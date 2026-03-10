@@ -1,0 +1,165 @@
+import uuid
+from datetime import datetime
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.adapters.base import RawEventData, PriceRecord
+from src.core.enums import EventType, Severity, PriceInterval
+from src.db.models import Company, Source
+from src.db.repository import (
+    RawEventRepository,
+    NormalizedEventRepository,
+    PriceDataRepository,
+    OutboxRepository,
+)
+from src.parsers.helpers import compute_dedup_key, clean_whitespace, strip_html, make_aware
+
+logger = structlog.get_logger(__name__)
+
+SOURCE_TO_EVENT_TYPE = {
+    "kap": EventType.KAP_DISCLOSURE,
+    "anadoluefes_news": EventType.OFFICIAL_NEWS,
+    "anadoluefes_ir": EventType.OFFICIAL_IR_UPDATE,
+}
+
+SOURCE_TO_SEVERITY = {
+    "kap": Severity.WATCH,
+    "anadoluefes_news": Severity.INFO,
+    "anadoluefes_ir": Severity.WATCH,
+}
+
+
+class EventService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.raw_repo = RawEventRepository(session)
+        self.norm_repo = NormalizedEventRepository(session)
+        self.outbox_repo = OutboxRepository(session)
+
+    async def process_raw_events(
+        self,
+        events: list[RawEventData],
+        source: Source,
+        company: Company,
+    ) -> dict:
+        stats = {"new_raw": 0, "new_normalized": 0, "outbox_created": 0, "duplicates": 0}
+
+        for event_data in events:
+            # Insert raw event
+            raw_event = await self.raw_repo.insert_if_not_exists(
+                source_id=source.id,
+                company_id=company.id,
+                external_id=event_data.external_id,
+                canonical_url=event_data.canonical_url,
+                source_event_type=event_data.source_event_type,
+                title=event_data.title,
+                summary=event_data.summary,
+                published_at=event_data.published_at,
+                content_hash=event_data.content_hash,
+                raw_payload_json=event_data.raw_payload_json,
+                raw_payload_text=event_data.raw_payload_text,
+                attachment_urls=event_data.attachment_urls,
+                http_status=event_data.http_status,
+                headers_json=event_data.headers_json,
+            )
+
+            if raw_event is None:
+                stats["duplicates"] += 1
+                continue
+            stats["new_raw"] += 1
+
+            # Normalize
+            source_code = source.code
+            event_type = SOURCE_TO_EVENT_TYPE.get(source_code, EventType.KAP_DISCLOSURE)
+            severity = SOURCE_TO_SEVERITY.get(source_code, Severity.INFO)
+
+            published_at = event_data.published_at or make_aware(datetime.now())
+            metadata = {}
+            if event_data.published_at is None:
+                metadata["published_at_missing"] = True
+
+            dedup_key = compute_dedup_key(
+                source_code,
+                event_data.canonical_url or "",
+                published_at.isoformat(),
+                event_data.title or "",
+            )
+
+            norm_event = await self.norm_repo.insert_if_not_exists(
+                raw_event_id=raw_event.id,
+                company_id=company.id,
+                event_type=event_type,
+                title=clean_whitespace(event_data.title),
+                excerpt=clean_whitespace(event_data.summary)[:500] if event_data.summary else None,
+                body_text=strip_html(event_data.body_text) if event_data.body_text else None,
+                published_at=published_at,
+                event_url=event_data.canonical_url,
+                source_code=source_code,
+                severity=severity,
+                is_notifiable=True,
+                dedup_key=dedup_key,
+                metadata_json=metadata,
+            )
+
+            if norm_event is None:
+                continue
+            stats["new_normalized"] += 1
+
+            # Create outbox entry
+            payload = {
+                "event_id": str(norm_event.id),
+                "event_type": event_type.value,
+                "title": norm_event.title,
+                "source_code": source_code,
+                "severity": severity.value,
+                "published_at": published_at.isoformat(),
+                "event_url": event_data.canonical_url,
+            }
+            await self.outbox_repo.create(norm_event.id, payload)
+            stats["outbox_created"] += 1
+
+        await self.session.commit()
+        return stats
+
+
+class PriceService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.price_repo = PriceDataRepository(session)
+
+    async def process_prices(
+        self,
+        records: list[PriceRecord],
+        company: Company,
+    ) -> dict:
+        stats = {"new_prices": 0, "duplicates": 0}
+
+        for rec in records:
+            interval = PriceInterval.ONE_DAY
+            if rec.interval == "1h":
+                interval = PriceInterval.ONE_HOUR
+            elif rec.interval == "15m":
+                interval = PriceInterval.FIFTEEN_MIN
+
+            result = await self.price_repo.insert_if_not_exists(
+                company_id=company.id,
+                ticker=rec.ticker,
+                source=rec.source,
+                open=rec.open,
+                high=rec.high,
+                low=rec.low,
+                close=rec.close,
+                adjusted_close=rec.adjusted_close,
+                volume=rec.volume,
+                trading_date=rec.trading_date,
+                interval=interval,
+            )
+
+            if result is None:
+                stats["duplicates"] += 1
+            else:
+                stats["new_prices"] += 1
+
+        await self.session.commit()
+        return stats

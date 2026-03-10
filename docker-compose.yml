@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aefes
+      POSTGRES_PASSWORD: aefes
+      POSTGRES_DB: aefes_listener
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aefes -d aefes_listener"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://aefes:aefes@db:5432/aefes_listener
+      DATABASE_URL_SYNC: postgresql://aefes:aefes@db:5432/aefes_listener
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  worker:
+    build: .
+    command: python -m src.workers.run_workers
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://aefes:aefes@db:5432/aefes_listener
+      DATABASE_URL_SYNC: postgresql://aefes:aefes@db:5432/aefes_listener
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    profiles:
+      - mail
+
+volumes:
+  pgdata:
