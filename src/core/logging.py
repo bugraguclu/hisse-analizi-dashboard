@@ -15,7 +15,7 @@ def setup_logging() -> None:
             else structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            structlog.get_level_from_name(settings.log_level)
+    getattr(structlog, 'get_level_from_name', lambda x: 20)(settings.log_level)
         ),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
