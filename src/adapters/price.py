@@ -12,7 +12,10 @@ logger = structlog.get_logger(__name__)
 
 
 class PriceAdapter(BasePriceAdapter):
-    """Fiyat verisi: borsapy birincil, yfinance yedek."""
+    """Fiyat verisi: borsapy birincil, yfinance yedek. Multi-stock destekli."""
+
+    def __init__(self, ticker: str = "AEFES"):
+        self.ticker = ticker
 
     def get_source_code(self) -> str:
         return "price"
@@ -20,7 +23,7 @@ class PriceAdapter(BasePriceAdapter):
     async def fetch_prices(self, polling_state: PollingState | None = None) -> list[PriceRecord]:
         records = await self._fetch_via_borsapy()
         if not records:
-            logger.warning("borsapy_price_empty_fallback_to_yfinance")
+            logger.warning("borsapy_price_empty_fallback_to_yfinance", ticker=self.ticker)
             records = await self._fetch_via_yfinance()
         return records
 
@@ -29,11 +32,11 @@ class PriceAdapter(BasePriceAdapter):
             import borsapy as bp
 
             loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: bp.Ticker("AEFES"))
+            ticker = await loop.run_in_executor(None, lambda: bp.Ticker(self.ticker))
             df = await loop.run_in_executor(None, lambda: ticker.history(period="1ay"))
 
             if df is None or df.empty:
-                logger.info("borsapy_price_no_data")
+                logger.info("borsapy_price_no_data", ticker=self.ticker)
                 return []
 
             records: list[PriceRecord] = []
@@ -44,7 +47,7 @@ class PriceAdapter(BasePriceAdapter):
 
                 records.append(
                     PriceRecord(
-                        ticker="AEFES",
+                        ticker=self.ticker,
                         source="borsapy",
                         open=float(row.get("Open", 0)) if row.get("Open") is not None else None,
                         high=float(row.get("High", 0)) if row.get("High") is not None else None,
@@ -56,30 +59,32 @@ class PriceAdapter(BasePriceAdapter):
                     )
                 )
 
-            logger.info("borsapy_price_fetched", count=len(records))
+            logger.info("borsapy_price_fetched", ticker=self.ticker, count=len(records))
             return records
 
         except Exception as e:
-            logger.error("borsapy_price_error", error=str(e))
+            logger.error("borsapy_price_error", ticker=self.ticker, error=str(e))
             return []
 
     async def _fetch_via_yfinance(self) -> list[PriceRecord]:
         try:
             import yfinance as yf
 
+            # yfinance BIST hisseleri için .IS suffix kullanır
+            yf_ticker = f"{self.ticker}.IS"
             loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: yf.Ticker("AEFES.IS"))
+            ticker = await loop.run_in_executor(None, lambda: yf.Ticker(yf_ticker))
             df = await loop.run_in_executor(None, lambda: ticker.history(period="1mo"))
 
             if df is None or df.empty:
-                logger.info("yfinance_price_no_data")
+                logger.info("yfinance_price_no_data", ticker=self.ticker)
                 return []
 
             records: list[PriceRecord] = []
             for idx, row in df.iterrows():
                 records.append(
                     PriceRecord(
-                        ticker="AEFES",
+                        ticker=self.ticker,
                         source="yfinance",
                         open=float(row.get("Open", 0)) if row.get("Open") is not None else None,
                         high=float(row.get("High", 0)) if row.get("High") is not None else None,
@@ -91,9 +96,9 @@ class PriceAdapter(BasePriceAdapter):
                     )
                 )
 
-            logger.info("yfinance_price_fetched", count=len(records))
+            logger.info("yfinance_price_fetched", ticker=self.ticker, count=len(records))
             return records
 
         except Exception as e:
-            logger.error("yfinance_price_error", error=str(e))
+            logger.error("yfinance_price_error", ticker=self.ticker, error=str(e))
             return []

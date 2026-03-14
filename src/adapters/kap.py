@@ -13,7 +13,10 @@ logger = structlog.get_logger(__name__)
 
 
 class KAPAdapter(BaseAdapter):
-    """KAP bildirimleri: borsapy birincil, /api/disclosures yedek."""
+    """KAP bildirimleri: borsapy birincil, /api/disclosures yedek. Multi-stock destekli."""
+
+    def __init__(self, ticker: str = "AEFES"):
+        self.ticker = ticker
 
     def get_source_code(self) -> str:
         return "kap"
@@ -21,7 +24,7 @@ class KAPAdapter(BaseAdapter):
     async def fetch(self, polling_state: PollingState | None = None) -> list[RawEventData]:
         events = await self._fetch_via_borsapy()
         if not events:
-            logger.warning("borsapy_kap_empty_fallback_to_api")
+            logger.warning("borsapy_kap_empty_fallback_to_api", ticker=self.ticker)
             events = await self._fetch_via_kap_api(polling_state)
         return events
 
@@ -30,11 +33,11 @@ class KAPAdapter(BaseAdapter):
             import borsapy as bp
 
             loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: bp.Ticker("AEFES"))
+            ticker = await loop.run_in_executor(None, lambda: bp.Ticker(self.ticker))
             news_df = await loop.run_in_executor(None, lambda: ticker.news)
 
             if news_df is None or news_df.empty:
-                logger.info("borsapy_kap_no_data")
+                logger.info("borsapy_kap_no_data", ticker=self.ticker)
                 return []
 
             events: list[RawEventData] = []
@@ -61,15 +64,15 @@ class KAPAdapter(BaseAdapter):
                         summary=title,
                         published_at=published_at,
                         content_hash=content_hash,
-                        raw_payload_json={"source": "borsapy", "date": date_str, "title": title, "url": url},
+                        raw_payload_json={"source": "borsapy", "date": date_str, "title": title, "url": url, "ticker": self.ticker},
                     )
                 )
 
-            logger.info("borsapy_kap_fetched", count=len(events))
+            logger.info("borsapy_kap_fetched", ticker=self.ticker, count=len(events))
             return events
 
         except Exception as e:
-            logger.error("borsapy_kap_error", error=str(e))
+            logger.error("borsapy_kap_error", ticker=self.ticker, error=str(e))
             return []
 
     async def _fetch_via_kap_api(self, polling_state: PollingState | None = None) -> list[RawEventData]:
@@ -97,7 +100,7 @@ class KAPAdapter(BaseAdapter):
             for item in data:
                 basic = item.get("basic", {})
                 stock_codes = str(basic.get("stockCodes", ""))
-                if "AEFES" not in stock_codes:
+                if self.ticker not in stock_codes:
                     continue
 
                 disclosure_index = str(basic.get("disclosureIndex", ""))
@@ -125,9 +128,9 @@ class KAPAdapter(BaseAdapter):
                     )
                 )
 
-            logger.info("kap_api_fetched", count=len(events))
+            logger.info("kap_api_fetched", ticker=self.ticker, count=len(events))
             return events
 
         except Exception as e:
-            logger.error("kap_api_error", error=str(e))
+            logger.error("kap_api_error", ticker=self.ticker, error=str(e))
             return []

@@ -172,6 +172,7 @@ class NormalizedEventRepository:
         self,
         source_code: str | None = None,
         event_type: str | None = None,
+        ticker: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 50,
@@ -182,6 +183,10 @@ class NormalizedEventRepository:
             q = q.where(NormalizedEvent.source_code == source_code)
         if event_type:
             q = q.where(NormalizedEvent.event_type == event_type)
+        if ticker:
+            # Filter by company ticker via join
+            from src.db.models import Company
+            q = q.join(Company, NormalizedEvent.company_id == Company.id).where(Company.ticker == ticker.upper())
         if since:
             q = q.where(NormalizedEvent.published_at >= since)
         if until:

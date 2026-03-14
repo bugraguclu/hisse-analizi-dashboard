@@ -6,8 +6,6 @@ import structlog
 
 from src.adapters.base import BaseAdapter, BasePriceAdapter
 from src.adapters.kap import KAPAdapter
-from src.adapters.anadoluefes_news import AnadoluEfesNewsAdapter
-from src.adapters.anadoluefes_ir import AnadoluEfesIRAdapter
 from src.adapters.price import PriceAdapter
 from src.core.config import settings
 from src.db.session import async_session_factory
@@ -20,19 +18,11 @@ from src.services.event_service import EventService, PriceService
 
 logger = structlog.get_logger(__name__)
 
-ADAPTERS: dict[str, BaseAdapter] = {
-    "kap": KAPAdapter(),
-    "anadoluefes_news": AnadoluEfesNewsAdapter(),
-    "anadoluefes_ir": AnadoluEfesIRAdapter(),
-}
 
-PRICE_ADAPTER = PriceAdapter()
-
-
-async def poll_source(source_code: str) -> dict:
-    """Tek bir kaynak için poll çalıştır."""
+async def poll_source_for_company(source_code: str, ticker: str) -> dict:
+    """Tek bir kaynak + tek bir şirket için poll çalıştır."""
     started_at = datetime.now()
-    stats = {"source": source_code, "started_at": started_at.isoformat()}
+    stats = {"source": source_code, "ticker": ticker, "started_at": started_at.isoformat()}
 
     async with async_session_factory() as session:
         try:
@@ -45,9 +35,9 @@ async def poll_source(source_code: str) -> dict:
                 stats["skipped"] = True
                 return stats
 
-            company = await company_repo.get_by_ticker("AEFES")
+            company = await company_repo.get_by_ticker(ticker)
             if not company:
-                stats["error"] = "AEFES company not found"
+                stats["error"] = f"{ticker} company not found"
                 return stats
 
             polling_state = await polling_repo.get_by_source_id(source.id)
@@ -57,6 +47,7 @@ async def poll_source(source_code: str) -> dict:
                 logger.warning(
                     "source_disabled_too_many_failures",
                     source=source_code,
+                    ticker=ticker,
                     failures=polling_state.consecutive_failures,
                 )
                 stats["skipped"] = True
@@ -64,14 +55,13 @@ async def poll_source(source_code: str) -> dict:
                 return stats
 
             if source_code == "price":
-                # Price adapter
-                records = await PRICE_ADAPTER.fetch_prices(polling_state)
+                adapter = PriceAdapter(ticker=ticker)
+                records = await adapter.fetch_prices(polling_state)
                 price_service = PriceService(session)
                 result = await price_service.process_prices(records, company)
                 stats.update(result)
-            elif source_code in ADAPTERS:
-                # Event adapters
-                adapter = ADAPTERS[source_code]
+            elif source_code == "kap":
+                adapter = KAPAdapter(ticker=ticker)
                 events = await adapter.fetch(polling_state)
                 event_service = EventService(session)
                 result = await event_service.process_raw_events(events, source, company)
@@ -94,7 +84,7 @@ async def poll_source(source_code: str) -> dict:
                 stats["error"] = f"unknown_source: {source_code}"
 
         except Exception as e:
-            logger.error("poll_source_error", source=source_code, error=str(e))
+            logger.error("poll_source_error", source=source_code, ticker=ticker, error=str(e))
             stats["error"] = str(e)
             try:
                 if source:
@@ -110,24 +100,38 @@ async def poll_source(source_code: str) -> dict:
     return stats
 
 
-async def run_all_sources_once() -> list[dict]:
-    """Tüm kaynakları bir kez poll et."""
+async def poll_source(source_code: str) -> list[dict]:
+    """Tüm aktif şirketler için tek bir kaynağı poll et."""
     results = []
-    for source_code in ["kap", "anadoluefes_news", "anadoluefes_ir", "price"]:
-        result = await poll_source(source_code)
+    async with async_session_factory() as session:
+        company_repo = CompanyRepository(session)
+        companies = await company_repo.get_all()
+
+    for company in companies:
+        result = await poll_source_for_company(source_code, company.ticker)
         results.append(result)
+        # Rate limiting: şirketler arası kısa bekleme
+        await asyncio.sleep(1)
+
+    return results
+
+
+async def run_all_sources_once() -> list[dict]:
+    """Tüm kaynakları tüm şirketler için bir kez poll et."""
+    results = []
+    for source_code in ["kap", "price"]:
+        source_results = await poll_source(source_code)
+        results.extend(source_results)
     return results
 
 
 async def polling_loop():
-    """Sürekli polling döngüsü."""
+    """Sürekli polling döngüsü — tüm şirketler için."""
     logger.info("polling_loop_started")
 
     # Source intervals
     intervals = {
         "kap": 30,
-        "anadoluefes_news": 60,
-        "anadoluefes_ir": 300,
         "price": 300,
     }
     last_poll = {code: 0.0 for code in intervals}

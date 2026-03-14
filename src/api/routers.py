@@ -44,7 +44,7 @@ from src.schemas.events import (
     BackfillRequest,
     StatsOut,
 )
-from src.workers.polling_worker import poll_source, run_all_sources_once
+from src.workers.polling_worker import poll_source, run_all_sources_once, poll_source_for_company
 from src.workers.notification_worker import process_notifications_once
 
 DB = Annotated[AsyncSession, Depends(get_db)]
@@ -86,6 +86,7 @@ async def list_events(
     db: DB,
     source_code: str | None = None,
     event_type: str | None = None,
+    ticker: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     limit: int = Query(default=50, le=200),
@@ -95,6 +96,7 @@ async def list_events(
     return await repo.get_list(
         source_code=source_code,
         event_type=event_type,
+        ticker=ticker,
         since=since,
         until=until,
         limit=limit,
