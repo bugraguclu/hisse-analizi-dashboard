@@ -28,9 +28,10 @@ async def inflation():
     return await get_inflation()
 
 
-@macro_router.get("/fx/{symbol}")
-async def fx_rates(symbol: str = "USDTRY"):
-    return await get_fx_rates(symbol.upper())
+@macro_router.get("/fx/{currency}")
+async def fx_rates(currency: str = "USD"):
+    """Doviz kuru. currency: USD, EUR, GBP, JPY, CHF, vb."""
+    return await get_fx_rates(currency.upper())
 
 
 @macro_router.get("/calendar")

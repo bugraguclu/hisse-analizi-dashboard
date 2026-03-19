@@ -1,4 +1,12 @@
-"""Makro ekonomik veri adaptoru — TCMB, enflasyon, doviz, ekonomik takvim."""
+"""Makro ekonomik veri adaptoru — TCMB, enflasyon, doviz, ekonomik takvim.
+
+borsapy API:
+  - bp.TCMB() -> class, interest_rates attribute
+  - bp.Inflation() -> class, latest(), tufe(), ufe() methods
+  - bp.policy_rate() -> fonksiyon
+  - bp.FX(currency_code) -> class, currency code alir (USD, EUR, GBP vb.)
+  - bp.economic_calendar() -> fonksiyon
+"""
 
 import asyncio
 
@@ -35,7 +43,9 @@ async def get_tcmb_rates() -> dict:
         import borsapy as bp
         loop = asyncio.get_event_loop()
         tcmb = await loop.run_in_executor(None, lambda: bp.TCMB())
-        rates = await loop.run_in_executor(None, lambda: tcmb.interest_rates if hasattr(tcmb, "interest_rates") else None)
+        rates = await loop.run_in_executor(
+            None, lambda: tcmb.interest_rates if hasattr(tcmb, "interest_rates") else None
+        )
         if rates is None:
             return {"source": "TCMB", "data": {}}
         data = _df_to_records(rates) if hasattr(rates, "iterrows") else _safe_serialize(rates)
@@ -58,34 +68,41 @@ async def get_policy_rate() -> dict:
 
 
 async def get_inflation() -> dict:
-    """Enflasyon verileri."""
+    """Enflasyon verileri — bp.Inflation().latest() ve bp.Inflation().tufe()."""
     try:
         import borsapy as bp
         loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, bp.inflation)
-        result = _df_to_records(data) if hasattr(data, "iterrows") else _safe_serialize(data)
-        return {"source": "TCMB", "inflation": result}
+        inf = await loop.run_in_executor(None, lambda: bp.Inflation())
+        latest = await loop.run_in_executor(None, lambda: inf.latest())
+        tufe_df = await loop.run_in_executor(None, lambda: inf.tufe())
+        return {
+            "source": "TCMB",
+            "latest": latest if isinstance(latest, dict) else _safe_serialize(latest),
+            "tufe_history": _df_to_records(tufe_df),
+        }
     except Exception as e:
         logger.error("macro_inflation_error", error=str(e))
-        return {"source": "TCMB", "inflation": [], "error": str(e)}
+        return {"source": "TCMB", "latest": {}, "tufe_history": [], "error": str(e)}
 
 
-async def get_fx_rates(symbol: str = "USDTRY") -> dict:
-    """Doviz kuru verileri."""
+async def get_fx_rates(currency: str = "USD") -> dict:
+    """Doviz kuru verileri. currency: USD, EUR, GBP vb. (pair degil)."""
     try:
         import borsapy as bp
         loop = asyncio.get_event_loop()
-        fx = await loop.run_in_executor(None, lambda: bp.FX(symbol))
+        fx = await loop.run_in_executor(None, lambda: bp.FX(currency))
         info = await loop.run_in_executor(None, lambda: fx.info if hasattr(fx, "info") else None)
-        history = await loop.run_in_executor(None, lambda: fx.history(period="1ay") if hasattr(fx, "history") else None)
+        history = await loop.run_in_executor(
+            None, lambda: fx.history(period="1ay") if hasattr(fx, "history") else None
+        )
         return {
-            "symbol": symbol,
-            "info": _safe_serialize(info) if info else {},
+            "currency": currency,
+            "info": info if isinstance(info, dict) else _safe_serialize(info) if info else {},
             "history": _df_to_records(history) if history is not None else [],
         }
     except Exception as e:
-        logger.error("macro_fx_error", symbol=symbol, error=str(e))
-        return {"symbol": symbol, "info": {}, "history": [], "error": str(e)}
+        logger.error("macro_fx_error", currency=currency, error=str(e))
+        return {"currency": currency, "info": {}, "history": [], "error": str(e)}
 
 
 async def get_economic_calendar() -> dict:
