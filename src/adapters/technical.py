@@ -1,136 +1,174 @@
-"""Teknik analiz adapter'ı: RSI, MACD, Bollinger, SMA, EMA."""
+"""Teknik analiz adaptoru — borsapy technical indicators."""
+
 import asyncio
-from datetime import datetime
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
 
-class TechnicalAdapter:
-    """technical.py → RSI, MACD, Bollinger Bands, SMA, EMA göstergeleri."""
-
-    def __init__(self, ticker: str):
-        self.ticker = ticker
-
-    async def fetch_rsi(self, period: int = 14) -> list[dict]:
-        return await self._fetch_indicator("rsi", period=period)
-
-    async def fetch_macd(self) -> list[dict]:
-        return await self._fetch_indicator("macd")
-
-    async def fetch_bollinger(self, period: int = 20) -> list[dict]:
-        return await self._fetch_indicator("bbands", period=period)
-
-    async def fetch_sma(self, period: int = 50) -> list[dict]:
-        return await self._fetch_indicator("sma", period=period)
-
-    async def fetch_ema(self, period: int = 20) -> list[dict]:
-        return await self._fetch_indicator("ema", period=period)
-
-    async def fetch_all_indicators(self) -> dict[str, list[dict]]:
-        """Tüm temel göstergeleri tek seferde çek."""
-        results = {}
-        indicators = [
-            ("RSI_14", "rsi", {"period": 14}),
-            ("MACD", "macd", {}),
-            ("BBANDS_20", "bbands", {"period": 20}),
-            ("SMA_50", "sma", {"period": 50}),
-            ("SMA_200", "sma", {"period": 200}),
-            ("EMA_20", "ema", {"period": 20}),
+async def get_rsi(ticker: str, period: int = 14) -> dict:
+    """RSI hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.rsi(period=period))
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "RSI", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
         ]
-        for name, indicator, kwargs in indicators:
-            data = await self._fetch_indicator(indicator, **kwargs)
-            results[name] = data
-        return results
-
-    async def _fetch_indicator(self, indicator: str, **kwargs) -> list[dict]:
-        try:
-            import borsapy as bp
-            loop = asyncio.get_event_loop()
-            t = await loop.run_in_executor(None, lambda: bp.Ticker(self.ticker))
-            tech = await loop.run_in_executor(None, lambda: t.technical)
-
-            if tech is None:
-                logger.info("technical_not_available", ticker=self.ticker)
-                return []
-
-            # Her gösterge için ilgili metodu çağır
-            df = None
-            if indicator == "rsi":
-                df = await loop.run_in_executor(None, lambda: tech.rsi(**kwargs))
-            elif indicator == "macd":
-                df = await loop.run_in_executor(None, lambda: tech.macd())
-            elif indicator == "bbands":
-                df = await loop.run_in_executor(None, lambda: tech.bbands(**kwargs))
-            elif indicator == "sma":
-                period = kwargs.get("period", 50)
-                df = await loop.run_in_executor(None, lambda: tech.sma(period=period))
-            elif indicator == "ema":
-                period = kwargs.get("period", 20)
-                df = await loop.run_in_executor(None, lambda: tech.ema(period=period))
-
-            if df is None or (hasattr(df, 'empty') and df.empty):
-                return []
-
-            records = []
-            if hasattr(df, 'iterrows'):
-                for date_idx, row in df.iterrows():
-                    record = {
-                        "ticker": self.ticker,
-                        "indicator_name": indicator.upper(),
-                        "trading_date": date_idx.date() if hasattr(date_idx, "date") else date_idx,
-                        "value": float(row.iloc[0]) if len(row) > 0 else None,
-                    }
-                    # MACD → signal + histogram
-                    if indicator == "macd" and len(row) >= 3:
-                        record["signal"] = float(row.iloc[1])
-                        record["histogram"] = float(row.iloc[2])
-                    # Bollinger → upper + lower
-                    if indicator == "bbands" and len(row) >= 3:
-                        record["upper_band"] = float(row.iloc[1])
-                        record["lower_band"] = float(row.iloc[2])
-                    records.append(record)
-            elif hasattr(df, 'items'):
-                # Series
-                for date_idx, val in df.items():
-                    records.append({
-                        "ticker": self.ticker,
-                        "indicator_name": indicator.upper(),
-                        "trading_date": date_idx.date() if hasattr(date_idx, "date") else date_idx,
-                        "value": float(val) if val is not None else None,
-                    })
-
-            logger.info("technical_fetched", ticker=self.ticker, indicator=indicator, count=len(records))
-            return records
-
-        except Exception as e:
-            logger.error("technical_error", ticker=self.ticker, indicator=indicator, error=str(e))
-            return []
+        return {"ticker": ticker, "indicator": "RSI", "period": period, "data": records}
+    except Exception as e:
+        logger.error("technical_rsi_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "RSI", "error": str(e)}
 
 
-class ScreenerAdapter:
-    """screener.py → hisse tarama."""
+async def get_macd(ticker: str) -> dict:
+    """MACD hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.macd())
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "MACD", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
+        ]
+        return {"ticker": ticker, "indicator": "MACD", "data": records}
+    except Exception as e:
+        logger.error("technical_macd_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "MACD", "error": str(e)}
 
-    async def screen(self, filters: dict | None = None) -> list[dict]:
-        try:
-            import borsapy as bp
-            loop = asyncio.get_event_loop()
-            screener = await loop.run_in_executor(None, lambda: bp.Screener())
 
-            if filters:
-                for key, value in filters.items():
-                    if hasattr(screener, key):
-                        screener = await loop.run_in_executor(None, lambda: getattr(screener, key)(value))
+async def get_bollinger(ticker: str, period: int = 20) -> dict:
+    """Bollinger Bands hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.bollinger_bands(period=period))
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "BOLLINGER", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
+        ]
+        return {"ticker": ticker, "indicator": "BOLLINGER", "period": period, "data": records}
+    except Exception as e:
+        logger.error("technical_bollinger_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "BOLLINGER", "error": str(e)}
 
-            results = await loop.run_in_executor(None, lambda: screener.scan())
-            if results is None or (hasattr(results, 'empty') and results.empty):
-                return []
 
-            records = results.to_dict(orient="records") if hasattr(results, "to_dict") else []
-            logger.info("screener_completed", count=len(records), filters=filters)
-            return records
+async def get_sma(ticker: str, period: int = 20) -> dict:
+    """SMA hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.sma(period=period))
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "SMA", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
+        ]
+        return {"ticker": ticker, "indicator": "SMA", "period": period, "data": records}
+    except Exception as e:
+        logger.error("technical_sma_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "SMA", "error": str(e)}
 
-        except Exception as e:
-            logger.error("screener_error", error=str(e), filters=filters)
-            return []
+
+async def get_ema(ticker: str, period: int = 20) -> dict:
+    """EMA hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.ema(period=period))
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "EMA", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
+        ]
+        return {"ticker": ticker, "indicator": "EMA", "period": period, "data": records}
+    except Exception as e:
+        logger.error("technical_ema_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "EMA", "error": str(e)}
+
+
+async def get_supertrend(ticker: str) -> dict:
+    """SuperTrend hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.supertrend())
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "SUPERTREND", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
+        ]
+        return {"ticker": ticker, "indicator": "SUPERTREND", "data": records}
+    except Exception as e:
+        logger.error("technical_supertrend_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "SUPERTREND", "error": str(e)}
+
+
+async def get_stochastic(ticker: str) -> dict:
+    """Stochastic Oscillator hesapla."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        df = await loop.run_in_executor(None, lambda: t.stochastic())
+        if df is None or df.empty:
+            return {"ticker": ticker, "indicator": "STOCHASTIC", "data": []}
+        records = [
+            {"date": str(idx), **{col: round(float(row[col]), 4) for col in df.columns if row[col] is not None}}
+            for idx, row in df.iterrows()
+        ]
+        return {"ticker": ticker, "indicator": "STOCHASTIC", "data": records}
+    except Exception as e:
+        logger.error("technical_stochastic_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "indicator": "STOCHASTIC", "error": str(e)}
+
+
+async def get_ta_signals(ticker: str) -> dict:
+    """Tum teknik analiz sinyallerini getir (AL/SAT/NOTR)."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        result = await loop.run_in_executor(None, lambda: t.ta_signals)
+        if result is None:
+            return {"ticker": ticker, "signals": {}}
+        if hasattr(result, "to_dict"):
+            return {"ticker": ticker, "signals": result.to_dict()}
+        return {"ticker": ticker, "signals": result}
+    except Exception as e:
+        logger.error("technical_ta_signals_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "signals": {}, "error": str(e)}
+
+
+async def get_ta_signals_all_timeframes(ticker: str) -> dict:
+    """Tum zaman dilimlerinde teknik sinyalleri getir."""
+    try:
+        import borsapy as bp
+        loop = asyncio.get_event_loop()
+        t = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+        result = await loop.run_in_executor(None, lambda: t.ta_signals_all_timeframes)
+        if result is None:
+            return {"ticker": ticker, "timeframes": {}}
+        if hasattr(result, "to_dict"):
+            return {"ticker": ticker, "timeframes": result.to_dict()}
+        return {"ticker": ticker, "timeframes": result}
+    except Exception as e:
+        logger.error("technical_ta_all_tf_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "timeframes": {}, "error": str(e)}

@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aefes-listener"
-version = "0.1.0"
-description = "AEFES Haber & KAP Listener — polling tabanlı veri toplama ve bildirim sistemi"
+name = "hisse-analizi-dashboard"
+version = "0.2.0"
+description = "BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110.0",
