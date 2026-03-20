@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Hisse Analizi Dashboard",
     description="BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
