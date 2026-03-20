@@ -5,13 +5,18 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.base import RawEventData, PriceRecord
-from src.core.enums import EventType, Severity, PriceInterval
+from src.core.enums import EventType, Severity, PriceInterval, EventCategory
 from src.db.models import Company, Source
 from src.db.repository import (
     RawEventRepository,
     NormalizedEventRepository,
     PriceDataRepository,
     OutboxRepository,
+    CompanyRepository,
+    SourceRepository,
+    PollingStateRepository,
+    NotificationRuleRepository,
+    FinancialStatementRepository,
 )
 from src.parsers.helpers import compute_dedup_key, clean_whitespace, strip_html, make_aware
 
@@ -29,6 +34,15 @@ SOURCE_TO_SEVERITY = {
     "anadoluefes_ir": Severity.WATCH,
 }
 
+CATEGORY_KEYWORDS = {
+    EventCategory.DIVIDEND: ["temettü", "kar payı", "dividend"],
+    EventCategory.CAPITAL_INCREASE: ["sermaye artırımı", "bedelli", "bedelsiz", "tahsisli"],
+    EventCategory.NEW_BUSINESS: ["yeni iş", "ihale", "sözleşme", "sipariş"],
+    EventCategory.LEGAL: ["dava", "hukuki", "ceza", "soruşturma"],
+    EventCategory.MANAGEMENT: ["yönetim kurulu", "atama", "istifa", "genel müdür"],
+    EventCategory.FINANCIAL_RESULTS: ["finansal rapor", "bilanço", "gelir tablosu", "kar/zarar"],
+}
+
 
 class EventService:
     def __init__(self, session: AsyncSession):
@@ -36,6 +50,13 @@ class EventService:
         self.raw_repo = RawEventRepository(session)
         self.norm_repo = NormalizedEventRepository(session)
         self.outbox_repo = OutboxRepository(session)
+
+    def _classify_event(self, title: str, summary: str | None) -> EventCategory:
+        text = f"{title} {summary or ''}".lower()
+        for category, keywords in CATEGORY_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                return category
+        return EventCategory.OTHER
 
     async def process_raw_events(
         self,
@@ -75,6 +96,7 @@ class EventService:
             severity = SOURCE_TO_SEVERITY.get(source_code, Severity.INFO)
 
             published_at = event_data.published_at or make_aware(datetime.now())
+            category = self._classify_event(event_data.title or "", event_data.summary)
             metadata = {}
             if event_data.published_at is None:
                 metadata["published_at_missing"] = True
@@ -98,6 +120,7 @@ class EventService:
                 source_code=source_code,
                 severity=severity,
                 is_notifiable=True,
+                category=category,
                 dedup_key=dedup_key,
                 metadata_json=metadata,
             )
@@ -126,40 +149,58 @@ class EventService:
 class PriceService:
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.price_repo = PriceDataRepository(session)
+        self.repo = PriceDataRepository(session)
 
-    async def process_prices(
-        self,
-        records: list[PriceRecord],
-        company: Company,
-    ) -> dict:
-        stats = {"new_prices": 0, "duplicates": 0}
-
+    async def process_prices(self, records: list[PriceRecord], company: Company) -> dict:
+        count = 0
         for rec in records:
-            interval = PriceInterval.ONE_DAY
-            if rec.interval == "1h":
-                interval = PriceInterval.ONE_HOUR
-            elif rec.interval == "15m":
-                interval = PriceInterval.FIFTEEN_MIN
-
-            result = await self.price_repo.insert_if_not_exists(
+            inserted = await self.repo.insert_if_not_exists(
                 company_id=company.id,
-                ticker=rec.ticker,
+                ticker=company.ticker,
                 source=rec.source,
                 open=rec.open,
                 high=rec.high,
                 low=rec.low,
                 close=rec.close,
-                adjusted_close=rec.adjusted_close,
                 volume=rec.volume,
                 trading_date=rec.trading_date,
-                interval=interval,
+                interval=rec.interval,
             )
+            if inserted:
+                count += 1
+        return {"price_records_inserted": count}
 
-            if result is None:
-                stats["duplicates"] += 1
-            else:
-                stats["new_prices"] += 1
 
-        await self.session.commit()
-        return stats
+class FinancialService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.repo = FinancialStatementRepository(session)
+
+    async def process_financials(self, raw_data: list[RawEventData], company: Company) -> dict:
+        count = 0
+        for raw in raw_data:
+            payload = raw.raw_payload_json
+            if not payload:
+                continue
+
+            statement_type = payload.get("statement_type")
+            data = payload.get("data", {})
+
+            # borsapy verisinden dönemleri çıkar (sütunlar dönemlerdir)
+            # data = {"2023/12": {"Kalem1": 100, ...}, "2023/09": {...}}
+            periods = list(data.keys())
+
+            for period in periods:
+                # Her dönem için ayrı bir kayıt (veya güncelleme)
+                period_data = {k: v.get(period) for k, v in data.items()}
+
+                await self.repo.upsert(
+                    company_id=company.id,
+                    period=period,
+                    statement_type=statement_type,
+                    data_json=period_data,
+                    currency="TRY"  # Varsayılan
+                )
+                count += 1
+
+        return {"financial_records_processed": count}

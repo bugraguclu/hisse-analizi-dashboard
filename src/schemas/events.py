@@ -117,6 +117,7 @@ class StatsOut(BaseModel):
     total_normalized_events: int
     total_price_records: int
     total_notifications: int
+    total_financial_records: int
     pending_outbox: int
 
 
@@ -124,3 +125,15 @@ class HealthOut(BaseModel):
     status: str = "ok"
     version: str = "0.1.0"
     environment: str = "development"
+
+
+class FinancialStatementOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    period: str
+    statement_type: str
+    data_json: dict
+    currency: str
+    fetched_at: datetime
+    created_at: datetime
+    model_config = {"from_attributes": True}

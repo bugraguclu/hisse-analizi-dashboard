@@ -22,7 +22,9 @@ class AnadoluEfesNewsAdapter(BaseAdapter):
     def get_source_code(self) -> str:
         return "anadoluefes_news"
 
-    async def fetch(self, polling_state: PollingState | None = None) -> list[RawEventData]:
+    async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
+        if ticker != "AEFES":
+            return []
         all_events: list[RawEventData] = []
 
         async with httpx.AsyncClient(

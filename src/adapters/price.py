@@ -17,23 +17,23 @@ class PriceAdapter(BasePriceAdapter):
     def get_source_code(self) -> str:
         return "price"
 
-    async def fetch_prices(self, polling_state: PollingState | None = None) -> list[PriceRecord]:
-        records = await self._fetch_via_borsapy()
+    async def fetch_prices(self, ticker: str, polling_state: PollingState | None = None) -> list[PriceRecord]:
+        records = await self._fetch_via_borsapy(ticker)
         if not records:
-            logger.warning("borsapy_price_empty_fallback_to_yfinance")
-            records = await self._fetch_via_yfinance()
+            logger.warning("borsapy_price_empty_fallback_to_yfinance", ticker=ticker)
+            records = await self._fetch_via_yfinance(ticker)
         return records
 
-    async def _fetch_via_borsapy(self) -> list[PriceRecord]:
+    async def _fetch_via_borsapy(self, ticker: str) -> list[PriceRecord]:
         try:
             import borsapy as bp
 
             loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: bp.Ticker("AEFES"))
-            df = await loop.run_in_executor(None, lambda: ticker.history(period="1ay"))
+            bp_ticker = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+            df = await loop.run_in_executor(None, lambda: bp_ticker.history(period="1ay"))
 
             if df is None or df.empty:
-                logger.info("borsapy_price_no_data")
+                logger.info("borsapy_price_no_data", ticker=ticker)
                 return []
 
             records: list[PriceRecord] = []
@@ -44,7 +44,7 @@ class PriceAdapter(BasePriceAdapter):
 
                 records.append(
                     PriceRecord(
-                        ticker="AEFES",
+                        ticker=ticker,
                         source="borsapy",
                         open=float(row.get("Open", 0)) if row.get("Open") is not None else None,
                         high=float(row.get("High", 0)) if row.get("High") is not None else None,
@@ -63,23 +63,24 @@ class PriceAdapter(BasePriceAdapter):
             logger.error("borsapy_price_error", error=str(e))
             return []
 
-    async def _fetch_via_yfinance(self) -> list[PriceRecord]:
+    async def _fetch_via_yfinance(self, ticker: str) -> list[PriceRecord]:
         try:
             import yfinance as yf
 
             loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: yf.Ticker("AEFES.IS"))
-            df = await loop.run_in_executor(None, lambda: ticker.history(period="1mo"))
+            yf_ticker_symbol = f"{ticker}.IS"
+            yf_ticker = await loop.run_in_executor(None, lambda: yf.Ticker(yf_ticker_symbol))
+            df = await loop.run_in_executor(None, lambda: yf_ticker.history(period="1mo"))
 
             if df is None or df.empty:
-                logger.info("yfinance_price_no_data")
+                logger.info("yfinance_price_no_data", ticker=ticker)
                 return []
 
             records: list[PriceRecord] = []
             for idx, row in df.iterrows():
                 records.append(
                     PriceRecord(
-                        ticker="AEFES",
+                        ticker=ticker,
                         source="yfinance",
                         open=float(row.get("Open", 0)) if row.get("Open") is not None else None,
                         high=float(row.get("High", 0)) if row.get("High") is not None else None,

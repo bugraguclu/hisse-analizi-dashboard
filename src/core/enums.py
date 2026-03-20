@@ -18,6 +18,7 @@ class SourceKind(str, Enum):
     OFFICIAL_NEWS = "official_news"
     OFFICIAL_IR = "official_ir"
     PRICE_DATA = "price_data"
+    FINANCIAL_STATEMENTS = "financial_statements"
 
 
 class OutboxStatus(str, Enum):
@@ -51,3 +52,13 @@ class PriceInterval(str, Enum):
     ONE_DAY = "1d"
     ONE_HOUR = "1h"
     FIFTEEN_MIN = "15m"
+
+
+class EventCategory(str, Enum):
+    DIVIDEND = "temettü"
+    CAPITAL_INCREASE = "sermaye_artırımı"
+    NEW_BUSINESS = "yeni_iş"
+    LEGAL = "dava_ceza"
+    MANAGEMENT = "yönetim_değişimi"
+    FINANCIAL_RESULTS = "finansal_sonuç"
+    OTHER = "diğer"

@@ -18,20 +18,20 @@ class KAPAdapter(BaseAdapter):
     def get_source_code(self) -> str:
         return "kap"
 
-    async def fetch(self, polling_state: PollingState | None = None) -> list[RawEventData]:
-        events = await self._fetch_via_borsapy()
+    async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
+        events = await self._fetch_via_borsapy(ticker)
         if not events:
-            logger.warning("borsapy_kap_empty_fallback_to_api")
-            events = await self._fetch_via_kap_api(polling_state)
+            logger.warning("borsapy_kap_empty_fallback_to_api", ticker=ticker)
+            events = await self._fetch_via_kap_api(ticker, polling_state)
         return events
 
-    async def _fetch_via_borsapy(self) -> list[RawEventData]:
+    async def _fetch_via_borsapy(self, ticker: str) -> list[RawEventData]:
         try:
             import borsapy as bp
 
             loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: bp.Ticker("AEFES"))
-            news_df = await loop.run_in_executor(None, lambda: ticker.news)
+            bp_ticker = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+            news_df = await loop.run_in_executor(None, lambda: bp_ticker.news)
 
             if news_df is None or news_df.empty:
                 logger.info("borsapy_kap_no_data")
@@ -72,7 +72,7 @@ class KAPAdapter(BaseAdapter):
             logger.error("borsapy_kap_error", error=str(e))
             return []
 
-    async def _fetch_via_kap_api(self, polling_state: PollingState | None = None) -> list[RawEventData]:
+    async def _fetch_via_kap_api(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
         try:
             url = "https://www.kap.org.tr/tr/api/disclosures"
             if polling_state and polling_state.last_seen_external_id:
@@ -97,7 +97,7 @@ class KAPAdapter(BaseAdapter):
             for item in data:
                 basic = item.get("basic", {})
                 stock_codes = str(basic.get("stockCodes", ""))
-                if "AEFES" not in stock_codes:
+                if ticker not in stock_codes:
                     continue
 
                 disclosure_index = str(basic.get("disclosureIndex", ""))

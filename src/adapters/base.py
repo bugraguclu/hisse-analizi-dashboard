@@ -38,7 +38,7 @@ class PriceRecord:
 
 class BaseAdapter(ABC):
     @abstractmethod
-    async def fetch(self, polling_state: PollingState | None = None) -> list[RawEventData]:
+    async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
         ...
 
     @abstractmethod
@@ -48,7 +48,7 @@ class BaseAdapter(ABC):
 
 class BasePriceAdapter(ABC):
     @abstractmethod
-    async def fetch_prices(self, polling_state: PollingState | None = None) -> list[PriceRecord]:
+    async def fetch_prices(self, ticker: str, polling_state: PollingState | None = None) -> list[PriceRecord]:
         ...
 
     @abstractmethod

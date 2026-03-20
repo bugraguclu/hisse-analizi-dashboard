@@ -17,6 +17,7 @@ from src.db.models import (
     NotificationRule,
     Notification,
     AuditLog,
+    FinancialStatement,
 )
 from src.core.enums import OutboxStatus, Severity
 
@@ -30,6 +31,10 @@ class CompanyRepository:
         return result.scalar_one_or_none()
 
     async def get_all(self) -> Sequence[Company]:
+        result = await self.session.execute(select(Company).where(Company.is_active == True).order_by(Company.ticker))
+        return result.scalars().all()
+
+    async def get_active(self) -> Sequence[Company]:
         result = await self.session.execute(select(Company).where(Company.is_active == True).order_by(Company.ticker))
         return result.scalars().all()
 
@@ -365,6 +370,48 @@ class NotificationRepository:
     async def get_all(self, limit: int = 50) -> Sequence[Notification]:
         result = await self.session.execute(
             select(Notification).order_by(desc(Notification.created_at)).limit(limit)
+        )
+        return result.scalars().all()
+
+
+class FinancialStatementRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_company_period_type(
+        self, company_id: uuid.UUID, period: str, statement_type: str
+    ) -> FinancialStatement | None:
+        result = await self.session.execute(
+            select(FinancialStatement).where(
+                and_(
+                    FinancialStatement.company_id == company_id,
+                    FinancialStatement.period == period,
+                    FinancialStatement.statement_type == statement_type,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(self, **kwargs) -> FinancialStatement:
+        existing = await self.get_by_company_period_type(
+            kwargs["company_id"], kwargs["period"], kwargs["statement_type"]
+        )
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            await self.session.flush()
+            return existing
+        
+        fs = FinancialStatement(**kwargs)
+        self.session.add(fs)
+        await self.session.flush()
+        return fs
+
+    async def get_for_company(self, company_id: uuid.UUID) -> Sequence[FinancialStatement]:
+        result = await self.session.execute(
+            select(FinancialStatement)
+            .where(FinancialStatement.company_id == company_id)
+            .order_by(desc(FinancialStatement.period))
         )
         return result.scalars().all()
 

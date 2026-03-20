@@ -19,7 +19,9 @@ class AnadoluEfesIRAdapter(BaseAdapter):
     def get_source_code(self) -> str:
         return "anadoluefes_ir"
 
-    async def fetch(self, polling_state: PollingState | None = None) -> list[RawEventData]:
+    async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
+        if ticker != "AEFES":
+            return []
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(
