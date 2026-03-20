@@ -7,6 +7,7 @@ import structlog
 from src.adapters.base import BaseAdapter, BasePriceAdapter
 from src.adapters.kap import KAPAdapter
 from src.adapters.price import PriceAdapter
+from src.adapters.financial_adapter import FinancialAdapter
 from src.core.config import settings
 from src.db.session import async_session_factory
 from src.db.repository import (
@@ -14,7 +15,7 @@ from src.db.repository import (
     SourceRepository,
     PollingStateRepository,
 )
-from src.services.event_service import EventService, PriceService
+from src.services.event_service import EventService, PriceService, FinancialService
 
 logger = structlog.get_logger(__name__)
 
@@ -60,6 +61,20 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
                 price_service = PriceService(session)
                 result = await price_service.process_prices(records, company)
                 stats.update(result)
+            elif source_code == "financials":
+                fin_adapter = FinancialAdapter()
+                raw_data = await fin_adapter.fetch(ticker, polling_state)
+                financial_service = FinancialService(session)
+                result = await financial_service.process_financials(raw_data, company)
+                stats.update(result)
+
+                if raw_data:
+                    await polling_repo.update_success(
+                        source.id,
+                        last_seen_external_id=raw_data[0].external_id,
+                        last_seen_published_at=raw_data[0].published_at,
+                    )
+                await session.commit()
             elif source_code == "kap":
                 adapter = KAPAdapter(ticker=ticker)
                 events = await adapter.fetch(polling_state)
@@ -119,7 +134,7 @@ async def poll_source(source_code: str) -> list[dict]:
 async def run_all_sources_once() -> list[dict]:
     """Tüm kaynakları tüm şirketler için bir kez poll et."""
     results = []
-    for source_code in ["kap", "price"]:
+    for source_code in ["kap", "price", "financials"]:
         source_results = await poll_source(source_code)
         results.extend(source_results)
     return results
@@ -133,6 +148,7 @@ async def polling_loop():
     intervals = {
         "kap": 30,
         "price": 300,
+        "financials": 3600,  # saatte bir — finansal tablolar sik degismez
     }
     last_poll = {code: 0.0 for code in intervals}
 
