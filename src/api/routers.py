@@ -18,6 +18,7 @@ from src.db.models import (
     EventOutbox,
     Notification,
     PollingState,
+    FinancialStatement,
 )
 from src.db.repository import (
     CompanyRepository,
@@ -28,6 +29,8 @@ from src.db.repository import (
     NotificationRepository,
     NotificationRuleRepository,
     PollingStateRepository,
+    FinancialStatementRepository,
+    FinancialRatioRepository,
 )
 from src.schemas.events import (
     HealthOut,
@@ -43,6 +46,8 @@ from src.schemas.events import (
     PollRunRequest,
     BackfillRequest,
     StatsOut,
+    FinancialStatementOut,
+    FinancialRatioOut,
 )
 from src.workers.polling_worker import poll_source, run_all_sources_once, poll_source_for_company
 from src.workers.notification_worker import process_notifications_once
@@ -138,6 +143,35 @@ async def latest_price(db: DB, ticker: str = "AEFES"):
     return await repo.get_latest(ticker)
 
 
+@router.get("/financials", response_model=list[FinancialStatementOut])
+async def list_financials(
+    db: DB,
+    ticker: str = Query(..., description="Hisse kodu (orn: AEFES)"),
+    statement_type: str | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
+):
+    """Sirketin DB'deki finansal tablolarini listele."""
+    company_repo = CompanyRepository(db)
+    company = await company_repo.get_by_ticker(ticker.upper())
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    repo = FinancialStatementRepository(db)
+    return await repo.get_for_company(company.id, statement_type=statement_type)
+
+
+@router.get("/financials/ratios", response_model=list[FinancialRatioOut])
+async def list_ratios(
+    db: DB,
+    ticker: str = Query(..., description="Hisse kodu (orn: AEFES)"),
+):
+    """Sirketin hesaplanmis finansal oranlarini listele."""
+    company_repo = CompanyRepository(db)
+    company = await company_repo.get_by_ticker(ticker.upper())
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    repo = FinancialRatioRepository(db)
+    return await repo.get_for_company(company.id)
+
+
 @router.get("/notifications", response_model=list[NotificationOut])
 async def list_notifications(db: DB):
     repo = NotificationRepository(db)
@@ -203,6 +237,7 @@ async def get_stats(db: DB):
     norm_count = (await db.execute(select(func.count(NormalizedEvent.id)))).scalar() or 0
     price_count = (await db.execute(select(func.count(PriceData.id)))).scalar() or 0
     notif_count = (await db.execute(select(func.count(Notification.id)))).scalar() or 0
+    financial_count = (await db.execute(select(func.count(FinancialStatement.id)))).scalar() or 0
     pending_outbox = (
         await db.execute(
             select(func.count(EventOutbox.id)).where(EventOutbox.status == "pending")
@@ -214,5 +249,6 @@ async def get_stats(db: DB):
         total_normalized_events=norm_count,
         total_price_records=price_count,
         total_notifications=notif_count,
+        total_financial_records=financial_count,
         pending_outbox=pending_outbox,
     )

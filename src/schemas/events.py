@@ -117,10 +117,40 @@ class StatsOut(BaseModel):
     total_normalized_events: int
     total_price_records: int
     total_notifications: int
+    total_financial_records: int
     pending_outbox: int
 
 
 class HealthOut(BaseModel):
     status: str = "ok"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     environment: str = "development"
+
+
+class FinancialStatementOut(BaseModel):
+    id: UUID
+    period: str
+    statement_type: str
+    period_type: str | None = None
+    currency: str
+    data_json: dict
+    fetched_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class FinancialRatioOut(BaseModel):
+    id: UUID
+    period: str
+    roe: float | None = None
+    roa: float | None = None
+    net_margin: float | None = None
+    gross_margin: float | None = None
+    ebitda_margin: float | None = None
+    pe_ratio: float | None = None
+    pb_ratio: float | None = None
+    ps_ratio: float | None = None
+    debt_to_equity: float | None = None
+    current_ratio: float | None = None
+    net_debt_ebitda: float | None = None
+    calculated_at: datetime
+    model_config = {"from_attributes": True}
