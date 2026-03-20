@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.adapters.base import RawEventData, PriceRecord
 from src.core.enums import EventType, Severity, PriceInterval, EventCategory
 from src.db.models import Company, Source
+from src.services.analysis_service import AnalysisService
+from src.parsers.helpers import compute_dedup_key, clean_whitespace, strip_html, make_aware
 from src.db.repository import (
     RawEventRepository,
     NormalizedEventRepository,
@@ -17,21 +19,22 @@ from src.db.repository import (
     PollingStateRepository,
     NotificationRuleRepository,
     FinancialStatementRepository,
+    FinancialRatioRepository,
 )
-from src.parsers.helpers import compute_dedup_key, clean_whitespace, strip_html, make_aware
+from src.services.analysis_service import AnalysisService
 
 logger = structlog.get_logger(__name__)
 
 SOURCE_TO_EVENT_TYPE = {
     "kap": EventType.KAP_DISCLOSURE,
-    "anadoluefes_news": EventType.OFFICIAL_NEWS,
-    "anadoluefes_ir": EventType.OFFICIAL_IR_UPDATE,
+    "official_news": EventType.OFFICIAL_NEWS,
+    "official_ir": EventType.OFFICIAL_IR_UPDATE,
 }
 
 SOURCE_TO_SEVERITY = {
     "kap": Severity.WATCH,
-    "anadoluefes_news": Severity.INFO,
-    "anadoluefes_ir": Severity.WATCH,
+    "official_news": Severity.INFO,
+    "official_ir": Severity.WATCH,
 }
 
 CATEGORY_KEYWORDS = {
@@ -175,9 +178,12 @@ class FinancialService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repo = FinancialStatementRepository(session)
+        self.ratio_repo = FinancialRatioRepository(session)
+        self.analysis_service = AnalysisService(session)
 
     async def process_financials(self, raw_data: list[RawEventData], company: Company) -> dict:
         count = 0
+        ratios_calculated = 0
         for raw in raw_data:
             payload = raw.raw_payload_json
             if not payload:
@@ -187,20 +193,42 @@ class FinancialService:
             data = payload.get("data", {})
 
             # borsapy verisinden dönemleri çıkar (sütunlar dönemlerdir)
-            # data = {"2023/12": {"Kalem1": 100, ...}, "2023/09": {...}}
             periods = list(data.keys())
 
             for period in periods:
                 # Her dönem için ayrı bir kayıt (veya güncelleme)
-                period_data = {k: v.get(period) for k, v in data.items()}
+                # data formatı: { "2023/12": {"Kalem1": 100, ...}, ... }
+                period_data = data.get(period, {})
+                
+                # JSONB formatı NaN değerlerini desteklemediği için temizliyoruz
+                clean_period_data = {}
+                for k, v in period_data.items():
+                    if isinstance(v, float) and (v != v or v == float('inf') or v == float('-inf')):
+                        clean_period_data[k] = None
+                    else:
+                        clean_period_data[k] = v
 
                 await self.repo.upsert(
                     company_id=company.id,
                     period=period,
                     statement_type=statement_type,
-                    data_json=period_data,
+                    data_json=clean_period_data,
                     currency="TRY"  # Varsayılan
                 )
                 count += 1
+                
+                # Oranları hesapla ve kaydet (Eğer hem bilanço hem gelir tablosu varsa)
+                # Not: Bu her statement eklendiğinde tetiklenir, AnalysisService eksik tablo kontrolü yapar.
+                ratios = await self.analysis_service.calculate_ratios(company, period)
+                if ratios:
+                    await self.ratio_repo.upsert(
+                        company_id=company.id,
+                        period=period,
+                        **ratios
+                    )
+                    ratios_calculated += 1
 
-        return {"financial_records_processed": count}
+        return {
+            "financial_records_processed": count,
+            "financial_ratios_calculated": ratios_calculated
+        }

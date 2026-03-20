@@ -86,7 +86,7 @@ class NotificationOut(BaseModel):
 
 
 class NotificationRuleCreate(BaseModel):
-    company_ticker: str = "AEFES"
+    company_ticker: str
     email: str
     min_severity: Severity = Severity.INFO
     source_filters: list[str] = Field(default_factory=list)

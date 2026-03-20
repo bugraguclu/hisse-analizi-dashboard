@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aefes-listener"
+name = "ai-financial-assistant"
 version = "0.1.0"
-description = "AEFES Haber & KAP Listener — polling tabanlı veri toplama ve bildirim sistemi"
+description = "AI Powered Financial Assistant — BIST veri toplama, analiz ve bildirim sistemi"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110.0",

@@ -2,15 +2,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: aefes
-      POSTGRES_PASSWORD: aefes
-      POSTGRES_DB: aefes_listener
+      POSTGRES_USER: assistant
+      POSTGRES_PASSWORD: assistant
+      POSTGRES_DB: financial_assistant
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aefes -d aefes_listener"]
+      test: ["CMD-SHELL", "pg_isready -U assistant -d financial_assistant"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,8 +22,8 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://aefes:aefes@db:5432/aefes_listener
-      DATABASE_URL_SYNC: postgresql://aefes:aefes@db:5432/aefes_listener
+      DATABASE_URL: postgresql+asyncpg://assistant:assistant@db:5432/financial_assistant
+      DATABASE_URL_SYNC: postgresql://assistant:assistant@db:5432/financial_assistant
     depends_on:
       db:
         condition: service_healthy
@@ -35,8 +35,8 @@ services:
     command: python -m src.workers.run_workers
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://aefes:aefes@db:5432/aefes_listener
-      DATABASE_URL_SYNC: postgresql://aefes:aefes@db:5432/aefes_listener
+      DATABASE_URL: postgresql+asyncpg://assistant:assistant@db:5432/financial_assistant
+      DATABASE_URL_SYNC: postgresql://assistant:assistant@db:5432/financial_assistant
     depends_on:
       db:
         condition: service_healthy

@@ -16,11 +16,11 @@ NEWS_URLS = [
 BASE_URL = "https://www.anadoluefes.com"
 
 
-class AnadoluEfesNewsAdapter(BaseAdapter):
-    """Anadolu Efes resmi site haberleri scraper."""
+class OfficialNewsAdapter(BaseAdapter):
+    """Resmi şirket site haberleri scraper (Şimdilik Anadolu Efes destekli)."""
 
     def get_source_code(self) -> str:
-        return "anadoluefes_news"
+        return "official_news"
 
     async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
         if ticker != "AEFES":

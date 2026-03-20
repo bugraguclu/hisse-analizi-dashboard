@@ -84,14 +84,14 @@ async def seed():
             if ticker == "AEFES":
                 aefes_sources = [
                     {
-                        "code": "anadoluefes_news",
+                        "code": "official_news",
                         "name": "Anadolu Efes Kurumsal Haberler",
                         "base_url": "https://www.anadoluefes.com",
                         "kind": SourceKind.OFFICIAL_NEWS,
                         "poll_interval_seconds": 60,
                     },
                     {
-                        "code": "anadoluefes_ir",
+                        "code": "official_ir",
                         "name": "Anadolu Efes Yatırımcı İlişkileri",
                         "base_url": "https://www.anadoluefes.com/sayfa/1/652/yatirimci-iliskileri",
                         "kind": SourceKind.OFFICIAL_IR,
@@ -102,14 +102,14 @@ async def seed():
                     source = await source_repo.upsert(**s_data)
                     await polling_repo.upsert(source.id)
 
-            # Notification rule for the company
+        # Notification rule for the company
             existing_rules = await rule_repo.get_all()
             company_rules = [r for r in existing_rules if r.company_id == company.id]
             
             if not company_rules:
                 await rule_repo.create(
                     company_id=company.id,
-                    email="test@example.com",
+                    email="assistant-test@example.com",
                     channel=NotificationChannel.EMAIL,
                     frequency=NotificationFrequency.INSTANT,
                     min_severity=Severity.INFO,

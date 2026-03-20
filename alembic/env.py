@@ -8,10 +8,18 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.db.models import Base
+from src.core.config import settings
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Overwrite sqlalchemy.url with environment variable if present
+db_url = os.environ.get("DATABASE_URL_SYNC")
+if db_url:
+    config.set_main_option("sqlalchemy.url", db_url)
+elif settings.database_url_sync:
+    config.set_main_option("sqlalchemy.url", settings.database_url_sync)
 
 target_metadata = Base.metadata
 

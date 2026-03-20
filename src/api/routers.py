@@ -123,24 +123,24 @@ async def get_event(event_id: uuid.UUID, db: DB):
 @router.get("/prices", response_model=list[PriceOut])
 async def list_prices(
     db: DB,
-    ticker: str = "AEFES",
+    ticker: str = Query(..., description="Company ticker symbol"),
     since: str | None = None,
     until: str | None = None,
     interval: str = "1d",
     limit: int = Query(default=100, le=500),
 ):
     repo = PriceDataRepository(db)
-    return await repo.get_list(ticker=ticker, since=since, until=until, interval=interval, limit=limit)
+    return await repo.get_list(ticker=ticker.upper(), since=since, until=until, interval=interval, limit=limit)
 
 
 @router.get("/prices/latest", response_model=PriceOut | None)
-async def latest_price(db: DB, ticker: str = "AEFES"):
+async def latest_price(db: DB, ticker: str = Query(..., description="Company ticker symbol")):
     repo = PriceDataRepository(db)
-    return await repo.get_latest(ticker)
+    return await repo.get_latest(ticker.upper())
 
 
 @router.get("/financials", response_model=list[FinancialStatementOut])
-async def list_financials(db: DB, ticker: str = "AEFES"):
+async def list_financials(db: DB, ticker: str = Query(..., description="Company ticker symbol")):
     company_repo = CompanyRepository(db)
     company = await company_repo.get_by_ticker(ticker.upper())
     if not company:
@@ -221,6 +221,24 @@ async def get_stats(db: DB):
             select(func.count(EventOutbox.id)).where(EventOutbox.status == "pending")
         )
     ).scalar() or 0
+
+    # --- Public Endpoints ---
+
+    # Events summary by company and category
+    events_by_company = (
+        await db.execute(
+            select(Company.ticker, func.count(NormalizedEvent.id))
+            .join(NormalizedEvent)
+            .group_by(Company.ticker)
+        )
+    ).all()
+    
+    events_by_category = (
+        await db.execute(
+            select(NormalizedEvent.category, func.count(NormalizedEvent.id))
+            .group_by(NormalizedEvent.category)
+        )
+    ).all()
 
     return StatsOut(
         total_raw_events=raw_count,

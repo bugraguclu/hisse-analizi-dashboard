@@ -58,6 +58,7 @@ class Company(Base):
     price_data = relationship("PriceData", back_populates="company")
     notification_rules = relationship("NotificationRule", back_populates="company")
     financial_statements = relationship("FinancialStatement", back_populates="company")
+    financial_ratios = relationship("FinancialRatio", back_populates="company")
 
 
 class FinancialStatement(Base):
@@ -77,6 +78,36 @@ class FinancialStatement(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     company = relationship("Company", back_populates="financial_statements")
+
+
+class FinancialRatio(Base):
+    __tablename__ = "financial_ratios"
+    __table_args__ = (
+        UniqueConstraint("company_id", "period", name="uq_financial_ratios_period"),
+        Index("ix_financial_ratios_period", "period"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    period = Column(String(20), nullable=False)
+    
+    # Karlılık Oranları
+    roe = Column(Numeric(12, 4), nullable=True)  # Özsermaye Karlılığı
+    roa = Column(Numeric(12, 4), nullable=True)  # Aktif Karlılık
+    net_profit_margin = Column(Numeric(12, 4), nullable=True)
+    
+    # Değerleme Oranları
+    pe_ratio = Column(Numeric(12, 4), nullable=True)  # F/K
+    pb_ratio = Column(Numeric(12, 4), nullable=True)  # PD/DD
+    
+    # Borçluluk/Likidite Oranları
+    net_debt_ebitda = Column(Numeric(12, 4), nullable=True)
+    current_ratio = Column(Numeric(12, 4), nullable=True)  # Cari Oran
+    
+    metadata_json = Column(JSONB, default=dict)
+    calculated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company", back_populates="financial_ratios")
 
 
 class Source(Base):

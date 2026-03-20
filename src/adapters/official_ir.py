@@ -13,11 +13,11 @@ IR_URL = "https://www.anadoluefes.com/sayfa/1/652/yatirimci-iliskileri"
 BASE_URL = "https://www.anadoluefes.com"
 
 
-class AnadoluEfesIRAdapter(BaseAdapter):
-    """Anadolu Efes yatırımcı ilişkileri sayfası scraper."""
+class OfficialIRAdapter(BaseAdapter):
+    """Yatırımcı ilişkileri sayfası scraper (Şimdilik Anadolu Efes destekli)."""
 
     def get_source_code(self) -> str:
-        return "anadoluefes_ir"
+        return "official_ir"
 
     async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
         if ticker != "AEFES":

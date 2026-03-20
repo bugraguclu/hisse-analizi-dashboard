@@ -1,224 +1,81 @@
-# AEFES Listener — Proje Özeti
+# AI Powered Financial Assistant — Proje Özeti
 
-**Son Güncelleme:** 2026-03-10
-**Faz:** 1A (veri çekme + depolama) + 1B (notification-ready altyapı)
-**Durum:** MVP tamamlandı, PostgreSQL bağlantısı ile production'a hazır
+**Son Güncelleme:** 20 Mart 2026
+**Faz:** 1 (Tamamlandı) + 2 (Devam Ediyor)
+**Durum:** Altyapı BIST 30 ölçeğine genişletildi. Finansal analiz ve NLP sınıflandırma modülleri eklendi. Proje ismi "AI Powered Financial Assistant" olarak güncellendi.
 
 ---
 
 ## 1. YAPILAN İŞLER (Tamamlanan)
 
-### Altyapı
-- [x] Proje dizin yapısı oluşturuldu (modüler monolit)
-- [x] pyproject.toml ve bağımlılıklar tanımlandı
-- [x] Docker + docker-compose yapılandırması yazıldı
-- [x] Alembic migration altyapısı kuruldu
-- [x] .env.example hazırlandı
-- [x] structlog ile JSON logging altyapısı kuruldu
+### Altyapı & Yeniden Markalama (Rebranding)
+- [x] Projenin adı **"AI Powered Financial Assistant"** olarak tüm dosyalarda (README, API, pyproject.toml vb.) güncellendi.
+- [x] Dockerfile'a `psycopg2-binary` eklendi (Kalıcı veritabanı sürücüsü).
+- [x] `pyproject.toml`'da `structlog` versiyonu pinlendi.
+- [x] `docker-compose.yml` güncellendi:
+    - Obsolete `version` attribute kaldırıldı.
+    - Veritabanı adı `financial_assistant`, kullanıcı adı `assistant` olarak değiştirildi.
+- [x] **Alembic Migration Sistemi:**
+    - `initial tables` migration'ı oluşturuldu.
+    - `financial_statements` tablosu eklendi.
+    - `financial_ratios` tablosu eklendi.
+    - `normalized_events` tablosuna `category` (Enum) sütunu eklendi.
+- [x] `scripts/reset_polling.py` ile hata alan polling durumlarını sıfırlama aracı eklendi.
 
-### Veri Katmanı
-- [x] borsapy kuruldu ve AEFES için gerçek verilerle test edildi
-- [x] borsapy KAP haberleri: **ÇALIŞIYOR** (20 haber başarıyla çekildi)
-- [x] borsapy fiyat verisi: **ÇALIŞIYOR** (30 günlük OHLCV başarıyla çekildi)
-- [x] borsapy companies(): **ÇALIŞIYOR** (780 BIST şirketi listelendi)
-- [x] Anadolu Efes haber sayfası: **ÇALIŞIYOR** (6 haber linki çekildi)
-- [x] KAP API yedek endpoint: **TIMEOUT** (beklenen — SPA backend, güvenilmez)
-- [x] Gerçek response fixture'ları tests/fixtures/ altına kaydedildi
+### Multi-Stock & BIST 30 Genişlemesi
+- [x] **Kapsam Artırımı:** Sistem artık sadece AEFES değil, tüm **BIST 30** şirketlerini destekliyor.
+- [x] **Seed Verisi:** `scripts/seed.py` güncellenerek 30+ şirket ve bildirim kuralları otomatik yüklenir hale getirildi.
+- [x] **Dinamik Adapterlar:** KAP, Fiyat ve IR adapter'ları `ticker` parametresi alacak şekilde refaktör edildi.
+- [x] **Polling Worker:** Tüm aktif şirketleri sırayla tarayan döngüsel yapıya geçildi.
+- [x] API endpoint'lerindeki varsayılan "AEFES" kısıtı kaldırıldı, `ticker` parametresi zorunlu ve dinamik hale getirildi.
 
-### Veritabanı
-- [x] 10 tablo modeli yazıldı (SQLAlchemy 2.x async)
-- [x] Repository katmanı (CRUD) yazıldı
-- [x] Seed script yazıldı (AEFES + 4 source + test notification rule)
+### Finansal Analiz Modülü
+- [x] **FinancialAdapter:** borsapy entegrasyonu ile Bilanço, Gelir Tablosu ve Nakit Akış verilerinin çekilmesi sağlandı.
+- [x] **AnalysisService:** Finansal verilerden rasyo hesaplama motoru eklendi:
+    - **ROE** (Özsermaye Karlılığı)
+    - **ROA** (Aktif Karlılık)
+    - **Net Kar Marjı**
+    - **Cari Oran**
+- [x] **Otomatik Analiz:** Finansal tablolar sisteme girdiği anda oranlar otomatik hesaplanıp `financial_ratios` tablosuna kaydediliyor.
 
-### Adapter'lar
-- [x] BaseAdapter abstract class
-- [x] KAPAdapter (borsapy birincil + KAP API yedek)
-- [x] AnadoluEfesNewsAdapter (httpx + BeautifulSoup)
-- [x] AnadoluEfesIRAdapter (httpx + BeautifulSoup)
-- [x] PriceAdapter (borsapy birincil + yfinance yedek)
+### NLP & Akıllı Sınıflandırma
+- [x] **Keyword Classifier:** KAP bildirimlerini ve haberleri analiz eden ilk aşama NLP mantığı kuruldu.
+- [x] **Kategorizasyon:** Olaylar; *Temettü, Sermaye Artırımı, Yeni İş, Dava/Ceza, Yönetim Değişimi, Finansal Sonuç* olarak etiketleniyor.
+- [x] **Backfill classification:** `scripts/backfill_classification.py` ile mevcut 500+ olay yeni mantığa göre geriye dönük sınıflandırıldı.
 
-### Servisler
-- [x] EventService (raw → normalize → outbox pipeline)
-- [x] PriceService (fiyat verisi depolama)
-- [x] NotificationService (outbox → rules → email/dry-run)
-
-### Worker'lar
-- [x] Polling worker (configurable interval + jitter + backoff)
-- [x] Notification worker (outbox pattern)
-- [x] Worker entrypoint (run_workers.py)
-
-### API
-- [x] FastAPI app with lifespan (auto-start workers)
-- [x] 16 REST endpoint (public + admin)
-- [x] Pydantic v2 request/response schemas
-
-### Testler
-- [x] 36 unit test — **TÜMÜ GEÇTİ**
-- [x] content_hash / dedup_key hesaplama testleri
-- [x] Türkçe tarih parsing testleri
-- [x] HTML strip / whitespace normalization testleri
-- [x] Enum değer testleri
-- [x] Adapter veri yapısı testleri
-- [x] Integration test şablonları (network conditional)
+### API & Geliştirmeler
+- [x] `GET /financials?ticker=THYAO` ile finansal tablo sorgulama.
+- [x] `GET /admin/stats` ile yeni tabloları (finansal kayıtlar, oranlar) içeren genişletilmiş istatistikler.
+- [x] Bildirim başlıkları dinamik hale getirildi (örn: `[THYAO][KAP] Yeni olay...`).
 
 ---
 
 ## 2. YAPILACAKLAR (TO-DO)
 
-### Kısa Vadeli (Faz 1 tamamlama)
-- [ ] PostgreSQL kurulumu ve bağlantı testi
-- [ ] `alembic revision --autogenerate` ile migration oluşturma
-- [ ] `alembic upgrade head` ile tabloları oluşturma
-- [ ] `python scripts/seed.py` ile seed verisi yükleme
-- [ ] End-to-end poll test: `POST /admin/poll/run-once`
-- [ ] API testleri (httpx TestClient ile)
-- [ ] DB testleri (unique constraint, dedup)
+### Kısa Vadeli (Faz 2 Devamı)
+- [ ] **Gelişmiş NLP:** Claude/OpenAI API entegrasyonu ile gerçek sentiment analizi ve özetleme.
+- [ ] **Frontend Dashboard:** Next.js + Tailwind + Shadcn/UI ile yatırımcı arayüzü.
+- [ ] **Rate Limiting:** API güvenliği için istek sınırlama.
+- [ ] **Object Storage:** Ham JSON payload'ların S3 (MinIO) üzerinde saklanması.
 
-### Orta Vadeli (Faz 2)
-- [ ] Multi-stock desteği (adapter'lara ticker parametresi)
-- [ ] Object storage for raw payloads (S3/MinIO)
-- [ ] Backfill script'ini gerçek tarih aralığı ile çalıştırma
-- [ ] Rate limiting on API endpoints
-- [ ] Admin dashboard (basit web UI)
-- [ ] CI/CD pipeline (GitHub Actions)
-
-### Uzun Vadeli (Faz 3)
-- [ ] WebSocket real-time stream (opsiyonel)
-- [ ] Slack/Telegram notification channel
-- [ ] Finansal tablo analizi (borsapy financials)
-- [ ] Çoklu hisse karşılaştırma
-- [ ] Anomaly detection (fiyat/hacim)
+### Orta Vadeli (Faz 3)
+- [ ] **Yatırım Tez Takibi:** Kullanıcının girdiği tezlerin (örn: "X şirketi kapasite artıracak") haberlerle doğrulanması.
+- [ ] **Event Study:** Önemli olayların hisse fiyatı üzerindeki etkisinin tarihsel analizi.
+- [ ] **Alarm Önceliklendirme:** AI skoru ile "kritik" haberlerin anlık push/mail olarak ayrılması.
 
 ---
 
-## 3. MİMARİ ÖZET
+## 3. TEKNİK MİMARİ NOTLARI
 
-```
-Tip:     Modüler Monolit + Background Worker
-Dil:     Python 3.11+
-API:     FastAPI (async)
-DB:      PostgreSQL 16 (SQLAlchemy 2.x async)
-Cache:   Yok (Faz 1'de gereksiz)
-Queue:   Yok (DB-based outbox pattern)
-Deploy:  Docker Compose
-```
-
-### Dizin Yapısı
-```
-aefes-listener/
-├── src/
-│   ├── api/           → FastAPI app, routers
-│   ├── workers/       → polling_worker, notification_worker
-│   ├── adapters/      → KAP, news, IR, price (her biri BaseAdapter'dan)
-│   ├── parsers/       → hash, dedup, date parse, HTML strip
-│   ├── services/      → event_service, notification_service
-│   ├── db/            → models, repository, session
-│   ├── core/          → config, enums, logging
-│   └── schemas/       → Pydantic request/response
-├── alembic/           → DB migrations
-├── tests/             → unit + integration
-├── scripts/           → seed, manual_poll
-├── docker-compose.yml
-├── Dockerfile
-└── pyproject.toml
-```
-
-### Veri Akışı
-```
-Kaynak → Adapter.fetch() → RawEventData
-    → EventService.process_raw_events()
-        → raw_events (dedup: source_id + content_hash)
-        → normalized_events (dedup: dedup_key)
-        → event_outbox (status=pending)
-    → NotificationService.process_pending()
-        → notification_rules match
-        → notifications (email/dry_run)
-
-Fiyat → PriceAdapter.fetch_prices() → PriceRecord
-    → PriceService.process_prices()
-        → price_data (dedup: company_id + date + interval + source)
-```
-
----
-
-## 4. TEKNOLOJİ STACK'İ
-
-| Kategori | Teknoloji | Versiyon | Not |
-|----------|-----------|----------|-----|
-| Runtime | Python | 3.11+ | async/await |
-| Web Framework | FastAPI | 0.110+ | async |
-| ORM | SQLAlchemy | 2.x | async session |
-| DB | PostgreSQL | 16 | JSONB, UUID |
-| Migration | Alembic | 1.13+ | |
-| HTTP Client | httpx | 0.27+ | async |
-| HTML Parser | BeautifulSoup4 + lxml | | |
-| Veri Kaynağı | borsapy | 0.8.3 | MIT, birincil |
-| Yedek Fiyat | yfinance | 0.2.35+ | |
-| Validation | Pydantic | v2 | |
-| Logging | structlog | 24.1+ | JSON format |
-| Container | Docker + Compose | | |
-
----
-
-## 5. VERİTABANI TABLOLARI
-
-| Tablo | Satır Sayısı (tahmini/ay) | Açıklama |
-|-------|---------------------------|----------|
-| companies | 1 (şimdilik) | AEFES |
-| sources | 4 | kap, news, ir, price |
-| polling_state | 4 | Her source için son durum |
-| raw_events | ~600-1000 | Ham veri (tüm kaynaklar) |
-| normalized_events | ~600-1000 | İşlenmiş, dedup'lanmış |
-| price_data | ~20-22/ay | Günlük OHLCV |
-| event_outbox | ~600-1000 | Bildirim kuyruğu |
-| notification_rules | 1+ | E-posta kuralları |
-| notifications | Kurala göre | Gönderilen bildirimler |
-| audit_log | Düşük | İşlem logu |
-
----
-
-## 6. API ENDPOİNT'LERİ
-
-| Method | Path | Açıklama |
-|--------|------|----------|
-| GET | /health | Sistem durumu |
-| GET | /companies | Şirket listesi |
-| GET | /companies/{ticker} | Şirket detayı |
-| GET | /sources | Kaynak listesi |
-| GET | /events | Olay listesi (filtreli) |
-| GET | /events/latest | Son 10 olay |
-| GET | /events/{id} | Olay detayı |
-| GET | /prices | Fiyat geçmişi |
-| GET | /prices/latest | Son fiyat |
-| GET | /notifications | Bildirim listesi |
-| GET | /outbox | Outbox durumu |
-| GET | /polling-state | Polling durumu |
-| POST | /admin/poll/run-once | Manuel poll |
-| POST | /admin/backfill | Geçmiş veri çekme |
-| POST | /admin/notification-rules | Kural ekleme |
-| POST | /admin/notifications/test-send | Test bildirim |
-| GET | /admin/stats | İstatistikler |
-
----
-
-## 7. borsapy DOĞRULAMA SONUÇLARI
-
-| Test | Sonuç | Detay |
-|------|-------|-------|
-| KAP Haberleri | ✅ ÇALIŞIYOR | 20 haber, Date/Title/URL kolonları |
-| Fiyat Verisi | ✅ ÇALIŞIYOR | 30 günlük OHLCV, timezone-aware |
-| Companies | ✅ ÇALIŞIYOR | 780 BIST şirketi, AEFES mevcut |
-| KAP API Yedek | ⚠️ TIMEOUT | SPA backend, güvenilmez (beklenen) |
-| Anadolu Efes Site | ✅ ÇALIŞIYOR | 6 haber linki başarıyla parse edildi |
-| yfinance (yedek) | ✅ HAZIR | AEFES.IS ticker ile çalışır |
-
----
+- **Async/Await:** Tüm I/O işlemleri ve DB sorguları async (SQLAlchemy + FastAPI).
+- **Outbox Pattern:** Bildirimlerin veri kaybı olmadan güvenli gönderimi.
+- **Graceful Fallback:** borsapy verisi eksikse yfinance veya direkt API denemesi.
+- **Dockerized:** Tek komutla (`docker-compose up`) tüm stack (DB, App, Worker) ayağa kalkar.
 
 ## 8. BİLİNEN RİSKLER
 
 1. **borsapy** 3rd party — aktif ama breaking change riski var. Yedek kaynaklar yazıldı.
 2. **KAP SPA API** resmi değil — habersiz değişebilir. borsapy birincil tutuldu.
-3. **KAP rate limit** — 30sn'den sık poll'lanmamalı. Jitter eklendi.
 4. **Anadolu Efes site** ASP.NET WebForms — yapı değişebilir.
 5. **Raw payload** DB'de tutulur — büyük hacimde Faz 2'de object storage'a taşınmalı.
 6. **Hukuki uyarı** — sistem finansal tavsiye aracı değildir.
@@ -229,7 +86,7 @@ Fiyat → PriceAdapter.fetch_prices() → PriceRecord
 ## 9. DOSYA LİSTESİ
 
 ```
-aefes-listener/
+financial-assistant/
 ├── PROJE_OZETI.md              ← Bu dosya
 ├── README.md                   ← Kurulum ve kullanım
 ├── pyproject.toml              ← Bağımlılıklar
@@ -288,7 +145,7 @@ aefes-listener/
     ├── fixtures/
     │   ├── borsapy_kap_news.json      ← Gerçek KAP verisi
     │   ├── borsapy_price_data.json    ← Gerçek fiyat verisi
-    │   ├── borsapy_companies.json     ← Şirket listesi
+    │   ├── borsapy_companies.json     ← Şirket listesi (30+)
     │   └── anadoluefes_news_page.html ← Gerçek sayfa HTML'i
     ├── unit/
     │   ├── __init__.py
@@ -313,7 +170,7 @@ aefes-listener/
 ### Adımlar
 1. `cp .env.example .env` → DATABASE_URL'i düzenle
 2. `pip install -e ".[dev]"` → Bağımlılıkları kur
-3. PostgreSQL'de `aefes_listener` veritabanını oluştur
+3. PostgreSQL'de `financial_assistant` veritabanını oluştur
 4. `alembic revision --autogenerate -m "initial"` → Migration oluştur
 5. `alembic upgrade head` → Tabloları oluştur
 6. `python scripts/seed.py` → Seed verisi yükle

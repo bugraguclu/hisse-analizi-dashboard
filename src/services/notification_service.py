@@ -35,17 +35,24 @@ class NotificationService:
 
                 # Get the normalized event to find company_id
                 from sqlalchemy import select
-                from src.db.models import NormalizedEvent
+                from sqlalchemy.orm import selectinload
+                from src.db.models import NormalizedEvent, Company
                 from src.core.enums import Severity
 
                 result = await self.session.execute(
-                    select(NormalizedEvent).where(
-                        NormalizedEvent.id == outbox_entry.normalized_event_id
-                    )
+                    select(NormalizedEvent)
+                    .options(selectinload(NormalizedEvent.company))
+                    .where(NormalizedEvent.id == outbox_entry.normalized_event_id)
                 )
                 norm_event = result.scalar_one_or_none()
                 if not norm_event:
                     await self.outbox_repo.mark_failed(outbox_entry.id, "normalized_event_not_found")
+                    stats["errors"] += 1
+                    continue
+
+                company = norm_event.company
+                if not company:
+                    await self.outbox_repo.mark_failed(outbox_entry.id, "company_not_found")
                     stats["errors"] += 1
                     continue
 
@@ -74,7 +81,7 @@ class NotificationService:
                         continue
 
                     # Build notification
-                    subject = f"[AEFES][{source_code.upper()}] Yeni olay: {norm_event.title or 'Bilinmeyen'}"
+                    subject = f"[{company.ticker}][{source_code.upper()}] Yeni olay: {norm_event.title or 'Bilinmeyen'}"
                     body = self._build_body(norm_event, payload)
 
                     provider = (

@@ -6,8 +6,8 @@ import structlog
 
 from src.adapters.base import BaseAdapter, BasePriceAdapter
 from src.adapters.kap import KAPAdapter
-from src.adapters.anadoluefes_news import AnadoluEfesNewsAdapter
-from src.adapters.anadoluefes_ir import AnadoluEfesIRAdapter
+from src.adapters.official_news import OfficialNewsAdapter
+from src.adapters.official_ir import OfficialIRAdapter
 from src.adapters.price import PriceAdapter
 from src.adapters.financial_adapter import FinancialAdapter
 from src.core.config import settings
@@ -23,8 +23,8 @@ logger = structlog.get_logger(__name__)
 
 ADAPTERS: dict[str, BaseAdapter] = {
     "kap": KAPAdapter(),
-    "anadoluefes_news": AnadoluEfesNewsAdapter(),
-    "anadoluefes_ir": AnadoluEfesIRAdapter(),
+    "official_news": OfficialNewsAdapter(),
+    "official_ir": OfficialIRAdapter(),
     "financials": FinancialAdapter(),
 }
 
@@ -131,7 +131,7 @@ async def poll_source(source_code: str) -> dict:
 async def run_all_sources_once() -> list[dict]:
     """Tüm kaynakları bir kez poll et."""
     results = []
-    for source_code in ["kap", "anadoluefes_news", "anadoluefes_ir", "price"]:
+    for source_code in ["kap", "official_news", "official_ir", "price", "financials"]:
         result = await poll_source(source_code)
         results.append(result)
     return results
@@ -144,8 +144,8 @@ async def polling_loop():
     # Source intervals
     intervals = {
         "kap": 30,
-        "anadoluefes_news": 60,
-        "anadoluefes_ir": 300,
+        "official_news": 60,
+        "official_ir": 300,
         "price": 300,
         "financials": 3600,  # 1 hour for financials
     }

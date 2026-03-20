@@ -28,8 +28,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AEFES Listener",
-    description="AEFES Haber & KAP Listener — polling tabanlı veri toplama ve bildirim sistemi",
+    title="AI Powered Financial Assistant",
+    description="AI destekli BIST finansal asistan — polling tabanlı veri toplama, analiz ve bildirim sistemi",
     version="0.1.0",
     lifespan=lifespan,
 )

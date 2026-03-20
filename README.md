@@ -1,6 +1,6 @@
-# AEFES Listener — Haber & KAP Bildirim Sistemi
+# AI Powered Financial Assistant — Haber & KAP Bildirim Sistemi
 
-AEFES (Anadolu Efes) için kamuya açık kaynaklardan olay/haber/KAP bildirimi/fiyat verisi toplayan, saklayan ve bildirime hazır hale getiren polling tabanlı listener sistemi.
+Borsa İstanbul (BIST) şirketleri için kamuya açık kaynaklardan olay/haber/KAP bildirimi/fiyat/finansal tablo verisi toplayan, analiz eden ve bildirime hazır hale getiren polling tabanlı AI asistan sistemi.
 
 ## Mimari
 
@@ -89,8 +89,8 @@ GET  /health
 GET  /companies
 GET  /events?source_code=kap&limit=50
 GET  /events/latest
-GET  /prices?ticker=AEFES
-GET  /prices/latest?ticker=AEFES
+GET  /prices?ticker=THYAO
+GET  /prices/latest?ticker=THYAO
 POST /admin/poll/run-once   {"source_code": "kap"}
 POST /admin/backfill        {"days": 30}
 GET  /admin/stats

@@ -18,6 +18,7 @@ from src.db.models import (
     Notification,
     AuditLog,
     FinancialStatement,
+    FinancialRatio,  # Added FinancialRatio model
 )
 from src.core.enums import OutboxStatus, Severity
 
@@ -250,7 +251,7 @@ class PriceDataRepository:
         result = await self.session.execute(q)
         return result.scalars().all()
 
-    async def get_latest(self, ticker: str = "AEFES") -> PriceData | None:
+    async def get_latest(self, ticker: str) -> PriceData | None:
         result = await self.session.execute(
             select(PriceData)
             .where(PriceData.ticker == ticker)
@@ -414,6 +415,35 @@ class FinancialStatementRepository:
             .order_by(desc(FinancialStatement.period))
         )
         return result.scalars().all()
+
+
+class FinancialRatioRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_company_period(self, company_id: uuid.UUID, period: str) -> FinancialRatio | None:
+        result = await self.session.execute(
+            select(FinancialRatio).where(
+                and_(
+                    FinancialRatio.company_id == company_id,
+                    FinancialRatio.period == period,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(self, **kwargs) -> FinancialRatio:
+        existing = await self.get_by_company_period(kwargs["company_id"], kwargs["period"])
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            await self.session.flush()
+            return existing
+        
+        ratio = FinancialRatio(**kwargs)
+        self.session.add(ratio)
+        await self.session.flush()
+        return ratio
 
 
 class AuditLogRepository:

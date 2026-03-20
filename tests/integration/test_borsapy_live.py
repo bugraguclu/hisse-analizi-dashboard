@@ -12,7 +12,7 @@ HAS_NETWORK = os.environ.get("SKIP_NETWORK_TESTS") != "1"
 def test_borsapy_kap_news():
     import borsapy as bp
 
-    ticker = bp.Ticker("AEFES")
+    ticker = bp.Ticker("THYAO")
     news = ticker.news
     assert news is not None
     assert len(news) > 0
@@ -25,7 +25,7 @@ def test_borsapy_kap_news():
 def test_borsapy_price_data():
     import borsapy as bp
 
-    ticker = bp.Ticker("AEFES")
+    ticker = bp.Ticker("THYAO")
     df = ticker.history(period="1ay")
     assert df is not None
     assert len(df) > 0
@@ -41,9 +41,9 @@ def test_borsapy_companies():
     companies = bp.companies()
     assert companies is not None
     assert len(companies) > 700
-    # AEFES should be in the list
+    # THYAO should be in the list
     tickers = companies["ticker"].tolist()
-    assert "AEFES" in tickers
+    assert "THYAO" in tickers
 
 
 @pytest.mark.integration
@@ -53,7 +53,7 @@ def test_anadoluefes_news_page():
 
     resp = httpx.get(
         "https://www.anadoluefes.com/haber-liste/247",
-        headers={"User-Agent": "AEFESListener/1.0"},
+        headers={"User-Agent": "FinancialAssistant/1.0"},
         follow_redirects=True,
         timeout=30,
     )
