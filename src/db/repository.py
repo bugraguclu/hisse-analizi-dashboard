@@ -17,6 +17,8 @@ from src.db.models import (
     NotificationRule,
     Notification,
     AuditLog,
+    FinancialStatement,
+    FinancialRatio,
 )
 from src.core.enums import OutboxStatus, Severity
 
@@ -370,6 +372,87 @@ class NotificationRepository:
     async def get_all(self, limit: int = 50) -> Sequence[Notification]:
         result = await self.session.execute(
             select(Notification).order_by(desc(Notification.created_at)).limit(limit)
+        )
+        return result.scalars().all()
+
+
+class FinancialStatementRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_company_period_type(
+        self, company_id: uuid.UUID, period: str, statement_type: str
+    ) -> FinancialStatement | None:
+        result = await self.session.execute(
+            select(FinancialStatement).where(
+                and_(
+                    FinancialStatement.company_id == company_id,
+                    FinancialStatement.period == period,
+                    FinancialStatement.statement_type == statement_type,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(self, **kwargs) -> FinancialStatement:
+        existing = await self.get_by_company_period_type(
+            kwargs["company_id"], kwargs["period"], kwargs["statement_type"]
+        )
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            await self.session.flush()
+            return existing
+        fs = FinancialStatement(**kwargs)
+        self.session.add(fs)
+        await self.session.flush()
+        return fs
+
+    async def get_for_company(
+        self, company_id: uuid.UUID, statement_type: str | None = None
+    ) -> Sequence[FinancialStatement]:
+        q = select(FinancialStatement).where(FinancialStatement.company_id == company_id)
+        if statement_type:
+            q = q.where(FinancialStatement.statement_type == statement_type)
+        q = q.order_by(desc(FinancialStatement.period))
+        result = await self.session.execute(q)
+        return result.scalars().all()
+
+
+class FinancialRatioRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_company_period(
+        self, company_id: uuid.UUID, period: str
+    ) -> FinancialRatio | None:
+        result = await self.session.execute(
+            select(FinancialRatio).where(
+                and_(
+                    FinancialRatio.company_id == company_id,
+                    FinancialRatio.period == period,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(self, **kwargs) -> FinancialRatio:
+        existing = await self.get_by_company_period(kwargs["company_id"], kwargs["period"])
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            await self.session.flush()
+            return existing
+        ratio = FinancialRatio(**kwargs)
+        self.session.add(ratio)
+        await self.session.flush()
+        return ratio
+
+    async def get_for_company(self, company_id: uuid.UUID) -> Sequence[FinancialRatio]:
+        result = await self.session.execute(
+            select(FinancialRatio)
+            .where(FinancialRatio.company_id == company_id)
+            .order_by(desc(FinancialRatio.period))
         )
         return result.scalars().all()
 
