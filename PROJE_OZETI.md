@@ -1,204 +1,201 @@
-# Hisse Analizi Dashboard — Proje Ozeti
+# BIST Hisse Analizi Platformu — Proje Ozeti
 
-**Son Guncelleme:** 2026-03-20
+**Son Guncelleme:** 20 Mart 2026
 **Versiyon:** 0.4.0
-**Durum:** Dashboard UI gelistirme asamasi
-
-BIST'te islem goren 780+ sirket icin kapsamli analiz platformu.
-Teknik analiz, temel analiz, KAP bildirimleri, makro ekonomik veriler
-ve gercek zamanli fiyat takibi sunar. Varsayilan ticker: THYAO (tum BIST sirketleri desteklenir).
+**Durum:** Frontend dashboard tamamlandi, deployment oncesi test asamasi
 
 ---
 
-## 1. YAPILAN ISLER
+## Proje Nedir?
 
-### Faz 1 — Altyapi ve Polling (Tamamlandi)
-- [x] Moduler monolit mimari
-- [x] PostgreSQL + SQLAlchemy 2.x async
-- [x] 10 tablo modeli + repository katmani
-- [x] KAP, Haber, IR, Fiyat adapter'lari
-- [x] Event pipeline (raw → normalize → outbox)
-- [x] Notification sistemi (e-posta / dry-run)
-- [x] Polling + notification worker'lari
-- [x] 16 REST endpoint
-- [x] 36 unit test
-
-### Faz 2 — borsapy Tam Entegrasyon (Tamamlandi)
-- [x] Teknik analiz modulu (RSI, MACD, Bollinger, SMA, EMA, SuperTrend, Stochastic)
-- [x] Teknik sinyal ozeti (AL/SAT/NOTR) + tum zaman dilimleri
-- [x] Temel analiz modulu (sirket bilgileri, finansallar, temettu, ortaklik)
-- [x] Analist tavsiyeleri ve hedef fiyatlar
-- [x] Makro ekonomik veriler (TCMB, enflasyon, doviz, ekonomik takvim)
-- [x] Hisse tarama (screener) — ozel filtrelerle
-- [x] Teknik sinyal tarama (scanner)
-- [x] BIST endeks verileri
-- [x] Sembol arama (780+ sirket)
-- [x] Twitter/X finansal tweet entegrasyonu
-- [x] Canli fiyat stream altyapisi (TradingView WebSocket)
-- [x] Anlik fiyat snapshot (coklu sembol)
-- [x] 4 yeni API router dosyasi, 30+ yeni endpoint
-
-### Faz 3 — Finansal Analiz Sistemi (Tamamlandi)
-- [x] Model konsolidasyonu (models_extended.py -> models.py)
-- [x] FinancialStatement ve FinancialRatio modelleri (13 tablo)
-- [x] EventCategory enum + NLP keyword siniflandirma (temettü, sermaye artırımı, hukuki vb.)
-- [x] FinancialStatementRepository ve FinancialRatioRepository
-- [x] AnalysisService — 8 finansal oran (ROE, ROA, net/gross/ebitda margin, debt_to_equity, current_ratio, net_debt_ebitda)
-- [x] FinancialAdapter (borsapy: bilanco, gelir tablosu, nakit akis)
-- [x] FinancialService (DB upsert + oran hesaplama)
-- [x] Polling worker financials source destegi (saatlik)
-- [x] Alembic initial migration (13 tablo, tum index/constraint)
-- [x] GET /financials ve GET /financials/ratios endpoint'leri
-- [x] Seed'e financials source eklendi
-- [x] Developer Test UI v0.3.0 (financials bolumu eklendi)
+BIST'te islem goren 780+ sirket icin kapsamli bir hisse analiz platformu.
+Teknik analiz, temel analiz, KAP bildirimleri, makro ekonomik veriler ve
+gercek zamanli fiyat takibi tek bir catida sunulur. Backend Python/FastAPI,
+frontend Next.js 14 ile gelistirilmistir. Docker Compose ile tek komutla
+tum sistem ayaga kalkar.
 
 ---
 
-## 2. YAPILACAKLAR
+## Proje Gelisim Sureci
 
-### Kisa Vadeli
-- [ ] PostgreSQL kurulumu ve baglanti testi
-- [ ] `alembic upgrade head` ile tablolari olusturma
-- [ ] Yeni moduller icin unit test yazimi
-- [ ] End-to-end poll test
+### Faz 0 — Proje Baslangici (14 Mart 2026)
 
-### Orta Vadeli
-- [ ] Frontend dashboard (React/Next.js)
-- [ ] Grafik goruntuleme (TradingView widget veya recharts)
-- [ ] Object storage for raw payloads
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Rate limiting on API endpoints
+Proje "AEFES Listener" adiyla, yalnizca Anadolu Efes (AEFES) hissesini
+izleyen bir KAP bildirim takip sistemi olarak basladi.
 
-### Uzun Vadeli
-- [ ] WebSocket real-time fiyat push
-- [ ] Slack/Telegram bildirim kanallari
-- [ ] Anomaly detection (fiyat/hacim)
-- [ ] Portfoy takibi
+**Yapilan:**
+- FastAPI backend yapisi kuruldu
+- PostgreSQL + Docker Compose altyapisi olusturuldu
+- KAP bildirimleri ve fiyat verisi cekme (sadece AEFES)
+- Bildirim sistemi (outbox pattern ile event-driven mimari)
+- Temel API endpoint'leri (health, events, prices, companies)
+- 10 veritabani tablosu ve repository katmani
+- Polling + notification worker'lari
+- 36 unit test
+
+**Teknik kararlar:** Moduler monolit mimari secildi. Event pipeline
+(raw → normalize → outbox) sayesinde veri kaynaklari bagimsiz calisir.
+
+### Faz 1 — Multi-Stock Genislemesi (15 Mart 2026)
+
+Proje tek hisseden BIST 30'a genisledi.
+
+**Yapilan:**
+- 30 BIST sirketi veritabanina eklendi
+- KAP ve fiyat adapter'lari dinamik hale getirildi (hardcoded AEFES kaldirildi)
+- Polling worker tum sirketler uzerinde dongulu calismaya basladi
+- API endpoint'lerine `?ticker=` filtresi eklendi
+- Docker ve Alembic migration duzeltmeleri yapildi
+
+### Faz 2 — borsapy Tam Entegrasyon (15 Mart 2026)
+
+borsapy kutuphanesi (MIT, 780+ BIST sirketi) uzerinden tum veri modulleri
+platforma entegre edildi. Sistem sadece KAP takibinden kapsamli bir analiz
+platformuna donustu.
+
+**Eklenen moduller:**
+- Teknik analiz: RSI, MACD, Bollinger Bands, SMA, EMA, SuperTrend, Stochastic
+- Teknik sinyal ozeti: AL/SAT/NOTR kararlari, tum zaman dilimleri
+- Temel analiz: sirket bilgileri, bilanco, gelir tablosu, nakit akis, temettu, ortaklik yapisi
+- Analist tavsiyeleri ve hedef fiyatlar
+- Makro veriler: TCMB politika faizi, enflasyon, doviz kurlari, ekonomik takvim
+- Hisse tarama (screener) ve teknik sinyal tarama (scanner)
+- BIST endeks verileri, sembol arama
+- Twitter/X finansal tweet entegrasyonu
+- Canli fiyat stream altyapisi (TradingView WebSocket)
+- 4 yeni API router dosyasi, toplam 50+ endpoint
+
+**Sonuc:** 15 adapter sinifi, 53 API endpoint, Swagger dokumantasyonu otomatik.
+
+### Faz 3 — Finansal Analiz ve NLP (20 Mart 2026)
+
+Finansal tablolarin veritabanina kaydedilmesi, otomatik oran hesaplama ve
+KAP bildirimlerinin NLP ile siniflandirilmasi eklendi.
+
+**Yapilan:**
+- FinancialStatement ve FinancialRatio modelleri (toplam 13 DB tablosu)
+- AnalysisService: 8 finansal oran otomatik hesaplama (ROE, ROA, net/gross/EBITDA margin, debt-to-equity, current ratio, net debt/EBITDA)
+- NLP keyword siniflandirma: KAP bildirimlerini 7 kategoriye ayirma (temettu, sermaye artirimi, hukuki, yonetim vb.)
+- FinancialAdapter: borsapy uzerinden bilanco, gelir tablosu, nakit akis → DB
+- Polling worker'a financials source eklendi (saatlik guncelleme)
+- Alembic initial migration (13 tablo, tum index ve constraint'ler)
+- GET /financials ve GET /financials/ratios endpoint'leri
+- Dinamik bildirim subject'i (hardcoded AEFES yerine sirket ticker'i)
+- Utility script'ler: backfill_classification, debug_financials
+- Developer Test UI v0.3.0 (finansal tablolar bolumu)
+- 42 test, 53 endpoint
+
+**Karar:** Backend MVP-hazir ilan edildi. Frontend gelistirmeye gecis karari alindi.
+
+### Faz 4 — Dashboard UI (20 Mart 2026)
+
+Iki asamada gerceklesti: once vanilla JS ile hizli bir prototip, ardindan
+Next.js 14 ile profesyonel dashboard.
+
+**Adim 1 — Vanilla JS Prototip:**
+- Tek sayfa SPA (hash-based routing), 5 bolum: Overview, Stocks, Detail, Screener, News
+- Chart.js entegrasyonu, dark tema
+- `src/static/dashboard/` altinda 6 dosya
+
+**Adim 2 — Next.js 14 Dashboard:**
+- App Router, TypeScript, Tailwind CSS
+- shadcn/ui component library (card, badge, table, tabs, skeleton, sonner)
+- React Query (@tanstack/react-query) ile veri yonetimi (30sn cache)
+- Recharts ile grafikler (AreaChart, BarChart)
+- Lucide React ikon seti
+- Light fintech tema (beyaz zemin, teal sidebar, turuncu vurgular)
+
+**7 sayfa:**
+1. Dashboard — 6 KPI karti, fiyat snapshot, son olaylar tablosu
+2. Olaylar — Source/ticker filtreleme, sayfalama
+3. Hisse Detay — 90 gunluk fiyat grafigi, hacim, finansal oranlar, olaylar
+4. Teknik Analiz — AL/SAT/NOTR sinyalleri, RSI, MACD, Bollinger, SuperTrend
+5. Temel Analiz — Sirket bilgileri, analist tavsiyeleri, hedef fiyat, ortaklar
+6. Makro Ekonomi — Politika faizi, enflasyon, doviz, TCMB, ekonomik takvim
+7. Tarama — Screener, teknik sinyal scanner, BIST endeksleri
+
+### Faz 4.5 — Proje Genelleme ve Docker (20 Mart 2026)
+
+Proje "AEFES Listener"dan genel "BIST Hisse Analizi Platformu"na donusturuldu.
+Dashboard Docker Compose'a eklenerek tek komutla deploy mumkun hale geldi.
+
+**Yapilan:**
+- Tum varsayilan ticker AEFES → THYAO olarak degistirildi (25+ dosya, 75 referans)
+- DB adi: aefes_listener → hisse_analizi
+- DB kullanicisi: aefes → hisse
+- User-Agent: AEFESListener/1.0 → HisseAnalizi/1.0
+- Dashboard icin multi-stage Dockerfile (Node 20 Alpine, standalone output)
+- docker-compose.yml: 4 servis (db, app, worker, dashboard) + opsiyonel mailhog
+- next.config.ts: standalone output + backend API rewrite
+- Tum dokumantasyon guncellendi
+
+**Sonuc:** `docker-compose up -d` ile PostgreSQL, FastAPI backend, worker ve
+Next.js dashboard tek seferde ayaga kalkar.
 
 ---
 
-## 3. MIMARI OZET
+## Mevcut Mimari
 
 ```
-Tip:     Moduler Monolit + Background Worker
-Dil:     Python 3.11+
-API:     FastAPI (async)
-DB:      PostgreSQL 16 (SQLAlchemy 2.x async)
-Deploy:  Docker Compose
-Versiyon: 0.3.0
+Kullanici
+   |
+   v
+[Next.js Dashboard :3000]  ←→  [FastAPI Backend :8000]  ←→  [PostgreSQL :5432]
+                                        |
+                                   [Worker Proses]
+                                        |
+                                   [borsapy / KAP / TradingView]
 ```
+
+**Backend:** Python 3.11, FastAPI (async), SQLAlchemy 2.x async, Alembic
+**Frontend:** Next.js 14, TypeScript, Tailwind CSS, shadcn/ui, React Query, Recharts
+**Veri Kaynagi:** borsapy 0.8.3 (MIT) — KAP, fiyat, teknik, temel, makro
+**Deploy:** Docker Compose (4 servis)
+
+### Endpoint Ozeti
+
+| Grup | Sayi | Ornekler |
+|------|------|----------|
+| Core | 17 | health, events, prices, companies, admin, financials |
+| Teknik Analiz | 9 | RSI, MACD, Bollinger, SMA, EMA, SuperTrend, signals |
+| Temel Analiz | 10 | info, balance-sheet, income, cashflow, dividends, holders |
+| Makro Ekonomi | 5 | TCMB, enflasyon, doviz, politika faizi, takvim |
+| Piyasa | 10 | screener, scanner, indices, search, tweets, snapshot |
+| **Toplam** | **53** | |
 
 ### Dizin Yapisi
+
 ```
 hisse-analizi-dashboard/
-├── src/
-│   ├── api/
-│   │   ├── app.py                    ← FastAPI application
-│   │   ├── routers.py                ← Core endpoints (16 adet)
-│   │   ├── routers_technical.py      ← Teknik analiz endpoints (9 adet)
-│   │   ├── routers_fundamentals.py   ← Temel analiz endpoints (10 adet)
-│   │   ├── routers_macro.py          ← Makro ekonomi endpoints (5 adet)
-│   │   └── routers_market.py         ← Piyasa verileri endpoints (10 adet)
-│   ├── adapters/
-│   │   ├── base.py                   ← BaseAdapter, RawEventData, PriceRecord
-│   │   ├── kap.py                    ← KAP adapter (borsapy + API yedek)
-│   │   ├── anadoluefes_news.py       ← Haber scraper
-│   │   ├── anadoluefes_ir.py         ← IR scraper
-│   │   ├── price.py                  ← Fiyat adapter (borsapy + yfinance)
-│   │   ├── technical.py              ← Teknik analiz (RSI, MACD, Bollinger...)
-│   │   ├── fundamentals.py           ← Temel analiz (bilanco, gelir, nakit)
-│   │   ├── macro.py                  ← Makro veriler (TCMB, enflasyon, FX)
-│   │   ├── financial_adapter.py       ← Finansal tablolar (borsapy → DB)
-│   │   ├── screener_adapter.py       ← Hisse tarama
-│   │   ├── scanner_adapter.py        ← Teknik sinyal tarama
-│   │   ├── index_adapter.py          ← BIST endeksleri
-│   │   ├── search_adapter.py         ← Sembol arama
-│   │   ├── twitter_adapter.py        ← Twitter/X tweet'ler
-│   │   └── stream_adapter.py         ← Canli fiyat stream
-│   ├── core/                         ← Config, enums, logging
-│   ├── db/                           ← Models (13 tablo), repository, session
-│   ├── parsers/                      ← Hash, dedup, date parse
-│   ├── schemas/                      ← Pydantic request/response
-│   ├── services/                     ← Event, price, financial, analysis, notification
-│   └── workers/                      ← Polling, notification
-├── alembic/                          ← DB migrations
-├── tests/                            ← Unit + integration (36 test)
-├── scripts/                          ← Seed, manual_poll
+├── src/                        ← Python backend
+│   ├── api/                    ← FastAPI app + 5 router dosyasi
+│   ├── adapters/               ← 15 veri kaynagi adapter'i
+│   ├── core/                   ← Config, enums, logging
+│   ├── db/                     ← Models (13 tablo), repository, session
+│   ├── services/               ← Event, notification, analysis, financial
+│   ├── workers/                ← Polling + notification worker
+│   └── static/                 ← Vanilla JS dashboard (prototip)
+├── dashboard/                  ← Next.js 14 frontend
+│   ├── src/app/                ← 7 sayfa (App Router)
+│   ├── src/components/         ← UI bilesenleri (layout, shared, dashboard)
+│   ├── src/lib/                ← API client, format utils, query client
+│   └── Dockerfile              ← Multi-stage production build
+├── alembic/                    ← DB migration'lari
+├── tests/                      ← Unit + integration (42 test)
+├── scripts/                    ← Seed, backfill, debug
+├── docker-compose.yml          ← 4 servis: db, app, worker, dashboard
 └── pyproject.toml
 ```
 
 ---
 
-## 4. API ENDPOINT OZETI
+## Siradaki Adimlar
 
-| Grup | Endpoint Sayisi | Aciklama |
-|------|----------------|----------|
-| Core | 17 | health, events, prices, companies, admin |
-| Finansal | 2 | financials (DB), financials/ratios (DB) |
-| Teknik Analiz | 9 | RSI, MACD, Bollinger, SMA, EMA, SuperTrend, Stochastic, signals |
-| Temel Analiz | 10 | info, balance-sheet, income, cashflow, dividends, holders, recommendations |
-| Makro Ekonomi | 5 | TCMB, enflasyon, doviz, politika faizi, ekonomik takvim |
-| Piyasa | 10 | screener, scanner, indices, search, tweets, snapshot |
-| **Toplam** | **53** | |
-
----
-
-## 5. borsapy ENTEGRASYON MATRISI
-
-| Modul | Adapter | API Endpoint | Durum |
-|-------|---------|-------------|-------|
-| Ticker.history | price.py | /prices | Aktif (polling) |
-| Ticker.news | kap.py | /events | Aktif (polling) |
-| Ticker.balance_sheet | financial_adapter.py | /financials | Aktif (polling, saatlik) |
-| Ticker.income_stmt | financial_adapter.py | /financials | Aktif (polling, saatlik) |
-| Ticker.cashflow | financial_adapter.py | /financials | Aktif (polling, saatlik) |
-| Ticker.rsi | technical.py | /technical/{t}/rsi | Aktif (on-demand) |
-| Ticker.macd | technical.py | /technical/{t}/macd | Aktif (on-demand) |
-| Ticker.bollinger_bands | technical.py | /technical/{t}/bollinger | Aktif (on-demand) |
-| Ticker.sma | technical.py | /technical/{t}/sma | Aktif (on-demand) |
-| Ticker.ema | technical.py | /technical/{t}/ema | Aktif (on-demand) |
-| Ticker.supertrend | technical.py | /technical/{t}/supertrend | Aktif (on-demand) |
-| Ticker.stochastic | technical.py | /technical/{t}/stochastic | Aktif (on-demand) |
-| Ticker.ta_signals | technical.py | /technical/{t}/signals | Aktif (on-demand) |
-| Ticker.ta_signals_all_timeframes | technical.py | /technical/{t}/signals/all-timeframes | Aktif (on-demand) |
-| Ticker.info | fundamentals.py | /fundamentals/{t}/info | Aktif (on-demand) |
-| Ticker.fast_info | fundamentals.py | /fundamentals/{t}/fast-info | Aktif (on-demand) |
-| Ticker.balance_sheet | fundamentals.py | /fundamentals/{t}/balance-sheet | Aktif (on-demand) |
-| Ticker.income_stmt | fundamentals.py | /fundamentals/{t}/income-statement | Aktif (on-demand) |
-| Ticker.cashflow | fundamentals.py | /fundamentals/{t}/cashflow | Aktif (on-demand) |
-| Ticker.dividends | fundamentals.py | /fundamentals/{t}/dividends | Aktif (on-demand) |
-| Ticker.major_holders | fundamentals.py | /fundamentals/{t}/holders | Aktif (on-demand) |
-| Ticker.recommendations | fundamentals.py | /fundamentals/{t}/recommendations | Aktif (on-demand) |
-| Ticker.analyst_price_targets | fundamentals.py | /fundamentals/{t}/price-targets | Aktif (on-demand) |
-| Ticker.earnings_dates | fundamentals.py | /fundamentals/{t}/earnings-dates | Aktif (on-demand) |
-| Ticker.tweets | twitter_adapter.py | /market/tweets/{t} | Aktif (on-demand) |
-| bp.TCMB | macro.py | /macro/tcmb | Aktif (on-demand) |
-| bp.policy_rate | macro.py | /macro/policy-rate | Aktif (on-demand) |
-| bp.inflation | macro.py | /macro/inflation | Aktif (on-demand) |
-| bp.FX | macro.py | /macro/fx/{symbol} | Aktif (on-demand) |
-| bp.economic_calendar | macro.py | /macro/calendar | Aktif (on-demand) |
-| bp.screen_stocks | screener_adapter.py | /market/screener | Aktif (on-demand) |
-| bp.TechnicalScanner | scanner_adapter.py | /market/scanner | Aktif (on-demand) |
-| bp.Index | index_adapter.py | /market/index/{s} | Aktif (on-demand) |
-| bp.indices | index_adapter.py | /market/indices | Aktif (on-demand) |
-| bp.search | search_adapter.py | /market/search | Aktif (on-demand) |
-| bp.companies | search_adapter.py | /market/companies/all | Aktif (on-demand) |
-| TradingViewStream | stream_adapter.py | (programmatic) | Hazir |
-
----
-
-## 6. TEKNOLOJI STACK'I
-
-| Kategori | Teknoloji | Versiyon |
-|----------|-----------|----------|
-| Runtime | Python | 3.11+ |
-| Web Framework | FastAPI | 0.110+ |
-| ORM | SQLAlchemy | 2.x async |
-| DB | PostgreSQL | 16 |
-| Veri Kaynagi | borsapy | 0.8.3 (MIT) |
-| Yedek Fiyat | yfinance | 0.2.35+ |
-| HTTP Client | httpx | 0.27+ |
-| HTML Parser | BeautifulSoup4 + lxml | |
-| Validation | Pydantic | v2 |
-| Logging | structlog | JSON format |
-| Container | Docker + Compose | |
+- [ ] PostgreSQL kurulumu ve `alembic upgrade head` ile tablo olusturma
+- [ ] Docker Compose ile end-to-end calistirma testi
+- [ ] Next.js dashboard build dogrulama
+- [ ] Yeni moduller icin unit test tamamlama (hedef: 80%+ coverage)
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] WebSocket ile gercek zamanli fiyat push
+- [ ] Slack/Telegram bildirim kanallari
+- [ ] Portfoy takibi modulu
