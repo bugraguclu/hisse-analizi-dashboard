@@ -252,7 +252,7 @@ class PriceDataRepository:
         result = await self.session.execute(q)
         return result.scalars().all()
 
-    async def get_latest(self, ticker: str = "AEFES") -> PriceData | None:
+    async def get_latest(self, ticker: str = "THYAO") -> PriceData | None:
         result = await self.session.execute(
             select(PriceData)
             .where(PriceData.ticker == ticker)

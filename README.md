@@ -117,10 +117,10 @@ GET  /health                              Sistem durumu
 GET  /companies                           Sirket listesi
 GET  /events?source_code=kap&limit=50     Olay listesi
 GET  /events/latest                       Son 10 olay
-GET  /prices?ticker=AEFES                 Fiyat gecmisi
-GET  /prices/latest?ticker=AEFES          Son fiyat
-GET  /financials?ticker=AEFES             Finansal tablolar (DB)
-GET  /financials/ratios?ticker=AEFES      Hesaplanmis oranlar (DB)
+GET  /prices?ticker=THYAO                 Fiyat gecmisi
+GET  /prices/latest?ticker=THYAO          Son fiyat
+GET  /financials?ticker=THYAO             Finansal tablolar (DB)
+GET  /financials/ratios?ticker=THYAO      Hesaplanmis oranlar (DB)
 ```
 
 ### Teknik Analiz
@@ -171,7 +171,7 @@ GET  /market/index/{symbol}/info          Endeks bilgileri
 GET  /market/search?q=THYAO               Sembol arama
 GET  /market/companies/all                Tum BIST sirketleri
 GET  /market/tweets/{ticker}              Hisse tweet'leri
-GET  /market/snapshot?symbols=AEFES,THYAO Anlik fiyat snapshot
+GET  /market/snapshot?symbols=THYAO,GARAN Anlik fiyat snapshot
 ```
 
 ### Admin

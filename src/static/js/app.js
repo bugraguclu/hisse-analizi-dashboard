@@ -10,70 +10,70 @@ const ENDPOINTS = {
   ],
   technical: [
     { method: "GET", path: "/technical/{ticker}/rsi", desc: "RSI", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "period", type: "query", default: "14" },
     ]},
     { method: "GET", path: "/technical/{ticker}/macd", desc: "MACD", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/technical/{ticker}/bollinger", desc: "Bollinger Bands", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "period", type: "query", default: "20" },
     ]},
     { method: "GET", path: "/technical/{ticker}/sma", desc: "SMA", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "period", type: "query", default: "20" },
     ]},
     { method: "GET", path: "/technical/{ticker}/ema", desc: "EMA", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "period", type: "query", default: "20" },
     ]},
     { method: "GET", path: "/technical/{ticker}/supertrend", desc: "SuperTrend", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/technical/{ticker}/stochastic", desc: "Stochastic", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/technical/{ticker}/signals", desc: "Teknik Sinyal Ozeti", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/technical/{ticker}/signals/all-timeframes", desc: "Tum Zaman Dilimleri", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
   ],
   fundamentals: [
     { method: "GET", path: "/fundamentals/{ticker}/info", desc: "Sirket Bilgileri", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/fast-info", desc: "Hizli Ozet", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/balance-sheet", desc: "Bilanco", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "quarterly", type: "query", default: "false", options: ["false", "true"] },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/income-statement", desc: "Gelir Tablosu", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "quarterly", type: "query", default: "false", options: ["false", "true"] },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/cashflow", desc: "Nakit Akis", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "quarterly", type: "query", default: "false", options: ["false", "true"] },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/dividends", desc: "Temettu Gecmisi", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/holders", desc: "Buyuk Ortaklar", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/recommendations", desc: "Analist Tavsiyeleri", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/price-targets", desc: "Hedef Fiyatlar", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
     { method: "GET", path: "/fundamentals/{ticker}/earnings-dates", desc: "Kazanc Tarihleri", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
     ]},
   ],
   macro: [
@@ -104,20 +104,20 @@ const ENDPOINTS = {
     ]},
     { method: "GET", path: "/market/companies/all", desc: "Tum BIST Sirketleri" },
     { method: "GET", path: "/market/tweets/{ticker}", desc: "Twitter/X", params: [
-      { name: "ticker", type: "path", default: "AEFES" },
+      { name: "ticker", type: "path", default: "THYAO" },
       { name: "limit", type: "query", default: "10" },
     ]},
     { method: "GET", path: "/market/snapshot", desc: "Anlik Fiyat Snapshot", params: [
-      { name: "symbols", type: "query", default: "AEFES,THYAO,GARAN" },
+      { name: "symbols", type: "query", default: "THYAO,GARAN,SISE" },
     ]},
   ],
   financials: [
     { method: "GET", path: "/financials", desc: "Finansal Tablolar (DB)", params: [
-      { name: "ticker", type: "query", default: "AEFES" },
+      { name: "ticker", type: "query", default: "THYAO" },
       { name: "statement_type", type: "query", default: "", options: ["", "balance_sheet", "income_stmt", "cash_flow"] },
     ]},
     { method: "GET", path: "/financials/ratios", desc: "Finansal Oranlar (DB)", params: [
-      { name: "ticker", type: "query", default: "AEFES" },
+      { name: "ticker", type: "query", default: "THYAO" },
     ]},
   ],
   events: [
@@ -127,10 +127,10 @@ const ENDPOINTS = {
       { name: "source_code", type: "query", default: "" },
     ]},
     { method: "GET", path: "/prices/latest", desc: "Son Fiyat", params: [
-      { name: "ticker", type: "query", default: "AEFES" },
+      { name: "ticker", type: "query", default: "THYAO" },
     ]},
     { method: "GET", path: "/prices", desc: "Fiyat Gecmisi", params: [
-      { name: "ticker", type: "query", default: "AEFES" },
+      { name: "ticker", type: "query", default: "THYAO" },
       { name: "limit", type: "query", default: "30" },
     ]},
     { method: "GET", path: "/companies", desc: "Kayitli Sirketler" },

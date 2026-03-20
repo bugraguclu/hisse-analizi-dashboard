@@ -3,15 +3,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: aefes
-      POSTGRES_PASSWORD: aefes
-      POSTGRES_DB: aefes_listener
+      POSTGRES_USER: hisse
+      POSTGRES_PASSWORD: hisse
+      POSTGRES_DB: hisse_analizi
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aefes -d aefes_listener"]
+      test: ["CMD-SHELL", "pg_isready -U hisse -d hisse_analizi"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,8 +23,8 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://aefes:aefes@db:5432/aefes_listener
-      DATABASE_URL_SYNC: postgresql://aefes:aefes@db:5432/aefes_listener
+      DATABASE_URL: postgresql+asyncpg://hisse:hisse@db:5432/hisse_analizi
+      DATABASE_URL_SYNC: postgresql://hisse:hisse@db:5432/hisse_analizi
     depends_on:
       db:
         condition: service_healthy
@@ -36,13 +36,25 @@ services:
     command: python -m src.workers.run_workers
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://aefes:aefes@db:5432/aefes_listener
-      DATABASE_URL_SYNC: postgresql://aefes:aefes@db:5432/aefes_listener
+      DATABASE_URL: postgresql+asyncpg://hisse:hisse@db:5432/hisse_analizi
+      DATABASE_URL_SYNC: postgresql://hisse:hisse@db:5432/hisse_analizi
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - .:/app
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://app:8000
+    depends_on:
+      - app
+    restart: unless-stopped
 
   mailhog:
     image: mailhog/mailhog:latest

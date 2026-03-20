@@ -15,9 +15,9 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/events", label: "Olaylar & KAP", icon: Newspaper },
-  { href: "/hisse/AEFES", label: "Hisse Analizi", icon: BarChart3, match: "/hisse" },
-  { href: "/teknik/AEFES", label: "Teknik Analiz", icon: TrendingUp, match: "/teknik" },
-  { href: "/temel/AEFES", label: "Temel Analiz", icon: Building2, match: "/temel" },
+  { href: "/hisse/THYAO", label: "Hisse Analizi", icon: BarChart3, match: "/hisse" },
+  { href: "/teknik/THYAO", label: "Teknik Analiz", icon: TrendingUp, match: "/teknik" },
+  { href: "/temel/THYAO", label: "Temel Analiz", icon: Building2, match: "/temel" },
   { href: "/makro", label: "Makro Ekonomi", icon: Globe },
   { href: "/tarama", label: "Hisse Tarama", icon: Search },
 ];

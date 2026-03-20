@@ -127,7 +127,7 @@ async def get_event(event_id: uuid.UUID, db: DB):
 @router.get("/prices", response_model=list[PriceOut])
 async def list_prices(
     db: DB,
-    ticker: str = "AEFES",
+    ticker: str = "THYAO",
     since: str | None = None,
     until: str | None = None,
     interval: str = "1d",
@@ -138,7 +138,7 @@ async def list_prices(
 
 
 @router.get("/prices/latest", response_model=PriceOut | None)
-async def latest_price(db: DB, ticker: str = "AEFES"):
+async def latest_price(db: DB, ticker: str = "THYAO"):
     repo = PriceDataRepository(db)
     return await repo.get_latest(ticker)
 
@@ -146,7 +146,7 @@ async def latest_price(db: DB, ticker: str = "AEFES"):
 @router.get("/financials", response_model=list[FinancialStatementOut])
 async def list_financials(
     db: DB,
-    ticker: str = Query(..., description="Hisse kodu (orn: AEFES)"),
+    ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
     statement_type: str | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
 ):
     """Sirketin DB'deki finansal tablolarini listele."""
@@ -161,7 +161,7 @@ async def list_financials(
 @router.get("/financials/ratios", response_model=list[FinancialRatioOut])
 async def list_ratios(
     db: DB,
-    ticker: str = Query(..., description="Hisse kodu (orn: AEFES)"),
+    ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
 ):
     """Sirketin hesaplanmis finansal oranlarini listele."""
     company_repo = CompanyRepository(db)

@@ -32,12 +32,12 @@ def test_price_record_defaults():
 
 def test_price_record_with_values():
     rec = PriceRecord(
-        ticker="AEFES",
+        ticker="THYAO",
         open=18.5,
         high=19.0,
         low=18.3,
         close=18.7,
         volume=37000000,
     )
-    assert rec.ticker == "AEFES"
+    assert rec.ticker == "THYAO"
     assert rec.close == 18.7

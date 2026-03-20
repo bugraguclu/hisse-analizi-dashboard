@@ -11,7 +11,7 @@ class LivePriceStream:
     """Canli fiyat stream yoneticisi.
 
     Kullanim:
-        stream = LivePriceStream(["AEFES", "THYAO", "GARAN"])
+        stream = LivePriceStream(["THYAO", "GARAN", "SISE"])
         stream.start(callback=my_handler)
         # ...
         stream.stop()

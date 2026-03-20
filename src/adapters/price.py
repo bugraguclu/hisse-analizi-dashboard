@@ -14,7 +14,7 @@ logger = structlog.get_logger(__name__)
 class PriceAdapter(BasePriceAdapter):
     """Fiyat verisi: borsapy birincil, yfinance yedek. Multi-stock destekli."""
 
-    def __init__(self, ticker: str = "AEFES"):
+    def __init__(self, ticker: str = "THYAO"):
         self.ticker = ticker
 
     def get_source_code(self) -> str:

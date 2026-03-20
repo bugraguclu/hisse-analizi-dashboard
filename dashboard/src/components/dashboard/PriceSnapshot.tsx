@@ -7,7 +7,7 @@ import { CardSkeleton } from "@/components/shared/LoadingSpinner";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import Link from "next/link";
 
-const watchlist = ["AEFES", "THYAO", "GARAN", "SISE"];
+const watchlist = ["THYAO", "GARAN", "SISE", "ASELS"];
 
 export function PriceSnapshot() {
   const { data, isLoading } = useQuery({

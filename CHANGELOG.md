@@ -5,6 +5,32 @@ Format: [Oyun Patch Notes tarzı — her gün ne yapıldı, kim yaptı]
 
 ---
 
+## [v0.4.0] — 20 Mart 2026
+
+**Branch:** `master`
+
+### Yeni Ozellikler
+- **Next.js Dashboard:** 7 sayfa (Dashboard, Olaylar, Hisse Detay, Teknik, Temel, Makro, Tarama)
+- **Docker Compose:** Dashboard servisi eklendi, tek komutla tum sistem ayaga kalkar
+- **shadcn/ui + Recharts:** Modern fintech temali UI, grafikler ve tablolar
+- **React Query:** 30sn cache, otomatik refetch
+
+### Degisiklikler
+- Proje "AEFES Listener"dan genel BIST analiz platformuna yeniden adlandirildi
+- Tum hardcoded `AEFES` default degerleri `THYAO` ile degistirildi
+- DB adi `aefes_listener` -> `hisse_analizi` olarak guncellendi
+- DB kullanicisi `aefes` -> `hisse` olarak guncellendi
+- User-Agent `AEFESListener/1.0` -> `HisseAnalizi/1.0` olarak guncellendi
+- Yol haritasi guncellendi (Faz 4 eklendi)
+
+### Istatistikler
+- **50 dosya** eklendi (dashboard/)
+- **75 referans** guncellendi (AEFES -> THYAO, aefes_listener -> hisse_analizi)
+- **7 sayfa** Next.js dashboard
+- **53 endpoint** backend (degisiklik yok)
+
+---
+
 ## [v0.3.0] — 20 Mart 2026
 
 **Branch:** `master` (feature/ai-financial-assistant merge)

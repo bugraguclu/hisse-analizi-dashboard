@@ -1,8 +1,12 @@
 # Hisse Analizi Dashboard — Proje Ozeti
 
 **Son Guncelleme:** 2026-03-20
-**Versiyon:** 0.3.0
-**Durum:** Finansal analiz sistemi, NLP siniflandirma ve Alembic migration eklendi
+**Versiyon:** 0.4.0
+**Durum:** Dashboard UI gelistirme asamasi
+
+BIST'te islem goren 780+ sirket icin kapsamli analiz platformu.
+Teknik analiz, temel analiz, KAP bildirimleri, makro ekonomik veriler
+ve gercek zamanli fiyat takibi sunar. Varsayilan ticker: THYAO (tum BIST sirketleri desteklenir).
 
 ---
 

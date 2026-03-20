@@ -4,12 +4,12 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     app_env: str = "development"
-    database_url: str = "postgresql+asyncpg://aefes:aefes@localhost:5432/aefes_listener"
-    database_url_sync: str = "postgresql://aefes:aefes@localhost:5432/aefes_listener"
+    database_url: str = "postgresql+asyncpg://hisse:hisse@localhost:5432/hisse_analizi"
+    database_url_sync: str = "postgresql://hisse:hisse@localhost:5432/hisse_analizi"
 
     tz: str = "Europe/Istanbul"
     default_poll_interval_seconds: int = 30
-    user_agent: str = "AEFESListener/1.0"
+    user_agent: str = "HisseAnalizi/1.0"
     log_level: str = "INFO"
 
     # SMTP

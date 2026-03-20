@@ -316,7 +316,7 @@ const Pages = {
   // DETAIL — Hisse Detay
   // =============================================
   async detail(ticker) {
-    ticker = ticker || "AEFES";
+    ticker = ticker || "THYAO";
     const main = document.getElementById("main");
     main.innerHTML = `
       <div class="flex items-center justify-between mb-6">

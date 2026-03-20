@@ -85,7 +85,7 @@ async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
 # --- Snapshot ---
 
 @market_router.get("/snapshot")
-async def snapshot(symbols: str = Query(description="Virgul ile ayrilmis semboller, orn: AEFES,THYAO,GARAN")):
+async def snapshot(symbols: str = Query(description="Virgul ile ayrilmis semboller, orn: THYAO,GARAN,SISE")):
     """Birden fazla hisse icin anlik fiyat snapshot'i."""
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     return await get_snapshot(symbol_list)

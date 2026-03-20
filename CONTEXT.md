@@ -1,29 +1,25 @@
-cd ~/hisse-analizi-dashboard
-nano CONTEXT.md
-```
-
-## Adım 2 — Şu içeriği yapıştır (Ctrl+Shift+V)
-```
-# Hisse Takibi — Oturum Özeti ve Sonraki Adımlar
-Tarih: 14 Mart 2026
-Katılımcılar: Ataberk + Bugra
+# Hisse Analizi Dashboard — Proje Baglamı
 
 ## Proje
 - Repo: github.com/bugraguclu/hisse-analizi-dashboard
-- Stack: Python/FastAPI, PostgreSQL, Docker
-- Odak hisse: AEFES
+- Stack: Python/FastAPI + Next.js, PostgreSQL, Docker
+- Desteklenen hisseler: Tum BIST sirketleri (780+), varsayilan: THYAO
 
-## Kurulum Durumu
-- WSL2 + Ubuntu kuruldu (kullanici: bugra)
-- Docker Desktop henuz calısmiyor (virtualization hatasi)
-- Git clone yapildi
+## Mimari
+- Backend: Python/FastAPI (53+ endpoint)
+- Frontend: Next.js 14 (dashboard/ klasoru)
+- DB: PostgreSQL 16 (async, SQLAlchemy 2.x)
+- Deploy: Docker Compose (db, app, worker, dashboard)
 
-## Sonraki Adim
-- Docker Desktop sorununu coz
-- docker-compose up -d ile containerlari baslat
-- http://localhost:8000/health kontrol et
+## Calistirma
+```bash
+docker-compose up -d
+```
+- Backend: http://localhost:8000
+- Dashboard: http://localhost:3000
+- API Docs: http://localhost:8000/docs
 
 ## Notlar
-- .env icinde DATABASE_URL localhost -> db degistirilmeli
-- alembic.ini icinde de ayni degisiklik
-- psycopg2-binary container icine kurulmali
+- .env dosyasi .env.example'dan kopyalanmali
+- Alembic migration: `alembic upgrade head`
+- Seed: `python scripts/seed.py`
