@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Hisse Analizi Dashboard",
     description="BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -60,17 +60,26 @@ app.include_router(fundamentals_router)
 app.include_router(macro_router)
 app.include_router(market_router)
 
+DASHBOARD_DIR = STATIC_DIR / "dashboard"
+
+
 # Dashboard UI routes (must be before static mount)
 @app.get("/", include_in_schema=False)
 async def root_redirect():
-    """Redirect root to dashboard."""
+    """Redirect root to main dashboard."""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/dashboard")
 
 
 @app.get("/dashboard", include_in_schema=False)
 async def dashboard():
-    """Developer test dashboard UI."""
+    """Main user dashboard UI."""
+    return FileResponse(str(DASHBOARD_DIR / "index.html"))
+
+
+@app.get("/test-ui", include_in_schema=False)
+async def test_ui():
+    """Developer test UI (API endpoint tester)."""
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
