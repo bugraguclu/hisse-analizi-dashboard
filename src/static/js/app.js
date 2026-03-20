@@ -111,6 +111,15 @@ const ENDPOINTS = {
       { name: "symbols", type: "query", default: "AEFES,THYAO,GARAN" },
     ]},
   ],
+  financials: [
+    { method: "GET", path: "/financials", desc: "Finansal Tablolar (DB)", params: [
+      { name: "ticker", type: "query", default: "AEFES" },
+      { name: "statement_type", type: "query", default: "", options: ["", "balance_sheet", "income_stmt", "cash_flow"] },
+    ]},
+    { method: "GET", path: "/financials/ratios", desc: "Finansal Oranlar (DB)", params: [
+      { name: "ticker", type: "query", default: "AEFES" },
+    ]},
+  ],
   events: [
     { method: "GET", path: "/events/latest", desc: "Son 10 Olay" },
     { method: "GET", path: "/events", desc: "Olay Listesi (Filtreli)", params: [
@@ -382,6 +391,7 @@ function init() {
     ${renderSection("overview", "Genel Bakis", "Sistem durumu ve istatistikler", "")}
     ${renderSection("technical", "Teknik Analiz", "RSI, MACD, Bollinger, SMA, EMA, SuperTrend, Stochastic, sinyaller", "")}
     ${renderSection("fundamentals", "Temel Analiz", "Sirket bilgileri, finansallar, temettu, ortaklik, analist tavsiyeleri", "")}
+    ${renderSection("financials", "Finansal Tablolar", "DB'deki finansal tablolar ve hesaplanmis oranlar (ROE, ROA, margin vb.)", "")}
     ${renderSection("macro", "Makro Ekonomi", "TCMB faiz, enflasyon, doviz kurlari, ekonomik takvim", "")}
     ${renderSection("market", "Piyasa Verileri", "Hisse tarama, sinyal tarama, endeksler, arama, Twitter, snapshot", "")}
     ${renderSection("events", "Olaylar & Veriler", "KAP bildirimleri, fiyatlar, bildirimler, polling durumu", "")}

@@ -1,8 +1,8 @@
 # Hisse Analizi Dashboard — Proje Ozeti
 
-**Son Guncelleme:** 2026-03-19
-**Versiyon:** 0.2.0
-**Durum:** Teknik/temel analiz, makro veriler ve piyasa tarama modulleri entegre edildi
+**Son Guncelleme:** 2026-03-20
+**Versiyon:** 0.3.0
+**Durum:** Finansal analiz sistemi, NLP siniflandirma ve Alembic migration eklendi
 
 ---
 
@@ -33,6 +33,20 @@
 - [x] Canli fiyat stream altyapisi (TradingView WebSocket)
 - [x] Anlik fiyat snapshot (coklu sembol)
 - [x] 4 yeni API router dosyasi, 30+ yeni endpoint
+
+### Faz 3 — Finansal Analiz Sistemi (Tamamlandi)
+- [x] Model konsolidasyonu (models_extended.py -> models.py)
+- [x] FinancialStatement ve FinancialRatio modelleri (13 tablo)
+- [x] EventCategory enum + NLP keyword siniflandirma (temettü, sermaye artırımı, hukuki vb.)
+- [x] FinancialStatementRepository ve FinancialRatioRepository
+- [x] AnalysisService — 8 finansal oran (ROE, ROA, net/gross/ebitda margin, debt_to_equity, current_ratio, net_debt_ebitda)
+- [x] FinancialAdapter (borsapy: bilanco, gelir tablosu, nakit akis)
+- [x] FinancialService (DB upsert + oran hesaplama)
+- [x] Polling worker financials source destegi (saatlik)
+- [x] Alembic initial migration (13 tablo, tum index/constraint)
+- [x] GET /financials ve GET /financials/ratios endpoint'leri
+- [x] Seed'e financials source eklendi
+- [x] Developer Test UI v0.3.0 (financials bolumu eklendi)
 
 ---
 
@@ -67,7 +81,7 @@ Dil:     Python 3.11+
 API:     FastAPI (async)
 DB:      PostgreSQL 16 (SQLAlchemy 2.x async)
 Deploy:  Docker Compose
-Versiyon: 0.2.0
+Versiyon: 0.3.0
 ```
 
 ### Dizin Yapisi
@@ -90,6 +104,7 @@ hisse-analizi-dashboard/
 │   │   ├── technical.py              ← Teknik analiz (RSI, MACD, Bollinger...)
 │   │   ├── fundamentals.py           ← Temel analiz (bilanco, gelir, nakit)
 │   │   ├── macro.py                  ← Makro veriler (TCMB, enflasyon, FX)
+│   │   ├── financial_adapter.py       ← Finansal tablolar (borsapy → DB)
 │   │   ├── screener_adapter.py       ← Hisse tarama
 │   │   ├── scanner_adapter.py        ← Teknik sinyal tarama
 │   │   ├── index_adapter.py          ← BIST endeksleri
@@ -97,10 +112,10 @@ hisse-analizi-dashboard/
 │   │   ├── twitter_adapter.py        ← Twitter/X tweet'ler
 │   │   └── stream_adapter.py         ← Canli fiyat stream
 │   ├── core/                         ← Config, enums, logging
-│   ├── db/                           ← Models, repository, session
+│   ├── db/                           ← Models (13 tablo), repository, session
 │   ├── parsers/                      ← Hash, dedup, date parse
 │   ├── schemas/                      ← Pydantic request/response
-│   ├── services/                     ← Event, price, notification
+│   ├── services/                     ← Event, price, financial, analysis, notification
 │   └── workers/                      ← Polling, notification
 ├── alembic/                          ← DB migrations
 ├── tests/                            ← Unit + integration (36 test)
@@ -115,11 +130,12 @@ hisse-analizi-dashboard/
 | Grup | Endpoint Sayisi | Aciklama |
 |------|----------------|----------|
 | Core | 17 | health, events, prices, companies, admin |
+| Finansal | 2 | financials (DB), financials/ratios (DB) |
 | Teknik Analiz | 9 | RSI, MACD, Bollinger, SMA, EMA, SuperTrend, Stochastic, signals |
 | Temel Analiz | 10 | info, balance-sheet, income, cashflow, dividends, holders, recommendations |
 | Makro Ekonomi | 5 | TCMB, enflasyon, doviz, politika faizi, ekonomik takvim |
 | Piyasa | 10 | screener, scanner, indices, search, tweets, snapshot |
-| **Toplam** | **51** | |
+| **Toplam** | **53** | |
 
 ---
 
@@ -129,6 +145,9 @@ hisse-analizi-dashboard/
 |-------|---------|-------------|-------|
 | Ticker.history | price.py | /prices | Aktif (polling) |
 | Ticker.news | kap.py | /events | Aktif (polling) |
+| Ticker.balance_sheet | financial_adapter.py | /financials | Aktif (polling, saatlik) |
+| Ticker.income_stmt | financial_adapter.py | /financials | Aktif (polling, saatlik) |
+| Ticker.cashflow | financial_adapter.py | /financials | Aktif (polling, saatlik) |
 | Ticker.rsi | technical.py | /technical/{t}/rsi | Aktif (on-demand) |
 | Ticker.macd | technical.py | /technical/{t}/macd | Aktif (on-demand) |
 | Ticker.bollinger_bands | technical.py | /technical/{t}/bollinger | Aktif (on-demand) |

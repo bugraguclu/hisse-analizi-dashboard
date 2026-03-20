@@ -7,15 +7,17 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Polling Worker                              │
-│  ┌──────┐ ┌──────┐ ┌────┐ ┌──────┐                             │
-│  │ KAP  │ │ News │ │ IR │ │Price │                             │
-│  └──┬───┘ └──┬───┘ └─┬──┘ └──┬───┘                             │
-└─────┼────────┼───────┼───────┼───────────────────────────────────┘
-      │        │       │       │
-┌─────▼────────▼───────▼───────▼──────────┐
-│         Event Service                     │
-│  raw_events → normalized → outbox         │
-└────────────────┬─────────────────────────┘
+│  ┌──────┐ ┌──────┐ ┌────┐ ┌──────┐ ┌────────────┐              │
+│  │ KAP  │ │ News │ │ IR │ │Price │ │ Financials │              │
+│  └──┬───┘ └──┬───┘ └─┬──┘ └──┬───┘ └─────┬──────┘              │
+└─────┼────────┼───────┼───────┼────────────┼─────────────────────┘
+      │        │       │       │            │
+┌─────▼────────▼───────▼───────▼────────────▼─┐
+│    Event Service / Price Service /            │
+│    Financial Service + AnalysisService        │
+│  raw_events → normalized → outbox             │
+│  financials → DB → ratio calculation          │
+└────────────────┬─────────────────────────────┘
                  │
 ┌────────────────▼─────────────────────────┐
 │       Notification Worker                 │
@@ -25,12 +27,13 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 ┌──────────────────────────────────────────────────────────────────┐
 │                      FastAPI (REST API)                           │
 ├──────────────────────────────────────────────────────────────────┤
-│  Core:     /health /events /prices /companies                    │
-│  Teknik:   /technical/{ticker}/rsi /macd /bollinger /signals     │
-│  Temel:    /fundamentals/{ticker}/info /balance-sheet /dividends │
-│  Makro:    /macro/tcmb /inflation /fx/{symbol} /calendar         │
-│  Piyasa:   /market/screener /scanner /indices /search /tweets    │
-│  Admin:    /admin/poll/run-once /stats                           │
+│  Core:       /health /events /prices /companies                  │
+│  Finansal:   /financials?ticker= /financials/ratios?ticker=      │
+│  Teknik:     /technical/{ticker}/rsi /macd /bollinger /signals   │
+│  Temel:      /fundamentals/{ticker}/info /balance-sheet          │
+│  Makro:      /macro/tcmb /inflation /fx/{symbol} /calendar       │
+│  Piyasa:     /market/screener /scanner /indices /search /tweets  │
+│  Admin:      /admin/poll/run-once /stats                         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -77,8 +80,8 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 | Kurumsal Haberler | httpx + BS4 | - | 60sn |
 | Yatirimci Iliskileri | httpx + BS4 | - | 300sn |
 | Fiyat Verisi | borsapy | yfinance | 300sn |
+| Finansal Tablolar | borsapy | - | 3600sn (polling + DB) |
 | Teknik Gostergeler | borsapy | - | on-demand |
-| Finansal Tablolar | borsapy | - | on-demand |
 | Makro Veriler | borsapy (TCMB) | - | on-demand |
 | Endeks/Tarama | borsapy | - | on-demand |
 
@@ -116,6 +119,8 @@ GET  /events?source_code=kap&limit=50     Olay listesi
 GET  /events/latest                       Son 10 olay
 GET  /prices?ticker=AEFES                 Fiyat gecmisi
 GET  /prices/latest?ticker=AEFES          Son fiyat
+GET  /financials?ticker=AEFES             Finansal tablolar (DB)
+GET  /financials/ratios?ticker=AEFES      Hesaplanmis oranlar (DB)
 ```
 
 ### Teknik Analiz

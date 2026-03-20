@@ -5,6 +5,42 @@ Format: [Oyun Patch Notes tarzı — her gün ne yapıldı, kim yaptı]
 
 ---
 
+## [v0.3.0] — 20 Mart 2026
+
+**Branch:** `master` (feature/ai-financial-assistant merge)
+
+### Yeni Ozellikler
+- **Finansal Analiz Sistemi:** FinancialAdapter ile borsapy uzerinden bilanco, gelir tablosu, nakit akis cekme ve DB'ye kaydetme
+- **AnalysisService:** 8 finansal oran otomatik hesaplama (ROE, ROA, net/gross/ebitda margin, debt_to_equity, current_ratio, net_debt_ebitda)
+- **NLP Siniflandirma:** KAP bildirimlerini keyword bazli kategorilere ayirma (temettu, sermaye artirimi, hukuki, yonetim vb.)
+- **Alembic Migration:** 13 tablo icin initial migration dosyasi
+- **Yeni Endpoint'ler:** GET /financials, GET /financials/ratios
+- **Developer Test UI v0.3.0:** Finansal tablolar bolumu eklendi
+
+### Degisiklikler
+| Dosya | Ne Degisti |
+|-------|-----------|
+| `src/core/enums.py` | EventCategory enum + SourceKind.FINANCIAL_STATEMENTS eklendi |
+| `src/db/models.py` | FinancialStatement, FinancialRatio modelleri + NormalizedEvent.category kolonu |
+| `src/db/models_extended.py` | Bosaltildi, re-export ile geriye donuk uyumluluk |
+| `src/db/repository.py` | FinancialStatementRepository, FinancialRatioRepository eklendi |
+| `src/services/event_service.py` | NLP siniflandirma + FinancialService eklendi |
+| `src/services/analysis_service.py` | Yeni — 8 finansal oran hesaplama |
+| `src/adapters/financial_adapter.py` | Yeni — borsapy finansal tablo adapter |
+| `src/workers/polling_worker.py` | financials source destegi (3600sn interval) |
+| `src/api/routers.py` | /financials ve /financials/ratios endpoint'leri |
+| `src/schemas/events.py` | FinancialStatementOut, FinancialRatioOut, StatsOut guncellendi |
+| `scripts/seed.py` | financials source eklendi |
+| `alembic/versions/001_full_schema_v1.py` | Yeni — 13 tablo migration |
+
+### Istatistikler
+- **9 commit**
+- **~800 satir** kod eklendi
+- **53 endpoint** (onceki: 51)
+- **38 unit test** (onceki: 36)
+
+---
+
 ## [v0.2.0] — 15 Mart 2026
 
 **Geliştirici:** Ataberk (Antigravity destekli)
