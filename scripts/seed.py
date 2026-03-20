@@ -64,6 +64,13 @@ SOURCES_DATA = [
         "kind": SourceKind.PRICE_DATA,
         "poll_interval_seconds": 300,
     },
+    {
+        "code": "financials",
+        "name": "Finansal Tablolar (borsapy)",
+        "base_url": None,
+        "kind": SourceKind.FINANCIAL_STATEMENTS,
+        "poll_interval_seconds": 3600,
+    },
 ]
 
 
