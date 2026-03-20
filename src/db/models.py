@@ -31,6 +31,7 @@ from src.core.enums import (
     NotificationProvider,
     NotificationStatus,
     PriceInterval,
+    EventCategory,
 )
 
 
@@ -56,6 +57,8 @@ class Company(Base):
     normalized_events = relationship("NormalizedEvent", back_populates="company")
     price_data = relationship("PriceData", back_populates="company")
     notification_rules = relationship("NotificationRule", back_populates="company")
+    financial_statements = relationship("FinancialStatement", back_populates="company")
+    financial_ratios = relationship("FinancialRatio", back_populates="company")
 
 
 class Source(Base):
@@ -142,6 +145,7 @@ class NormalizedEvent(Base):
     source_code = Column(String(50), nullable=False)
     severity = Column(SAEnum(Severity), nullable=False, default=Severity.INFO)
     is_notifiable = Column(Boolean, default=True, nullable=False)
+    category = Column(SAEnum(EventCategory), nullable=True, default=EventCategory.OTHER)
     dedup_key = Column(String(64), unique=True, nullable=False)
     metadata_json = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -230,6 +234,53 @@ class Notification(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     outbox_entry = relationship("EventOutbox", back_populates="notifications")
+
+
+class FinancialStatement(Base):
+    __tablename__ = "financial_statements"
+    __table_args__ = (
+        UniqueConstraint("company_id", "period", "statement_type", name="uq_financial_statements_period"),
+        Index("ix_financial_statements_period", "period"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    period = Column(String(20), nullable=False)
+    statement_type = Column(String(50), nullable=False)
+    period_type = Column(String(20), nullable=True)
+    data_json = Column(JSONB, nullable=False)
+    currency = Column(String(10), default="TRY")
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company", back_populates="financial_statements")
+
+
+class FinancialRatio(Base):
+    __tablename__ = "financial_ratios"
+    __table_args__ = (
+        UniqueConstraint("company_id", "period", name="uq_financial_ratios_period"),
+        Index("ix_financial_ratios_period", "period"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    period = Column(String(20), nullable=False)
+    roe = Column(Numeric(12, 4), nullable=True)
+    roa = Column(Numeric(12, 4), nullable=True)
+    net_margin = Column(Numeric(12, 4), nullable=True)
+    gross_margin = Column(Numeric(12, 4), nullable=True)
+    ebitda_margin = Column(Numeric(12, 4), nullable=True)
+    pe_ratio = Column(Numeric(12, 4), nullable=True)
+    pb_ratio = Column(Numeric(12, 4), nullable=True)
+    ps_ratio = Column(Numeric(12, 4), nullable=True)
+    debt_to_equity = Column(Numeric(12, 4), nullable=True)
+    current_ratio = Column(Numeric(12, 4), nullable=True)
+    net_debt_ebitda = Column(Numeric(12, 4), nullable=True)
+    raw_ratios_json = Column(JSONB, default=dict)
+    calculated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company", back_populates="financial_ratios")
 
 
 class AuditLog(Base):
