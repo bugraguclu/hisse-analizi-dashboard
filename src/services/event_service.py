@@ -5,14 +5,17 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.base import RawEventData, PriceRecord
-from src.core.enums import EventType, Severity, PriceInterval
+from src.core.enums import EventType, Severity, PriceInterval, EventCategory
 from src.db.models import Company, Source
 from src.db.repository import (
     RawEventRepository,
     NormalizedEventRepository,
     PriceDataRepository,
     OutboxRepository,
+    FinancialStatementRepository,
+    FinancialRatioRepository,
 )
+from src.services.analysis_service import AnalysisService
 from src.parsers.helpers import compute_dedup_key, clean_whitespace, strip_html, make_aware
 
 logger = structlog.get_logger(__name__)
@@ -21,12 +24,25 @@ SOURCE_TO_EVENT_TYPE = {
     "kap": EventType.KAP_DISCLOSURE,
     "anadoluefes_news": EventType.OFFICIAL_NEWS,
     "anadoluefes_ir": EventType.OFFICIAL_IR_UPDATE,
+    "official_news": EventType.OFFICIAL_NEWS,
+    "official_ir": EventType.OFFICIAL_IR_UPDATE,
 }
 
 SOURCE_TO_SEVERITY = {
     "kap": Severity.WATCH,
     "anadoluefes_news": Severity.INFO,
     "anadoluefes_ir": Severity.WATCH,
+    "official_news": Severity.INFO,
+    "official_ir": Severity.WATCH,
+}
+
+CATEGORY_KEYWORDS = {
+    EventCategory.DIVIDEND: ["temettü", "kar payı", "dividend"],
+    EventCategory.CAPITAL_INCREASE: ["sermaye artırımı", "bedelli", "bedelsiz", "tahsisli"],
+    EventCategory.NEW_BUSINESS: ["yeni iş", "ihale", "sözleşme", "sipariş"],
+    EventCategory.LEGAL: ["dava", "hukuki", "ceza", "soruşturma"],
+    EventCategory.MANAGEMENT: ["yönetim kurulu", "atama", "istifa", "genel müdür"],
+    EventCategory.FINANCIAL_RESULTS: ["finansal rapor", "bilanço", "gelir tablosu", "kar/zarar"],
 }
 
 
@@ -36,6 +52,14 @@ class EventService:
         self.raw_repo = RawEventRepository(session)
         self.norm_repo = NormalizedEventRepository(session)
         self.outbox_repo = OutboxRepository(session)
+
+    def _classify_event(self, title: str, summary: str | None) -> EventCategory:
+        """NLP keyword-based event siniflandirma."""
+        text = f"{title} {summary or ''}".lower()
+        for category, keywords in CATEGORY_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                return category
+        return EventCategory.OTHER
 
     async def process_raw_events(
         self,
@@ -75,6 +99,7 @@ class EventService:
             severity = SOURCE_TO_SEVERITY.get(source_code, Severity.INFO)
 
             published_at = event_data.published_at or make_aware(datetime.now())
+            category = self._classify_event(event_data.title or "", event_data.summary)
             metadata = {}
             if event_data.published_at is None:
                 metadata["published_at_missing"] = True
@@ -98,6 +123,7 @@ class EventService:
                 source_code=source_code,
                 severity=severity,
                 is_notifiable=True,
+                category=category,
                 dedup_key=dedup_key,
                 metadata_json=metadata,
             )
@@ -163,3 +189,62 @@ class PriceService:
 
         await self.session.commit()
         return stats
+
+
+class FinancialService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.repo = FinancialStatementRepository(session)
+        self.ratio_repo = FinancialRatioRepository(session)
+        self.analysis_service = AnalysisService(session)
+
+    async def process_financials(self, raw_data: list[RawEventData], company: Company) -> dict:
+        """Finansal tablolari DB'ye kaydet ve oranlari hesapla."""
+        count = 0
+        ratios_calculated = 0
+
+        for raw in raw_data:
+            payload = raw.raw_payload_json
+            if not payload:
+                continue
+
+            statement_type = payload.get("statement_type")
+            data = payload.get("data", {})
+
+            # borsapy verisinden donemleri cikar (sutunlar donemlerdir)
+            periods = list(data.keys())
+
+            for period in periods:
+                period_data = data.get(period, {})
+
+                # JSONB NaN desteklemez — temizle
+                clean_period_data = {}
+                for k, v in period_data.items():
+                    if isinstance(v, float) and (v != v or v == float("inf") or v == float("-inf")):
+                        clean_period_data[k] = None
+                    else:
+                        clean_period_data[k] = v
+
+                await self.repo.upsert(
+                    company_id=company.id,
+                    period=period,
+                    statement_type=statement_type,
+                    data_json=clean_period_data,
+                    currency="TRY",
+                )
+                count += 1
+
+                # Oranlari hesapla (eksik tablo varsa AnalysisService bos doner)
+                ratios = await self.analysis_service.calculate_ratios(company, period)
+                if ratios:
+                    await self.ratio_repo.upsert(
+                        company_id=company.id,
+                        period=period,
+                        **ratios,
+                    )
+                    ratios_calculated += 1
+
+        return {
+            "financial_records_processed": count,
+            "financial_ratios_calculated": ratios_calculated,
+        }
