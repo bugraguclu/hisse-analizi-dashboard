@@ -60,11 +60,19 @@ app.include_router(fundamentals_router)
 app.include_router(macro_router)
 app.include_router(market_router)
 
-# Static files & dashboard UI
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# Dashboard UI routes (must be before static mount)
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    """Redirect root to dashboard."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard")
 
 
 @app.get("/dashboard", include_in_schema=False)
 async def dashboard():
     """Developer test dashboard UI."""
     return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+# Static files (CSS/JS) — must be last
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
