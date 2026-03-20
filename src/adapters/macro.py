@@ -16,13 +16,25 @@ logger = structlog.get_logger(__name__)
 
 
 def _df_to_records(df) -> list[dict]:
+    """NaN/Inf -> None (JSON uyumlu)."""
     if df is None:
         return []
     if hasattr(df, "empty") and df.empty:
         return []
     try:
+        import math
         result = df.reset_index()
-        return result.to_dict(orient="records")
+        records = result.to_dict(orient="records")
+        clean = []
+        for row in records:
+            clean_row = {}
+            for k, v in row.items():
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    clean_row[k] = None
+                else:
+                    clean_row[k] = v
+            clean.append(clean_row)
+        return clean
     except Exception:
         return []
 

@@ -1,4 +1,11 @@
-"""Teknik sinyal tarama adaptoru — borsapy TechnicalScanner."""
+"""Teknik sinyal tarama adaptoru — borsapy TechnicalScanner.
+
+TechnicalScanner API:
+  - add_condition(condition) -> condition ekle
+  - run() -> tarama calistir
+  - results -> sonuclar
+  - to_dataframe() -> DataFrame olarak sonuclar
+"""
 
 import asyncio
 
@@ -7,22 +14,24 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
-def _df_to_records(df) -> list[dict]:
-    if df is None:
+def _safe_records(data) -> list:
+    """Herhangi bir veriyi list[dict]'e cevir."""
+    if data is None:
         return []
-    if hasattr(df, "empty") and df.empty:
-        return []
-    try:
-        result = df.reset_index()
-        return result.to_dict(orient="records")
-    except Exception:
-        return []
+    if isinstance(data, list):
+        return data
+    if hasattr(data, "to_dict"):
+        try:
+            return data.to_dict(orient="records") if hasattr(data, "iterrows") else [data.to_dict()]
+        except Exception:
+            return []
+    return []
 
 
 async def scan_signals(condition: str | None = None) -> dict:
     """Teknik sinyal taramasi.
 
-    condition ornekleri: "rsi_oversold", "macd_crossover", "bollinger_breakout"
+    condition ornekleri: "rsi_below_30", "macd_cross_above_signal"
     """
     try:
         import borsapy as bp
@@ -30,11 +39,15 @@ async def scan_signals(condition: str | None = None) -> dict:
         scanner = await loop.run_in_executor(None, lambda: bp.TechnicalScanner())
 
         if condition:
-            result = await loop.run_in_executor(None, lambda: scanner.scan(condition=condition))
-        else:
-            result = await loop.run_in_executor(None, lambda: scanner.scan())
+            await loop.run_in_executor(None, lambda: scanner.add_condition(condition))
 
-        data = _df_to_records(result) if hasattr(result, "iterrows") else result
+        await loop.run_in_executor(None, lambda: scanner.run())
+
+        # Sonuclari al
+        results = await loop.run_in_executor(None, lambda: scanner.results)
+        df = await loop.run_in_executor(None, lambda: scanner.to_dataframe())
+
+        data = _safe_records(df) if df is not None else _safe_records(results)
         return {"condition": condition, "results": data}
     except Exception as e:
         logger.error("scanner_error", condition=condition, error=str(e))

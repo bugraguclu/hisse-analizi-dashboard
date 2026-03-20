@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hisse Analizi Dashboard — Developer Test UI</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <h1>Hisse Analizi</h1>
+        <div class="version">Dashboard v0.2.0 — Developer Test UI</div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-title">Genel</div>
+        <div class="nav-item active" data-section="overview">
+          <span class="nav-icon">&#9632;</span> Genel Bakis
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-title">Analiz</div>
+        <div class="nav-item" data-section="technical">
+          <span class="nav-icon">&#9650;</span> Teknik Analiz
+        </div>
+        <div class="nav-item" data-section="fundamentals">
+          <span class="nav-icon">&#9670;</span> Temel Analiz
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-title">Veri</div>
+        <div class="nav-item" data-section="macro">
+          <span class="nav-icon">&#9733;</span> Makro Ekonomi
+        </div>
+        <div class="nav-item" data-section="market">
+          <span class="nav-icon">&#9776;</span> Piyasa Verileri
+        </div>
+        <div class="nav-item" data-section="events">
+          <span class="nav-icon">&#9993;</span> Olaylar & Veriler
+        </div>
+      </div>
+
+      <div class="nav-group" style="margin-top:auto; padding:16px 20px; border-top:1px solid var(--border)">
+        <div id="global-summary" class="test-summary" style="flex-direction:column;gap:6px"></div>
+        <button id="btn-run-all" class="btn btn-run-all" style="width:100%;margin-top:12px;justify-content:center">
+          Tum Testleri Calistir
+        </button>
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="main-content" id="main-content">
+    </main>
+
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
