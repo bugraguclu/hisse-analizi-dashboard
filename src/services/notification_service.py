@@ -38,8 +38,12 @@ class NotificationService:
                 from src.db.models import NormalizedEvent
                 from src.core.enums import Severity
 
+                from sqlalchemy.orm import selectinload
+
                 result = await self.session.execute(
-                    select(NormalizedEvent).where(
+                    select(NormalizedEvent)
+                    .options(selectinload(NormalizedEvent.company))
+                    .where(
                         NormalizedEvent.id == outbox_entry.normalized_event_id
                     )
                 )
@@ -74,7 +78,8 @@ class NotificationService:
                         continue
 
                     # Build notification
-                    subject = f"[AEFES][{source_code.upper()}] Yeni olay: {norm_event.title or 'Bilinmeyen'}"
+                    company_ticker = norm_event.company.ticker if norm_event.company else "UNKNOWN"
+                    subject = f"[{company_ticker}][{source_code.upper()}] Yeni olay: {norm_event.title or 'Bilinmeyen'}"
                     body = self._build_body(norm_event, payload)
 
                     provider = (
