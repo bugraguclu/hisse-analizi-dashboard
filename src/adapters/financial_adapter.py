@@ -1,10 +1,12 @@
-import asyncio
 import hashlib
-import structlog
-from datetime import datetime
+import json
 from typing import Any
 
+import structlog
+
 from src.adapters.base import BaseAdapter, RawEventData
+from src.adapters.utils import run_sync
+from src.core.time import utcnow
 from src.db.models import PollingState
 
 logger = structlog.get_logger(__name__)
@@ -17,41 +19,24 @@ class FinancialAdapter(BaseAdapter):
         return "financials"
 
     async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
-        """
-        Finansal tablolari ceker ve RawEventData formatinda doner.
-        borsapy sync kutuphane oldugu icin run_in_executor kullanilir.
-        """
         try:
             import borsapy as bp
-            loop = asyncio.get_event_loop()
 
-            bp_ticker = await loop.run_in_executor(None, lambda: bp.Ticker(ticker))
+            bp_ticker = await run_sync(bp.Ticker, ticker)
 
             results = []
 
-            # 1. Bilanco (Balance Sheet)
-            try:
-                bs_df = await loop.run_in_executor(None, lambda: bp_ticker.balance_sheet)
-                if bs_df is not None and not bs_df.empty:
-                    results.append(self._create_raw_data(ticker, "balance_sheet", bs_df))
-            except Exception as e:
-                logger.error("financial_adapter_bs_error", ticker=ticker, error=str(e))
-
-            # 2. Gelir Tablosu (Income Statement)
-            try:
-                is_df = await loop.run_in_executor(None, lambda: bp_ticker.income_stmt)
-                if is_df is not None and not is_df.empty:
-                    results.append(self._create_raw_data(ticker, "income_stmt", is_df))
-            except Exception as e:
-                logger.error("financial_adapter_is_error", ticker=ticker, error=str(e))
-
-            # 3. Nakit Akis (Cash Flow)
-            try:
-                cf_df = await loop.run_in_executor(None, lambda: bp_ticker.cashflow)
-                if cf_df is not None and not cf_df.empty:
-                    results.append(self._create_raw_data(ticker, "cash_flow", cf_df))
-            except Exception as e:
-                logger.error("financial_adapter_cf_error", ticker=ticker, error=str(e))
+            for attr_name, statement_type in [
+                ("balance_sheet", "balance_sheet"),
+                ("income_stmt", "income_stmt"),
+                ("cashflow", "cash_flow"),
+            ]:
+                try:
+                    df = await run_sync(lambda a=attr_name: getattr(bp_ticker, a))
+                    if df is not None and not df.empty:
+                        results.append(self._create_raw_data(ticker, statement_type, df))
+                except Exception as e:
+                    logger.error(f"financial_adapter_{statement_type}_error", ticker=ticker, error=str(e))
 
             logger.info("financial_adapter_fetched", ticker=ticker, count=len(results))
             return results
@@ -73,16 +58,17 @@ class FinancialAdapter(BaseAdapter):
                 col_data[str(idx)] = clean_val
             data_dict[col_key] = col_data
 
-        # content_hash for deduplication
-        date_str = datetime.now().strftime("%Y%m%d")
-        content = f"{ticker}_{statement_type}_{date_str}"
-        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        # Content-based hash: hash the actual data, not the date
+        # This ensures same content produces same hash, and changed content produces different hash
+        content_for_hash = json.dumps(data_dict, sort_keys=True, default=str)
+        content_hash = hashlib.sha256(f"{ticker}_{statement_type}_{content_for_hash}".encode()).hexdigest()
 
+        now = utcnow()
         return RawEventData(
-            external_id=f"{ticker}_{statement_type}_{date_str}",
+            external_id=f"{ticker}_{statement_type}_{content_hash[:12]}",
             source_event_type=f"FINANCIAL_{statement_type.upper()}",
             title=f"{ticker} {statement_type} updated",
-            published_at=datetime.now(),
+            published_at=now,
             content_hash=content_hash,
             raw_payload_json={
                 "ticker": ticker,

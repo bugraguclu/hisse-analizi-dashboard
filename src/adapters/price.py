@@ -1,18 +1,14 @@
-import asyncio
-from datetime import datetime
-
 import structlog
 
 from src.adapters.base import BasePriceAdapter, PriceRecord
-from src.core.config import settings
+from src.adapters.utils import run_sync
 from src.db.models import PollingState
-from src.parsers.helpers import make_aware
 
 logger = structlog.get_logger(__name__)
 
 
 class PriceAdapter(BasePriceAdapter):
-    """Fiyat verisi: borsapy birincil, yfinance yedek. Multi-stock destekli."""
+    """Fiyat verisi: borsapy birincil, yfinance yedek."""
 
     def __init__(self, ticker: str = "THYAO"):
         self.ticker = ticker
@@ -31,9 +27,8 @@ class PriceAdapter(BasePriceAdapter):
         try:
             import borsapy as bp
 
-            loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: bp.Ticker(self.ticker))
-            df = await loop.run_in_executor(None, lambda: ticker.history(period="1ay"))
+            ticker = await run_sync(bp.Ticker, self.ticker)
+            df = await run_sync(lambda: ticker.history(period="1ay"))
 
             if df is None or df.empty:
                 logger.info("borsapy_price_no_data", ticker=self.ticker)
@@ -41,10 +36,6 @@ class PriceAdapter(BasePriceAdapter):
 
             records: list[PriceRecord] = []
             for idx, row in df.iterrows():
-                trading_date = idx
-                if hasattr(trading_date, "date"):
-                    trading_date = trading_date
-
                 records.append(
                     PriceRecord(
                         ticker=self.ticker,
@@ -70,11 +61,9 @@ class PriceAdapter(BasePriceAdapter):
         try:
             import yfinance as yf
 
-            # yfinance BIST hisseleri için .IS suffix kullanır
             yf_ticker = f"{self.ticker}.IS"
-            loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: yf.Ticker(yf_ticker))
-            df = await loop.run_in_executor(None, lambda: ticker.history(period="1mo"))
+            ticker = await run_sync(yf.Ticker, yf_ticker)
+            df = await run_sync(lambda: ticker.history(period="1mo"))
 
             if df is None or df.empty:
                 logger.info("yfinance_price_no_data", ticker=self.ticker)

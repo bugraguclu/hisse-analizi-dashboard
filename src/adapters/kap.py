@@ -1,10 +1,7 @@
-import asyncio
-from datetime import datetime
-
-import httpx
 import structlog
 
 from src.adapters.base import BaseAdapter, RawEventData
+from src.adapters.utils import run_sync, get_http_client
 from src.core.config import settings
 from src.db.models import PollingState
 from src.parsers.helpers import compute_content_hash, parse_date, clean_whitespace
@@ -32,9 +29,8 @@ class KAPAdapter(BaseAdapter):
         try:
             import borsapy as bp
 
-            loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(None, lambda: bp.Ticker(self.ticker))
-            news_df = await loop.run_in_executor(None, lambda: ticker.news)
+            ticker = await run_sync(bp.Ticker, self.ticker)
+            news_df = await run_sync(lambda: ticker.news)
 
             if news_df is None or news_df.empty:
                 logger.info("borsapy_kap_no_data", ticker=self.ticker)
@@ -81,15 +77,9 @@ class KAPAdapter(BaseAdapter):
             if polling_state and polling_state.last_seen_external_id:
                 url = f"{url}?afterDisclosureIndex={polling_state.last_seen_external_id}"
 
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(
-                    connect=settings.http_connect_timeout,
-                    read=settings.http_read_timeout,
-                ),
-                headers={"User-Agent": settings.user_agent},
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
+            client = get_http_client()
+            resp = await client.get(url)
+            resp.raise_for_status()
 
             data = resp.json()
             if not isinstance(data, list):
@@ -105,7 +95,6 @@ class KAPAdapter(BaseAdapter):
 
                 disclosure_index = str(basic.get("disclosureIndex", ""))
                 title = clean_whitespace(str(basic.get("title", "")))
-                company_name = str(basic.get("companyName", ""))
                 published_at_str = str(basic.get("publishDate", basic.get("disclosureDate", "")))
                 published_at = parse_date(published_at_str)
 

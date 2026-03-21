@@ -3,9 +3,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: hisse
-      POSTGRES_PASSWORD: hisse
-      POSTGRES_DB: hisse_analizi
+      POSTGRES_USER: ${POSTGRES_USER:-hisse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hisse}
+      POSTGRES_DB: ${POSTGRES_DB:-hisse_analizi}
     ports:
       - "5432:5432"
     volumes:
@@ -18,31 +18,33 @@ services:
 
   app:
     build: .
-    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://hisse:hisse@db:5432/hisse_analizi
-      DATABASE_URL_SYNC: postgresql://hisse:hisse@db:5432/hisse_analizi
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
 
+  # Worker process — separate from API.
+  # IMPORTANT: Deploy with exactly 1 replica unless WORKER_SINGLE_REPLICA=false.
+  # With WORKER_SINGLE_REPLICA=false, multiple replicas are safe (advisory locks + outbox claiming).
   worker:
     build: .
     command: python -m src.workers.run_workers
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://hisse:hisse@db:5432/hisse_analizi
-      DATABASE_URL_SYNC: postgresql://hisse:hisse@db:5432/hisse_analizi
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
+      WORKER_SINGLE_REPLICA: "true"
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
+    deploy:
+      replicas: 1
 
   dashboard:
     build:

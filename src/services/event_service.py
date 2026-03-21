@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from src.core.time import utcnow
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,7 +98,7 @@ class EventService:
             event_type = SOURCE_TO_EVENT_TYPE.get(source_code, EventType.KAP_DISCLOSURE)
             severity = SOURCE_TO_SEVERITY.get(source_code, Severity.INFO)
 
-            published_at = event_data.published_at or make_aware(datetime.now())
+            published_at = event_data.published_at or make_aware(utcnow())
             category = self._classify_event(event_data.title or "", event_data.summary)
             metadata = {}
             if event_data.published_at is None:

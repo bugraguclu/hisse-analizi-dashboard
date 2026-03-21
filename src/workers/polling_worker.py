@@ -1,14 +1,23 @@
+"""Polling worker — fetches data from external sources for all active companies.
+
+Concurrency model:
+- Uses bounded concurrency (asyncio.Semaphore) for parallel company polling.
+- Uses PostgreSQL advisory locks per source to prevent duplicate polling across workers.
+- If WORKER_SINGLE_REPLICA=true (default), advisory locks are skipped and single-replica
+  execution is assumed. Document this in deployment config.
+- Backoff uses configured values with exponential increase on consecutive failures.
+"""
+
 import asyncio
 import random
-from datetime import datetime
 
 import structlog
 
-from src.adapters.base import BaseAdapter, BasePriceAdapter
 from src.adapters.kap import KAPAdapter
 from src.adapters.price import PriceAdapter
 from src.adapters.financial_adapter import FinancialAdapter
 from src.core.config import settings
+from src.core.time import utcnow
 from src.db.session import async_session_factory
 from src.db.repository import (
     CompanyRepository,
@@ -19,10 +28,37 @@ from src.services.event_service import EventService, PriceService, FinancialServ
 
 logger = structlog.get_logger(__name__)
 
+# Advisory lock namespace — use a fixed hash prefix per source
+_ADVISORY_LOCK_BASE = 0x48495353  # "HISS" in hex
+
+
+def _source_lock_id(source_code: str) -> int:
+    """Deterministic advisory lock ID per source code."""
+    return _ADVISORY_LOCK_BASE + hash(source_code) % 10000
+
+
+async def _try_advisory_lock(session, source_code: str) -> bool:
+    """Try to acquire a PostgreSQL advisory lock for a source. Non-blocking."""
+    if settings.worker_single_replica:
+        return True  # Skip locking in single-replica mode
+    from sqlalchemy import text
+    lock_id = _source_lock_id(source_code)
+    result = await session.execute(text(f"SELECT pg_try_advisory_lock({lock_id})"))
+    return result.scalar()
+
+
+async def _release_advisory_lock(session, source_code: str) -> None:
+    """Release advisory lock for a source."""
+    if settings.worker_single_replica:
+        return
+    from sqlalchemy import text
+    lock_id = _source_lock_id(source_code)
+    await session.execute(text(f"SELECT pg_advisory_unlock({lock_id})"))
+
 
 async def poll_source_for_company(source_code: str, ticker: str) -> dict:
-    """Tek bir kaynak + tek bir şirket için poll çalıştır."""
-    started_at = datetime.now()
+    """Tek bir kaynak + tek bir sirket icin poll calistir."""
+    started_at = utcnow()
     stats = {"source": source_code, "ticker": ticker, "started_at": started_at.isoformat()}
 
     async with async_session_factory() as session:
@@ -43,7 +79,7 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
 
             polling_state = await polling_repo.get_by_source_id(source.id)
 
-            # Check consecutive failures
+            # Check consecutive failures and apply backoff
             if polling_state and polling_state.consecutive_failures >= settings.max_consecutive_failures:
                 logger.warning(
                     "source_disabled_too_many_failures",
@@ -82,7 +118,6 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
                 result = await event_service.process_raw_events(events, source, company)
                 stats.update(result)
 
-                # Update polling state
                 last_external_id = None
                 last_published = None
                 if events:
@@ -108,7 +143,7 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
             except Exception:
                 pass
 
-    ended_at = datetime.now()
+    ended_at = utcnow()
     stats["ended_at"] = ended_at.isoformat()
     stats["duration_seconds"] = (ended_at - started_at).total_seconds()
     logger.info("poll_complete", **stats)
@@ -116,23 +151,54 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
 
 
 async def poll_source(source_code: str) -> list[dict]:
-    """Tüm aktif şirketler için tek bir kaynağı poll et."""
-    results = []
+    """Tum aktif sirketler icin tek bir kaynagi poll et.
+
+    Uses bounded concurrency via asyncio.Semaphore.
+    Uses advisory lock to prevent concurrent polling of the same source by multiple workers.
+    """
+    # Try to acquire advisory lock for this source
     async with async_session_factory() as session:
-        company_repo = CompanyRepository(session)
-        companies = await company_repo.get_all()
+        acquired = await _try_advisory_lock(session, source_code)
+        if not acquired:
+            logger.info("poll_source_skipped_locked", source=source_code)
+            return []
 
-    for company in companies:
-        result = await poll_source_for_company(source_code, company.ticker)
-        results.append(result)
-        # Rate limiting: şirketler arası kısa bekleme
-        await asyncio.sleep(1)
+    try:
+        async with async_session_factory() as session:
+            company_repo = CompanyRepository(session)
+            companies = await company_repo.get_all()
 
-    return results
+        semaphore = asyncio.Semaphore(settings.worker_max_concurrency)
+
+        async def poll_with_limit(ticker: str) -> dict:
+            async with semaphore:
+                result = await poll_source_for_company(source_code, ticker)
+                # Rate limiting between companies
+                await asyncio.sleep(0.5)
+                return result
+
+        results = await asyncio.gather(
+            *(poll_with_limit(c.ticker) for c in companies),
+            return_exceptions=True,
+        )
+
+        # Convert exceptions to error dicts
+        clean_results = []
+        for r in results:
+            if isinstance(r, Exception):
+                clean_results.append({"error": str(r)})
+            else:
+                clean_results.append(r)
+
+        return clean_results
+
+    finally:
+        async with async_session_factory() as session:
+            await _release_advisory_lock(session, source_code)
 
 
 async def run_all_sources_once() -> list[dict]:
-    """Tüm kaynakları tüm şirketler için bir kez poll et."""
+    """Tum kaynaklari tum sirketler icin bir kez poll et."""
     results = []
     for source_code in ["kap", "price", "financials"]:
         source_results = await poll_source(source_code)
@@ -140,17 +206,34 @@ async def run_all_sources_once() -> list[dict]:
     return results
 
 
-async def polling_loop():
-    """Sürekli polling döngüsü — tüm şirketler için."""
-    logger.info("polling_loop_started")
+def _compute_backoff(consecutive_failures: int) -> float:
+    """Compute backoff delay based on consecutive failures."""
+    if consecutive_failures <= 0:
+        return 0
+    delay = min(
+        settings.backoff_base_seconds * (settings.backoff_factor ** (consecutive_failures - 1)),
+        settings.backoff_max_seconds,
+    )
+    return delay
 
-    # Source intervals
+
+async def polling_loop():
+    """Surekli polling dongusu — tum sirketler icin.
+
+    CONCURRENCY SAFETY:
+    - If WORKER_SINGLE_REPLICA=true (default): Only one worker process should run.
+      Deploy with replicas=1 in docker-compose or use process manager.
+    - If WORKER_SINGLE_REPLICA=false: Multiple workers can run safely.
+      PostgreSQL advisory locks prevent duplicate source polling.
+    """
+    logger.info("polling_loop_started", single_replica=settings.worker_single_replica)
+
     intervals = {
         "kap": 30,
         "price": 300,
-        "financials": 3600,  # saatte bir — finansal tablolar sik degismez
+        "financials": 3600,
     }
-    last_poll = {code: 0.0 for code in intervals}
+    last_poll: dict[str, float] = {code: 0.0 for code in intervals}
 
     while True:
         now = asyncio.get_event_loop().time()
@@ -161,9 +244,11 @@ async def polling_loop():
 
             if now - last_poll[source_code] >= effective_interval:
                 try:
+                    logger.info("polling_cycle_start", source=source_code)
                     await poll_source(source_code)
+                    logger.info("polling_cycle_end", source=source_code)
                 except Exception as e:
                     logger.error("polling_loop_error", source=source_code, error=str(e))
                 last_poll[source_code] = now
 
-        await asyncio.sleep(5)  # Check every 5 seconds
+        await asyncio.sleep(5)

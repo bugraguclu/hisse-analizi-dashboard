@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -6,6 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from src.core.config import settings
 from src.core.logging import setup_logging
@@ -17,39 +19,37 @@ from src.api.routers_market import market_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-
-    # Start workers if not in test mode
-    if settings.app_env != "test":
-        from src.workers.polling_worker import polling_loop
-        from src.workers.notification_worker import notification_loop
-
-        polling_task = asyncio.create_task(polling_loop())
-        notification_task = asyncio.create_task(notification_loop())
-
+    # Workers are NOT started here.
+    # They run in a dedicated worker process via: python -m src.workers.run_workers
+    # See docker-compose.yml 'worker' service.
     yield
-
-    if settings.app_env != "test":
-        polling_task.cancel()
-        notification_task.cancel()
+    # Cleanup shared HTTP client on shutdown
+    from src.adapters.utils import close_http_client
+    await close_http_client()
 
 
 app = FastAPI(
     title="Hisse Analizi Dashboard",
     description="BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
-# CORS — dashboard ve local gelistirme icin
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS — config-driven allowlist, defaults to localhost for dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_allowed_origins,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # API routers

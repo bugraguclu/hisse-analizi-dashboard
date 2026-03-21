@@ -123,7 +123,7 @@ class StatsOut(BaseModel):
 
 class HealthOut(BaseModel):
     status: str = "ok"
-    version: str = "0.3.0"
+    version: str = "0.5.0"
     environment: str = "development"
 
 

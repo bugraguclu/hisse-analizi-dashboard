@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,13 +49,16 @@ from src.schemas.events import (
     FinancialStatementOut,
     FinancialRatioOut,
 )
-from src.workers.polling_worker import poll_source, run_all_sources_once, poll_source_for_company
-from src.workers.notification_worker import process_notifications_once
+from src.api.dependencies import require_admin
 
 DB = Annotated[AsyncSession, Depends(get_db)]
 
 router = APIRouter()
-admin_router = APIRouter(prefix="/admin", tags=["admin"])
+admin_router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 # --- Public Endpoints ---
@@ -149,7 +152,6 @@ async def list_financials(
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
     statement_type: str | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
 ):
-    """Sirketin DB'deki finansal tablolarini listele."""
     company_repo = CompanyRepository(db)
     company = await company_repo.get_by_ticker(ticker.upper())
     if not company:
@@ -163,7 +165,6 @@ async def list_ratios(
     db: DB,
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
 ):
-    """Sirketin hesaplanmis finansal oranlarini listele."""
     company_repo = CompanyRepository(db)
     company = await company_repo.get_by_ticker(ticker.upper())
     if not company:
@@ -190,10 +191,12 @@ async def list_polling_state(db: DB):
     return await repo.get_all()
 
 
-# --- Admin Endpoints ---
+# --- Admin Endpoints (protected by require_admin dependency) ---
 
 @admin_router.post("/poll/run-once", status_code=202)
 async def run_poll_once(body: PollRunRequest, background_tasks: BackgroundTasks):
+    from src.workers.polling_worker import poll_source, run_all_sources_once
+
     if body.source_code:
         background_tasks.add_task(poll_source, body.source_code)
     else:
@@ -203,6 +206,8 @@ async def run_poll_once(body: PollRunRequest, background_tasks: BackgroundTasks)
 
 @admin_router.post("/backfill", status_code=202)
 async def backfill(body: BackfillRequest, background_tasks: BackgroundTasks):
+    from src.workers.polling_worker import run_all_sources_once
+
     background_tasks.add_task(run_all_sources_once)
     return {"status": "accepted", "days": body.days, "source_code": body.source_code or "all"}
 
@@ -227,6 +232,8 @@ async def create_notification_rule(body: NotificationRuleCreate, db: DB):
 
 @admin_router.post("/notifications/test-send")
 async def test_notification(background_tasks: BackgroundTasks):
+    from src.workers.notification_worker import process_notifications_once
+
     background_tasks.add_task(process_notifications_once)
     return {"status": "accepted"}
 

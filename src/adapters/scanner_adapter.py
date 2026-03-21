@@ -7,27 +7,14 @@ TechnicalScanner API:
   - to_dataframe() -> DataFrame olarak sonuclar
 """
 
-import asyncio
-
 import structlog
+
+from src.adapters.utils import cached, df_to_records, safe_serialize, run_sync, TTL_MARKET
 
 logger = structlog.get_logger(__name__)
 
 
-def _safe_records(data) -> list:
-    """Herhangi bir veriyi list[dict]'e cevir."""
-    if data is None:
-        return []
-    if isinstance(data, list):
-        return data
-    if hasattr(data, "to_dict"):
-        try:
-            return data.to_dict(orient="records") if hasattr(data, "iterrows") else [data.to_dict()]
-        except Exception:
-            return []
-    return []
-
-
+@cached(TTL_MARKET, "scanner")
 async def scan_signals(condition: str | None = None) -> dict:
     """Teknik sinyal taramasi.
 
@@ -35,19 +22,23 @@ async def scan_signals(condition: str | None = None) -> dict:
     """
     try:
         import borsapy as bp
-        loop = asyncio.get_event_loop()
-        scanner = await loop.run_in_executor(None, lambda: bp.TechnicalScanner())
+        scanner = await run_sync(lambda: bp.TechnicalScanner())
 
         if condition:
-            await loop.run_in_executor(None, lambda: scanner.add_condition(condition))
+            await run_sync(lambda: scanner.add_condition(condition))
 
-        await loop.run_in_executor(None, lambda: scanner.run())
+        await run_sync(lambda: scanner.run())
 
         # Sonuclari al
-        results = await loop.run_in_executor(None, lambda: scanner.results)
-        df = await loop.run_in_executor(None, lambda: scanner.to_dataframe())
+        results = await run_sync(lambda: scanner.results)
+        df = await run_sync(lambda: scanner.to_dataframe())
 
-        data = _safe_records(df) if df is not None else _safe_records(results)
+        if df is not None:
+            data = df_to_records(df)
+        elif results is not None:
+            data = safe_serialize(results) if not isinstance(results, list) else results
+        else:
+            data = []
         return {"condition": condition, "results": data}
     except Exception as e:
         logger.error("scanner_error", condition=condition, error=str(e))

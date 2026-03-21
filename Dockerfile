@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml .
 RUN pip install --no-cache-dir psycopg2-binary
-RUN pip install --no-cache-dir -e ".[email]"
+RUN pip install --no-cache-dir ".[email]"
 
 COPY . .
 

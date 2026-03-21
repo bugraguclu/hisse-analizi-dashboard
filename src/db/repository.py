@@ -1,11 +1,11 @@
 import uuid
-from datetime import datetime
 from typing import Sequence
 
-from sqlalchemy import select, update, and_, desc
+from sqlalchemy import select, update, and_, desc, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.time import utcnow
 from src.db.models import (
     Company,
     Source,
@@ -36,17 +36,15 @@ class CompanyRepository:
         return result.scalars().all()
 
     async def upsert(self, **kwargs) -> Company:
-        ticker = kwargs["ticker"]
-        existing = await self.get_by_ticker(ticker)
-        if existing:
-            for k, v in kwargs.items():
-                setattr(existing, k, v)
-            await self.session.flush()
-            return existing
-        company = Company(**kwargs)
-        self.session.add(company)
-        await self.session.flush()
-        return company
+        """Atomic upsert using ON CONFLICT on ticker."""
+        stmt = pg_insert(Company).values(**kwargs)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["ticker"],
+            set_={k: v for k, v in kwargs.items() if k != "ticker"},
+        )
+        stmt = stmt.returning(Company)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
 
 class SourceRepository:
@@ -66,17 +64,15 @@ class SourceRepository:
         return result.scalars().all()
 
     async def upsert(self, **kwargs) -> Source:
-        code = kwargs["code"]
-        existing = await self.get_by_code(code)
-        if existing:
-            for k, v in kwargs.items():
-                setattr(existing, k, v)
-            await self.session.flush()
-            return existing
-        source = Source(**kwargs)
-        self.session.add(source)
-        await self.session.flush()
-        return source
+        """Atomic upsert using ON CONFLICT on code."""
+        stmt = pg_insert(Source).values(**kwargs)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["code"],
+            set_={k: v for k, v in kwargs.items() if k != "code"},
+        )
+        stmt = stmt.returning(Source)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
 
 class PollingStateRepository:
@@ -90,21 +86,23 @@ class PollingStateRepository:
         return result.scalar_one_or_none()
 
     async def upsert(self, source_id: uuid.UUID) -> PollingState:
-        existing = await self.get_by_source_id(source_id)
-        if existing:
-            return existing
-        ps = PollingState(source_id=source_id)
-        self.session.add(ps)
-        await self.session.flush()
-        return ps
+        """Atomic upsert using ON CONFLICT on source_id."""
+        stmt = pg_insert(PollingState).values(source_id=source_id)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["source_id"])
+        await self.session.execute(stmt)
+        # Always return the row
+        result = await self.session.execute(
+            select(PollingState).where(PollingState.source_id == source_id)
+        )
+        return result.scalar_one()
 
     async def update_success(
         self,
         source_id: uuid.UUID,
         last_seen_external_id: str | None = None,
-        last_seen_published_at: datetime | None = None,
+        last_seen_published_at=None,
     ) -> None:
-        now = datetime.now()
+        now = utcnow()
         values = {
             "last_success_at": now,
             "last_attempt_at": now,
@@ -120,12 +118,16 @@ class PollingStateRepository:
         )
 
     async def update_failure(self, source_id: uuid.UUID, error: str) -> None:
-        ps = await self.get_by_source_id(source_id)
-        if ps:
-            ps.last_attempt_at = datetime.now()
-            ps.consecutive_failures = (ps.consecutive_failures or 0) + 1
-            ps.last_error = error
-            await self.session.flush()
+        now = utcnow()
+        await self.session.execute(
+            update(PollingState)
+            .where(PollingState.source_id == source_id)
+            .values(
+                last_attempt_at=now,
+                consecutive_failures=PollingState.consecutive_failures + 1,
+                last_error=error,
+            )
+        )
 
     async def get_all(self) -> Sequence[PollingState]:
         result = await self.session.execute(
@@ -139,19 +141,14 @@ class RawEventRepository:
         self.session = session
 
     async def insert_if_not_exists(self, **kwargs) -> RawEvent | None:
-        content_hash = kwargs["content_hash"]
-        source_id = kwargs["source_id"]
-        existing = await self.session.execute(
-            select(RawEvent).where(
-                and_(RawEvent.source_id == source_id, RawEvent.content_hash == content_hash)
-            )
+        """Atomic dedup insert using ON CONFLICT DO NOTHING on (source_id, content_hash)."""
+        stmt = pg_insert(RawEvent).values(**kwargs)
+        stmt = stmt.on_conflict_do_nothing(
+            constraint="uq_raw_events_source_hash",
         )
-        if existing.scalar_one_or_none():
-            return None
-        raw_event = RawEvent(**kwargs)
-        self.session.add(raw_event)
-        await self.session.flush()
-        return raw_event
+        stmt = stmt.returning(RawEvent)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
 
 class NormalizedEventRepository:
@@ -159,24 +156,20 @@ class NormalizedEventRepository:
         self.session = session
 
     async def insert_if_not_exists(self, **kwargs) -> NormalizedEvent | None:
-        dedup_key = kwargs["dedup_key"]
-        existing = await self.session.execute(
-            select(NormalizedEvent).where(NormalizedEvent.dedup_key == dedup_key)
-        )
-        if existing.scalar_one_or_none():
-            return None
-        event = NormalizedEvent(**kwargs)
-        self.session.add(event)
-        await self.session.flush()
-        return event
+        """Atomic dedup insert using ON CONFLICT DO NOTHING on dedup_key."""
+        stmt = pg_insert(NormalizedEvent).values(**kwargs)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["dedup_key"])
+        stmt = stmt.returning(NormalizedEvent)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_list(
         self,
         source_code: str | None = None,
         event_type: str | None = None,
         ticker: str | None = None,
-        since: datetime | None = None,
-        until: datetime | None = None,
+        since=None,
+        until=None,
         limit: int = 50,
         offset: int = 0,
     ) -> Sequence[NormalizedEvent]:
@@ -186,8 +179,6 @@ class NormalizedEventRepository:
         if event_type:
             q = q.where(NormalizedEvent.event_type == event_type)
         if ticker:
-            # Filter by company ticker via join
-            from src.db.models import Company
             q = q.join(Company, NormalizedEvent.company_id == Company.id).where(Company.ticker == ticker.upper())
         if since:
             q = q.where(NormalizedEvent.published_at >= since)
@@ -215,22 +206,14 @@ class PriceDataRepository:
         self.session = session
 
     async def insert_if_not_exists(self, **kwargs) -> PriceData | None:
-        existing = await self.session.execute(
-            select(PriceData).where(
-                and_(
-                    PriceData.company_id == kwargs["company_id"],
-                    PriceData.trading_date == kwargs["trading_date"],
-                    PriceData.interval == kwargs["interval"],
-                    PriceData.source == kwargs["source"],
-                )
-            )
+        """Atomic dedup insert using ON CONFLICT DO NOTHING on (company_id, trading_date, interval, source)."""
+        stmt = pg_insert(PriceData).values(**kwargs)
+        stmt = stmt.on_conflict_do_nothing(
+            constraint="uq_price_data_unique",
         )
-        if existing.scalar_one_or_none():
-            return None
-        price = PriceData(**kwargs)
-        self.session.add(price)
-        await self.session.flush()
-        return price
+        stmt = stmt.returning(PriceData)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_list(
         self,
@@ -276,20 +259,37 @@ class OutboxRepository:
         await self.session.flush()
         return entry
 
-    async def get_pending(self, limit: int = 10) -> Sequence[EventOutbox]:
-        result = await self.session.execute(
-            select(EventOutbox)
+    async def claim_pending(self, limit: int = 10) -> Sequence[EventOutbox]:
+        """Atomically claim pending outbox entries using SELECT ... FOR UPDATE SKIP LOCKED.
+
+        This prevents concurrent workers from processing the same entries.
+        Claimed entries are moved to PROCESSING status.
+        """
+        now = utcnow()
+        # Select and lock rows, skipping already-locked ones
+        subq = (
+            select(EventOutbox.id)
             .where(EventOutbox.status == OutboxStatus.PENDING)
             .order_by(EventOutbox.created_at)
             .limit(limit)
+            .with_for_update(skip_locked=True)
         )
+        # Update status to PROCESSING
+        stmt = (
+            update(EventOutbox)
+            .where(EventOutbox.id.in_(subq.scalar_subquery()))
+            .values(status=OutboxStatus.PROCESSING, updated_at=now)
+            .returning(EventOutbox)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
         return result.scalars().all()
 
     async def mark_done(self, outbox_id: uuid.UUID) -> None:
         await self.session.execute(
             update(EventOutbox)
             .where(EventOutbox.id == outbox_id)
-            .values(status=OutboxStatus.DONE, processed_at=datetime.now())
+            .values(status=OutboxStatus.DONE, processed_at=utcnow())
         )
 
     async def mark_failed(self, outbox_id: uuid.UUID, error: str) -> None:
@@ -303,9 +303,37 @@ class OutboxRepository:
             )
         )
 
+    async def reclaim_stuck(self, stuck_seconds: int = 300) -> int:
+        """Reclaim entries stuck in PROCESSING state for too long.
+        Returns number of reclaimed entries.
+        """
+        cutoff = utcnow()
+        stmt = (
+            update(EventOutbox)
+            .where(
+                and_(
+                    EventOutbox.status == OutboxStatus.PROCESSING,
+                    EventOutbox.updated_at < text(f"NOW() - INTERVAL '{stuck_seconds} seconds'"),
+                )
+            )
+            .values(status=OutboxStatus.PENDING)
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount
+
     async def get_all(self, limit: int = 50) -> Sequence[EventOutbox]:
         result = await self.session.execute(
             select(EventOutbox).order_by(desc(EventOutbox.created_at)).limit(limit)
+        )
+        return result.scalars().all()
+
+    # Keep get_pending for backward compat in stats queries
+    async def get_pending(self, limit: int = 10) -> Sequence[EventOutbox]:
+        result = await self.session.execute(
+            select(EventOutbox)
+            .where(EventOutbox.status == OutboxStatus.PENDING)
+            .order_by(EventOutbox.created_at)
+            .limit(limit)
         )
         return result.scalars().all()
 
@@ -352,11 +380,20 @@ class NotificationRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create(self, **kwargs) -> Notification:
-        notif = Notification(**kwargs)
-        self.session.add(notif)
-        await self.session.flush()
-        return notif
+    async def create_if_not_exists(
+        self, **kwargs
+    ) -> Notification | None:
+        """Atomic dedup insert for notification.
+        Returns None if notification already exists (idempotent).
+        Uses ON CONFLICT DO NOTHING on (normalized_event_id, email) unique constraint.
+        """
+        stmt = pg_insert(Notification).values(**kwargs)
+        stmt = stmt.on_conflict_do_nothing(
+            constraint="uq_notification_event_email",
+        )
+        stmt = stmt.returning(Notification)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def exists(self, normalized_event_id: uuid.UUID, email: str) -> bool:
         result = await self.session.execute(
@@ -380,33 +417,17 @@ class FinancialStatementRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_company_period_type(
-        self, company_id: uuid.UUID, period: str, statement_type: str
-    ) -> FinancialStatement | None:
-        result = await self.session.execute(
-            select(FinancialStatement).where(
-                and_(
-                    FinancialStatement.company_id == company_id,
-                    FinancialStatement.period == period,
-                    FinancialStatement.statement_type == statement_type,
-                )
-            )
-        )
-        return result.scalar_one_or_none()
-
     async def upsert(self, **kwargs) -> FinancialStatement:
-        existing = await self.get_by_company_period_type(
-            kwargs["company_id"], kwargs["period"], kwargs["statement_type"]
+        """Atomic upsert using ON CONFLICT on (company_id, period, statement_type)."""
+        stmt = pg_insert(FinancialStatement).values(**kwargs)
+        set_fields = {k: v for k, v in kwargs.items() if k not in ("company_id", "period", "statement_type")}
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_financial_statements_period",
+            set_=set_fields,
         )
-        if existing:
-            for k, v in kwargs.items():
-                setattr(existing, k, v)
-            await self.session.flush()
-            return existing
-        fs = FinancialStatement(**kwargs)
-        self.session.add(fs)
-        await self.session.flush()
-        return fs
+        stmt = stmt.returning(FinancialStatement)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
     async def get_for_company(
         self, company_id: uuid.UUID, statement_type: str | None = None
@@ -423,30 +444,17 @@ class FinancialRatioRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_company_period(
-        self, company_id: uuid.UUID, period: str
-    ) -> FinancialRatio | None:
-        result = await self.session.execute(
-            select(FinancialRatio).where(
-                and_(
-                    FinancialRatio.company_id == company_id,
-                    FinancialRatio.period == period,
-                )
-            )
-        )
-        return result.scalar_one_or_none()
-
     async def upsert(self, **kwargs) -> FinancialRatio:
-        existing = await self.get_by_company_period(kwargs["company_id"], kwargs["period"])
-        if existing:
-            for k, v in kwargs.items():
-                setattr(existing, k, v)
-            await self.session.flush()
-            return existing
-        ratio = FinancialRatio(**kwargs)
-        self.session.add(ratio)
-        await self.session.flush()
-        return ratio
+        """Atomic upsert using ON CONFLICT on (company_id, period)."""
+        stmt = pg_insert(FinancialRatio).values(**kwargs)
+        set_fields = {k: v for k, v in kwargs.items() if k not in ("company_id", "period")}
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_financial_ratios_period",
+            set_=set_fields,
+        )
+        stmt = stmt.returning(FinancialRatio)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
     async def get_for_company(self, company_id: uuid.UUID) -> Sequence[FinancialRatio]:
         result = await self.session.execute(

@@ -2,11 +2,10 @@
 
 import { Badge } from "@/components/ui/badge";
 
+// Backend Severity enum: INFO, WATCH, HIGH
 const severityConfig: Record<string, { label: string; className: string }> = {
-  CRITICAL: { label: "Kritik", className: "bg-red-50 text-red-700 border-red-200" },
-  HIGH: { label: "Yuksek", className: "bg-orange-50 text-orange-700 border-orange-200" },
-  MEDIUM: { label: "Orta", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  LOW: { label: "Dusuk", className: "bg-slate-50 text-slate-500 border-slate-200" },
+  HIGH: { label: "Yuksek", className: "bg-red-50 text-red-700 border-red-200" },
+  WATCH: { label: "Takip", className: "bg-amber-50 text-amber-700 border-amber-200" },
   INFO: { label: "Bilgi", className: "bg-blue-50 text-blue-600 border-blue-200" },
 };
 

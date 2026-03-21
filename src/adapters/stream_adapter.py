@@ -1,8 +1,8 @@
 """Canli veri akisi adaptoru — TradingView WebSocket stream."""
 
-import asyncio
-
 import structlog
+
+from src.adapters.utils import cached, safe_serialize, run_sync, TTL_PRICE_SNAPSHOT
 
 logger = structlog.get_logger(__name__)
 
@@ -47,22 +47,17 @@ class LivePriceStream:
                 self._stream = None
 
 
+@cached(TTL_PRICE_SNAPSHOT, "stream")
 async def get_snapshot(symbols: list[str]) -> dict:
     """Birden fazla sembol icin anlik fiyat snapshot'i (stream kullanmadan)."""
     try:
         import borsapy as bp
-        loop = asyncio.get_event_loop()
         results = {}
         for symbol in symbols:
             try:
-                t = await loop.run_in_executor(None, lambda s=symbol: bp.Ticker(s))
-                fi = await loop.run_in_executor(None, lambda: t.fast_info)
-                if fi and hasattr(fi, "to_dict"):
-                    results[symbol] = fi.to_dict()
-                elif isinstance(fi, dict):
-                    results[symbol] = fi
-                else:
-                    results[symbol] = {"value": str(fi)} if fi else {}
+                t = await run_sync(lambda s=symbol: bp.Ticker(s))
+                fi = await run_sync(lambda: t.fast_info)
+                results[symbol] = safe_serialize(fi) if fi else {}
             except Exception as e:
                 results[symbol] = {"error": str(e)}
         return {"symbols": symbols, "snapshot": results}

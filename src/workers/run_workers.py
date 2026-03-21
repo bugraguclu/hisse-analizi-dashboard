@@ -1,9 +1,17 @@
-"""Worker entrypoint: polling + notification loops."""
-import asyncio
-import sys
-import os
+"""Worker entrypoint: polling + notification loops.
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+Run with: python -m src.workers.run_workers
+
+CONCURRENCY SAFETY:
+- Default mode (WORKER_SINGLE_REPLICA=true): Run exactly ONE worker replica.
+  Enforce via docker-compose replicas=1 or process manager.
+- Multi-replica mode (WORKER_SINGLE_REPLICA=false): Multiple workers are safe.
+  PostgreSQL advisory locks prevent duplicate source polling.
+  Outbox entries are claimed via SELECT ... FOR UPDATE SKIP LOCKED.
+  Notifications are deduplicated via DB unique constraint.
+"""
+
+import asyncio
 
 from src.core.logging import setup_logging
 from src.workers.polling_worker import polling_loop

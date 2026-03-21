@@ -9,7 +9,7 @@ import { Newspaper, DollarSign, BarChart3, Bell, FileText, Clock } from "lucide-
 const cardConfig = [
   { key: "total_normalized_events", label: "Toplam Olay", icon: Newspaper, color: "text-teal-600", bg: "bg-teal-50" },
   { key: "total_price_records", label: "Fiyat Kaydi", icon: DollarSign, color: "text-blue-600", bg: "bg-blue-50" },
-  { key: "total_companies", label: "Sirket", icon: BarChart3, color: "text-emerald-600", bg: "bg-emerald-50" },
+  { key: "total_raw_events", label: "Ham Olay", icon: BarChart3, color: "text-emerald-600", bg: "bg-emerald-50" },
   { key: "total_notifications", label: "Bildirim", icon: Bell, color: "text-amber-600", bg: "bg-amber-50" },
   { key: "total_financial_records", label: "Finansal Kayit", icon: FileText, color: "text-purple-600", bg: "bg-purple-50" },
   { key: "pending_outbox", label: "Bekleyen", icon: Clock, color: "text-slate-600", bg: "bg-slate-50" },

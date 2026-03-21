@@ -12,9 +12,17 @@ import type {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-async function get<T>(path: string): Promise<T | null> {
+/**
+ * Endpoint-appropriate caching:
+ * - "no-store": real-time data that must always be fresh (events, prices, outbox)
+ * - "default": let browser/CDN cache with revalidation (companies, macro, fundamentals)
+ * React Query handles client-side staleness via staleTime.
+ */
+type CacheStrategy = "no-store" | "default";
+
+async function get<T>(path: string, cache: CacheStrategy = "default"): Promise<T | null> {
   try {
-    const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
+    const res = await fetch(`${BASE}${path}`, { cache });
     if (!res.ok) {
       console.warn(`API ${res.status}: ${path}`);
       return null;
@@ -44,11 +52,11 @@ async function post<T>(path: string, body: unknown): Promise<T | null> {
 export const api = {
   // Core
   health: () => get<HealthResponse>("/health"),
-  stats: () => get<StatsOut>("/admin/stats"),
+  stats: () => get<StatsOut>("/admin/stats", "no-store"),
   companies: () => get<Company[]>("/companies"),
   company: (ticker: string) => get<Company>(`/companies/${ticker}`),
 
-  // Events
+  // Events (real-time, no cache)
   events: (params?: {
     source_code?: string;
     ticker?: string;
@@ -61,17 +69,17 @@ export const api = {
     if (params?.limit) q.set("limit", String(params.limit));
     if (params?.offset) q.set("offset", String(params.offset));
     const qs = q.toString();
-    return get<EventOut[]>(`/events${qs ? `?${qs}` : ""}`);
+    return get<EventOut[]>(`/events${qs ? `?${qs}` : ""}`, "no-store");
   },
-  latestEvents: () => get<EventOut[]>("/events/latest"),
+  latestEvents: () => get<EventOut[]>("/events/latest", "no-store"),
 
-  // Prices
+  // Prices (real-time, no cache)
   prices: (ticker: string, limit = 90) =>
-    get<PriceOut[]>(`/prices?ticker=${ticker}&limit=${limit}`),
+    get<PriceOut[]>(`/prices?ticker=${ticker}&limit=${limit}`, "no-store"),
   latestPrice: (ticker: string) =>
-    get<PriceOut | PriceOut[]>(`/prices/latest?ticker=${ticker}`),
+    get<PriceOut>(`/prices/latest?ticker=${ticker}`, "no-store"),
 
-  // Financials (DB)
+  // Financials (DB, cacheable)
   financials: (ticker: string, statementType?: string) => {
     const q = new URLSearchParams({ ticker });
     if (statementType) q.set("statement_type", statementType);
@@ -80,7 +88,7 @@ export const api = {
   financialRatios: (ticker: string) =>
     get<FinancialRatioOut[]>(`/financials/ratios?ticker=${ticker}`),
 
-  // Technical
+  // Technical (backend caches 60s, let fetch cache too)
   rsi: (ticker: string, period?: number) =>
     get(`/technical/${ticker}/rsi${period ? `?period=${period}` : ""}`),
   macd: (ticker: string) => get(`/technical/${ticker}/macd`),
@@ -96,7 +104,7 @@ export const api = {
   ema: (ticker: string, period?: number) =>
     get(`/technical/${ticker}/ema${period ? `?period=${period}` : ""}`),
 
-  // Fundamentals
+  // Fundamentals (backend caches 300s)
   companyInfo: (ticker: string) =>
     get<CompanyInfo>(`/fundamentals/${ticker}/info`),
   fastInfo: (ticker: string) => get(`/fundamentals/${ticker}/fast-info`),
@@ -117,14 +125,14 @@ export const api = {
   earningsDates: (ticker: string) =>
     get(`/fundamentals/${ticker}/earnings-dates`),
 
-  // Macro
+  // Macro (backend caches 600s)
   tcmb: () => get("/macro/tcmb"),
   policyRate: () => get("/macro/policy-rate"),
   inflation: () => get("/macro/inflation"),
   fx: (symbol: string) => get(`/macro/fx/${symbol}`),
   calendar: () => get("/macro/calendar"),
 
-  // Market
+  // Market (backend caches 120s)
   screener: (filters?: Record<string, unknown>) =>
     filters ? post("/market/screener", filters) : get("/market/screener"),
   screenerTemplates: () => get("/market/screener/templates"),
@@ -139,8 +147,8 @@ export const api = {
   tweets: (ticker: string, limit = 10) =>
     get(`/market/tweets/${ticker}?limit=${limit}`),
   snapshot: (symbols: string[]) =>
-    get(`/market/snapshot?symbols=${symbols.join(",")}`),
+    get(`/market/snapshot?symbols=${symbols.join(",")}`, "no-store"),
 
   // Polling
-  pollingState: () => get("/polling-state"),
+  pollingState: () => get("/polling-state", "no-store"),
 };

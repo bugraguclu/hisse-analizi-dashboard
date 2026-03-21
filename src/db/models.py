@@ -218,6 +218,9 @@ class NotificationRule(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint("normalized_event_id", "email", name="uq_notification_event_email"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     rule_id = Column(UUID(as_uuid=True), ForeignKey("notification_rules.id"), nullable=False)

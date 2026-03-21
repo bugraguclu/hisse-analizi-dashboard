@@ -1,24 +1,13 @@
 """Hisse tarama adaptoru — borsapy Screener."""
 
-import asyncio
-
 import structlog
+
+from src.adapters.utils import cached, df_to_records, run_sync, TTL_MARKET
 
 logger = structlog.get_logger(__name__)
 
 
-def _df_to_records(df) -> list[dict]:
-    if df is None:
-        return []
-    if hasattr(df, "empty") and df.empty:
-        return []
-    try:
-        result = df.reset_index()
-        return result.to_dict(orient="records")
-    except Exception:
-        return []
-
-
+@cached(TTL_MARKET, "screener")
 async def screen_stocks(filters: dict | None = None) -> dict:
     """Hisse tarama — filtrelerle BIST hisselerini tara.
 
@@ -29,28 +18,27 @@ async def screen_stocks(filters: dict | None = None) -> dict:
     """
     try:
         import borsapy as bp
-        loop = asyncio.get_event_loop()
 
         if filters:
-            result = await loop.run_in_executor(None, lambda: bp.screen_stocks(filters=filters))
+            result = await run_sync(lambda: bp.screen_stocks(filters=filters))
         else:
-            result = await loop.run_in_executor(None, bp.screen_stocks)
+            result = await run_sync(bp.screen_stocks)
 
-        data = _df_to_records(result) if hasattr(result, "iterrows") else result
+        data = df_to_records(result) if hasattr(result, "iterrows") else result
         return {"filters": filters or {}, "results": data}
     except Exception as e:
         logger.error("screener_error", filters=filters, error=str(e))
         return {"filters": filters or {}, "results": [], "error": str(e)}
 
 
+@cached(TTL_MARKET, "screener")
 async def get_screener_templates() -> dict:
     """Hazir tarama sablonlari listesi."""
     try:
         import borsapy as bp
-        loop = asyncio.get_event_loop()
-        screener = await loop.run_in_executor(None, lambda: bp.Screener())
-        templates = await loop.run_in_executor(
-            None, lambda: screener.templates if hasattr(screener, "templates") else []
+        screener = await run_sync(lambda: bp.Screener())
+        templates = await run_sync(
+            lambda: screener.templates if hasattr(screener, "templates") else []
         )
         return {"templates": templates if isinstance(templates, list) else []}
     except Exception as e:
