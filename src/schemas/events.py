@@ -38,6 +38,8 @@ class EventOut(BaseModel):
     source_code: str
     severity: Severity
     is_notifiable: bool
+    ticker: str | None = None
+    category: str | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 

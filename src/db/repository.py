@@ -4,6 +4,7 @@ from typing import Sequence
 from sqlalchemy import select, update, and_, desc, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.core.time import utcnow
 from src.db.models import (
@@ -173,7 +174,7 @@ class NormalizedEventRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> Sequence[NormalizedEvent]:
-        q = select(NormalizedEvent)
+        q = select(NormalizedEvent).options(selectinload(NormalizedEvent.company))
         if source_code:
             q = q.where(NormalizedEvent.source_code == source_code)
         if event_type:
@@ -190,13 +191,18 @@ class NormalizedEventRepository:
 
     async def get_by_id(self, event_id: uuid.UUID) -> NormalizedEvent | None:
         result = await self.session.execute(
-            select(NormalizedEvent).where(NormalizedEvent.id == event_id)
+            select(NormalizedEvent)
+            .options(selectinload(NormalizedEvent.company))
+            .where(NormalizedEvent.id == event_id)
         )
         return result.scalar_one_or_none()
 
     async def get_latest(self) -> Sequence[NormalizedEvent]:
         result = await self.session.execute(
-            select(NormalizedEvent).order_by(desc(NormalizedEvent.published_at)).limit(10)
+            select(NormalizedEvent)
+            .options(selectinload(NormalizedEvent.company))
+            .order_by(desc(NormalizedEvent.published_at))
+            .limit(10)
         )
         return result.scalars().all()
 

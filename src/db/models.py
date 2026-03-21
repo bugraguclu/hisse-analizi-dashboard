@@ -155,6 +155,10 @@ class NormalizedEvent(Base):
     company = relationship("Company", back_populates="normalized_events")
     outbox_entries = relationship("EventOutbox", back_populates="normalized_event")
 
+    @property
+    def ticker(self) -> str | None:
+        return self.company.ticker if self.company else None
+
 
 class PriceData(Base):
     __tablename__ = "price_data"

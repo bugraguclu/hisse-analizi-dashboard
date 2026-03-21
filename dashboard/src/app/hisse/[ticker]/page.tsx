@@ -21,9 +21,9 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   const infoQ = useQuery({ queryKey: ["fast-info", t], queryFn: () => api.fastInfo(t) });
 
   const prices = Array.isArray(pricesQ.data) ? pricesQ.data : [];
-  const sorted = [...prices].sort((a, b) => new Date(a.trading_date || a.date || "").getTime() - new Date(b.trading_date || b.date || "").getTime());
+  const sorted = [...prices].sort((a, b) => new Date(a.trading_date || "").getTime() - new Date(b.trading_date || "").getTime());
   const chartData = sorted.map((p) => ({
-    date: new Date(p.trading_date || p.date || "").toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+    date: new Date(p.trading_date || "").toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
     close: p.close || 0,
     volume: p.volume || 0,
   }));

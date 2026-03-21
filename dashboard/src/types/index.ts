@@ -25,6 +25,8 @@ export interface EventOut {
   source_code: string;
   severity: "INFO" | "WATCH" | "HIGH";
   is_notifiable: boolean;
+  ticker?: string | null;
+  category?: string | null;
   created_at: string;
 }
 
