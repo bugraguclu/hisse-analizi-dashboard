@@ -1,13 +1,13 @@
 """Add notification dedup unique constraint and outbox processing support.
 
 Revision ID: 002
-Revises: 001
+Revises: 001_full_schema_v1
 """
 
 from alembic import op
 
 revision = "002"
-down_revision = "001"
+down_revision = "001_full_schema_v1"
 branch_labels = None
 depends_on = None
 
