@@ -46,3 +46,16 @@ async def list_indices() -> dict:
     except Exception as e:
         logger.error("indices_list_error", error=str(e))
         return {"indices": [], "error": str(e)}
+
+
+@cached(TTL_MARKET, "ticker_history")
+async def get_ticker_history(ticker: str, period: str = "1ay") -> dict:
+    """Hisse fiyat gecmisi (borsapy uzerinden canli)."""
+    try:
+        import borsapy as bp
+        t = await run_sync(lambda: bp.Ticker(ticker))
+        df = await run_sync(lambda: t.history(period=period))
+        return {"ticker": ticker, "period": period, "data": df_to_records(df)}
+    except Exception as e:
+        logger.error("ticker_history_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "period": period, "data": [], "error": str(e)}

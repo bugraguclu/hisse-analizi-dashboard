@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatDate, formatCompact } from "@/lib/format";
@@ -41,12 +42,13 @@ const watchlist = [
   { ticker: "EREGL", name: "Eregli Demir Celik" },
 ];
 
-const marketPulseSymbols = ["XU100", "XU030", "XUSIN"];
+const indexSymbols = ["XU100", "XU030", "XUSIN"];
 
 function MarketDate() {
   const now = new Date();
   const hour = now.getHours();
-  const isOpen = hour >= 10 && hour < 18;
+  const day = now.getDay();
+  const isOpen = day >= 1 && day <= 5 && hour >= 10 && hour < 18;
   const dateStr = now.toLocaleDateString("tr-TR", {
     day: "numeric",
     month: "long",
@@ -122,13 +124,34 @@ function PortfolioCard() {
   );
 }
 
-function MarketPulse() {
-  const { data: indices, isLoading } = useQuery({
-    queryKey: ["indices"],
-    queryFn: () => api.indices(),
+function useIndexSummary(symbol: string) {
+  return useQuery({
+    queryKey: ["indexData", symbol],
+    queryFn: () => api.indexData(symbol, "1ay"),
+    staleTime: 120_000,
   });
+}
 
-  const items = Array.isArray(indices) ? indices : [];
+function MarketPulse() {
+  const xu100 = useIndexSummary("XU100");
+  const xu030 = useIndexSummary("XU030");
+  const xusin = useIndexSummary("XUSIN");
+  const queries = [xu100, xu030, xu030, xusin];
+  const isLoading = queries.some((q) => q.isLoading);
+
+  const items = [xu100.data, xu030.data, xusin.data]
+    .filter(Boolean)
+    .map((d) => {
+      const raw = d as { symbol: string; data: Array<Record<string, unknown>> };
+      const arr = raw?.data ?? [];
+      if (arr.length === 0) return { name: raw?.symbol ?? "", value: 0, change: 0 };
+      const last = arr[arr.length - 1];
+      const prev = arr.length > 1 ? arr[arr.length - 2] : last;
+      const close = Number(last.Close ?? 0);
+      const prevClose = Number(prev.Close ?? close);
+      const change = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
+      return { name: raw.symbol, value: close, change };
+    });
 
   return (
     <motion.div
@@ -150,88 +173,68 @@ function MarketPulse() {
         </div>
       ) : (
         <div className="space-y-2">
-          {(items.length > 0 ? items.slice(0, 4) : marketPulseSymbols).map(
-            (item: Record<string, unknown> | string, i: number) => {
-              const isObj = typeof item === "object";
-              const name = isObj
-                ? String(
-                    (item as Record<string, unknown>).name ||
-                      (item as Record<string, unknown>).symbol ||
-                      (item as Record<string, unknown>).ticker ||
-                      ""
-                  )
-                : String(item);
-              const value = isObj
-                ? Number(
-                    (item as Record<string, unknown>).close ||
-                      (item as Record<string, unknown>).value ||
-                      (item as Record<string, unknown>).last ||
-                      0
-                  )
-                : 0;
-              const change = isObj
-                ? Number(
-                    (item as Record<string, unknown>).change_pct ||
-                      (item as Record<string, unknown>).change_percent ||
-                      0
-                  )
-                : 0;
-              const isUp = change >= 0;
-
-              return (
-                <div
-                  key={i}
-                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+          {items.map((item, i) => {
+            const isUp = item.change >= 0;
+            return (
+              <div
+                key={i}
+                className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                  isUp
+                    ? "bg-emerald-500/5 border-emerald-500/10 hover:bg-emerald-500/10"
+                    : "bg-red-500/5 border-red-500/10 hover:bg-red-500/10"
+                }`}
+              >
+                <div>
+                  <p className="text-sm font-bold text-foreground">{item.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {item.value > 0 ? formatNumber(item.value) : "-"}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs font-bold px-2 py-1 rounded-md ${
                     isUp
-                      ? "bg-emerald-500/5 border-emerald-500/10 hover:bg-emerald-500/10"
-                      : "bg-red-500/5 border-red-500/10 hover:bg-red-500/10"
+                      ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/15"
+                      : "text-red-700 dark:text-red-400 bg-red-500/15"
                   }`}
                 >
-                  <div>
-                    <p className="text-sm font-bold text-foreground">{name || `Endeks ${i + 1}`}</p>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {value > 0 ? formatNumber(value) : "-"}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-xs font-bold px-2 py-1 rounded-md ${
-                      isUp
-                        ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/15"
-                        : "text-red-700 dark:text-red-400 bg-red-500/15"
-                    }`}
-                  >
-                    {isUp ? "+" : ""}
-                    {change !== 0 ? `${formatNumber(change)}%` : "-"}
-                  </span>
-                </div>
-              );
-            }
-          )}
+                  {isUp ? "+" : ""}
+                  {item.change !== 0 ? `${formatNumber(item.change)}%` : "-"}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </motion.div>
   );
 }
 
+const periodMap: Record<string, string> = {
+  "1H": "1hf",
+  "1A": "1ay",
+  "3A": "3ay",
+  "YBB": "5y",
+};
+
 function PerformanceChart() {
+  const [period, setPeriod] = useState("1A");
+  const borsapyPeriod = periodMap[period] ?? "1ay";
+
   const { data, isLoading } = useQuery({
-    queryKey: ["prices", "THYAO"],
-    queryFn: () => api.prices("THYAO", 30),
+    queryKey: ["indexChart", "XU100", borsapyPeriod],
+    queryFn: () => api.indexData("XU100", borsapyPeriod),
   });
 
-  const chartData = Array.isArray(data)
-    ? data
-        .map((p) => ({
-          date: new Date(p.trading_date).toLocaleDateString("tr-TR", {
-            day: "2-digit",
-            month: "short",
-          }),
-          close: p.close ?? 0,
-        }))
-        .reverse()
-    : [];
+  const raw = data as { data: Array<Record<string, unknown>> } | null;
+  const chartData = (raw?.data ?? []).map((d) => ({
+    date: new Date(String(d.Date ?? "")).toLocaleDateString("tr-TR", {
+      day: "2-digit",
+      month: "short",
+    }),
+    close: Number(d.Close ?? 0),
+  }));
 
-  const periods = ["1G", "1H", "1A", "YBB"];
+  const periods = Object.keys(periodMap);
 
   return (
     <motion.div
@@ -241,13 +244,14 @@ function PerformanceChart() {
       className="lg:col-span-2 bg-card rounded-xl border border-border p-5"
     >
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-foreground">Performans Gecmisi</h2>
+        <h2 className="text-sm font-semibold text-foreground">BIST 100 Performans</h2>
         <div className="flex gap-0.5 border border-border rounded-lg overflow-hidden">
-          {periods.map((p, i) => (
+          {periods.map((p) => (
             <button
               key={p}
+              onClick={() => setPeriod(p)}
               className={`px-3 py-1 text-xs font-semibold transition-colors ${
-                i === 2
+                p === period
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:bg-muted/50"
               }`}
@@ -290,7 +294,7 @@ function PerformanceChart() {
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                 tickMargin={10}
                 tickFormatter={(v) => `${formatCompact(v)}`}
-                domain={["dataMin - 5", "dataMax + 5"]}
+                domain={["dataMin - 50", "dataMax + 50"]}
               />
               <Tooltip
                 contentStyle={{
@@ -300,7 +304,7 @@ function PerformanceChart() {
                   fontSize: "12px",
                 }}
                 labelStyle={{ color: "hsl(var(--muted-foreground))" }}
-                formatter={(value: unknown) => [`₺${formatNumber(Number(value))}`, "Kapanis"]}
+                formatter={(value: unknown) => [`${formatNumber(Number(value))}`, "BIST 100"]}
               />
               <Line
                 type="monotone"
@@ -326,17 +330,18 @@ function PerformanceChart() {
 }
 
 function WatchlistTable() {
-  const symbols = watchlist.map((w) => w.ticker);
-  const { data, isLoading } = useQuery({
-    queryKey: ["snapshot", symbols],
-    queryFn: () => api.snapshot(symbols),
+  const { data: screenerData, isLoading } = useQuery({
+    queryKey: ["screener"],
+    queryFn: () => api.screener(),
+    staleTime: 120_000,
   });
 
-  const items = Array.isArray(data)
-    ? data
-    : data && typeof data === "object" && "data" in (data as Record<string, unknown>)
-      ? ((data as Record<string, unknown[]>).data as unknown[])
-      : [];
+  const results =
+    screenerData && typeof screenerData === "object" && "results" in (screenerData as Record<string, unknown>)
+      ? ((screenerData as Record<string, unknown>).results as Array<Record<string, unknown>>)
+      : Array.isArray(screenerData)
+        ? (screenerData as Array<Record<string, unknown>>)
+        : [];
 
   return (
     <motion.div
@@ -358,7 +363,6 @@ function WatchlistTable() {
         </Link>
       </div>
 
-      {/* Table header */}
       <div className="grid grid-cols-3 px-5 py-2 border-t border-border bg-muted/30">
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
           Hisse
@@ -367,7 +371,7 @@ function WatchlistTable() {
           Fiyat
         </span>
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-right">
-          Degisim
+          Sinyal
         </span>
       </div>
 
@@ -380,20 +384,10 @@ function WatchlistTable() {
       ) : (
         <div className="divide-y divide-border/50">
           {watchlist.map((w) => {
-            const match = Array.isArray(items)
-              ? (items as Record<string, unknown>[]).find(
-                  (p) =>
-                    (String(p?.ticker || p?.symbol || "")).toUpperCase() ===
-                    w.ticker
-                )
-              : null;
-            const price = match
-              ? Number(match.close || match.price || match.last || 0)
-              : 0;
-            const change = match
-              ? Number(match.change_pct || match.change_percent || 0)
-              : 0;
-            const isUp = change >= 0;
+            const match = results.find(
+              (r) => String(r.symbol ?? r.ticker ?? "").toUpperCase() === w.ticker
+            );
+            const price = match ? Number(match.criteria_7 ?? match.close ?? match.price ?? 0) : 0;
 
             return (
               <Link
@@ -406,24 +400,16 @@ function WatchlistTable() {
                   <p className="text-[11px] text-muted-foreground">{w.name}</p>
                 </div>
                 <p className="text-sm font-semibold text-foreground text-right font-mono">
-                  {price > 0 ? formatNumber(price) : "-"}
+                  {price > 0 ? `${formatNumber(price)}` : "-"}
                 </p>
-                <div className="flex items-center justify-end gap-1">
-                  {isUp ? (
-                    <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <ArrowDownRight className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-                  )}
-                  <span
-                    className={`text-sm font-semibold ${
-                      isUp
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-red-600 dark:text-red-400"
-                    }`}
+                <div className="flex items-center justify-end">
+                  <Link
+                    href={`/teknik/${w.ticker}`}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    {isUp ? "+" : ""}
-                    {change !== 0 ? `${formatNumber(change)}%` : "-"}
-                  </span>
+                    Teknik Analiz
+                  </Link>
                 </div>
               </Link>
             );
@@ -580,7 +566,7 @@ export default function DashboardPage() {
       >
         <MarketDate />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden sm:block">Senkronize ediliyor...</span>
+          <span className="text-xs text-muted-foreground hidden sm:block">Canli veri</span>
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
             HA
           </div>

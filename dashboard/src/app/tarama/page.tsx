@@ -20,29 +20,43 @@ export default function TaramaPage() {
     queryFn: () => api.scanner(scanCondition || undefined),
     enabled: true,
   });
-  const indicesQ = useQuery({ queryKey: ["indices"], queryFn: () => api.indices() });
+  const xu100Q = useQuery({ queryKey: ["indexData", "XU100"], queryFn: () => api.indexData("XU100", "1ay") });
+  const xu030Q = useQuery({ queryKey: ["indexData", "XU030"], queryFn: () => api.indexData("XU030", "1ay") });
+  const xusinQ = useQuery({ queryKey: ["indexData", "XUSIN"], queryFn: () => api.indexData("XUSIN", "1ay") });
+  const xbankQ = useQuery({ queryKey: ["indexData", "XBANK"], queryFn: () => api.indexData("XBANK", "1ay") });
 
   const screenerData = screenerQ.data;
-  const stocks = Array.isArray(screenerData)
-    ? screenerData
-    : (screenerData && typeof screenerData === "object" && "data" in (screenerData as Record<string, unknown>))
-    ? ((screenerData as Record<string, unknown>).data as Record<string, unknown>[])
-    : [];
+  const stocks = screenerData && typeof screenerData === "object" && "results" in (screenerData as Record<string, unknown>)
+    ? ((screenerData as Record<string, unknown>).results as Record<string, unknown>[])
+    : Array.isArray(screenerData)
+      ? screenerData
+      : [];
 
   const scannerData = scannerQ.data;
-  const scanResults = Array.isArray(scannerData)
-    ? scannerData
-    : (scannerData && typeof scannerData === "object" && "data" in (scannerData as Record<string, unknown>))
+  const scanResults = scannerData && typeof scannerData === "object" && "results" in (scannerData as Record<string, unknown>)
+    ? ((scannerData as Record<string, unknown>).results as Record<string, unknown>[])
+    : scannerData && typeof scannerData === "object" && "data" in (scannerData as Record<string, unknown>)
     ? ((scannerData as Record<string, unknown>).data as Record<string, unknown>[])
-    : [];
+    : Array.isArray(scannerData)
+      ? scannerData
+      : [];
 
-  // Parse indices
-  const indicesData = indicesQ.data;
-  const indicesArr = Array.isArray(indicesData)
-    ? indicesData
-    : (indicesData && typeof indicesData === "object" && "data" in (indicesData as Record<string, unknown>))
-    ? ((indicesData as Record<string, unknown>).data as Record<string, unknown>[])
-    : null;
+  // Build index summary from OHLCV data
+  const indexQueries = [xu100Q, xu030Q, xusinQ, xbankQ];
+  const indicesLoading = indexQueries.some((q) => q.isLoading);
+  const indicesArr = [xu100Q.data, xu030Q.data, xusinQ.data, xbankQ.data]
+    .filter(Boolean)
+    .map((d) => {
+      const raw = d as { symbol: string; data: Array<Record<string, unknown>> };
+      const arr = raw?.data ?? [];
+      if (arr.length === 0) return { symbol: raw?.symbol ?? "", close: 0, change_pct: 0 };
+      const last = arr[arr.length - 1];
+      const prev = arr.length > 1 ? arr[arr.length - 2] : last;
+      const close = Number(last.Close ?? 0);
+      const prevClose = Number(prev.Close ?? close);
+      const change_pct = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
+      return { symbol: raw.symbol, close, change_pct };
+    });
 
   return (
     <div className="space-y-6">
@@ -57,14 +71,14 @@ export default function TaramaPage() {
       {/* Indices */}
       <div className="bg-card rounded-xl border border-border p-5">
         <h2 className="text-sm font-semibold text-foreground mb-3">BIST Endeksleri</h2>
-        {indicesQ.isLoading ? <LoadingSpinner /> : !indicesArr || !Array.isArray(indicesArr) || indicesArr.length === 0 ? (
+        {indicesLoading ? <LoadingSpinner /> : indicesArr.length === 0 ? (
           <EmptyState message="Endeks verisi yok" />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {(indicesArr as Record<string, unknown>[]).slice(0, 8).map((idx, i) => {
-              const name = String(idx.symbol || idx.name || idx.ticker || `Index ${i}`);
-              const value = Number(idx.close || idx.price || idx.value || 0);
-              const change = Number(idx.change_pct || idx.change_percent || idx.change || 0);
+            {indicesArr.map((idx, i) => {
+              const name = idx.symbol;
+              const value = idx.close;
+              const change = idx.change_pct;
               const isUp = change >= 0;
               return (
                 <div key={i} className="bg-muted/50 rounded-lg p-3">
@@ -102,8 +116,9 @@ export default function TaramaPage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {(stocks as Record<string, unknown>[]).slice(0, 50).map((s, i) => {
-                  const tk = String(s.ticker || s.symbol || s.code || "");
-                  const price = Number(s.close || s.price || s.last || 0);
+                  const tk = String(s.symbol || s.ticker || s.code || "");
+                  const name = String(s.name || "");
+                  const price = Number(s.criteria_7 || s.close || s.price || s.last || 0);
                   const change = Number(s.change_pct || s.change_percent || 0);
                   const vol = Number(s.volume || 0);
                   const isUp = change >= 0;
@@ -111,8 +126,9 @@ export default function TaramaPage() {
                     <tr key={i} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <Link href={`/hisse/${tk}`} className="font-semibold text-primary hover:underline text-xs">{tk}</Link>
+                        {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px]">{name}</p>}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">₺{formatNumber(price)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-foreground">{price > 0 ? `${formatNumber(price)}` : "-"}</td>
                       <td className={`px-4 py-3 font-mono text-xs font-semibold ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                         {isUp ? "+" : ""}{formatNumber(change)}%
                       </td>

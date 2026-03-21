@@ -18,25 +18,37 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   const { ticker } = use(params);
   const t = ticker.toUpperCase();
 
-  const pricesQ = useQuery({ queryKey: ["prices", t], queryFn: () => api.prices(t, 90) });
+  const historyQ = useQuery({
+    queryKey: ["tickerHistory", t],
+    queryFn: () => api.tickerHistory(t, "3ay"),
+  });
   const ratiosQ = useQuery({ queryKey: ["ratios", t], queryFn: () => api.financialRatios(t) });
   const eventsQ = useQuery({ queryKey: ["hisse-events", t], queryFn: () => api.events({ ticker: t, limit: 10 }) });
+  const signalsQ = useQuery({ queryKey: ["signals", t], queryFn: () => api.signals(t) });
 
-  const prices = Array.isArray(pricesQ.data) ? pricesQ.data : [];
-  const sorted = [...prices].sort((a, b) => new Date(a.trading_date || "").getTime() - new Date(b.trading_date || "").getTime());
-  const chartData = sorted.map((p) => ({
-    date: new Date(p.trading_date || "").toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
-    close: p.close || 0,
-    volume: p.volume || 0,
+  const historyData = (historyQ.data as { data: Array<Record<string, unknown>> } | null)?.data ?? [];
+  const chartData = historyData.map((d) => ({
+    date: new Date(String(d.Date ?? "")).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+    close: Number(d.Close ?? 0),
+    volume: Number(d.Volume ?? 0),
+    open: Number(d.Open ?? 0),
+    high: Number(d.High ?? 0),
+    low: Number(d.Low ?? 0),
   }));
 
-  const lastPrice = sorted.length > 0 ? sorted[sorted.length - 1] : null;
-  const prevPrice = sorted.length > 1 ? sorted[sorted.length - 2] : null;
-  const change = lastPrice && prevPrice && prevPrice.close ? ((lastPrice.close! - prevPrice.close!) / prevPrice.close!) * 100 : 0;
+  const lastPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+  const prevPrice = chartData.length > 1 ? chartData[chartData.length - 2] : null;
+  const change = lastPrice && prevPrice && prevPrice.close > 0
+    ? ((lastPrice.close - prevPrice.close) / prevPrice.close) * 100
+    : 0;
   const isUp = change >= 0;
 
   const ratios = Array.isArray(ratiosQ.data) && ratiosQ.data.length > 0 ? ratiosQ.data[0] : null;
   const events = Array.isArray(eventsQ.data) ? eventsQ.data : [];
+
+  const signals = signalsQ.data as Record<string, unknown> | null;
+  const summary = (signals?.signals as Record<string, unknown>)?.summary as Record<string, unknown> | undefined;
+  const recommendation = summary?.recommendation ? String(summary.recommendation) : null;
 
   return (
     <div className="space-y-6">
@@ -48,7 +60,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             {lastPrice && (
               <>
                 <span className="text-2xl font-bold font-mono text-foreground">
-                  ₺<SlidingNumber value={Math.round((lastPrice.close || 0) * 100) / 100} />
+                  <SlidingNumber value={Math.round(lastPrice.close * 100) / 100} />
                 </span>
                 <span className={`flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${
                   isUp ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"
@@ -57,6 +69,15 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                   {isUp ? "+" : ""}{formatNumber(change)}%
                 </span>
               </>
+            )}
+            {recommendation && (
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg uppercase ${
+                recommendation.includes("BUY") ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : recommendation.includes("SELL") ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              }`}>
+                {recommendation.replace("STRONG_", "Guclu ").replace("BUY", "Al").replace("SELL", "Sat").replace("NEUTRAL", "Notr")}
+              </span>
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-1">
@@ -100,8 +121,8 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         transition={{ delay: 0.2 }}
         className="bg-card rounded-xl border border-border p-5"
       >
-        <h2 className="text-sm font-semibold text-foreground mb-4">Fiyat Grafigi (90 Gun)</h2>
-        {pricesQ.isLoading ? <LoadingSpinner /> : chartData.length === 0 ? <EmptyState message="Fiyat verisi bulunamadi" /> : (
+        <h2 className="text-sm font-semibold text-foreground mb-4">Fiyat Grafigi (3 Ay)</h2>
+        {historyQ.isLoading ? <LoadingSpinner /> : chartData.length === 0 ? <EmptyState message="Fiyat verisi bulunamadi" /> : (
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart data={chartData}>
               <defs>
@@ -137,7 +158,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatCompact(v)} />
                 <Bar dataKey="volume" fill="hsl(var(--primary))" opacity={0.5} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

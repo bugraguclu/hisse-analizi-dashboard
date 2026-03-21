@@ -148,6 +148,10 @@ export const api = {
     get(`/market/tweets/${ticker}?limit=${limit}`),
   snapshot: (symbols: string[]) =>
     get(`/market/snapshot?symbols=${symbols.join(",")}`, "no-store"),
+  tickerHistory: (ticker: string, period = "1ay") =>
+    get<{ ticker: string; period: string; data: Array<Record<string, unknown>> }>(
+      `/market/ticker/${ticker}/history?period=${period}`,
+    ),
 
   // Polling
   pollingState: () => get("/polling-state", "no-store"),

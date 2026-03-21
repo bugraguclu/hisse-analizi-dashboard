@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 
 from src.adapters.screener_adapter import screen_stocks, get_screener_templates
 from src.adapters.scanner_adapter import scan_signals
-from src.adapters.index_adapter import get_index_data, get_index_info, list_indices
+from src.adapters.index_adapter import get_index_data, get_index_info, list_indices, get_ticker_history
 from src.adapters.search_adapter import search_symbol, list_companies
 from src.adapters.twitter_adapter import get_tweets
 from src.adapters.stream_adapter import get_snapshot
@@ -80,6 +80,14 @@ async def all_companies():
 async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
     """Hisse ile ilgili tweet'leri getir."""
     return await get_tweets(ticker.upper(), limit=limit)
+
+
+# --- Ticker History (live) ---
+
+@market_router.get("/ticker/{ticker}/history")
+async def ticker_history(ticker: str, period: str = Query(default="1ay")):
+    """Hisse fiyat gecmisi (canli, borsapy uzerinden)."""
+    return await get_ticker_history(ticker.upper(), period=period)
 
 
 # --- Snapshot ---
