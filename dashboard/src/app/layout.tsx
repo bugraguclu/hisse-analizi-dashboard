@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { AppSidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -27,14 +27,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#f5f6fa] text-slate-800">
+    <html lang="tr" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="min-h-full">
         <Providers>
           <div className="flex min-h-screen">
-            <Sidebar />
-            <div className="flex-1 ml-[240px] flex flex-col min-h-screen">
+            <AppSidebar />
+            <div className="flex-1 flex flex-col min-h-screen">
               <TopBar />
-              <main className="flex-1 p-6">
+              <main className="flex-1 p-4 md:p-6">
                 {children}
               </main>
             </div>

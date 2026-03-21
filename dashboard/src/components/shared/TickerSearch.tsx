@@ -56,26 +56,26 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value.toUpperCase())}
           placeholder="Hisse ara..."
-          className="pl-10 bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 h-9 text-sm"
+          className="pl-10 h-9 text-sm bg-background"
         />
       </div>
       {isOpen && results.length > 0 && (
-        <div className="absolute z-50 top-full mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 top-full mt-1 w-full bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
           {results.map((r, i) => {
             const ticker = r.symbol || r.ticker || "";
             return (
               <button
                 key={i}
                 onClick={() => select(ticker)}
-                className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center justify-between border-b border-slate-50 last:border-0"
+                className="w-full px-4 py-2.5 text-left text-sm hover:bg-accent flex items-center justify-between border-b border-border/50 last:border-0 transition-colors"
               >
-                <span className="font-semibold text-slate-800">{ticker}</span>
-                <span className="text-xs text-slate-400 truncate ml-3">{r.name || r.title || ""}</span>
+                <span className="font-semibold text-foreground">{ticker}</span>
+                <span className="text-xs text-muted-foreground truncate ml-3">{r.name || r.title || ""}</span>
               </button>
             );
           })}

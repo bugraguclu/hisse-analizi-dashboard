@@ -8,6 +8,7 @@ import { SeverityBadge, CategoryBadge } from "@/components/shared/SeverityBadge"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
 import { Input } from "@/components/ui/input";
+import { motion } from "framer-motion";
 
 export default function EventsPage() {
   const [sourceFilter, setSourceFilter] = useState("");
@@ -28,13 +29,20 @@ export default function EventsPage() {
 
   const events = Array.isArray(data) ? data : [];
   const sources = ["", "kap", "official_news", "official_ir", "price"];
+  const sourceLabels: Record<string, string> = {
+    "": "Tumu",
+    kap: "KAP",
+    official_news: "Haberler",
+    official_ir: "IR",
+    price: "Fiyat",
+  };
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Olaylar & KAP Bildirimleri</h1>
-        <p className="text-sm text-slate-400 mt-0.5">Tum KAP bildirimleri, haberler ve fiyat olaylari</p>
-      </div>
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+        <h1 className="text-xl font-bold text-foreground">Olaylar & KAP Bildirimleri</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Tum KAP bildirimleri, haberler ve fiyat olaylari</p>
+      </motion.div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -45,11 +53,11 @@ export default function EventsPage() {
               onClick={() => { setSourceFilter(s); setPage(0); }}
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                 sourceFilter === s
-                  ? "bg-teal-50 border-teal-300 text-teal-700"
-                  : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-card border-border text-muted-foreground hover:border-primary/20 hover:text-foreground"
               }`}
             >
-              {s || "Tumu"}
+              {sourceLabels[s] || s}
             </button>
           ))}
         </div>
@@ -57,12 +65,12 @@ export default function EventsPage() {
           placeholder="Ticker filtrele..."
           value={tickerFilter}
           onChange={(e) => { setTickerFilter(e.target.value.toUpperCase()); setPage(0); }}
-          className="w-40 h-8 text-xs bg-white border-slate-200"
+          className="w-40 h-8 text-xs"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
         {isLoading ? (
           <LoadingSpinner />
         ) : events.length === 0 ? (
@@ -72,22 +80,22 @@ export default function EventsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Tarih</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Ticker</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Kaynak</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Baslik</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Kategori</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Onem</th>
+                  <tr className="bg-muted/50">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Tarih</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Ticker</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Kaynak</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Baslik</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Kategori</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Onem</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-border/50">
                   {events.map((e, i) => (
-                    <tr key={e.id || i} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-slate-400 font-mono whitespace-nowrap">{formatDate(e.published_at)}</td>
-                      <td className="px-4 py-3 font-semibold text-teal-600 text-xs">{e.ticker || "-"}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{e.source_code}</td>
-                      <td className="px-4 py-3 text-slate-700 max-w-md truncate">{e.title || "-"}</td>
+                    <tr key={e.id || i} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatDate(e.published_at)}</td>
+                      <td className="px-4 py-3 font-semibold text-primary text-xs">{e.ticker || "-"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{e.source_code}</td>
+                      <td className="px-4 py-3 text-foreground max-w-md truncate">{e.title || "-"}</td>
                       <td className="px-4 py-3"><CategoryBadge category={e.category} /></td>
                       <td className="px-4 py-3"><SeverityBadge severity={e.severity} /></td>
                     </tr>
@@ -95,20 +103,20 @@ export default function EventsPage() {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-              <span className="text-xs text-slate-400">{events.length} kayit gosteriliyor</span>
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <span className="text-xs text-muted-foreground">{events.length} kayit gosteriliyor</span>
               <div className="flex gap-2">
                 <button
                   disabled={page === 0}
                   onClick={() => setPage(Math.max(0, page - 1))}
-                  className="px-3 py-1 text-xs font-medium rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+                  className="px-3 py-1 text-xs font-medium rounded-md border border-border text-foreground hover:bg-accent disabled:opacity-30 transition-colors"
                 >
                   Onceki
                 </button>
                 <button
                   disabled={events.length < limit}
                   onClick={() => setPage(page + 1)}
-                  className="px-3 py-1 text-xs font-medium rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+                  className="px-3 py-1 text-xs font-medium rounded-md border border-border text-foreground hover:bg-accent disabled:opacity-30 transition-colors"
                 >
                   Sonraki
                 </button>

@@ -2,11 +2,10 @@
 
 import { Badge } from "@/components/ui/badge";
 
-// Backend Severity enum: INFO, WATCH, HIGH
 const severityConfig: Record<string, { label: string; className: string }> = {
-  HIGH: { label: "Yuksek", className: "bg-red-50 text-red-700 border-red-200" },
-  WATCH: { label: "Takip", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  INFO: { label: "Bilgi", className: "bg-blue-50 text-blue-600 border-blue-200" },
+  HIGH: { label: "Yuksek", className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" },
+  WATCH: { label: "Takip", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+  INFO: { label: "Bilgi", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
 };
 
 export function SeverityBadge({ severity }: { severity?: string | null }) {
@@ -22,13 +21,13 @@ export function SeverityBadge({ severity }: { severity?: string | null }) {
 export function CategoryBadge({ category }: { category?: string | null }) {
   if (!category) return null;
   const catMap: Record<string, { label: string; className: string }> = {
-    DIVIDEND: { label: "Temettu", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-    CAPITAL_INCREASE: { label: "Sermaye Artirimi", className: "bg-blue-50 text-blue-700 border-blue-200" },
-    LEGAL: { label: "Hukuki", className: "bg-red-50 text-red-600 border-red-200" },
-    MANAGEMENT: { label: "Yonetim", className: "bg-amber-50 text-amber-700 border-amber-200" },
-    FINANCIAL_RESULTS: { label: "Finansal", className: "bg-purple-50 text-purple-700 border-purple-200" },
-    NEW_BUSINESS: { label: "Yeni Is", className: "bg-teal-50 text-teal-700 border-teal-200" },
-    OTHER: { label: "Diger", className: "bg-slate-50 text-slate-500 border-slate-200" },
+    DIVIDEND: { label: "Temettu", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+    CAPITAL_INCREASE: { label: "Sermaye Artirimi", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
+    LEGAL: { label: "Hukuki", className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" },
+    MANAGEMENT: { label: "Yonetim", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+    FINANCIAL_RESULTS: { label: "Finansal", className: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+    NEW_BUSINESS: { label: "Yeni Is", className: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20" },
+    OTHER: { label: "Diger", className: "bg-muted text-muted-foreground border-border" },
   };
   const config = catMap[category.toUpperCase()] || catMap.OTHER;
   return (

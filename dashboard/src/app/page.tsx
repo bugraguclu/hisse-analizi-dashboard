@@ -3,23 +3,39 @@
 import { StatsCards } from "@/components/dashboard/StatsCards";
 import { LatestEvents } from "@/components/dashboard/LatestEvents";
 import { PriceSnapshot } from "@/components/dashboard/PriceSnapshot";
+import { motion } from "framer-motion";
 
 export default function DashboardPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Dashboard</h1>
-        <p className="text-sm text-slate-400 mt-0.5">BIST piyasa verileri, olaylar ve sistem durumu</p>
-      </div>
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">BIST piyasa verileri, olaylar ve sistem durumu</p>
+      </motion.div>
+
       <StatsCards />
-      <PriceSnapshot />
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">Son Olaylar</h2>
-          <span className="text-[11px] font-mono text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md">CANLI</span>
+
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Takip Listesi</h2>
+        <PriceSnapshot />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
+        className="bg-card rounded-xl border border-border overflow-hidden"
+      >
+        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">Son Olaylar</h2>
+          <span className="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md">CANLI</span>
         </div>
         <LatestEvents />
-      </div>
+      </motion.div>
     </div>
   );
 }
