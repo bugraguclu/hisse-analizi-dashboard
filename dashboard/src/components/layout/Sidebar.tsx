@@ -41,13 +41,11 @@ export function AppSidebar() {
 
   return (
     <SidebarRoot open={open} setOpen={setOpen}>
-      <SidebarBody className="justify-between gap-10">
+      <SidebarBody className="justify-between gap-8">
         <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
-          {/* Logo */}
           {open ? <Logo /> : <LogoIcon />}
 
-          {/* Navigation */}
-          <div className="mt-8 flex flex-col gap-1">
+          <div className="mt-6 flex flex-col gap-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item);
@@ -60,10 +58,10 @@ export function AppSidebar() {
                     href: item.href,
                     icon: (
                       <Icon
-                        className={`h-5 w-5 flex-shrink-0 ${
+                        className={`h-[18px] w-[18px] flex-shrink-0 transition-colors ${
                           active
                             ? "text-sidebar-primary"
-                            : "text-sidebar-foreground"
+                            : "text-sidebar-foreground/70"
                         }`}
                       />
                     ),
@@ -74,14 +72,13 @@ export function AppSidebar() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div>
+        <div className="pt-4 border-t border-sidebar-border/40">
           <SidebarLink
             link={{
               label: "API Docs",
               href: "/docs",
               icon: (
-                <ExternalLink className="h-5 w-5 flex-shrink-0 text-sidebar-foreground opacity-60" />
+                <ExternalLink className="h-[18px] w-[18px] flex-shrink-0 text-sidebar-foreground/50" />
               ),
             }}
           />
@@ -95,23 +92,19 @@ const Logo = () => {
   return (
     <Link
       href="/"
-      className="font-normal flex space-x-2 items-center text-sm py-1 relative z-20"
+      className="flex items-center gap-2.5 py-1.5 px-1 relative z-20"
     >
-      <div className="h-6 w-7 bg-primary rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm flex-shrink-0" />
-      <motion.span
+      <div className="h-7 w-7 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex-shrink-0 flex items-center justify-center shadow-sm shadow-primary/20">
+        <span className="text-[10px] font-black text-primary-foreground">HA</span>
+      </div>
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="font-semibold text-foreground whitespace-pre"
+        className="flex flex-col"
       >
-        Hisse Analizi
-      </motion.span>
-      <motion.span
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-[10px] text-muted-foreground font-mono"
-      >
-        v0.5
-      </motion.span>
+        <span className="text-sm font-bold text-foreground leading-tight">Hisse Analizi</span>
+        <span className="text-[10px] text-muted-foreground font-mono leading-tight">v0.5 BIST Dashboard</span>
+      </motion.div>
     </Link>
   );
 };
@@ -120,9 +113,11 @@ const LogoIcon = () => {
   return (
     <Link
       href="/"
-      className="font-normal flex space-x-2 items-center text-sm py-1 relative z-20"
+      className="flex items-center justify-center py-1.5 relative z-20"
     >
-      <div className="h-6 w-7 bg-primary rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm flex-shrink-0" />
+      <div className="h-7 w-7 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex-shrink-0 flex items-center justify-center shadow-sm shadow-primary/20">
+        <span className="text-[10px] font-black text-primary-foreground">HA</span>
+      </div>
     </Link>
   );
 };

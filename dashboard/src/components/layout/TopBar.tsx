@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
@@ -12,7 +11,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Bell } from "lucide-react";
 
 const routeLabels: Record<string, string> = {
   "": "Dashboard",
@@ -36,8 +34,7 @@ export function TopBar() {
   });
 
   return (
-    <header className="h-14 bg-card/80 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 md:px-6 sticky top-0 z-30">
-      {/* Breadcrumb */}
+    <header className="h-14 bg-card/60 backdrop-blur-md border-b border-border/40 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30">
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
@@ -58,15 +55,11 @@ export function TopBar() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      {/* Right side */}
-      <div className="flex items-center gap-3">
-        <div className="hidden md:block w-56">
+      <div className="flex items-center gap-2">
+        <div className="hidden md:block w-60">
           <TickerSearch />
         </div>
-        <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-accent">
-          <Bell className="h-[18px] w-[18px]" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
-        </button>
+        <div className="h-6 w-px bg-border/40 hidden md:block" />
         <ThemeToggle />
       </div>
     </header>

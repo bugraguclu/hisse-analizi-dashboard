@@ -85,13 +85,15 @@ export const DesktopSidebar = ({
   return (
     <motion.div
       className={cn(
-        "h-full px-4 py-4 hidden md:flex md:flex-col bg-sidebar dark:bg-sidebar flex-shrink-0 border-r border-sidebar-border",
+        "h-full px-3 py-4 hidden md:flex md:flex-col flex-shrink-0",
+        "bg-gradient-to-b from-sidebar via-sidebar to-sidebar/95",
+        "border-r border-sidebar-border/60",
         className
       )}
       animate={{
-        width: animate ? (open ? "280px" : "68px") : "280px",
+        width: animate ? (open ? "260px" : "64px") : "260px",
       }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
+      transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       {...props}
@@ -110,16 +112,16 @@ export const MobileSidebar = ({
   return (
     <>
       <div
-        className={cn(
-          "h-14 px-4 flex flex-row md:hidden items-center justify-between bg-sidebar border-b border-sidebar-border w-full"
-        )}
+        className="h-14 px-4 flex flex-row md:hidden items-center justify-between bg-sidebar border-b border-sidebar-border/60 w-full"
         {...props}
       >
         <div className="flex justify-end z-20 w-full">
-          <Menu
-            className="text-sidebar-foreground cursor-pointer"
+          <button
             onClick={() => setOpen(!open)}
-          />
+            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+          >
+            <Menu className="h-5 w-5 text-sidebar-foreground" />
+          </button>
         </div>
         <AnimatePresence>
           {open && (
@@ -127,21 +129,18 @@ export const MobileSidebar = ({
               initial={{ x: "-100%", opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "-100%", opacity: 0 }}
-              transition={{
-                duration: 0.3,
-                ease: "easeInOut",
-              }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
               className={cn(
-                "fixed h-full w-full inset-0 bg-sidebar p-10 z-[100] flex flex-col justify-between",
+                "fixed h-full w-full inset-0 bg-sidebar p-8 z-[100] flex flex-col justify-between",
                 className
               )}
             >
-              <div
-                className="absolute right-10 top-10 z-50 text-sidebar-foreground cursor-pointer"
+              <button
+                className="absolute right-6 top-6 z-50 p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
                 onClick={() => setOpen(!open)}
               >
-                <X />
-              </div>
+                <X className="h-5 w-5 text-sidebar-foreground" />
+              </button>
               {children}
             </motion.div>
           )}
@@ -167,21 +166,29 @@ export const SidebarLink = ({
     <Link
       href={link.href}
       className={cn(
-        "flex items-center justify-start gap-2 group/sidebar py-2 px-2 rounded-lg transition-colors",
+        "flex items-center justify-start gap-2.5 group/sidebar py-2.5 px-2.5 rounded-lg transition-all duration-200 relative",
         active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+          ? "bg-sidebar-primary/10 text-sidebar-primary font-medium"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
         className
       )}
       {...props}
     >
+      {active && (
+        <motion.div
+          layoutId="sidebar-active-indicator"
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-sidebar-primary rounded-r-full"
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        />
+      )}
       {link.icon}
       <motion.span
         animate={{
           display: animate ? (open ? "inline-block" : "none") : "inline-block",
           opacity: animate ? (open ? 1 : 0) : 1,
         }}
-        className="text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre inline-block !p-0 !m-0"
+        transition={{ duration: 0.15 }}
+        className="text-sm whitespace-pre inline-block !p-0 !m-0"
       >
         {link.label}
       </motion.span>
