@@ -1,7 +1,72 @@
-# 📋 Değişiklik Günlüğü (Changelog)
+# Degisiklik Gunlugu (Changelog)
 
-Tüm önemli değişiklikler burada tarih sırasıyla belgelenir.
-Format: [Oyun Patch Notes tarzı — her gün ne yapıldı, kim yaptı]
+Tum onemli degisiklikler burada tarih sirasiyla belgelenir.
+
+---
+
+## [v0.5.0] — 21 Mart 2026
+
+**Branch:** `master`
+
+### Production Hardening
+
+Bu surum, sistemin production ortamina hazirlanmasi icin kapsamli bir
+guclendirme (hardening) calismasi icerir. 8 fazda 10 kritik mimari risk
+giderilmistir.
+
+### Yeni Ozellikler
+- **Admin API Key Auth:** Tum admin endpoint'leri `X-Admin-Key` header ile korunuyor
+- **Rate Limiting:** slowapi ile API rate limiting (varsayilan: 100/dakika)
+- **CORS Allowlist:** Config-driven CORS origin listesi (hardcoded `*` kaldirildi)
+- **TTL In-Memory Cache:** Adapter sonuclari icin TTL bazli on-bellek (30s-600s arasi)
+- **PostgreSQL Advisory Lock:** Polling worker'da kaynak bazli koordinasyon kilidi
+- **Outbox Claim Semantics:** `SELECT...FOR UPDATE SKIP LOCKED` ile yarisma-guvenli outbox
+- **Notification Idempotency:** DB unique constraint + atomic insert ile cift gonderim onleme
+- **Content-Based Financial Hashing:** Tarih yerine icerik bazli hash ile finansal veri dedup
+- **CRLF Injection Prevention:** E-posta header sanitizasyonu
+- **Production Config Validation:** Zorunlu secret'larin eksikliginde fail-fast
+
+### Degisiklikler
+| Alan | Ne Degisti |
+|------|-----------|
+| Worker Izolasyonu | Worker artik API lifespan'den bagimsiz; ayri proses olarak calisir |
+| DB Upsert | Tum `select-then-insert` kaliplari PostgreSQL `ON CONFLICT` upsert'e donusturuldu |
+| Timestamps | `datetime.now()` → `utcnow()` (UTC-aware, merkezi fonksiyon) |
+| Async Pattern | `asyncio.get_event_loop().run_in_executor()` → `asyncio.to_thread()` |
+| HTTP Client | Her adapter'da ayri client → paylasimli `httpx.AsyncClient` (connection pool) |
+| DB Pool | `pool_pre_ping=True`, `pool_recycle=300` eklendi |
+| Frontend Types | `dashboard/src/types/index.ts` backend Pydantic semalarina hizalandi |
+| Frontend Cache | Endpoint bazli cache stratejisi (no-store / default) |
+| SeverityBadge | CRITICAL/HIGH/MEDIUM/LOW → HIGH/WATCH/INFO (backend enum'a uyum) |
+| StatsCards | `total_companies` → `total_raw_events` (backend'de olmayan alan duzeltildi) |
+| Docker | `-e` (editable install) kaldirildi, `--reload` kaldirildi, credentials parametrik |
+
+### Yeni Dosyalar
+| Dosya | Aciklama |
+|-------|----------|
+| `src/core/time.py` | Merkezi `utcnow()` fonksiyonu |
+| `src/api/dependencies.py` | Admin auth dependency (X-Admin-Key) |
+| `src/adapters/utils.py` | TTLCache, cached decorator, shared HTTP client, run_sync, df_to_records |
+| `alembic/versions/002_*.py` | Notification dedup constraint migration |
+| `tests/unit/test_ttl_cache.py` | TTL cache testleri |
+| `tests/unit/test_time.py` | UTC time testleri |
+| `tests/unit/test_config.py` | Config validation testleri |
+| `tests/unit/test_notification_sanitize.py` | Header sanitization testleri |
+| `tests/unit/test_serialization.py` | Serialization utility testleri |
+| `tests/unit/test_admin_auth.py` | Admin auth testleri |
+| `tests/unit/test_financial_hashing.py` | Content-based hash testleri |
+
+### Silinen Dosyalar
+| Dosya | Neden |
+|-------|-------|
+| `src/api/routers_extended.py` | Dead code — var olmayan siniflari import ediyordu |
+| `src/db/models_extended.py` | Bos uyumluluk dosyasi, artik gereksiz |
+
+### Istatistikler
+- **44 dosya** degistirildi (+1284 / -998 satir)
+- **7 yeni test dosyasi**, toplam 49+ test
+- **10 kritik mimari risk** giderildi
+- **53 endpoint** (degisiklik yok, sadece guvenlik eklendi)
 
 ---
 
@@ -48,7 +113,6 @@ Format: [Oyun Patch Notes tarzı — her gün ne yapıldı, kim yaptı]
 |-------|-----------|
 | `src/core/enums.py` | EventCategory enum + SourceKind.FINANCIAL_STATEMENTS eklendi |
 | `src/db/models.py` | FinancialStatement, FinancialRatio modelleri + NormalizedEvent.category kolonu |
-| `src/db/models_extended.py` | Bosaltildi, re-export ile geriye donuk uyumluluk |
 | `src/db/repository.py` | FinancialStatementRepository, FinancialRatioRepository eklendi |
 | `src/services/event_service.py` | NLP siniflandirma + FinancialService eklendi |
 | `src/services/analysis_service.py` | Yeni — 8 finansal oran hesaplama |
@@ -69,83 +133,38 @@ Format: [Oyun Patch Notes tarzı — her gün ne yapıldı, kim yaptı]
 
 ## [v0.2.0] — 15 Mart 2026
 
-**Geliştirici:** Ataberk (Antigravity destekli)
 **Branch:** `feature/multi-stock`
 
-### 🆕 Yeni Özellikler
-- **BIST 30 Desteği:** Proje artık sadece AEFES yerine 30 hisseyi takip ediyor
-- **25+ Yeni API Endpoint:** Finansal tablolar, teknik göstergeler, makro veriler, screener
-- **Dinamik Adapter'lar:** KAP ve fiyat adapter'ları artık herhangi bir hisse için çalışıyor
-- **Swagger Dökümantasyonu:** http://localhost:8000/docs adresinde interaktif API testi
+### Yeni Ozellikler
+- **BIST 30 Destegi:** Proje artik sadece AEFES yerine 30 hisseyi takip ediyor
+- **25+ Yeni API Endpoint:** Finansal tablolar, teknik gostergeler, makro veriler, screener
+- **Dinamik Adapter'lar:** KAP ve fiyat adapterlari artik herhangi bir hisse icin calisiyor
+- **Swagger Dokumantasyonu:** http://localhost:8000/docs adresinde interaktif API testi
 
-### 📄 Yeni Dosyalar
-| Dosya | Açıklama |
+### Yeni Dosyalar
+| Dosya | Aciklama |
 |-------|----------|
-| `src/db/models_extended.py` | 11 yeni veritabanı tablosu |
-| `src/adapters/financials.py` | Bilanço, gelir tablosu, temettü adapter'ları |
-| `src/adapters/macro.py` | TCMB, döviz, endeks, ekonomik takvim |
+| `src/adapters/fundamentals.py` | Bilanco, gelir tablosu, temettu adapterlari |
+| `src/adapters/macro.py` | TCMB, doviz, endeks, ekonomik takvim |
 | `src/adapters/technical.py` | RSI, MACD, Bollinger, SMA, EMA, screener |
-| `src/api/routers_extended.py` | Tüm yeni endpoint tanımları |
-| `docs/mimari.md` | Sistem mimarisi dokümanı |
-| `docs/api-rehberi.md` | API kullanım kılavuzu |
-| `docs/yol-haritasi.md` | Proje yol haritası |
-| `docs/katki-rehberi.md` | Katkı ve kurulum rehberi |
+| `docs/mimari.md` | Sistem mimarisi dokumani |
+| `docs/api-rehberi.md` | API kullanim kilavuzu |
+| `docs/yol-haritasi.md` | Proje yol haritasi |
+| `docs/katki-rehberi.md` | Katki ve kurulum rehberi |
 
-### 🔧 Değiştirilen Dosyalar
-| Dosya | Ne Değişti |
-|-------|-----------|
-| `scripts/seed.py` | 1 şirket → 30 BIST şirketi |
-| `src/adapters/kap.py` | Hardcoded AEFES → dinamik `ticker` parametresi |
-| `src/adapters/price.py` | Hardcoded AEFES → dinamik `ticker` + yfinance `.IS` |
-| `src/workers/polling_worker.py` | Tek şirket → tüm şirketler döngüsü + rate limiting |
-| `src/api/routers.py` | Events endpoint'ine `?ticker=` filtresi eklendi |
-| `src/db/repository.py` | Ticker ile company join sorgusu eklendi |
-| `src/api/app.py` | v0.2.0, 6 yeni router grubu kayıtlı |
-
-### 📊 İstatistikler
-- **3 commit:** `2f0ae85`, `95a97a9`, `aa9a0bc`, `1043cad`
-- **~1.500 satır** kod ve doküman eklendi
-- **30 şirket** veritabanına yüklendi
+### Istatistikler
+- **~1.500 satir** kod ve dokuman eklendi
+- **30 sirket** veritabanina yuklendi
 
 ---
 
-## [v0.1.0] — 14 Mart 2026 (Buğra ile oturum)
+## [v0.1.0] — 14 Mart 2026
 
-**Geliştiriciler:** Ataberk + Buğra
 **Branch:** `master`
 
-### 🆕 Proje Oluşturuldu
-- FastAPI backend yapısı kuruldu
-- PostgreSQL + Docker Compose altyapısı
-- KAP bildirimleri ve fiyat verisi çekme (sadece AEFES)
+### Proje Olusturuldu
+- FastAPI backend yapisi kuruldu
+- PostgreSQL + Docker Compose altyapisi
+- KAP bildirimleri ve fiyat verisi cekme (sadece AEFES)
 - Bildirim sistemi (outbox pattern)
 - Temel API endpoint'leri
-
-### 📄 Teknik Dokümanlar (Drive'da)
-- `HisseTakibi_Teknik_Mimari.docx`
-- `HisseTakibi_Fizibilite_SWOT_Rekabet.docx`
-- `HisseTakibi_Yol_Haritasi.xlsx`
-
----
-
-<!--
-ŞABLON: Yeni gün çalışması eklerken bunu kopyala ve üste yapıştır:
-
-## [vX.X.X] — GG Ay YYYY
-
-**Geliştirici:** İsim
-**Branch:** `feature/xxx`
-
-### 🆕 Yeni Özellikler
-- 
-
-### 🔧 Değişiklikler
-- 
-
-### 🐛 Hata Düzeltmeleri
-- 
-
-### 📊 İstatistikler
-- **X commit**
-- **X satır** eklendi
--->

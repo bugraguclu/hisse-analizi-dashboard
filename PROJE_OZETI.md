@@ -1,8 +1,8 @@
 # BIST Hisse Analizi Platformu — Proje Ozeti
 
-**Son Guncelleme:** 20 Mart 2026
-**Versiyon:** 0.4.0
-**Durum:** Frontend dashboard tamamlandi, deployment oncesi test asamasi
+**Son Guncelleme:** 21 Mart 2026
+**Versiyon:** 0.5.0
+**Durum:** Production hardening tamamlandi, deployment hazir
 
 ---
 
@@ -129,8 +129,43 @@ Dashboard Docker Compose'a eklenerek tek komutla deploy mumkun hale geldi.
 - next.config.ts: standalone output + backend API rewrite
 - Tum dokumantasyon guncellendi
 
-**Sonuc:** `docker-compose up -d` ile PostgreSQL, FastAPI backend, worker ve
-Next.js dashboard tek seferde ayaga kalkar.
+### Faz 5 — Production Hardening (21 Mart 2026)
+
+Sistemin production ortamina hazirlanmasi icin kapsamli guclendirme calismasi.
+8 alt fazda 10 kritik mimari risk giderildi.
+
+**Guvenlik:**
+- Admin endpoint'leri `X-Admin-Key` header ile korunuyor (dev bypass mevcut)
+- CORS origin listesi config-driven (hardcoded `*` kaldirildi)
+- slowapi ile API rate limiting (varsayilan: 100/dakika)
+- Production config validation — zorunlu secret eksikse fail-fast
+- E-posta header CRLF injection onleme
+
+**DB Dogrulugu ve Concurrency:**
+- Tum `select-then-insert` → PostgreSQL `ON CONFLICT` atomic upsert
+- Outbox: `SELECT...FOR UPDATE SKIP LOCKED` ile yarisma-guvenli claim
+- Notification: DB unique constraint + atomic insert ile cift gonderim onleme
+- Stuck PROCESSING entry'lerin otomatik geri kazanimi
+
+**Worker ve Performans:**
+- Worker API lifespan'den ayrildi (ayri proses)
+- PostgreSQL advisory lock ile kaynak bazli polling koordinasyonu
+- `asyncio.Semaphore` ile sinirli concurrency
+- Paylasimli `httpx.AsyncClient` (connection pooling)
+- TTL in-memory cache (30s-600s) — adapter sonuclari icin
+- `asyncio.to_thread()` ile modern async pattern
+
+**Frontend Uyumu:**
+- TypeScript tipleri backend Pydantic semalarina tam hizalandi
+- Severity enum duzeltildi (HIGH/WATCH/INFO)
+- Endpoint bazli cache stratejisi
+
+**Temizlik:**
+- Dead code silindi: `routers_extended.py`, `models_extended.py`
+- `datetime.now()` → merkezi `utcnow()` (UTC-aware)
+- Docker: editable install ve --reload kaldirildi, credentials parametrik
+
+**Sonuc:** 44 dosya, +1284/-998 satir, 7 yeni test dosyasi, 49+ test.
 
 ---
 
@@ -140,17 +175,24 @@ Next.js dashboard tek seferde ayaga kalkar.
 Kullanici
    |
    v
-[Next.js Dashboard :3000]  ←→  [FastAPI Backend :8000]  ←→  [PostgreSQL :5432]
+[Next.js Dashboard :3000]  <-->  [FastAPI Backend :8000]  <-->  [PostgreSQL :5432]
+                                        |                            |
+                                   [Rate Limiter]            [Advisory Locks]
+                                   [Admin Auth]              [ON CONFLICT Upsert]
+                                   [CORS Allowlist]          [FOR UPDATE SKIP LOCKED]
                                         |
-                                   [Worker Proses]
+                                   [Worker Proses]  (ayri proses, API'den bagimsiz)
                                         |
                                    [borsapy / KAP / TradingView]
+                                        |
+                                   [TTL Cache] --> [Shared HTTP Client]
 ```
 
-**Backend:** Python 3.11, FastAPI (async), SQLAlchemy 2.x async, Alembic
+**Backend:** Python 3.11, FastAPI (async), SQLAlchemy 2.x async, Alembic, slowapi
 **Frontend:** Next.js 14, TypeScript, Tailwind CSS, shadcn/ui, React Query, Recharts
 **Veri Kaynagi:** borsapy 0.8.3 (MIT) — KAP, fiyat, teknik, temel, makro
-**Deploy:** Docker Compose (4 servis)
+**Guvenlik:** Admin API Key auth, CORS allowlist, rate limiting, CRLF sanitization
+**Deploy:** Docker Compose (4 servis), production-hardened
 
 ### Endpoint Ozeti
 
@@ -167,23 +209,23 @@ Kullanici
 
 ```
 hisse-analizi-dashboard/
-├── src/                        ← Python backend
-│   ├── api/                    ← FastAPI app + 5 router dosyasi
-│   ├── adapters/               ← 15 veri kaynagi adapter'i
-│   ├── core/                   ← Config, enums, logging
-│   ├── db/                     ← Models (13 tablo), repository, session
-│   ├── services/               ← Event, notification, analysis, financial
-│   ├── workers/                ← Polling + notification worker
-│   └── static/                 ← Vanilla JS dashboard (prototip)
-├── dashboard/                  ← Next.js 14 frontend
-│   ├── src/app/                ← 7 sayfa (App Router)
-│   ├── src/components/         ← UI bilesenleri (layout, shared, dashboard)
-│   ├── src/lib/                ← API client, format utils, query client
-│   └── Dockerfile              ← Multi-stage production build
-├── alembic/                    ← DB migration'lari
-├── tests/                      ← Unit + integration (42 test)
-├── scripts/                    ← Seed, backfill, debug
-├── docker-compose.yml          ← 4 servis: db, app, worker, dashboard
+├── src/                        <- Python backend
+│   ├── api/                    <- FastAPI app + router + dependencies
+│   ├── adapters/               <- 15 veri kaynagi adapter'i + utils (cache, http client)
+│   ├── core/                   <- Config, enums, logging, time (utcnow)
+│   ├── db/                     <- Models (13 tablo), repository (ON CONFLICT), session
+│   ├── services/               <- Event, notification, analysis, financial
+│   ├── workers/                <- Polling + notification worker (ayri proses)
+│   └── static/                 <- Vanilla JS dashboard (prototip)
+├── dashboard/                  <- Next.js 14 frontend
+│   ├── src/app/                <- 7 sayfa (App Router)
+│   ├── src/components/         <- UI bilesenleri (layout, shared, dashboard)
+│   ├── src/lib/                <- API client, format utils, query client
+│   └── Dockerfile              <- Multi-stage production build
+├── alembic/                    <- DB migration'lari (001 + 002)
+├── tests/                      <- Unit + integration (49+ test)
+├── scripts/                    <- Seed, backfill, debug
+├── docker-compose.yml          <- 4 servis: db, app, worker, dashboard
 └── pyproject.toml
 ```
 
@@ -191,11 +233,10 @@ hisse-analizi-dashboard/
 
 ## Siradaki Adimlar
 
-- [ ] PostgreSQL kurulumu ve `alembic upgrade head` ile tablo olusturma
 - [ ] Docker Compose ile end-to-end calistirma testi
-- [ ] Next.js dashboard build dogrulama
-- [ ] Yeni moduller icin unit test tamamlama (hedef: 80%+ coverage)
 - [ ] CI/CD pipeline (GitHub Actions)
 - [ ] WebSocket ile gercek zamanli fiyat push
 - [ ] Slack/Telegram bildirim kanallari
 - [ ] Portfoy takibi modulu
+- [ ] Claude API ile AI sentiment analizi
+- [ ] Test coverage 80%+ hedefi

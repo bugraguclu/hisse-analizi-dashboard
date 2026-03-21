@@ -1,117 +1,191 @@
-# 🤝 Katkı Rehberi — Hisse Takibi
+# Katki Rehberi — Hisse Analizi Dashboard
 
-## Geliştirme Ortamı
+## Gelistirme Ortami
 
 ### Gereksinimler
-- **Docker Desktop** (Windows, WSL2 etkin)
-- **Git** 
-- **VS Code** (önerilen)
+- **Docker Desktop** (Windows, WSL2 etkin) veya **PostgreSQL 16+** (local)
+- **Python 3.11+**
+- **Node.js 20+** (dashboard icin)
+- **Git**
 
-### İlk Kurulum
+### Ilk Kurulum
+
 ```bash
 # 1. Repo'yu klonla
 git clone https://github.com/bugraguclu/hisse-analizi-dashboard.git
 cd hisse-analizi-dashboard
 
-# 2. .env dosyasını oluştur
+# 2. .env dosyasini olustur
 cp .env.example .env
-# .env'deki localhost → db olarak değiştir (Docker için)
+# .env icinde su degiskenleri ayarla:
+#   DATABASE_URL
+#   ADMIN_API_KEY (production icin zorunlu)
+#   CORS_ORIGINS (production icin zorunlu)
 
-# 3. Docker'ı başlat
+# 3. Docker ile baslat
 docker-compose up -d --build
 
-# 4. Şirket verilerini yükle
+# 4. DB migration'larini calistir
+docker-compose exec app alembic upgrade head
+
+# 5. Sirket verilerini yukle
 docker-compose exec app python scripts/seed.py
 
-# 5. Test et
-# Tarayıcıda aç: http://localhost:8000/docs
+# 6. Test et
+# Tarayicida ac: http://localhost:8000/docs
+# Dashboard: http://localhost:3000
+```
+
+### Local Gelistirme (Docker'siz)
+
+```bash
+pip install -e ".[dev]"
+cp .env.example .env
+# .env icinde DATABASE_URL'i duzenle
+
+alembic upgrade head
+python scripts/seed.py
+
+# Backend
+uvicorn src.api.app:app --reload
+
+# Worker (ayri terminal)
+python -m src.workers.run_workers
+
+# Dashboard (ayri terminal)
+cd dashboard && npm install && npm run dev
 ```
 
 ---
 
-## Git Çalışma Kuralları
+## Ortam Degiskenleri
 
-### Branch İsimlendirme
+| Degisken | Aciklama | Varsayilan |
+|----------|----------|------------|
+| `DATABASE_URL` | PostgreSQL baglanti | - (zorunlu) |
+| `ADMIN_API_KEY` | Admin endpoint auth | - (prod zorunlu) |
+| `CORS_ORIGINS` | Izin verilen origin'ler | `*` (dev) |
+| `RATE_LIMIT_PER_MINUTE` | API rate limit | 100 |
+| `WORKER_MAX_CONCURRENCY` | Worker semaphore | 5 |
+| `WORKER_SINGLE_REPLICA` | Tek worker zorunlu | false |
+| `SMTP_HOST` | E-posta sunucusu | - |
+
+---
+
+## Git Calisma Kurallari
+
+### Branch Isimlendirme
 ```
-feature/dashboard       ← Yeni özellik
-fix/kap-adapter-crash   ← Hata düzeltme
-docs/api-rehberi        ← Doküman güncellemesi
+feature/dashboard       <- Yeni ozellik
+fix/kap-adapter-crash   <- Hata duzeltme
+docs/api-rehberi        <- Dokuman guncellemesi
 ```
 
-### Commit Mesajları
+### Commit Mesajlari
 ```
-feat: BIST 30 şirketleri eklendi
-fix: KAP adapter timeout hatası düzeltildi
-docs: API rehberi güncellendi
+feat: BIST 30 sirketleri eklendi
+fix: KAP adapter timeout hatasi duzeltildi
+docs: API rehberi guncellendi
 refactor: polling worker temizlendi
+test: admin auth testleri eklendi
 ```
 
-Ön ekler:
-| Önek | Kullanım |
+| Onek | Kullanim |
 |------|----------|
-| `feat:` | Yeni özellik |
-| `fix:` | Hata düzeltme |
-| `docs:` | Doküman değişikliği |
-| `refactor:` | Kod düzenlemesi (davranış değişmez) |
-| `test:` | Test ekleme/düzeltme |
+| `feat:` | Yeni ozellik |
+| `fix:` | Hata duzeltme |
+| `docs:` | Dokuman degisikligi |
+| `refactor:` | Kod duzenlemesi (davranis degismez) |
+| `test:` | Test ekleme/duzeltme |
+| `perf:` | Performans iyilestirmesi |
+| `chore:` | Build/config degisikligi |
 
-### Günlük İş Akışı
+### Gunluk Is Akisi
 ```bash
-# 1. Güncel kodu çek
+# 1. Guncel kodu cek
 git pull origin master
 
-# 2. Yeni branch oluştur
+# 2. Yeni branch olustur
 git checkout -b feature/benim-ozelligim
 
-# 3. Kodla...
+# 3. Kodla + test yaz
 
-# 4. Değişiklikleri kaydet
+# 4. Degisiklikleri kaydet
 git add -A
-git commit -m "feat: yeni özellik açıklaması"
+git commit -m "feat: yeni ozellik aciklamasi"
 
-# 5. GitHub'a yükle
+# 5. GitHub'a yukle
 git push origin feature/benim-ozelligim
 
-# 6. GitHub'da Pull Request aç
+# 6. GitHub'da Pull Request ac
 ```
 
 ---
 
-## Kod Yazma Kuralları
+## Kod Yazma Kurallari
 
-- **Dil:** Kod İngilizce, açıklamalar/yorumlar Türkçe
-- **Açıklama:** Her fonksiyon ve karmaşık satır açıklanmalı
-- **Hata yönetimi:** try/except kullan, hataları logla
-- **Loglama:** `structlog` kullan, `print()` değil
-- Detaylar için: `.agent/workflows/coding-style.md`
+- **Dil:** Kod Ingilizce, aciklamalar/yorumlar Turkce
+- **Hata yonetimi:** try/except kullan, hatalari logla
+- **Loglama:** `structlog` kullan, `print()` degil
+- **Immutability:** Objeleri mutate etme, yeni kopyalar olustur
+- **Dosya boyutu:** 200-400 satir tipik, 800 maksimum
+- **Test:** TDD yaklasimi — once test yaz, sonra implement et
+- **Timestamps:** Her zaman `utcnow()` kullan (`src/core/time.py`)
+- **DB:** `ON CONFLICT` upsert kullan, select-then-insert yapma
+- **Async:** `asyncio.to_thread()` kullan, `run_in_executor` degil
 
 ---
 
-## Sık Kullanılan Komutlar
+## Test
+
+```bash
+# Unit testler
+pytest tests/unit/ -v
+
+# Integration testler
+pytest tests/integration/ -v
+
+# Tumu
+pytest -v
+
+# Coverage
+pytest --cov=src tests/
+```
+
+Hedef: 80%+ test coverage.
+
+---
+
+## Sik Kullanilan Komutlar
 
 ```bash
 # Docker
-docker-compose up -d          # Başlat
+docker-compose up -d          # Baslat
 docker-compose down            # Durdur
-docker-compose logs -f app     # Logları izle
-docker-compose exec app bash   # Container'a gir
+docker-compose logs -f app     # Backend loglarini izle
+docker-compose logs -f worker  # Worker loglarini izle
 
 # Git
-git status                     # Ne değişti?
+git status                     # Ne degisti?
 git log --oneline -5           # Son 5 commit
-git diff                       # Değişiklikleri gör
 
-# Veritabanı
-docker-compose exec app python scripts/seed.py  # Şirket yükle
+# Veritabani
+docker-compose exec app alembic upgrade head    # Migration
+docker-compose exec app python scripts/seed.py  # Sirket yukle
+
+# Admin API testi
+curl -H "X-Admin-Key: YOUR_KEY" http://localhost:8000/admin/stats
 ```
 
 ---
 
-## Sorun Çözme
+## Sorun Cozme
 
-| Sorun | Çözüm |
+| Sorun | Cozum |
 |-------|-------|
-| `.env not found` | `cp .env.example .env` çalıştır |
+| `.env not found` | `cp .env.example .env` calistir |
 | `port 5432 in use` | Eski PostgreSQL'i kapat: `docker-compose down` |
-| `connection refused` | Docker çalışıyor mu? `docker ps` ile kontrol et |
+| `connection refused` | Docker calisiyor mu? `docker ps` ile kontrol et |
 | `module not found` | `docker-compose up -d --build` ile yeniden build et |
+| `401 Unauthorized` | Admin endpoint icin `X-Admin-Key` header ekle |
+| `429 Too Many Requests` | Rate limit asildi, biraz bekle |

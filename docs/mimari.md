@@ -1,157 +1,211 @@
-# 🏗️ Sistem Mimarisi — Hisse Takibi
+# Sistem Mimarisi — Hisse Analizi Dashboard
 
-## Genel Bakış
+## Genel Bakis
 
-Bu proje, BIST 30 hisselerini takip eden, haberleri toplayan, finansal verileri analiz eden ve bildirimler gönderen bir **backend sistemidir**.
+BIST 780+ hissesini takip eden, haberleri toplayan, finansal verileri analiz eden
+ve bildirimler gonderen bir **full-stack platform**. Backend Python/FastAPI,
+frontend Next.js 14, veritabani PostgreSQL 16.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    KULLANICI                         │
-│         (Tarayıcı / Dashboard / API Client)         │
+│                    KULLANICI                          │
+│      (Next.js Dashboard / Tarayici / API Client)     │
 └────────────────────────┬────────────────────────────┘
                          │ HTTP
 ┌────────────────────────▼────────────────────────────┐
-│                  FastAPI (API Katmanı)               │
+│              FastAPI (API Katmani)                    │
 │                                                      │
-│  routers.py          → Temel CRUD endpoint'leri      │
-│  routers_extended.py → Finansal, teknik, makro API   │
+│  [Rate Limiter]  [CORS Allowlist]  [Admin Auth]      │
+│                                                      │
+│  routers.py  → Core + Admin + Teknik + Temel +       │
+│                Makro + Piyasa endpoint'leri           │
+│  dependencies.py → X-Admin-Key auth middleware        │
 └────────────┬───────────────────────┬────────────────┘
              │                       │
 ┌────────────▼──────────┐ ┌─────────▼────────────────┐
-│  Services (İş Mantığı)│ │  Workers (Arka Plan)      │
+│  Services (Is Mantigi)│ │  Workers (Ayri Proses)    │
 │                       │ │                           │
 │  event_service.py     │ │  polling_worker.py        │
-│  (veri işleme,        │ │  (dakikada 1 veri çeker)  │
-│   dedup, normalize)   │ │                           │
-│                       │ │  notification_worker.py   │
-│                       │ │  (bildirim gönderir)      │
+│  (veri isleme,        │ │  (advisory lock,          │
+│   dedup, normalize)   │ │   semaphore concurrency)  │
+│                       │ │                           │
+│  notification_svc.py  │ │  run_workers.py           │
+│  (idempotent send,    │ │  (API'den bagimsiz)       │
+│   CRLF sanitize)      │ │                           │
+│                       │ │                           │
+│  analysis_service.py  │ │                           │
+│  (finansal oran)      │ │                           │
 └────────────┬──────────┘ └─────────┬─────────────────┘
              │                       │
 ┌────────────▼───────────────────────▼────────────────┐
-│              Adapters (Veri Kaynakları)               │
+│              Adapters (Veri Kaynaklari)               │
 │                                                      │
 │  kap.py         → KAP bildirimleri (borsapy + API)   │
 │  price.py       → Fiyat verisi (borsapy + yfinance)  │
-│  financials.py  → Bilanço, gelir tablosu, temettü    │
-│  macro.py       → TCMB, enflasyon, döviz, endeksler  │
+│  financial_adapter.py → Bilanco, gelir tablosu        │
+│  macro.py       → TCMB, enflasyon, doviz, takvim     │
 │  technical.py   → RSI, MACD, Bollinger, SMA, EMA     │
+│  fundamentals.py → Sirket bilgileri, temettu          │
+│  screener_adapter.py → Hisse tarama                   │
+│  scanner_adapter.py  → Teknik sinyal tarama           │
+│  index_adapter.py    → BIST endeksleri                │
+│                                                      │
+│  utils.py → TTLCache, cached(), shared HTTP client,  │
+│             run_sync(), df_to_records()               │
 └────────────┬────────────────────────────────────────┘
              │
 ┌────────────▼────────────────────────────────────────┐
-│              PostgreSQL (Veritabanı)                  │
+│              PostgreSQL (Veritabani)                  │
 │                                                      │
-│  companies          → 30 BIST şirketi                │
-│  sources            → Veri kaynakları (KAP, fiyat)   │
+│  companies          → 780+ BIST sirketi              │
+│  sources            → Veri kaynaklari (KAP, fiyat)   │
 │  raw_events         → Ham veriler                    │
-│  normalized_events  → İşlenmiş veriler               │
-│  price_data         → Fiyat geçmişi                  │
-│  ------- YENİ TABLOLAR (models_extended.py) -------  │
-│  company_details    → Şirket detay bilgileri         │
-│  financial_stmts    → Bilanço, gelir, nakit akışı    │
-│  financial_ratios   → F/K, ROE, ROA hesaplamaları    │
-│  dividends          → Temettü geçmişi                │
-│  major_holders      → Ortaklık yapısı                │
-│  technical_indicators → RSI, MACD değerleri          │
-│  macro_indicators   → Enflasyon, faiz oranları       │
-│  forex_rates        → Döviz kurları                  │
-│  index_data         → BIST endeks verileri           │
-│  economic_calendar  → Ekonomik takvim                │
-│  screener_snapshots → Tarama sonuçları               │
+│  normalized_events  → Islenmis veriler               │
+│  price_data         → Fiyat gecmisi                  │
+│  financial_stmts    → Bilanco, gelir, nakit akisi    │
+│  financial_ratios   → ROE, ROA, margin hesaplamalari │
+│  outbox_entries     → Bildirim kuyrugu               │
+│  notifications      → Gonderilen bildirimler         │
+│  notification_rules → Bildirim kurallari             │
+│  polling_states     → Polling durumu                 │
+│                                                      │
+│  Ozellikler:                                         │
+│  - ON CONFLICT upsert (atomic dedup)                 │
+│  - FOR UPDATE SKIP LOCKED (outbox claim)             │
+│  - Advisory locks (polling koordinasyonu)            │
+│  - Unique constraint (notification idempotency)      │
+│  - pool_pre_ping + pool_recycle (baglanti sagligi)   │
 └─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Klasör Yapısı
+## Klasor Yapisi
 
 ```
 hisse-analizi-dashboard/
-├── docs/                    ← 📖 Dokümantasyon (şu an buradasın)
-│   ├── mimari.md            ← Sistem mimarisi
-│   ├── api-rehberi.md       ← API kullanım kılavuzu
-│   ├── yol-haritasi.md      ← Proje yol haritası
-│   └── katki-rehberi.md     ← Katkı ve çalışma kuralları
+├── docs/                    <- Dokumantasyon
+│   ├── mimari.md            <- Sistem mimarisi (bu dosya)
+│   ├── api-rehberi.md       <- API kullanim kilavuzu
+│   ├── yol-haritasi.md      <- Proje yol haritasi
+│   └── katki-rehberi.md     <- Katki ve calisma kurallari
 │
-├── src/                     ← 🧠 Ana kaynak kodu
-│   ├── adapters/            ← Dış veri kaynaklarına bağlantı
-│   │   ├── base.py          ← Temel adapter sınıfları (abstract)
-│   │   ├── kap.py           ← KAP bildirim çekici
-│   │   ├── price.py         ← Fiyat verisi çekici
-│   │   ├── financials.py    ← Bilanço, gelir tablosu, temettü
-│   │   ├── macro.py         ← TCMB, döviz, endeks, takvim
-│   │   └── technical.py     ← RSI, MACD, Bollinger, screener
+├── src/                     <- Python backend
+│   ├── adapters/            <- Dis veri kaynaklarina baglanti
+│   │   ├── base.py          <- Temel adapter siniflari (abstract)
+│   │   ├── kap.py           <- KAP bildirim cekici
+│   │   ├── price.py         <- Fiyat verisi cekici
+│   │   ├── financial_adapter.py <- Finansal tablo adapter (content hash)
+│   │   ├── fundamentals.py  <- Sirket bilgileri, temettu
+│   │   ├── macro.py         <- TCMB, doviz, endeks, takvim
+│   │   ├── technical.py     <- RSI, MACD, Bollinger, screener
+│   │   ├── screener_adapter.py <- Hisse tarama
+│   │   ├── scanner_adapter.py  <- Teknik sinyal tarama
+│   │   ├── index_adapter.py    <- BIST endeksleri
+│   │   └── utils.py         <- TTLCache, cached(), HTTP client, run_sync()
 │   │
-│   ├── api/                 ← HTTP endpoint tanımları
-│   │   ├── app.py           ← FastAPI uygulaması (ana giriş noktası)
-│   │   ├── routers.py       ← Temel endpoint'ler (CRUD)
-│   │   └── routers_extended.py ← Yeni endpoint'ler (finans, teknik, makro)
+│   ├── api/                 <- HTTP endpoint tanimlari
+│   │   ├── app.py           <- FastAPI uygulamasi (rate limiter, CORS, lifecycle)
+│   │   ├── routers.py       <- Tum endpoint'ler (admin auth korumali)
+│   │   └── dependencies.py  <- Admin auth dependency (X-Admin-Key)
 │   │
-│   ├── core/                ← Ayarlar ve sabitler
-│   │   ├── config.py        ← Ortam değişkenleri (.env)
-│   │   ├── enums.py         ← Enum tanımları (SourceKind, Severity vb.)
-│   │   └── logging.py       ← Log ayarları
+│   ├── core/                <- Ayarlar ve sabitler
+│   │   ├── config.py        <- Ortam degiskenleri + production validation
+│   │   ├── enums.py         <- Enum tanimlari (SourceKind, Severity vb.)
+│   │   ├── logging.py       <- Log ayarlari
+│   │   └── time.py          <- Merkezi utcnow() fonksiyonu
 │   │
-│   ├── db/                  ← Veritabanı katmanı
-│   │   ├── models.py        ← Temel tablo tanımları (Company, Event, Price)
-│   │   ├── models_extended.py ← Yeni tablolar (Financial, Macro, Technical)
-│   │   ├── repository.py    ← Veritabanı sorguları (CRUD işlemleri)
-│   │   └── session.py       ← DB bağlantı yönetimi
+│   ├── db/                  <- Veritabani katmani
+│   │   ├── models.py        <- 13 tablo tanimi (unique constraint'ler)
+│   │   ├── repository.py    <- ON CONFLICT upsert, FOR UPDATE SKIP LOCKED
+│   │   └── session.py       <- DB baglanti yonetimi (pool_pre_ping)
 │   │
-│   ├── services/            ← İş mantığı
-│   │   └── event_service.py ← Veri işleme, dedup, normalize
+│   ├── services/            <- Is mantigi
+│   │   ├── event_service.py <- Veri isleme, dedup, normalize
+│   │   ├── notification_service.py <- Idempotent bildirim, CRLF sanitize
+│   │   └── analysis_service.py <- 8 finansal oran hesaplama
 │   │
-│   ├── workers/             ← Arka plan görevleri
-│   │   ├── polling_worker.py     ← Periyodik veri çekme döngüsü
-│   │   └── notification_worker.py ← Bildirim gönderme
+│   ├── workers/             <- Arka plan gorevleri (AYRI PROSES)
+│   │   ├── polling_worker.py     <- Advisory lock + semaphore concurrency
+│   │   ├── notification_worker.py <- Outbox claim + stuck reclaim
+│   │   └── run_workers.py        <- Worker baslangic noktasi
 │   │
-│   ├── parsers/             ← Veri ayrıştırma yardımcıları
-│   │   └── helpers.py       ← Hash, tarih, temizleme fonksiyonları
-│   │
-│   └── schemas/             ← API istek/yanıt şemaları (Pydantic)
-│       └── events.py        ← Event, Price şemaları
+│   └── schemas/             <- API istek/yanit semalari (Pydantic)
+│       └── events.py        <- Event, Price, Financial semalari
 │
-├── scripts/                 ← Yardımcı scriptler
-│   └── seed.py              ← BIST 30 şirketlerini DB'ye yükler
+├── dashboard/               <- Next.js 14 frontend
+│   ├── src/app/             <- 7 sayfa (App Router)
+│   ├── src/components/      <- UI bilesenleri
+│   ├── src/lib/             <- API client, format utils
+│   └── Dockerfile           <- Multi-stage production build
 │
-├── tests/                   ← Testler
-├── alembic/                 ← DB migration'ları
-├── docker-compose.yml       ← Docker servisleri
-├── Dockerfile               ← Uygulama imajı
-├── pyproject.toml           ← Python bağımlılıkları
-└── .env                     ← Ortam değişkenleri (gizli — Git'te yok)
+├── alembic/                 <- DB migration'lari (001 + 002)
+├── tests/                   <- Unit + integration (49+ test)
+├── scripts/                 <- Seed, backfill, debug
+├── docker-compose.yml       <- 4 servis: db, app, worker, dashboard
+├── Dockerfile               <- Production build (no -e, no --reload)
+├── pyproject.toml           <- Python bagimliliklari
+└── .env.example             <- Ortam degiskenleri sablonu
 ```
 
 ---
 
-## Teknoloji Yığını
+## Teknoloji Yigini
 
-| Katman | Teknoloji | Ne İşe Yarar |
+| Katman | Teknoloji | Ne Ise Yarar |
 |--------|-----------|-------------|
-| **Backend** | Python 3.12 + FastAPI | API sunucusu |
-| **Veritabanı** | PostgreSQL 16 | Veri depolama |
-| **ORM** | SQLAlchemy 2.0 (async) | Python ↔ SQL köprüsü |
-| **Migration** | Alembic | DB şema değişiklikleri |
-| **Veri Kaynağı** | borsapy, yfinance | Borsa verisi çekme |
-| **Konteyner** | Docker + Docker Compose | Her yerde aynı çalışır |
-| **Versiyon Kontrolü** | Git + GitHub | Kod takibi |
-| **Frontend** *(yakında)* | Next.js | Dashboard arayüzü |
+| **Backend** | Python 3.11 + FastAPI | API sunucusu |
+| **Veritabani** | PostgreSQL 16 | Veri depolama |
+| **ORM** | SQLAlchemy 2.0 (async) | Python <-> SQL koprusu |
+| **Migration** | Alembic | DB sema degisiklikleri |
+| **Veri Kaynagi** | borsapy, yfinance | Borsa verisi cekme |
+| **HTTP Client** | httpx (shared pool) | Dis API cagrilari |
+| **Rate Limiting** | slowapi | API korumasi |
+| **Cache** | TTL in-memory | Adapter sonuc onbellegi |
+| **Konteyner** | Docker + Docker Compose | Deployment |
+| **Frontend** | Next.js 14, TypeScript, Tailwind | Dashboard arayuzu |
 
 ---
 
-## Veri Akışı
+## Veri Akisi
 
 ```
-1. Polling Worker her 30sn'de çalışır
-   ↓
-2. Her aktif şirket için KAP/fiyat adapter'ını çağırır
-   ↓
-3. Adapter → borsapy → BIST API'si → ham veri alır
-   ↓
-4. EventService → veriyi normalize eder, dedup yapar
-   ↓
-5. Veritabanına kaydeder (raw_events + normalized_events)
-   ↓
-6. EventOutbox'a yazar (bildirim kuyruğu)
-   ↓
-7. NotificationWorker → outbox'u okur → e-posta gönderir
+1. Worker proses baslar (API'den bagimsiz)
+   |
+2. Her kaynak icin advisory lock alinir
+   |
+3. Semaphore ile sinirli concurrency (varsayilan: 5)
+   |
+4. Adapter → borsapy → BIST API'si → ham veri alir
+   |   (TTL cache ile tekrar cagrilar onlenir)
+   |
+5. EventService → veriyi normalize eder
+   |   (ON CONFLICT ile atomic dedup)
+   |
+6. Veritabanina kaydeder (raw_events + normalized_events)
+   |
+7. EventOutbox'a yazar (bildirim kuyrugu)
+   |
+8. NotificationWorker → FOR UPDATE SKIP LOCKED ile claim
+   |
+9. Bildirim kurallarina gore eslestirme
+   |
+10. Atomic insert (idempotency) → e-posta gonderir
+    (CRLF sanitize edilmis subject)
 ```
+
+---
+
+## Guvenlik Modeli
+
+| Katman | Mekanizma |
+|--------|-----------|
+| API Auth | X-Admin-Key header (admin endpoint'ler) |
+| CORS | Config-driven origin allowlist |
+| Rate Limit | slowapi (varsayilan: 100/dk) |
+| DB Dedup | ON CONFLICT upsert (race-safe) |
+| Outbox | FOR UPDATE SKIP LOCKED (cift islem onleme) |
+| Notification | Unique constraint (cift gonderim onleme) |
+| Email | CRLF injection sanitization |
+| Config | Production'da zorunlu secret validation |
+| Timestamps | UTC-aware (merkezi utcnow) |

@@ -6,34 +6,40 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Polling Worker                              │
+│                   Worker Proses (ayri proses)                    │
 │  ┌──────┐ ┌──────┐ ┌────┐ ┌──────┐ ┌────────────┐              │
 │  │ KAP  │ │ News │ │ IR │ │Price │ │ Financials │              │
 │  └──┬───┘ └──┬───┘ └─┬──┘ └──┬───┘ └─────┬──────┘              │
+│     │   [Advisory Lock]  [Semaphore]       │                    │
 └─────┼────────┼───────┼───────┼────────────┼─────────────────────┘
+      │        │       │       │            │
+      │    [TTL Cache + Shared HTTP Client] │
       │        │       │       │            │
 ┌─────▼────────▼───────▼───────▼────────────▼─┐
 │    Event Service / Price Service /            │
 │    Financial Service + AnalysisService        │
-│  raw_events → normalized → outbox             │
-│  financials → DB → ratio calculation          │
+│  raw_events → normalized → outbox            │
+│  financials → DB → ratio calculation         │
+│  [ON CONFLICT upsert] [Content-based hash]   │
 └────────────────┬─────────────────────────────┘
                  │
 ┌────────────────▼─────────────────────────┐
 │       Notification Worker                 │
-│  outbox → rules match → email             │
+│  outbox → FOR UPDATE SKIP LOCKED →        │
+│  rules match → atomic insert → email      │
 └──────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
-│                      FastAPI (REST API)                           │
+│                FastAPI (REST API) + Guvenlik                      │
 ├──────────────────────────────────────────────────────────────────┤
+│  [Rate Limiter] [CORS Allowlist] [Admin API Key Auth]            │
 │  Core:       /health /events /prices /companies                  │
 │  Finansal:   /financials?ticker= /financials/ratios?ticker=      │
 │  Teknik:     /technical/{ticker}/rsi /macd /bollinger /signals   │
 │  Temel:      /fundamentals/{ticker}/info /balance-sheet          │
 │  Makro:      /macro/tcmb /inflation /fx/{symbol} /calendar       │
 │  Piyasa:     /market/screener /scanner /indices /search /tweets  │
-│  Admin:      /admin/poll/run-once /stats                         │
+│  Admin:      /admin/poll/run-once /stats  [X-Admin-Key]          │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +76,21 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 - KAP bildirimleri (borsapy + KAP API yedek)
 - Kurumsal haberler ve yatirimci iliskileri
 - Fiyat verisi takibi (borsapy + yfinance yedek)
-- E-posta bildirim sistemi (outbox pattern)
+- E-posta bildirim sistemi (outbox pattern, idempotent)
+
+### Guvenlik & Production Hardening (v0.5.0)
+- Admin API Key authentication (X-Admin-Key header)
+- Config-driven CORS allowlist
+- API rate limiting (slowapi)
+- PostgreSQL ON CONFLICT upsert (race-safe dedup)
+- Outbox claim: SELECT...FOR UPDATE SKIP LOCKED
+- Notification idempotency (DB unique constraint)
+- CRLF injection prevention (email headers)
+- UTC-aware timestamps (merkezi utcnow)
+- Content-based financial hashing
+- Worker proses izolasyonu (API'den bagimsiz)
+- TTL in-memory caching (adapter sonuclari)
+- Production config validation (fail-fast)
 
 ## Veri Kaynaklari
 
@@ -81,9 +101,9 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 | Yatirimci Iliskileri | httpx + BS4 | - | 300sn |
 | Fiyat Verisi | borsapy | yfinance | 300sn |
 | Finansal Tablolar | borsapy | - | 3600sn (polling + DB) |
-| Teknik Gostergeler | borsapy | - | on-demand |
-| Makro Veriler | borsapy (TCMB) | - | on-demand |
-| Endeks/Tarama | borsapy | - | on-demand |
+| Teknik Gostergeler | borsapy | - | on-demand (60s cache) |
+| Makro Veriler | borsapy (TCMB) | - | on-demand (600s cache) |
+| Endeks/Tarama | borsapy | - | on-demand (120s cache) |
 
 ## Kurulum
 
@@ -91,6 +111,8 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 
 ```bash
 cp .env.example .env
+# .env icinde ADMIN_API_KEY, CORS_ORIGINS, DB credentials ayarla
+
 docker-compose up -d
 docker-compose exec app alembic upgrade head
 docker-compose exec app python scripts/seed.py
@@ -108,6 +130,18 @@ alembic upgrade head
 python scripts/seed.py
 uvicorn src.api.app:app --reload
 ```
+
+### Ortam Degiskenleri
+
+| Degisken | Aciklama | Zorunlu |
+|----------|----------|---------|
+| `DATABASE_URL` | PostgreSQL baglanti adresi | Evet |
+| `ADMIN_API_KEY` | Admin endpoint auth key | Production'da evet |
+| `CORS_ORIGINS` | Izin verilen origin'ler (virgul ayirmali) | Hayir (dev: *) |
+| `RATE_LIMIT_PER_MINUTE` | API rate limit | Hayir (varsayilan: 100) |
+| `WORKER_MAX_CONCURRENCY` | Worker semaphore limiti | Hayir (varsayilan: 5) |
+| `WORKER_SINGLE_REPLICA` | Tek worker replica zorunlulugu | Hayir |
+| `SMTP_HOST`, `SMTP_PORT` | E-posta sunucusu | Bildirimler icin |
 
 ## API Endpoint'leri
 
@@ -168,13 +202,13 @@ GET  /market/scanner?condition=rsi_oversold  Teknik sinyal tarama
 GET  /market/indices                      Tum BIST endeksleri
 GET  /market/index/{symbol}?period=1ay    Endeks fiyat verisi
 GET  /market/index/{symbol}/info          Endeks bilgileri
-GET  /market/search?q=THYAO               Sembol arama
+GET  /market/search?q=THYAO              Sembol arama
 GET  /market/companies/all                Tum BIST sirketleri
 GET  /market/tweets/{ticker}              Hisse tweet'leri
 GET  /market/snapshot?symbols=THYAO,GARAN Anlik fiyat snapshot
 ```
 
-### Admin
+### Admin (X-Admin-Key gerekli)
 ```
 POST /admin/poll/run-once                 Manuel poll
 POST /admin/backfill                      Gecmis veri cekme
@@ -186,7 +220,7 @@ GET  /admin/stats                         Istatistikler
 ## Test
 
 ```bash
-pytest tests/unit/ -v              # Unit testler
+pytest tests/unit/ -v              # Unit testler (49+)
 pytest tests/integration/ -v       # Integration testler
 pytest -v                          # Tumu
 ```
@@ -209,6 +243,9 @@ pytest -v                          # Tumu
 | DB | PostgreSQL 16 |
 | Veri Kaynagi | borsapy 0.8.3 (MIT) |
 | Yedek Fiyat | yfinance |
-| HTTP Client | httpx (async) |
+| HTTP Client | httpx (async, shared pool) |
+| Rate Limiting | slowapi |
 | Logging | structlog (JSON) |
+| Cache | TTL in-memory (src/adapters/utils.py) |
 | Container | Docker + Compose |
+| Frontend | Next.js 14, TypeScript, Tailwind, shadcn/ui |

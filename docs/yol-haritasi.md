@@ -1,31 +1,32 @@
 # Proje Yol Haritasi — Hisse Analizi Dashboard
 
-## Proje Durumu: Faz 3 tamamlandi, Faz 4 (Dashboard UI) basliyor
+## Proje Durumu: Faz 5 (Production Hardening) tamamlandi — v0.5.0
 
 ---
 
 ## Tamamlananlar
 
-### Faz 0 — Altyapi (15 Mart 2026)
+### Faz 0 — Altyapi (14 Mart 2026)
 - [x] Git + GitHub repo kurulumu
 - [x] Docker duzeltmeleri (Dockerfile, docker-compose)
 - [x] Alembic migration klasoru
+- [x] FastAPI backend yapisi
+- [x] 36 unit test
 
-### Faz 1 — Mimariyi Anla (15 Mart 2026)
-- [x] Tum kaynak dosyalarin analizi
-- [x] Mimari rehber dokumani
-
-### Faz 2 — Multi-Stock / BIST 30 (15 Mart 2026)
+### Faz 1 — Multi-Stock / BIST 30 (15 Mart 2026)
 - [x] 30 BIST sirketi seed'e eklendi
 - [x] KAP ve fiyat adapterlari dinamik hale getirildi
 - [x] Polling worker tum sirketler icin calisiyor
 - [x] API'ye ticker filtresi eklendi
 
-### Faz 2.5 — borsapy Tam Entegrasyon (15 Mart 2026)
-- [x] 11 yeni veritabani modeli (finansal, makro, teknik)
+### Faz 2 — borsapy Tam Entegrasyon (15 Mart 2026)
 - [x] 15 adapter sinifi
 - [x] 53+ API endpoint
 - [x] Swagger dokumantasyonu otomatik
+- [x] Teknik analiz (RSI, MACD, Bollinger, SMA, EMA, SuperTrend, Stochastic)
+- [x] Temel analiz (sirket bilgileri, bilanco, gelir tablosu, temettu)
+- [x] Makro veriler (TCMB, enflasyon, doviz, takvim)
+- [x] Hisse tarama (screener) ve teknik sinyal tarama (scanner)
 
 ### Faz 3 — Finansal Analiz & NLP (20 Mart 2026)
 - [x] FinancialStatement ve FinancialRatio modelleri
@@ -34,115 +35,74 @@
 - [x] FinancialAdapter (borsapy: bilanco, gelir tablosu, nakit akis)
 - [x] Alembic initial migration (13 tablo)
 - [x] GET /financials ve GET /financials/ratios endpoint'leri
-- [x] Dinamik bildirim subject (hardcoded AEFES kaldirildi)
-- [x] Utility scriptleri (backfill_classification, debug_financials)
-- [x] Developer Test UI v0.3.0
+
+### Faz 4 — Dashboard UI (20 Mart 2026)
+- [x] Vanilla JS prototip (5 bolum)
+- [x] Next.js 14 dashboard (7 sayfa)
+- [x] shadcn/ui + Recharts + React Query
+- [x] Proje genelleme (AEFES → THYAO)
+- [x] Docker Compose ile tek komutla deploy
+
+### Faz 5 — Production Hardening (21 Mart 2026)
+- [x] Worker proses izolasyonu (API'den bagimsiz)
+- [x] Admin API Key authentication (X-Admin-Key)
+- [x] Config-driven CORS allowlist
+- [x] slowapi rate limiting
+- [x] Production config validation (fail-fast)
+- [x] PostgreSQL ON CONFLICT upsert (tum repository'ler)
+- [x] Outbox: SELECT...FOR UPDATE SKIP LOCKED
+- [x] Notification idempotency (unique constraint + atomic insert)
+- [x] PostgreSQL advisory lock (polling koordinasyonu)
+- [x] Worker semaphore concurrency
+- [x] TTL in-memory cache (adapter sonuclari)
+- [x] Shared httpx.AsyncClient (connection pooling)
+- [x] asyncio.to_thread() (modern async pattern)
+- [x] Merkezi utcnow() (UTC-aware timestamps)
+- [x] Content-based financial hashing
+- [x] CRLF injection prevention (email headers)
+- [x] Frontend TypeScript tip hizalamasi
+- [x] Dead code temizligi (routers_extended.py, models_extended.py)
+- [x] Docker hardening (no -e, no --reload, parametrik credentials)
+- [x] 7 yeni test dosyasi (49+ test)
 
 ---
 
-## Backend Son Durum (MVP Hazir)
+## Mevcut Durum
 
 | Bilesen | Sayi | Durum |
 |---------|------|-------|
-| API Endpoints | 53 | Aktif |
-| Adapterlar | 15 | Aktif |
-| DB Tablolari | 13 | Migration hazir |
-| Repository | 11 sinif | CRUD + dedup |
-| Servisler | 3 | Event, Notification, Analysis |
-| Workerlar | 2 | Polling + Notification |
-| Unit Test | 42 | Pass |
-
-**Temizlik Notu:** `routers_extended.py` mount edilmemis (dead code). Tum endpoint'ler diger router dosyalarinda mevcut.
-
----
-
-## Siradaki: Faz 4 — Dashboard UI
-
-### Mimari Karar
-- **Teknoloji:** Vanilla JS + Chart.js (CDN) — FastAPI static files icinde
-- **Neden:** Ayri frontend sunucu gerektirmez, deploy basit, MVP icin yeterli
-- **Sonra:** Gerekirse React/Next.js'e gecis yapilabilir (API hazir)
-
-### Sayfa Yapisi
-
-#### 4.1 — Ana Sayfa (Piyasa Ozeti)
-- [x] BIST 100 / BIST 30 endeks karti
-- [x] Doviz kurlari (USD, EUR, GBP)
-- [x] Politika faizi
-- [x] En cok yukselen / dusen hisseler
-- [x] Son haberler/olaylar ozeti
-
-#### 4.2 — Hisse Listesi
-- [ ] 30 hisse karti (fiyat, degisim, mini sparkline)
-- [ ] Arama ve filtreleme
-- [ ] Sektore gore gruplama
-
-#### 4.3 — Hisse Detay Sayfasi
-- [ ] Fiyat grafigi (Chart.js line/candlestick)
-- [ ] Teknik gostergeler (RSI, MACD)
-- [ ] Temel analiz ozeti (F/K, PD/DD, ROE)
-- [ ] Finansal tablolar (bilanco, gelir)
-- [ ] Son haberler/KAP bildirimleri
-- [ ] Analist tavsiyeleri
-
-#### 4.4 — Tarama (Screener)
-- [ ] Filtre paneli (sektor, fiyat araligi, hacim)
-- [ ] Sonuc tablosu
-- [ ] Hazir tarama sablonlari
-
-#### 4.5 — Haberler & Olaylar
-- [ ] Kronolojik olay akisi
-- [ ] Kategori filtreleme (temettu, sermaye artirimi, hukuki vb.)
-- [ ] Hisse bazli filtreleme
-
-#### 4.6 — Teknik Analiz
-- [ ] Interaktif grafik (zoom, pan)
-- [ ] Gosterge overlay (RSI, MACD, Bollinger)
-- [ ] Sinyal ozeti tablosu
-- [ ] Coklu zaman dilimi karsilastirma
+| API Endpoints | 53 | Aktif, rate limited, admin auth |
+| Adapterlar | 15 | Aktif, cached, shared HTTP client |
+| DB Tablolari | 13 | Migration hazir (001 + 002) |
+| Repository | ON CONFLICT | Atomic upsert, race-safe |
+| Servisler | 4 | Event, Notification, Analysis, Financial |
+| Workerlar | 2 | Ayri proses, advisory lock, semaphore |
+| Unit Test | 49+ | Pass |
+| Guvenlik | 6 katman | Auth, CORS, rate limit, dedup, sanitize, validation |
 
 ---
 
-## Faz 5 — Gelismis Ozellikler (Sonra)
+## Siradaki: Faz 6 — CI/CD & Gelismis Ozellikler
 
-### 5.1 — AI/NLP Haber Siniflandirma
-- [ ] Claude API entegrasyonu
-- [ ] Sentiment analizi (pozitif/negatif/notr)
-- [ ] Otomatik severity tespiti
+### 6.1 — CI/CD & DevOps
+- [ ] GitHub Actions pipeline (lint, test, build, deploy)
+- [ ] Test coverage raporlama (hedef: 80%+)
+- [ ] Otomatik Docker image build + push
 
-### 5.2 — Gercek Zamanli Veri
+### 6.2 — Gercek Zamanli Veri
 - [ ] WebSocket canli fiyat push
-- [ ] Dashboard auto-refresh
+- [ ] Dashboard auto-refresh (SSE veya WebSocket)
 
-### 5.3 — Bildirim Kanallari
+### 6.3 — Bildirim Kanallari
 - [ ] Slack entegrasyonu
 - [ ] Telegram bot
 
-### 5.4 — Portfoy Takibi
+### 6.4 — Portfoy Takibi
 - [ ] Portfoy olusturma
 - [ ] Kar/zarar takibi
 - [ ] Performans grafikleri
 
-### 5.5 — CI/CD & DevOps
-- [ ] GitHub Actions pipeline
-- [ ] Otomatik test + deploy
-- [ ] Rate limiting
-
----
-
-## Gorev Dagilimi
-
-| Gorev | Kisi | Branch |
-|-------|------|--------|
-| Dashboard UI (Frontend) | Ataberk | `feature/dashboard` |
-| AI/NLP Entegrasyonu | Bugra | `feature/ai-nlp` |
-| Backend gelistirme | Beraber | `master` |
-
----
-
-## Haftalik Ritual
-
-1. **Pazartesi:** Hedef belirleme (GitHub Issues)
-2. **Hafta ici:** Kodlama + ogrenme
-3. **Cuma:** Sync call (Bugra ile) + PR review
-4. **Hafta sonu:** Opsiyonel calisma + dokuman guncelleme
+### 6.5 — AI Entegrasyonu
+- [ ] Claude API ile KAP bildirim sentiment analizi
+- [ ] Otomatik severity tespiti
+- [ ] Haber ozet olusturma

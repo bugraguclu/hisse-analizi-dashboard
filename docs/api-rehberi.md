@@ -1,10 +1,13 @@
-# 📡 API Kullanım Rehberi — Hisse Takibi
+# API Kullanim Rehberi — Hisse Analizi Dashboard
 
-## Başlamadan Önce
+## Baslamadan Once
 
-API'ye erişmek için Docker çalışıyor olmalı:
+API'ye erismek icin Docker calisiyor olmali:
 ```bash
+cp .env.example .env
+# .env icinde ADMIN_API_KEY, CORS_ORIGINS ayarla
 docker-compose up -d
+docker-compose exec app alembic upgrade head
 ```
 
 API adresi: **http://localhost:8000**
@@ -12,185 +15,200 @@ Swagger (interaktif test): **http://localhost:8000/docs**
 
 ---
 
-## 1. Şirketler
+## Kimlik Dogrulama
 
-### Tüm şirketleri listele
+Admin endpoint'leri (`/admin/*`) `X-Admin-Key` header gerektirir:
+
+```bash
+curl -H "X-Admin-Key: YOUR_SECRET_KEY" http://localhost:8000/admin/stats
+```
+
+Development modda (`ADMIN_API_KEY` bos ise) auth atlanir.
+Production'da `ADMIN_API_KEY` ortam degiskeni zorunludur.
+
+---
+
+## Rate Limiting
+
+Tum endpoint'ler rate limit ile korunur (varsayilan: 100 istek/dakika).
+Limit asildiginda `429 Too Many Requests` doner.
+
+---
+
+## 1. Sirketler
+
+### Tum sirketleri listele
 ```
 GET /companies
 ```
-**Ne döner:** 30 BIST şirketi (ticker, isim, borsa bilgisi)
-
-### Tek şirket bilgisi
-```
-GET /company/{ticker}/info
-```
-**Örnek:** `GET /company/THYAO/info`
-**Ne döner:** Piyasa değeri, sektör, çalışan sayısı, P/E, beta vb.
-
-### Ortaklık yapısı
-```
-GET /company/{ticker}/holders
-```
-**Örnek:** `GET /company/AKBNK/holders`
-**Ne döner:** Büyük ortaklar ve pay oranları
-
-### Temettü geçmişi
-```
-GET /company/{ticker}/dividends
-```
-**Örnek:** `GET /company/EREGL/dividends`
-**Ne döner:** Tarih bazlı temettü ödemeleri
+**Ne doner:** BIST sirketleri (ticker, isim, borsa bilgisi)
 
 ---
 
-## 2. Finansal Tablolar
+## 2. Olaylar ve Haberler
 
-### Tüm tablolar (bilanço + gelir + nakit akışı)
+### Tum olaylar
 ```
-GET /financials/{ticker}
-GET /financials/{ticker}?quarterly=false   ← yıllık
-```
-**Örnek:** `GET /financials/THYAO`
-
-### Sadece bilanço
-```
-GET /financials/{ticker}/balance-sheet
+GET /events?limit=50&offset=0
+GET /events?ticker=THYAO          <- Sirkete gore filtre
+GET /events?source_code=kap       <- Kaynaga gore filtre
 ```
 
-### Sadece gelir tablosu
+### Son olaylar
 ```
-GET /financials/{ticker}/income-statement
-```
-
-### Sadece nakit akışı
-```
-GET /financials/{ticker}/cashflow
+GET /events/latest
 ```
 
 ---
 
-## 3. Teknik Göstergeler
+## 3. Fiyat Verileri
 
-### Tüm göstergeler (RSI + MACD + Bollinger + SMA + EMA)
+### Fiyat gecmisi
 ```
-GET /technical/{ticker}
+GET /prices?ticker=THYAO&limit=30
 ```
-**Örnek:** `GET /technical/GARAN`
 
-### RSI (Göreceli Güç Endeksi)
+### Son fiyat
+```
+GET /prices/latest?ticker=THYAO
+```
+
+---
+
+## 4. Finansal Tablolar (DB'den)
+
+### Tum tablolar
+```
+GET /financials?ticker=THYAO
+```
+
+### Hesaplanmis oranlar
+```
+GET /financials/ratios?ticker=THYAO
+```
+**Ne doner:** ROE, ROA, net/gross/EBITDA margin, debt-to-equity, current ratio, net debt/EBITDA
+
+---
+
+## 5. Teknik Gostergeler
+
+### RSI (Goreceli Guc Endeksi)
 ```
 GET /technical/{ticker}/rsi?period=14
 ```
-- **period**: Hesaplama dönemi (varsayılan: 14)
-- RSI > 70 → Aşırı alım (satış sinyali)
-- RSI < 30 → Aşırı satım (alış sinyali)
+- RSI > 70 → Asiri alim (satis sinyali)
+- RSI < 30 → Asiri satim (alis sinyali)
 
 ### MACD
 ```
 GET /technical/{ticker}/macd
 ```
-- **value**: MACD çizgisi
-- **signal**: Sinyal çizgisi
-- **histogram**: MACD - Signal farkı
 
 ### Bollinger Bands
 ```
 GET /technical/{ticker}/bollinger?period=20
 ```
-- **value**: Orta bant (SMA)
-- **upper_band**: Üst bant
-- **lower_band**: Alt bant
 
-### SMA (Basit Hareketli Ortalama)
+### SMA / EMA
 ```
 GET /technical/{ticker}/sma?period=50
-```
-
-### EMA (Üstel Hareketli Ortalama)
-```
 GET /technical/{ticker}/ema?period=20
 ```
 
----
-
-## 4. Makroekonomik Veriler
-
-### TCMB faiz oranları
+### SuperTrend / Stochastic
 ```
-GET /macro/tcmb
+GET /technical/{ticker}/supertrend
+GET /technical/{ticker}/stochastic
 ```
 
-### Enflasyon verileri
+### Sinyal Ozeti
 ```
-GET /macro/inflation
-```
-
-### Politika faiz oranı
-```
-GET /macro/policy-rate
+GET /technical/{ticker}/signals
+GET /technical/{ticker}/signals/all-timeframes
 ```
 
 ---
 
-## 5. Piyasa Verileri
+## 6. Temel Analiz
 
-### Döviz kurları (USD/TRY, EUR/TRY vb.)
 ```
-GET /market/fx
-```
-
-### BIST endeksleri
-```
-GET /market/indices              ← XU100, XU030, XBANK, XUSIN, XHOLD
-GET /market/indices/XU100        ← Tek endeks
-GET /market/indices/XU100?period=1ay
-```
-
-### Ekonomik takvim
-```
-GET /market/calendar
+GET /fundamentals/{ticker}/info           Sirket bilgileri
+GET /fundamentals/{ticker}/fast-info      Hizli ozet
+GET /fundamentals/{ticker}/balance-sheet  Bilanco
+GET /fundamentals/{ticker}/income-statement  Gelir tablosu
+GET /fundamentals/{ticker}/cashflow       Nakit akis
+GET /fundamentals/{ticker}/dividends      Temettu gecmisi
+GET /fundamentals/{ticker}/holders        Buyuk ortaklar
+GET /fundamentals/{ticker}/recommendations  Analist tavsiyeleri
+GET /fundamentals/{ticker}/price-targets  Hedef fiyatlar
+GET /fundamentals/{ticker}/earnings-dates Kazanc tarihleri
 ```
 
 ---
 
-## 6. Hisse Tarama (Screener)
+## 7. Makroekonomik Veriler
 
 ```
-GET /screener/scan?pe_lt=10&roe_gt=15
-```
-
-**Filtreler:**
-| Parametre | Açıklama | Örnek |
-|-----------|----------|-------|
-| `pe_lt` | F/K oranı şundan küçük | `pe_lt=10` |
-| `pe_gt` | F/K oranı şundan büyük | `pe_gt=5` |
-| `roe_gt` | ROE şundan büyük (%) | `roe_gt=15` |
-| `market_cap_gt` | Piyasa değeri şundan büyük | `market_cap_gt=1000000000` |
-| `volume_gt` | Hacim şundan büyük | `volume_gt=1000000` |
-
----
-
-## 7. Haberler ve Olaylar
-
-### Tüm olaylar
-```
-GET /events?limit=50&offset=0
-GET /events?ticker=THYAO          ← Şirkete göre filtre
-GET /events?source_code=kap       ← Kaynağa göre filtre
-```
-
-### Fiyat verileri
-```
-GET /prices?ticker=THYAO&interval=1d&limit=30
+GET /macro/tcmb                TCMB faiz oranlari
+GET /macro/policy-rate         Politika faizi
+GET /macro/inflation           Enflasyon verileri
+GET /macro/fx/{symbol}         Doviz kuru (USDTRY, EURTRY)
+GET /macro/calendar            Ekonomik takvim
 ```
 
 ---
 
-## Hata Kodları
+## 8. Piyasa Verileri
+
+### Hisse tarama
+```
+GET  /market/screener              Varsayilan tarama
+POST /market/screener              Ozel filtre ile tarama
+GET  /market/screener/templates    Hazir sablonlar
+```
+
+### Teknik sinyal tarama
+```
+GET /market/scanner?condition=rsi_oversold
+```
+
+### Endeksler
+```
+GET /market/indices                Tum BIST endeksleri
+GET /market/index/{symbol}         Endeks fiyat verisi
+GET /market/index/{symbol}/info    Endeks bilgileri
+```
+
+### Diger
+```
+GET /market/search?q=THYAO         Sembol arama
+GET /market/companies/all          Tum BIST sirketleri
+GET /market/tweets/{ticker}        Hisse tweet'leri
+GET /market/snapshot?symbols=THYAO,GARAN  Anlik fiyat
+```
+
+---
+
+## 9. Admin (X-Admin-Key gerekli)
+
+```
+POST /admin/poll/run-once          Manuel poll tetikleme
+POST /admin/backfill               Gecmis veri cekme
+POST /admin/notification-rules     Bildirim kurali ekle
+POST /admin/notifications/test-send  Test bildirim gonder
+GET  /admin/stats                  Sistem istatistikleri
+```
+
+---
+
+## Hata Kodlari
 
 | Kod | Anlam |
 |-----|-------|
-| 200 | Başarılı ✅ |
-| 404 | Bulunamadı (yanlış ticker vb.) |
-| 422 | Geçersiz parametre |
-| 500 | Sunucu hatası (log kontrol et) |
+| 200 | Basarili |
+| 401 | Kimlik dogrulama gerekli (admin endpoint) |
+| 403 | Yetkisiz erisim (yanlis API key) |
+| 404 | Bulunamadi (yanlis ticker vb.) |
+| 422 | Gecersiz parametre |
+| 429 | Rate limit asildi |
+| 500 | Sunucu hatasi (log kontrol et) |
