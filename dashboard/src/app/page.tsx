@@ -36,6 +36,7 @@ import {
   Tooltip,
   Area,
   AreaChart,
+  ReferenceLine,
 } from "recharts";
 import type { StatsOut, EventOut } from "@/types";
 
@@ -221,10 +222,24 @@ function MarketPulse() {
 
 const periodMap: Record<string, string> = {
   "1G": "1g",
-  "1H": "1hf",
+  "5G": "5g",
   "1A": "1ay",
-  "3A": "3ay",
-  "YBB": "5y",
+  "6A": "6ay",
+  "YBK": "1y",
+  "1Y": "1y",
+  "5Y": "5y",
+  "Maks.": "max",
+};
+
+const periodLabels: Record<string, string> = {
+  "1G": "bugun",
+  "5G": "5 gun",
+  "1A": "1 ay",
+  "6A": "6 ay",
+  "YBK": "yil basindan",
+  "1Y": "1 yil",
+  "5Y": "5 yil",
+  "Maks.": "tum zamanlar",
 };
 
 function formatChartDate(dateStr: string, period: string): string {
@@ -233,22 +248,26 @@ function formatChartDate(dateStr: string, period: string): string {
   switch (period) {
     case "1G":
       return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-    case "1H":
+    case "5G":
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
     case "1A":
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
-    case "3A":
+    case "6A":
+      return d.toLocaleDateString("tr-TR", { month: "short" });
+    case "YBK":
+    case "1Y":
       return d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" });
-    case "YBB":
-      return d.toLocaleDateString("tr-TR", { month: "short", year: "numeric" });
+    case "5Y":
+    case "Maks.":
+      return d.toLocaleDateString("tr-TR", { year: "numeric" });
     default:
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
   }
 }
 
 function PerformanceChart() {
-  const [period, setPeriod] = useState("1A");
-  const borsapyPeriod = periodMap[period] ?? "1ay";
+  const [period, setPeriod] = useState("1G");
+  const borsapyPeriod = periodMap[period] ?? "1g";
 
   const { data, isLoading } = useQuery({
     queryKey: ["indexChart", "XU100", borsapyPeriod],
@@ -263,16 +282,42 @@ function PerformanceChart() {
       date: formatChartDate(dateRaw, period),
       rawDate: dateRaw,
       close: Number(d.Close ?? d.close ?? 0),
+      open: Number(d.Open ?? d.open ?? 0),
+      high: Number(d.High ?? d.high ?? 0),
+      low: Number(d.Low ?? d.low ?? 0),
     };
   });
 
-  const first = chartData.length > 0 ? chartData[0].close : 0;
-  const last = chartData.length > 0 ? chartData[chartData.length - 1].close : 0;
-  const changeAbs = last - first;
-  const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+  // Price stats
+  const first = chartData.length > 0 ? chartData[0] : null;
+  const last = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+  const lastClose = last?.close ?? 0;
+  const prevClose = first?.close ?? 0;
+  const changeAbs = lastClose - prevClose;
+  const changePct = prevClose > 0 ? (changeAbs / prevClose) * 100 : 0;
   const isUp = changeAbs >= 0;
 
+  // OHLC aggregated from chart data
+  const openPrice = first?.open ?? first?.close ?? 0;
+  const highPrice = chartData.length > 0 ? Math.max(...chartData.map((d) => d.high || d.close)) : 0;
+  const lowPrice = chartData.length > 0 ? Math.min(...chartData.filter((d) => (d.low || d.close) > 0).map((d) => d.low || d.close)) : 0;
+
+  // 52-week high/low (approximate from data if period is long enough)
+  const allCloses = chartData.map((d) => d.close).filter((v) => v > 0);
+  const maxClose = allCloses.length > 0 ? Math.max(...allCloses) : 0;
+  const minClose = allCloses.length > 0 ? Math.min(...allCloses) : 0;
+
   const periods = Object.keys(periodMap);
+
+  // Last update time
+  const lastDateStr = last?.rawDate ?? "";
+  const lastDate = new Date(lastDateStr);
+  const dateLabel = !isNaN(lastDate.getTime())
+    ? lastDate.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) +
+      " " +
+      lastDate.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) +
+      " GMT+3"
+    : "";
 
   return (
     <motion.div
@@ -282,82 +327,142 @@ function PerformanceChart() {
       animate="show"
       className="lg:col-span-2 bg-card rounded-2xl border border-border/60 p-5"
     >
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">BIST 100 Performans</h2>
-          {chartData.length > 0 && (
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-xs text-muted-foreground font-mono">
-                Son: {formatNumber(last)}
-              </p>
-              <span className={`text-[11px] font-bold font-mono ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                {isUp ? "+" : ""}{formatNumber(changePct)}%
+      {/* Header: Price + Change */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-muted-foreground">BIST 100</h2>
+        </div>
+        {chartData.length > 0 ? (
+          <div className="mt-1">
+            <span className="text-3xl font-bold text-foreground font-mono tracking-tight">
+              {formatNumber(lastClose, 2)}
+            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-sm font-semibold font-mono ${isUp ? "text-emerald-500" : "text-red-500"}`}>
+                {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "%" : "-%"}{formatNumber(Math.abs(changePct), 2)})
               </span>
+              <span className={`text-sm ${isUp ? "text-emerald-500" : "text-red-500"}`}>
+                {isUp ? "\u2191" : "\u2193"}
+              </span>
+              <span className="text-xs text-muted-foreground ml-1">{periodLabels[period] ?? ""}</span>
             </div>
-          )}
-        </div>
-        <div className="flex gap-0.5 bg-muted/50 rounded-lg p-0.5">
-          {periods.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition-all ${
-                p === period
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+            {dateLabel && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">{dateLabel}</p>
+            )}
+          </div>
+        ) : !isLoading ? (
+          <span className="text-2xl font-bold text-foreground font-mono">-</span>
+        ) : null}
       </div>
 
+      {/* Period tabs */}
+      <div className="flex gap-0 border-b border-border/40 mb-4">
+        {periods.map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-3 py-2 text-xs font-semibold transition-all border-b-2 ${
+              p === period
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Chart */}
       {isLoading ? (
-        <div className="h-[220px] bg-muted/20 rounded-xl animate-pulse" />
+        <div className="h-[200px] bg-muted/20 rounded-xl animate-pulse" />
       ) : chartData.length > 0 ? (
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.15} />
-                  <stop offset="100%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.15} />
-              <XAxis
-                dataKey="date"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-                tickMargin={10}
-                interval="equidistantPreserveStart"
-                minTickGap={40}
-              />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickMargin={10} tickFormatter={(v) => formatCompact(v)} domain={["dataMin - 50", "dataMax + 50"]} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                  color: "var(--color-card-foreground)",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-                }}
-                labelStyle={{ color: "var(--color-muted-foreground)" }}
-                formatter={(value: unknown) => [`${formatNumber(Number(value))}`, "BIST 100"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="close"
-                stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"}
-                strokeWidth={2}
-                fill="url(#chartGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="bist100Gradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.08} />
+                    <stop offset="100%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.1} />
+                {prevClose > 0 && (
+                  <ReferenceLine
+                    y={prevClose}
+                    stroke="var(--color-muted-foreground)"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.5}
+                    label={{
+                      value: `Onceki kapanıs ${formatNumber(prevClose, 2)}`,
+                      position: "right",
+                      fontSize: 9,
+                      fill: "var(--color-muted-foreground)",
+                    }}
+                  />
+                )}
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  tickMargin={8}
+                  interval="equidistantPreserveStart"
+                  minTickGap={50}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  tickMargin={8}
+                  tickFormatter={(v) => formatCompact(v)}
+                  domain={["dataMin - 30", "dataMax + 30"]}
+                  width={55}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "10px",
+                    fontSize: "12px",
+                    color: "var(--color-card-foreground)",
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                  }}
+                  labelStyle={{ color: "var(--color-muted-foreground)" }}
+                  formatter={(value: unknown) => [`${formatNumber(Number(value), 2)}`, "BIST 100"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="close"
+                  stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"}
+                  strokeWidth={1.5}
+                  fill="url(#bist100Gradient)"
+                  dot={false}
+                  activeDot={{ r: 3, fill: isUp ? "rgb(16,185,129)" : "rgb(239,68,68)" }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Bottom stats bar - like Google Finance */}
+          <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 mt-4 pt-3 border-t border-border/40">
+            {[
+              ["Acilis", openPrice],
+              ["Yuksek", highPrice],
+              ["Dusuk", lowPrice],
+              ["Onc kapanıs", prevClose],
+              [period === "1G" || period === "5G" ? "Donem Yuksek" : "52h yuksek", maxClose],
+              [period === "1G" || period === "5G" ? "Donem Dusuk" : "52h dusuk", minClose],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex flex-col">
+                <span className="text-[10px] text-muted-foreground">{String(label)}</span>
+                <span className="text-xs font-semibold font-mono text-foreground">
+                  {Number(value) > 0 ? formatNumber(Number(value), 2) : "-"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <EmptyState message="Grafik verisi bulunamadi" />
       )}
