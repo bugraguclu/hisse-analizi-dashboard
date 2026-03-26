@@ -97,7 +97,7 @@ export const DesktopSidebar = ({
   return (
     <motion.div
       className={cn(
-        "h-full px-3 py-4 hidden md:flex md:flex-col flex-shrink-0",
+        "h-screen px-3 py-4 hidden md:flex md:flex-col flex-shrink-0 overflow-y-auto overflow-x-hidden",
         "bg-gradient-to-b from-sidebar via-sidebar to-sidebar/95",
         "border-r border-sidebar-border/60",
         className

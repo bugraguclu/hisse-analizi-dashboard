@@ -138,12 +138,32 @@ export default function EventsPage() {
   const [tickerFilter, setTickerFilter] = useState("");
   const [page, setPage] = useState(0);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const suggestRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const inputWrapperRef = useRef<HTMLDivElement>(null);
   const limit = 25;
+
+  const [suggestQuery, setSuggestQuery] = useState("");
+  const { data: suggestions } = useQuery({
+    queryKey: ["tickerSuggest", suggestQuery],
+    queryFn: () => api.search(suggestQuery),
+    enabled: suggestQuery.length >= 2,
+    staleTime: 60_000,
+  });
+  const suggestList = Array.isArray(suggestions) ? suggestions.slice(0, 6) : [];
 
   const handleTickerChange = useCallback((value: string) => {
     const upper = value.toUpperCase();
     setTickerInput(upper);
+
+    clearTimeout(suggestRef.current);
+    suggestRef.current = setTimeout(() => {
+      setSuggestQuery(upper);
+      if (upper.length >= 2) setShowSuggestions(true);
+      else setShowSuggestions(false);
+    }, 300);
+
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setTickerFilter(upper);
@@ -151,8 +171,28 @@ export default function EventsPage() {
     }, 500);
   }, []);
 
+  const handleSuggestionSelect = useCallback((ticker: string) => {
+    setTickerInput(ticker);
+    setTickerFilter(ticker);
+    setShowSuggestions(false);
+    setPage(0);
+  }, []);
+
   useEffect(() => {
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      clearTimeout(debounceRef.current);
+      clearTimeout(suggestRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (inputWrapperRef.current && !inputWrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const { data, isLoading } = useQuery({
@@ -209,21 +249,50 @@ export default function EventsPage() {
             </button>
           ))}
         </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <div className="relative" ref={inputWrapperRef}>
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10" />
           <Input
-            placeholder="Ticker (orn: THYAO)"
+            placeholder="Ticker ara (orn: THY, GAR...)"
             value={tickerInput}
             onChange={(e) => handleTickerChange(e.target.value)}
+            onFocus={() => { if (suggestList.length > 0 && tickerInput.length >= 2) setShowSuggestions(true); }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 clearTimeout(debounceRef.current);
                 setTickerFilter(tickerInput);
+                setShowSuggestions(false);
                 setPage(0);
               }
+              if (e.key === "Escape") setShowSuggestions(false);
             }}
-            className="w-44 h-8 text-xs pl-8"
+            className="w-52 h-8 text-xs pl-8"
           />
+          {showSuggestions && suggestList.length > 0 && (
+            <div className="absolute top-full left-0 mt-1 w-64 bg-card border border-border/60 rounded-xl shadow-xl z-50 overflow-hidden">
+              {suggestList.map((item: Record<string, unknown>, i: number) => {
+                const ticker = String(item.ticker ?? item.symbol ?? "");
+                const name = String(item.name ?? item.display_name ?? item.legal_name ?? "");
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleSuggestionSelect(ticker)}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="text-xs font-bold text-primary min-w-[50px]">{ticker}</span>
+                    <span className="text-[11px] text-muted-foreground truncate">{name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {tickerFilter && (
+            <button
+              onClick={() => { setTickerInput(""); setTickerFilter(""); setSuggestQuery(""); setPage(0); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted/50 transition-colors"
+            >
+              <X className="h-3 w-3 text-muted-foreground" />
+            </button>
+          )}
         </div>
       </motion.div>
 
@@ -232,7 +301,7 @@ export default function EventsPage() {
         {isLoading ? (
           <LoadingSpinner />
         ) : events.length === 0 ? (
-          <EmptyState message="Filtreye uygun olay bulunamadi" />
+          <EmptyState message={tickerFilter ? `"${tickerFilter}" icin olay bulunamadi — daha kisa bir arama deneyin` : "Filtreye uygun olay bulunamadi"} />
         ) : (
           <>
             <div className="overflow-x-auto">

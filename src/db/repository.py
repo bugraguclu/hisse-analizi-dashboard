@@ -180,7 +180,10 @@ class NormalizedEventRepository:
         if event_type:
             q = q.where(NormalizedEvent.event_type == event_type)
         if ticker:
-            q = q.join(Company, NormalizedEvent.company_id == Company.id).where(Company.ticker == ticker.upper())
+            t = ticker.upper().strip()
+            q = q.join(Company, NormalizedEvent.company_id == Company.id).where(
+                Company.ticker.ilike(f"%{t}%")
+            )
         if since:
             q = q.where(NormalizedEvent.published_at >= since)
         if until:

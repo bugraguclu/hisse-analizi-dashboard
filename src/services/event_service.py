@@ -45,6 +45,30 @@ CATEGORY_KEYWORDS = {
     EventCategory.FINANCIAL_RESULTS: ["finansal rapor", "bilanço", "gelir tablosu", "kar/zarar"],
 }
 
+# Keyword-based severity classification for KAP events
+HIGH_SEVERITY_KEYWORDS = [
+    "temettü", "kar payı", "dividend",
+    "sermaye artırımı", "bedelli", "bedelsiz",
+    "birleşme", "devralma", "satın alma", "ortaklık",
+    "dava", "ceza", "soruşturma", "suç duyurusu",
+    "konkordato", "iflas", "tasfiye",
+    "özel durum açıklaması",
+    "kar/zarar", "zarar",
+    "borsadan çıkma", "kottan çıkma",
+    "spk", "sermaye piyasası kurulu",
+]
+
+INFO_SEVERITY_KEYWORDS = [
+    "genel kurul toplantı çağrısı",
+    "faaliyet raporu",
+    "bağımsız denetim",
+    "kurumsal yönetim",
+    "bilgilendirme politikası",
+    "ticaret sicili",
+    "pay alım satım bildirimi",
+    "idari para cezası hariç bildirim",
+]
+
 
 class EventService:
     def __init__(self, session: AsyncSession):
@@ -60,6 +84,19 @@ class EventService:
             if any(kw in text for kw in keywords):
                 return category
         return EventCategory.OTHER
+
+    def _classify_severity(self, title: str, summary: str | None, source_code: str) -> Severity:
+        """Content-based severity classification."""
+        base_severity = SOURCE_TO_SEVERITY.get(source_code, Severity.INFO)
+        text = f"{title} {summary or ''}".lower()
+
+        if any(kw in text for kw in HIGH_SEVERITY_KEYWORDS):
+            return Severity.HIGH
+
+        if any(kw in text for kw in INFO_SEVERITY_KEYWORDS):
+            return Severity.INFO
+
+        return base_severity
 
     async def process_raw_events(
         self,
@@ -96,7 +133,9 @@ class EventService:
             # Normalize
             source_code = source.code
             event_type = SOURCE_TO_EVENT_TYPE.get(source_code, EventType.KAP_DISCLOSURE)
-            severity = SOURCE_TO_SEVERITY.get(source_code, Severity.INFO)
+            severity = self._classify_severity(
+                event_data.title or "", event_data.summary, source_code
+            )
 
             published_at = event_data.published_at or make_aware(utcnow())
             category = self._classify_event(event_data.title or "", event_data.summary)

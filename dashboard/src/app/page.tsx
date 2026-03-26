@@ -220,11 +220,31 @@ function MarketPulse() {
 }
 
 const periodMap: Record<string, string> = {
+  "1G": "1g",
   "1H": "1hf",
   "1A": "1ay",
   "3A": "3ay",
   "YBB": "5y",
 };
+
+function formatChartDate(dateStr: string, period: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  switch (period) {
+    case "1G":
+      return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    case "1H":
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+    case "1A":
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+    case "3A":
+      return d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" });
+    case "YBB":
+      return d.toLocaleDateString("tr-TR", { month: "short", year: "numeric" });
+    default:
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+  }
+}
 
 function PerformanceChart() {
   const [period, setPeriod] = useState("1A");
@@ -236,13 +256,21 @@ function PerformanceChart() {
   });
 
   const raw = data as { data: Array<Record<string, unknown>> } | null;
-  const chartData = (raw?.data ?? []).map((d) => ({
-    date: new Date(String(d.Date ?? "")).toLocaleDateString("tr-TR", {
-      day: "2-digit",
-      month: "short",
-    }),
-    close: Number(d.Close ?? 0),
-  }));
+  const rawData = raw?.data ?? [];
+  const chartData = rawData.map((d) => {
+    const dateRaw = String(d.Date ?? d.Datetime ?? d.date ?? d.datetime ?? d.timestamp ?? "");
+    return {
+      date: formatChartDate(dateRaw, period),
+      rawDate: dateRaw,
+      close: Number(d.Close ?? d.close ?? 0),
+    };
+  });
+
+  const first = chartData.length > 0 ? chartData[0].close : 0;
+  const last = chartData.length > 0 ? chartData[chartData.length - 1].close : 0;
+  const changeAbs = last - first;
+  const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+  const isUp = changeAbs >= 0;
 
   const periods = Object.keys(periodMap);
 
@@ -258,9 +286,14 @@ function PerformanceChart() {
         <div>
           <h2 className="text-sm font-semibold text-foreground">BIST 100 Performans</h2>
           {chartData.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-              Son: {formatNumber(chartData[chartData.length - 1]?.close ?? 0)}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-muted-foreground font-mono">
+                Son: {formatNumber(last)}
+              </p>
+              <span className={`text-[11px] font-bold font-mono ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                {isUp ? "+" : ""}{formatNumber(changePct)}%
+              </span>
+            </div>
           )}
         </div>
         <div className="flex gap-0.5 bg-muted/50 rounded-lg p-0.5">
@@ -288,12 +321,20 @@ function PerformanceChart() {
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.15} />
-                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+                  <stop offset="0%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.15} />
+                  <stop offset="100%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.3} />
-              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickMargin={10} interval="preserveStartEnd" />
+              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.15} />
+              <XAxis
+                dataKey="date"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                tickMargin={10}
+                interval="equidistantPreserveStart"
+                minTickGap={40}
+              />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickMargin={10} tickFormatter={(v) => formatCompact(v)} domain={["dataMin - 50", "dataMax + 50"]} />
               <Tooltip
                 contentStyle={{
@@ -307,7 +348,13 @@ function PerformanceChart() {
                 labelStyle={{ color: "var(--color-muted-foreground)" }}
                 formatter={(value: unknown) => [`${formatNumber(Number(value))}`, "BIST 100"]}
               />
-              <Area type="monotone" dataKey="close" stroke="var(--color-primary)" strokeWidth={2} fill="url(#chartGradient)" />
+              <Area
+                type="monotone"
+                dataKey="close"
+                stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"}
+                strokeWidth={2}
+                fill="url(#chartGradient)"
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>

@@ -35,11 +35,18 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
   const router = useRouter();
 
   const infoQ = useQuery({ queryKey: ["company-info", t], queryFn: () => api.companyInfo(t) });
+  const fastInfoQ = useQuery({ queryKey: ["fast-info", t], queryFn: () => api.fastInfo(t) });
   const targetsQ = useQuery({ queryKey: ["targets", t], queryFn: () => api.priceTargets(t) });
   const holdersQ = useQuery({ queryKey: ["holders", t], queryFn: () => api.holders(t) });
 
   const info = infoQ.data as Record<string, unknown> | null;
-  const infoObj = (info?.info || info) as Record<string, unknown> | null;
+  const fastInfo = fastInfoQ.data as Record<string, unknown> | null;
+  const fastInfoObj = (fastInfo?.fast_info && typeof fastInfo.fast_info === "object" ? fastInfo.fast_info : fastInfo) as Record<string, unknown> | null;
+  const rawInfoObj = (info?.info || info) as Record<string, unknown> | null;
+  // Merge fast_info as fallback for missing fields
+  const infoObj = rawInfoObj && fastInfoObj
+    ? { ...fastInfoObj, ...rawInfoObj }
+    : rawInfoObj || fastInfoObj;
 
   // Backend returns: {"ticker": ..., "holders": [...]}
   const holders = holdersQ.data as Record<string, unknown> | null;
@@ -87,17 +94,19 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
             <Building2 className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Sirket Bilgileri</h2>
           </div>
-          {infoQ.isLoading ? <LoadingSpinner /> : !infoObj || Object.keys(infoObj).length === 0 ? <EmptyState message="Sirket bilgisi bulunamadi — bu hisse icin yfinance verisi mevcut olmayabilir" /> : (
+          {(infoQ.isLoading || fastInfoQ.isLoading) ? <LoadingSpinner /> : !infoObj || Object.keys(infoObj).length === 0 ? <EmptyState message="Sirket bilgisi bulunamadi — bu hisse icin yfinance verisi mevcut olmayabilir" /> : (
             <div>
               {[
-                ["Isim", infoObj.longName || infoObj.shortName || infoObj.name || t],
-                ["Sektor", infoObj.sector || infoObj.industry || "-"],
-                ["Piyasa Degeri", formatCompact(Number(infoObj.marketCap || infoObj.market_cap || 0))],
-                ["F/K", infoObj.trailingPE != null ? formatNumber(Number(infoObj.trailingPE)) : "-"],
-                ["PD/DD", infoObj.priceToBook != null ? formatNumber(Number(infoObj.priceToBook)) : "-"],
-                ["Temettu Verimi", infoObj.dividendYield != null ? formatPercent(Number(infoObj.dividendYield) * 100) : "-"],
-                ["Calisan", formatCompact(Number(infoObj.fullTimeEmployees || 0))],
-                ["Web", infoObj.website || "-"],
+                ["Isim", infoObj.longName || infoObj.shortName || infoObj.name || infoObj.long_name || infoObj.short_name || t],
+                ["Sektor", infoObj.sector || infoObj.industry || infoObj.sectorDisp || infoObj.industryDisp || "-"],
+                ["Piyasa Degeri", formatCompact(Number(infoObj.marketCap || infoObj.market_cap || infoObj.marketCapitalization || 0))],
+                ["F/K", (infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio) != null ? formatNumber(Number(infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio)) : "-"],
+                ["PD/DD", (infoObj.priceToBook ?? infoObj.price_to_book ?? infoObj.pb_ratio) != null ? formatNumber(Number(infoObj.priceToBook ?? infoObj.price_to_book ?? infoObj.pb_ratio)) : "-"],
+                ["Temettu Verimi", (infoObj.dividendYield ?? infoObj.dividend_yield ?? infoObj.lastDividendValue) != null ? formatPercent(Number(infoObj.dividendYield ?? infoObj.dividend_yield ?? 0) * 100) : "-"],
+                ["Son Fiyat", (infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose) != null ? `₺${formatNumber(Number(infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose))}` : "-"],
+                ["52H Yuksek/Dusuk", (infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh) != null ? `₺${formatNumber(Number(infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh))} / ₺${formatNumber(Number(infoObj.fiftyTwoWeekLow ?? infoObj.fifty_two_week_low ?? infoObj.yearLow ?? 0))}` : "-"],
+                ["Calisan", Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0) > 0 ? formatCompact(Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0)) : "-"],
+                ["Web", infoObj.website || infoObj.web_site || "-"],
               ].map(([label, value]) => (
                 <InfoRow key={String(label)} label={String(label)} value={String(value)} />
               ))}

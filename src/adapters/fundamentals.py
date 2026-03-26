@@ -20,7 +20,20 @@ async def get_company_info(ticker: str) -> dict:
     try:
         t = await _get_ticker(ticker)
         info = await run_sync(lambda: t.info)
-        return {"ticker": ticker, "info": safe_serialize(info)}
+        info_dict = safe_serialize(info) if info else {}
+
+        # If info is empty or missing key fields, try fast_info as fallback
+        if not info_dict or not isinstance(info_dict, dict) or len(info_dict) < 3:
+            try:
+                fast = await run_sync(lambda: t.fast_info)
+                fast_dict = safe_serialize(fast) if fast else {}
+                if isinstance(fast_dict, dict) and fast_dict:
+                    merged = {**fast_dict, **info_dict} if isinstance(info_dict, dict) else fast_dict
+                    return {"ticker": ticker, "info": merged}
+            except Exception:
+                pass
+
+        return {"ticker": ticker, "info": info_dict if isinstance(info_dict, dict) else {}}
     except Exception as e:
         logger.error("fundamentals_info_error", ticker=ticker, error=str(e))
         return {"ticker": ticker, "info": {}, "error": str(e)}
