@@ -1,6 +1,7 @@
 import type {
   Company,
   EventOut,
+  EventDetailOut,
   PriceOut,
   FinancialStatementOut,
   FinancialRatioOut,
@@ -72,6 +73,7 @@ export const api = {
     return get<EventOut[]>(`/events${qs ? `?${qs}` : ""}`, "no-store");
   },
   latestEvents: () => get<EventOut[]>("/events/latest", "no-store"),
+  eventDetail: (eventId: string) => get<EventDetailOut>(`/events/${eventId}`, "no-store"),
 
   // Prices (real-time, no cache)
   prices: (ticker: string, limit = 90) =>

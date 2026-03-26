@@ -7,6 +7,7 @@ import { formatNumber, formatDate, formatCompact } from "@/lib/format";
 import { SlidingNumber } from "@/components/ui/sliding-number";
 import { CardSkeleton, TableSkeleton } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
+import { TickerSearch } from "@/components/shared/TickerSearch";
 import { SeverityBadge, CategoryBadge } from "@/components/shared/SeverityBadge";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -291,16 +292,17 @@ function PerformanceChart() {
                   <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
+              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.15} />
               <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickMargin={10} interval="preserveStartEnd" />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickMargin={10} tickFormatter={(v) => formatCompact(v)} domain={["dataMin - 50", "dataMax + 50"]} />
               <Tooltip
                 contentStyle={{
-                  background: "hsl(var(--popover))",
+                  background: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "10px",
                   fontSize: "12px",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                  color: "hsl(var(--card-foreground))",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
                 }}
                 labelStyle={{ color: "hsl(var(--muted-foreground))" }}
                 formatter={(value: unknown) => [`${formatNumber(Number(value))}`, "BIST 100"]}
@@ -498,11 +500,13 @@ function QuickActions() {
 export default function DashboardPage() {
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <MarketDate />
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground hidden sm:block font-mono">Canli veri</span>
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm shadow-primary/20">
+        <div className="flex items-center gap-3">
+          <div className="w-72 md:w-80">
+            <TickerSearch />
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm shadow-primary/20 flex-shrink-0">
             <span className="text-[10px] font-bold text-primary-foreground">HA</span>
           </div>
         </div>

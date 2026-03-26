@@ -18,6 +18,7 @@ import {
   Globe,
   Search,
   ExternalLink,
+  Columns2,
 } from "lucide-react";
 
 const navItems = [
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/hisse/THYAO", label: "Hisse Analizi", icon: BarChart3, match: "/hisse" },
   { href: "/teknik/THYAO", label: "Teknik Analiz", icon: TrendingUp, match: "/teknik" },
   { href: "/temel/THYAO", label: "Temel Analiz", icon: Building2, match: "/temel" },
+  { href: "/analiz/THYAO", label: "Kombine Analiz", icon: Columns2, match: "/analiz" },
   { href: "/makro", label: "Makro Ekonomi", icon: Globe },
   { href: "/tarama", label: "Hisse Tarama", icon: Search },
 ];
@@ -73,15 +75,15 @@ export function AppSidebar() {
         </div>
 
         <div className="pt-4 border-t border-sidebar-border/40">
-          <SidebarLink
-            link={{
-              label: "API Docs",
-              href: "/docs",
-              icon: (
-                <ExternalLink className="h-[18px] w-[18px] flex-shrink-0 text-sidebar-foreground/50" />
-              ),
-            }}
-          />
+          <a
+            href="http://localhost:8000/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 py-2.5 px-2.5 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-all duration-200"
+          >
+            <ExternalLink className="h-[18px] w-[18px] flex-shrink-0 text-sidebar-foreground/50" />
+            {open && <span className="text-sm whitespace-pre">API Docs</span>}
+          </a>
         </div>
       </SidebarBody>
     </SidebarRoot>

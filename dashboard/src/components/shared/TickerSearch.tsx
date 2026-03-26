@@ -126,7 +126,7 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
           onKeyDown={handleKeyDown}
           onFocus={() => { if (results.length > 0) setIsOpen(true); }}
           placeholder="Hisse ara... (THYAO, GARAN)"
-          className="pl-10 pr-9 h-9 text-sm bg-background/80 backdrop-blur-sm border-border/60 focus:border-primary/40 focus:ring-primary/20 transition-all"
+          className="pl-10 pr-9 h-10 text-sm bg-card border-border shadow-sm focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/60"
         />
       </div>
       <AnimatePresence>

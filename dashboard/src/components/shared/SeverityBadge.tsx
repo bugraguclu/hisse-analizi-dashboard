@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 
 const severityConfig: Record<string, { label: string; className: string }> = {
   HIGH: { label: "Yuksek", className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" },
-  WATCH: { label: "Takip", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+  WATCH: { label: "Orta", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
   INFO: { label: "Bilgi", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
 };
 

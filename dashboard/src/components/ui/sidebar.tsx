@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import Link, { LinkProps } from "next/link";
-import React, { useState, createContext, useContext } from "react";
+import React, { useState, createContext, useContext, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 
@@ -82,6 +82,18 @@ export const DesktopSidebar = ({
   ...props
 }: React.ComponentProps<typeof motion.div>) => {
   const { open, setOpen, animate } = useSidebar();
+  const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleMouseEnter = useCallback(() => {
+    clearTimeout(leaveTimer.current);
+    setOpen(true);
+  }, [setOpen]);
+
+  const handleMouseLeave = useCallback(() => {
+    clearTimeout(leaveTimer.current);
+    leaveTimer.current = setTimeout(() => setOpen(false), 200);
+  }, [setOpen]);
+
   return (
     <motion.div
       className={cn(
@@ -94,8 +106,8 @@ export const DesktopSidebar = ({
         width: animate ? (open ? "260px" : "64px") : "260px",
       }}
       transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       {...props}
     >
       {children}

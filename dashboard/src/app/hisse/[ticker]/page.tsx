@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatCompact, formatDate, formatPercent } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
 import { SlidingNumber } from "@/components/ui/sliding-number";
@@ -105,7 +105,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             )}
           </div>
         </motion.div>
-        <div className="w-64"><TickerSearch /></div>
+        <div className="w-72 md:w-80"><TickerSearch /></div>
       </div>
 
       {/* OHLCV Stats */}
@@ -145,11 +145,11 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                   <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
+              <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.15} vertical={false} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
               <Tooltip
-                contentStyle={{ backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--popover-foreground))", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}
+                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--card-foreground))", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}
               />
               <Area type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#colorClose)" />
             </AreaChart>
@@ -164,7 +164,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
+                <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.15} vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatCompact(v)} />
                 <Bar dataKey="volume" fill="hsl(var(--primary))" opacity={0.4} radius={[4, 4, 0, 0]} />
@@ -176,7 +176,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         {/* Financial Ratios */}
         <motion.div custom={8} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <h2 className="text-sm font-semibold text-foreground mb-4">Finansal Oranlar</h2>
-          {ratiosQ.isLoading ? <LoadingSpinner /> : !ratios ? <EmptyState message="Finansal oran verisi yok" /> : (
+          {ratiosQ.isLoading ? <LoadingSpinner /> : ratiosQ.isError ? <ErrorState message="Finansal oranlar yuklenemedi" onRetry={() => ratiosQ.refetch()} /> : !ratios ? <EmptyState message="Bu hisse icin finansal oran verisi henuz yok" /> : (
             <div className="space-y-3">
               {[
                 { label: "ROE", value: ratios.roe, max: 0.5, color: "from-blue-500 to-blue-400" },
@@ -214,7 +214,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         <div className="px-5 py-3.5 border-b border-border/40">
           <h2 className="text-sm font-semibold text-foreground">Son Olaylar</h2>
         </div>
-        {eventsQ.isLoading ? <LoadingSpinner /> : events.length === 0 ? <EmptyState message="Olay bulunamadi" /> : (
+        {eventsQ.isLoading ? <LoadingSpinner /> : eventsQ.isError ? <ErrorState message="Olaylar yuklenemedi" onRetry={() => eventsQ.refetch()} /> : events.length === 0 ? <EmptyState message="Bu hisse icin henuz olay kaydedilmemis" /> : (
           <div className="divide-y divide-border/30">
             {events.map((e, i) => (
               <div key={e.id || i} className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">

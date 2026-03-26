@@ -115,7 +115,7 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
             </div>
           </div>
         </motion.div>
-        <div className="w-64"><TickerSearch onSelect={handleTickerSelect} /></div>
+        <div className="w-72 md:w-80"><TickerSearch onSelect={handleTickerSelect} /></div>
       </div>
 
       {/* Signal Summary */}

@@ -10,7 +10,7 @@ import { TickerSearch } from "@/components/shared/TickerSearch";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Building2, TrendingUp, Users, Target, Star } from "lucide-react";
+import { Building2, TrendingUp, Users, Target } from "lucide-react";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -35,18 +35,11 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
   const router = useRouter();
 
   const infoQ = useQuery({ queryKey: ["company-info", t], queryFn: () => api.companyInfo(t) });
-  const recsQ = useQuery({ queryKey: ["recs", t], queryFn: () => api.recommendations(t) });
   const targetsQ = useQuery({ queryKey: ["targets", t], queryFn: () => api.priceTargets(t) });
   const holdersQ = useQuery({ queryKey: ["holders", t], queryFn: () => api.holders(t) });
 
   const info = infoQ.data as Record<string, unknown> | null;
   const infoObj = (info?.info || info) as Record<string, unknown> | null;
-
-  // Backend returns: {"ticker": ..., "recommendations": [...]}
-  const recs = recsQ.data as Record<string, unknown> | null;
-  const recsArr = recs?.recommendations ? recs.recommendations
-    : Array.isArray(recs) ? recs
-    : (recs?.data ? recs.data : null);
 
   // Backend returns: {"ticker": ..., "holders": [...]}
   const holders = holdersQ.data as Record<string, unknown> | null;
@@ -84,7 +77,7 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
             </div>
           </div>
         </motion.div>
-        <div className="w-64"><TickerSearch onSelect={handleTickerSelect} /></div>
+        <div className="w-72 md:w-80"><TickerSearch onSelect={handleTickerSelect} /></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -108,38 +101,6 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
               ].map(([label, value]) => (
                 <InfoRow key={String(label)} label={String(label)} value={String(value)} />
               ))}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Recommendations */}
-        <motion.div custom={2} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Star className="h-4 w-4 text-amber-500" />
-            <h2 className="text-sm font-semibold text-foreground">Analist Tavsiyeleri</h2>
-          </div>
-          {recsQ.isLoading ? <LoadingSpinner /> : !recsArr || !Array.isArray(recsArr) || recsArr.length === 0 ? <EmptyState message="Tavsiye verisi yok" /> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b border-border/40">
-                    <th className="pb-2.5 text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Donem</th>
-                    <th className="pb-2.5 text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">AL</th>
-                    <th className="pb-2.5 text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">TUT</th>
-                    <th className="pb-2.5 text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">SAT</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {(recsArr as Record<string, unknown>[]).slice(0, 8).map((rec, i) => (
-                    <tr key={i} className="hover:bg-muted/20 transition-colors">
-                      <td className="py-2.5 text-muted-foreground text-xs font-mono">{String(rec.period || rec.date || rec.month || i + 1)}</td>
-                      <td className="py-2.5 text-emerald-600 dark:text-emerald-400 font-semibold">{String(rec.strongBuy || rec.buy || rec.Buy || rec.strong_buy || 0)}</td>
-                      <td className="py-2.5 text-amber-600 dark:text-amber-400 font-semibold">{String(rec.hold || rec.Hold || 0)}</td>
-                      <td className="py-2.5 text-red-600 dark:text-red-400 font-semibold">{String(rec.strongSell || rec.sell || rec.Sell || rec.strong_sell || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           )}
         </motion.div>
