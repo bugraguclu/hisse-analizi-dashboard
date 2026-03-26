@@ -145,7 +145,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                   <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.15} vertical={false} />
+              <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} vertical={false} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
               <Tooltip
@@ -164,7 +164,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.15} vertical={false} />
+                <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatCompact(v)} />
                 <Bar dataKey="volume" fill="hsl(var(--primary))" opacity={0.4} radius={[4, 4, 0, 0]} />
@@ -179,14 +179,21 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           {ratiosQ.isLoading ? <LoadingSpinner /> : ratiosQ.isError ? <ErrorState message="Finansal oranlar yuklenemedi" onRetry={() => ratiosQ.refetch()} /> : !ratios ? <EmptyState message="Bu hisse icin finansal oran verisi henuz yok" /> : (
             <div className="space-y-3">
               {[
-                { label: "ROE", value: ratios.roe, max: 0.5, color: "from-blue-500 to-blue-400" },
-                { label: "ROA", value: ratios.roa, max: 0.3, color: "from-emerald-500 to-emerald-400" },
-                { label: "Net Margin", value: ratios.net_margin, max: 0.4, color: "from-violet-500 to-violet-400" },
-                { label: "Gross Margin", value: ratios.gross_margin, max: 0.6, color: "from-amber-500 to-amber-400" },
-                { label: "Borc/Ozsermaye", value: ratios.debt_to_equity, max: 2, color: "from-red-500 to-red-400" },
-                { label: "Cari Oran", value: ratios.current_ratio, max: 3, color: "from-teal-500 to-teal-400" },
-              ].map((r) => {
-                const pct = r.value != null ? Math.min(Math.abs(Number(r.value)) / r.max * 100, 100) : 0;
+                { label: "Brut Kar Marji", value: ratios.gross_margin, max: 50, unit: "%", color: "from-amber-500 to-amber-400" },
+                { label: "EBITDA Marji", value: ratios.ebitda_margin, max: 40, unit: "%", color: "from-violet-500 to-violet-400" },
+                { label: "Net Kar Marji", value: ratios.net_margin, max: 30, unit: "%", color: "from-blue-500 to-blue-400" },
+                { label: "ROE", value: ratios.roe, max: 30, unit: "%", color: "from-emerald-500 to-emerald-400" },
+                { label: "ROA", value: ratios.roa, max: 20, unit: "%", color: "from-cyan-500 to-cyan-400" },
+                { label: "Cari Oran", value: ratios.current_ratio, max: 3, unit: "x", color: "from-teal-500 to-teal-400" },
+                { label: "Net Borc/EBITDA", value: ratios.net_debt_ebitda, max: 10, unit: "x", color: "from-red-500 to-red-400" },
+                { label: "Borc/Ozsermaye", value: ratios.debt_to_equity, max: 3, unit: "x", color: "from-orange-500 to-orange-400" },
+                { label: "F/K", value: ratios.pe_ratio, max: 30, unit: "", color: "from-pink-500 to-pink-400" },
+              ].filter((r) => r.value != null).map((r) => {
+                const val = Number(r.value);
+                const pct = Math.min(Math.abs(val) / r.max * 100, 100);
+                const display = r.unit === "%" ? `%${formatNumber(val)}`
+                  : r.unit === "x" ? `${formatNumber(val)}x`
+                  : formatNumber(val);
                 return (
                   <div key={r.label} className="flex items-center gap-3">
                     <span className="text-[11px] font-medium text-muted-foreground w-28 flex-shrink-0">{r.label}</span>
@@ -198,12 +205,22 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                         className={`h-full rounded-full bg-gradient-to-r ${r.color}`}
                       />
                     </div>
-                    <span className="text-[11px] font-bold font-mono text-foreground w-14 text-right">
-                      {r.value != null ? formatPercent(Number(r.value) * 100) : "-"}
+                    <span className="text-[11px] font-bold font-mono text-foreground w-20 text-right">
+                      {display}
                     </span>
                   </div>
                 );
               })}
+              {[
+                { label: "Brut Kar Marji", value: ratios.gross_margin },
+                { label: "EBITDA Marji", value: ratios.ebitda_margin },
+                { label: "Net Kar Marji", value: ratios.net_margin },
+                { label: "ROE", value: ratios.roe },
+                { label: "ROA", value: ratios.roa },
+                { label: "Cari Oran", value: ratios.current_ratio },
+              ].every((r) => r.value == null) && (
+                <p className="text-xs text-muted-foreground text-center py-2">Bazi oranlar bu hisse icin hesaplanamamistir</p>
+              )}
             </div>
           )}
         </motion.div>

@@ -161,7 +161,7 @@ function TemelPanel({ ticker }: { ticker: string }) {
       {/* Company Info */}
       <div className="bg-card rounded-xl border border-border/60 p-4">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sirket Bilgileri</h3>
-        {infoObj ? (
+        {infoObj && Object.keys(infoObj).length > 0 ? (
           <div className="space-y-0">
             {[
               ["Isim", infoObj.longName || infoObj.shortName || infoObj.name || ticker],
@@ -207,11 +207,11 @@ function TemelPanel({ ticker }: { ticker: string }) {
           <div className="space-y-2">
             {(holdersArr as Record<string, unknown>[]).slice(0, 5).map((h, i) => {
               const name = String(h.Holder || h.holder || h.name || h.institution || `Ortak ${i + 1}`);
-              const pct = Number(h.pctHeld || h.percent || h.share || h.percentage || 0);
+              const pct = Number(h.Percentage ?? h.pctHeld ?? h.percent ?? h.share ?? h.percentage ?? 0);
               return (
                 <div key={i} className="flex items-center gap-2">
                   <span className="text-xs text-foreground flex-1 truncate">{name}</span>
-                  <span className="text-[10px] font-mono text-muted-foreground">{formatPercent(pct * 100)}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">%{formatNumber(pct)}</span>
                 </div>
               );
             })}

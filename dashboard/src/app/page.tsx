@@ -292,7 +292,7 @@ function PerformanceChart() {
                   <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.15} />
+              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} />
               <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickMargin={10} interval="preserveStartEnd" />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickMargin={10} tickFormatter={(v) => formatCompact(v)} domain={["dataMin - 50", "dataMax + 50"]} />
               <Tooltip

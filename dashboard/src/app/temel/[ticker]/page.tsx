@@ -87,7 +87,7 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
             <Building2 className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Sirket Bilgileri</h2>
           </div>
-          {infoQ.isLoading ? <LoadingSpinner /> : !infoObj ? <EmptyState /> : (
+          {infoQ.isLoading ? <LoadingSpinner /> : !infoObj || Object.keys(infoObj).length === 0 ? <EmptyState message="Sirket bilgisi bulunamadi — bu hisse icin yfinance verisi mevcut olmayabilir" /> : (
             <div>
               {[
                 ["Isim", infoObj.longName || infoObj.shortName || infoObj.name || t],
@@ -114,11 +114,12 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
           {targetsQ.isLoading ? <LoadingSpinner /> : !targets ? <EmptyState message="Hedef fiyat yok" /> : (
             <div>
               {[
-                ["Dusuk", targets.low || targets.targetLowPrice],
-                ["Ortalama", targets.mean || targets.targetMeanPrice || targets.average],
-                ["Medyan", targets.median || targets.targetMedianPrice],
-                ["Yuksek", targets.high || targets.targetHighPrice],
-                ["Analist Sayisi", targets.numberOfAnalystOpinions || targets.number_of_analysts || targets.count],
+                ["Mevcut Fiyat", targets.current || targets.currentPrice],
+                ["Dusuk Hedef", targets.low || targets.targetLowPrice],
+                ["Ortalama Hedef", targets.mean || targets.targetMeanPrice || targets.average],
+                ["Medyan Hedef", targets.median || targets.targetMedianPrice],
+                ["Yuksek Hedef", targets.high || targets.targetHighPrice],
+                ["Analist Sayisi", targets.numberOfAnalysts || targets.numberOfAnalystOpinions || targets.number_of_analysts || targets.count],
               ].filter(([, v]) => v != null).map(([label, value]) => (
                 <InfoRow key={String(label)} label={String(label)} value={typeof value === "number" ? `₺${formatNumber(value)}` : String(value)} />
               ))}
@@ -136,19 +137,22 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
             <div className="space-y-2.5">
               {(holdersArr as Record<string, unknown>[]).slice(0, 10).map((h, i) => {
                 const name = String(h.Holder || h.holder || h.name || h.institution || `Ortak ${i + 1}`);
-                const pct = Number(h.pctHeld || h.percent || h.share || h.percentage || 0);
+                const rawPct = h.Percentage ?? h.pctHeld ?? h.percent ?? h.share ?? h.percentage ?? 0;
+                const pct = Number(rawPct);
+                // Backend returns percentage as 49.12 (not 0.4912)
+                const barWidth = Math.min(pct, 100);
                 return (
                   <div key={i} className="flex items-center gap-3">
                     <span className="text-sm text-foreground flex-1 truncate">{name}</span>
                     <div className="w-20 h-2 bg-muted/50 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(pct * 100, 100)}%` }}
+                        animate={{ width: `${barWidth}%` }}
                         transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 + i * 0.05 }}
                         className="h-full bg-gradient-to-r from-teal-500 to-teal-400 rounded-full"
                       />
                     </div>
-                    <span className="text-[11px] font-mono text-muted-foreground w-12 text-right">{formatPercent(pct * 100)}</span>
+                    <span className="text-[11px] font-mono text-muted-foreground w-12 text-right">%{formatNumber(pct)}</span>
                   </div>
                 );
               })}
