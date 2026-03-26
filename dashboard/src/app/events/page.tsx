@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -9,7 +9,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
-import { Newspaper, ChevronLeft, ChevronRight, X, ExternalLink } from "lucide-react";
+import { Newspaper, ChevronLeft, ChevronRight, X, ExternalLink, Search } from "lucide-react";
 import type { EventOut, EventDetailOut } from "@/types";
 
 const stagger = {
@@ -134,10 +134,26 @@ function EventDetailModal({
 
 export default function EventsPage() {
   const [sourceFilter, setSourceFilter] = useState("");
+  const [tickerInput, setTickerInput] = useState("");
   const [tickerFilter, setTickerFilter] = useState("");
   const [page, setPage] = useState(0);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const limit = 25;
+
+  const handleTickerChange = useCallback((value: string) => {
+    const upper = value.toUpperCase();
+    setTickerInput(upper);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setTickerFilter(upper);
+      setPage(0);
+    }, 500);
+  }, []);
+
+  useEffect(() => {
+    return () => clearTimeout(debounceRef.current);
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ["events", sourceFilter, tickerFilter, page],
@@ -193,12 +209,22 @@ export default function EventsPage() {
             </button>
           ))}
         </div>
-        <Input
-          placeholder="Ticker filtrele..."
-          value={tickerFilter}
-          onChange={(e) => { setTickerFilter(e.target.value.toUpperCase()); setPage(0); }}
-          className="w-40 h-8 text-xs"
-        />
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Ticker (orn: THYAO)"
+            value={tickerInput}
+            onChange={(e) => handleTickerChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                clearTimeout(debounceRef.current);
+                setTickerFilter(tickerInput);
+                setPage(0);
+              }
+            }}
+            className="w-44 h-8 text-xs pl-8"
+          />
+        </div>
       </motion.div>
 
       {/* Table */}

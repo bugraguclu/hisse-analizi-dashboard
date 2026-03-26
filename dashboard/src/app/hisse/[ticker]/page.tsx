@@ -141,17 +141,17 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
+              <CartesianGrid strokeDasharray="4 8" stroke="var(--color-muted-foreground)" strokeOpacity={0.3} vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
               <Tooltip
-                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--card-foreground))", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}
+                contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10, fontSize: 12, color: "var(--color-card-foreground)", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}
               />
-              <Area type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#colorClose)" />
+              <Area type="monotone" dataKey="close" stroke="var(--color-primary)" strokeWidth={2} fill="url(#colorClose)" />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -164,10 +164,10 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="4 8" stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatCompact(v)} />
-                <Bar dataKey="volume" fill="hsl(var(--primary))" opacity={0.4} radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="4 8" stroke="var(--color-muted-foreground)" strokeOpacity={0.3} vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatCompact(v)} />
+                <Bar dataKey="volume" fill="var(--color-primary)" opacity={0.4} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <EmptyState />}

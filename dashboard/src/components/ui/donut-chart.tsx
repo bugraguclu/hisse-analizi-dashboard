@@ -78,7 +78,7 @@ const DonutChart = React.forwardRef<HTMLDivElement, DonutChartProps>(
             cy={size / 2}
             r={radius}
             fill="transparent"
-            stroke="hsl(var(--border) / 0.5)"
+            stroke="var(--color-border)"
             strokeWidth={strokeWidth}
           />
           <AnimatePresence>

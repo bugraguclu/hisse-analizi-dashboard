@@ -106,10 +106,27 @@ export default function MakroPage() {
           <p className="text-[11px] text-muted-foreground mt-1">TCMB Haftalik Repo</p>
         </MacroCard>
         <MacroCard title="Enflasyon (TUFE)" icon={BarChart3} index={2}>
-          <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
-            {inf ? formatPercent(Number(inf.rate || inf.value || inf.cpi || 0)) : infQ.isLoading ? "..." : "-"}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">Yillik Tuketici Fiyat Endeksi</p>
+          {inf ? (
+            <>
+              <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
+                {formatPercent(Number(inf.yearly_inflation ?? inf.rate ?? inf.value ?? inf.cpi ?? 0))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Yillik TUFE</p>
+              {inf.monthly_inflation != null && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-muted-foreground">Aylik:</span>
+                  <span className="text-sm font-bold font-mono text-foreground">{formatPercent(Number(inf.monthly_inflation))}</span>
+                </div>
+              )}
+              {inf.year_month && (
+                <p className="text-[10px] text-muted-foreground mt-1">{String(inf.year_month)}</p>
+              )}
+            </>
+          ) : infQ.isLoading ? (
+            <div className="text-3xl font-bold font-mono tracking-tight">...</div>
+          ) : (
+            <div className="text-3xl font-bold font-mono tracking-tight">-</div>
+          )}
         </MacroCard>
         <FxCard label="USD/TRY" data={usdQ.data as Record<string, unknown> | null} isLoading={usdQ.isLoading} index={3} />
         <FxCard label="EUR/TRY" data={eurQ.data as Record<string, unknown> | null} isLoading={eurQ.isLoading} index={4} />

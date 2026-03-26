@@ -288,26 +288,26 @@ function PerformanceChart() {
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.15} />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} />
-              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickMargin={10} interval="preserveStartEnd" />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickMargin={10} tickFormatter={(v) => formatCompact(v)} domain={["dataMin - 50", "dataMax + 50"]} />
+              <CartesianGrid strokeDasharray="4 8" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.3} />
+              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickMargin={10} interval="preserveStartEnd" />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickMargin={10} tickFormatter={(v) => formatCompact(v)} domain={["dataMin - 50", "dataMax + 50"]} />
               <Tooltip
                 contentStyle={{
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
+                  background: "var(--color-card)",
+                  border: "1px solid var(--color-border)",
                   borderRadius: "10px",
                   fontSize: "12px",
-                  color: "hsl(var(--card-foreground))",
+                  color: "var(--color-card-foreground)",
                   boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
                 }}
-                labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+                labelStyle={{ color: "var(--color-muted-foreground)" }}
                 formatter={(value: unknown) => [`${formatNumber(Number(value))}`, "BIST 100"]}
               />
-              <Area type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#chartGradient)" />
+              <Area type="monotone" dataKey="close" stroke="var(--color-primary)" strokeWidth={2} fill="url(#chartGradient)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>

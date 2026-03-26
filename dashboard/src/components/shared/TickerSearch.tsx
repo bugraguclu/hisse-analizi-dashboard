@@ -15,15 +15,23 @@ interface SearchResult {
   sector?: string;
 }
 
+function normalizeItem(item: unknown): SearchResult {
+  if (typeof item === "string") return { symbol: item, ticker: item, name: "" };
+  if (item && typeof item === "object") return item as SearchResult;
+  return { symbol: String(item), ticker: String(item), name: "" };
+}
+
 function extractResults(data: unknown): SearchResult[] {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === "object") {
+  let raw: unknown[] = [];
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
-    if (Array.isArray(obj.results)) return obj.results;
-    if (Array.isArray(obj.data)) return obj.data;
-    if (Array.isArray(obj.companies)) return obj.companies;
+    if (Array.isArray(obj.results)) raw = obj.results;
+    else if (Array.isArray(obj.data)) raw = obj.data;
+    else if (Array.isArray(obj.companies)) raw = obj.companies;
   }
-  return [];
+  return raw.map(normalizeItem);
 }
 
 function getTargetPath(pathname: string, ticker: string): string {

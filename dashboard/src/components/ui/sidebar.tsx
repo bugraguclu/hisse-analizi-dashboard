@@ -91,7 +91,7 @@ export const DesktopSidebar = ({
 
   const handleMouseLeave = useCallback(() => {
     clearTimeout(leaveTimer.current);
-    leaveTimer.current = setTimeout(() => setOpen(false), 200);
+    leaveTimer.current = setTimeout(() => setOpen(false), 300);
   }, [setOpen]);
 
   return (
@@ -105,9 +105,10 @@ export const DesktopSidebar = ({
       animate={{
         width: animate ? (open ? "260px" : "64px") : "260px",
       }}
-      transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as const }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      style={{ minWidth: open ? "260px" : "64px" }}
       {...props}
     >
       {children}
@@ -199,7 +200,7 @@ export const SidebarLink = ({
           display: animate ? (open ? "inline-block" : "none") : "inline-block",
           opacity: animate ? (open ? 1 : 0) : 1,
         }}
-        transition={{ duration: 0.15 }}
+        transition={{ duration: 0.2, delay: open ? 0.1 : 0 }}
         className="text-sm whitespace-pre inline-block !p-0 !m-0"
       >
         {link.label}
