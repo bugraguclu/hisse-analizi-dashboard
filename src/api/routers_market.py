@@ -8,6 +8,7 @@ from src.adapters.index_adapter import get_index_data, get_index_info, list_indi
 from src.adapters.search_adapter import search_symbol, list_companies
 from src.adapters.twitter_adapter import get_tweets
 from src.adapters.stream_adapter import get_snapshot
+from src.api.dependencies import validate_ticker
 
 market_router = APIRouter(prefix="/market", tags=["market"])
 
@@ -51,13 +52,13 @@ async def indices():
 @market_router.get("/index/{symbol}")
 async def index_data(symbol: str = "XU100", period: str = Query(default="1ay")):
     """Endeks fiyat verisi."""
-    return await get_index_data(symbol.upper(), period=period)
+    return await get_index_data(validate_ticker(symbol), period=period)
 
 
 @market_router.get("/index/{symbol}/info")
 async def index_info(symbol: str = "XU100"):
     """Endeks bilgileri."""
-    return await get_index_info(symbol.upper())
+    return await get_index_info(validate_ticker(symbol))
 
 
 # --- Search ---
@@ -79,7 +80,7 @@ async def all_companies():
 @market_router.get("/tweets/{ticker}")
 async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
     """Hisse ile ilgili tweet'leri getir."""
-    return await get_tweets(ticker.upper(), limit=limit)
+    return await get_tweets(validate_ticker(ticker), limit=limit)
 
 
 # --- Ticker History (live) ---
@@ -87,7 +88,7 @@ async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
 @market_router.get("/ticker/{ticker}/history")
 async def ticker_history(ticker: str, period: str = Query(default="1ay")):
     """Hisse fiyat gecmisi (canli, borsapy uzerinden)."""
-    return await get_ticker_history(ticker.upper(), period=period)
+    return await get_ticker_history(validate_ticker(ticker), period=period)
 
 
 # --- Snapshot ---
@@ -95,5 +96,5 @@ async def ticker_history(ticker: str, period: str = Query(default="1ay")):
 @market_router.get("/snapshot")
 async def snapshot(symbols: str = Query(description="Virgul ile ayrilmis semboller, orn: THYAO,GARAN,SISE")):
     """Birden fazla hisse icin anlik fiyat snapshot'i."""
-    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    symbol_list = [validate_ticker(s) for s in symbols.split(",") if s.strip()]
     return await get_snapshot(symbol_list)

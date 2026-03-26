@@ -323,12 +323,13 @@ function WatchlistTable() {
     staleTime: 120_000,
   });
 
-  const results =
-    screenerData && typeof screenerData === "object" && "results" in (screenerData as Record<string, unknown>)
-      ? ((screenerData as Record<string, unknown>).results as Array<Record<string, unknown>>)
-      : Array.isArray(screenerData)
-        ? (screenerData as Array<Record<string, unknown>>)
-        : [];
+  // Backend returns: {"filters": {...}, "results": [...]}
+  const screenerObj = screenerData as Record<string, unknown> | null;
+  const results = screenerObj?.results
+    ? (screenerObj.results as Array<Record<string, unknown>>)
+    : Array.isArray(screenerData)
+      ? (screenerData as Array<Record<string, unknown>>)
+      : [];
 
   return (
     <motion.div

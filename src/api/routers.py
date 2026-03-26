@@ -49,7 +49,7 @@ from src.schemas.events import (
     FinancialStatementOut,
     FinancialRatioOut,
 )
-from src.api.dependencies import require_admin
+from src.api.dependencies import require_admin, validate_ticker
 
 DB = Annotated[AsyncSession, Depends(get_db)]
 
@@ -77,7 +77,7 @@ async def list_companies(db: DB):
 @router.get("/companies/{ticker}", response_model=CompanyOut)
 async def get_company(ticker: str, db: DB):
     repo = CompanyRepository(db)
-    company = await repo.get_by_ticker(ticker.upper())
+    company = await repo.get_by_ticker(validate_ticker(ticker))
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     return company
@@ -137,13 +137,13 @@ async def list_prices(
     limit: int = Query(default=100, le=500),
 ):
     repo = PriceDataRepository(db)
-    return await repo.get_list(ticker=ticker, since=since, until=until, interval=interval, limit=limit)
+    return await repo.get_list(ticker=validate_ticker(ticker), since=since, until=until, interval=interval, limit=limit)
 
 
 @router.get("/prices/latest", response_model=PriceOut | None)
 async def latest_price(db: DB, ticker: str = "THYAO"):
     repo = PriceDataRepository(db)
-    return await repo.get_latest(ticker)
+    return await repo.get_latest(validate_ticker(ticker))
 
 
 @router.get("/financials", response_model=list[FinancialStatementOut])
@@ -153,7 +153,7 @@ async def list_financials(
     statement_type: str | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
 ):
     company_repo = CompanyRepository(db)
-    company = await company_repo.get_by_ticker(ticker.upper())
+    company = await company_repo.get_by_ticker(validate_ticker(ticker))
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     repo = FinancialStatementRepository(db)
@@ -166,7 +166,7 @@ async def list_ratios(
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
 ):
     company_repo = CompanyRepository(db)
-    company = await company_repo.get_by_ticker(ticker.upper())
+    company = await company_repo.get_by_ticker(validate_ticker(ticker))
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     repo = FinancialRatioRepository(db)

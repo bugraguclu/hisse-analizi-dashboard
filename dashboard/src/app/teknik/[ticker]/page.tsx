@@ -65,17 +65,31 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
   const supertrendQ = useQuery({ queryKey: ["supertrend", t], queryFn: () => api.supertrend(t) });
   const stochasticQ = useQuery({ queryKey: ["stochastic", t], queryFn: () => api.stochastic(t) });
 
-  const signals = signalsQ.data as Record<string, unknown> | null;
-  const signalMap = (signals?.signals || signals) as Record<string, string> | undefined;
+  // Backend returns: {"ticker": ..., "signals": {...}}
+  const signalsRaw = signalsQ.data as Record<string, unknown> | null;
+  const signalMap = (signalsRaw?.signals && typeof signalsRaw.signals === "object"
+    ? signalsRaw.signals
+    : null) as Record<string, string> | null;
 
+  // Backend returns: {"ticker": ..., "indicator": "RSI", "period": 14, "value": 65.12}
   const rsiData = rsiQ.data as Record<string, unknown> | null;
-  const rsiArr = rsiData ? (Array.isArray(rsiData.rsi) ? rsiData.rsi : Array.isArray(rsiData.data) ? rsiData.data : Array.isArray(rsiData) ? rsiData : []) : [];
-  const rsiVal = rsiArr.length > 0 ? Number(typeof rsiArr[rsiArr.length - 1] === "number" ? rsiArr[rsiArr.length - 1] : (rsiArr[rsiArr.length - 1] as Record<string, unknown>)?.rsi || (rsiArr[rsiArr.length - 1] as Record<string, unknown>)?.value || 0) : null;
+  const rsiVal = rsiData?.value != null ? Number(rsiData.value) : null;
 
-  const macdData = macdQ.data as Record<string, unknown> | null;
-  const bollingerData = bollingerQ.data as Record<string, unknown> | null;
-  const stochasticData = stochasticQ.data as Record<string, unknown> | null;
-  const supertrendData = supertrendQ.data as Record<string, unknown> | null;
+  // Backend returns: {"ticker": ..., "indicator": "MACD", "data": {"macd": ..., "signal": ..., "histogram": ...}}
+  const macdRaw = macdQ.data as Record<string, unknown> | null;
+  const macdData = (macdRaw?.data && typeof macdRaw.data === "object" ? macdRaw.data : macdRaw) as Record<string, unknown> | null;
+
+  // Backend returns: {"ticker": ..., "indicator": "BOLLINGER", "data": {"upper": ..., "middle": ..., "lower": ...}}
+  const bollingerRaw = bollingerQ.data as Record<string, unknown> | null;
+  const bollingerData = (bollingerRaw?.data && typeof bollingerRaw.data === "object" ? bollingerRaw.data : bollingerRaw) as Record<string, unknown> | null;
+
+  // Backend returns: {"ticker": ..., "indicator": "STOCHASTIC", "data": {"k": ..., "d": ...}}
+  const stochasticRaw = stochasticQ.data as Record<string, unknown> | null;
+  const stochasticData = (stochasticRaw?.data && typeof stochasticRaw.data === "object" ? stochasticRaw.data : stochasticRaw) as Record<string, unknown> | null;
+
+  // Backend returns: {"ticker": ..., "indicator": "SUPERTREND", "data": {"value": ..., "direction": ...}}
+  const supertrendRaw = supertrendQ.data as Record<string, unknown> | null;
+  const supertrendData = (supertrendRaw?.data && typeof supertrendRaw.data === "object" ? supertrendRaw.data : supertrendRaw) as Record<string, unknown> | null;
 
   function handleTickerSelect(newTicker: string) {
     router.push(`/teknik/${newTicker.toUpperCase()}`);
@@ -105,7 +119,7 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
       </div>
 
       {/* Signal Summary */}
-      {signalsQ.isLoading ? <LoadingSpinner /> : signalMap && typeof signalMap === "object" ? (
+      {signalsQ.isLoading ? <LoadingSpinner /> : signalMap && typeof signalMap === "object" && Object.keys(signalMap).length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {Object.entries(signalMap).map(([key, val], index) => (
             <SignalCard key={key} label={key} signal={String(val)} index={index} />

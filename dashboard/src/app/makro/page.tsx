@@ -34,8 +34,16 @@ function FxCard({ label, data, isLoading, index }: { label: string; data: Record
   if (isLoading) return <MacroCard title={label} icon={DollarSign} isLoading={true} index={index}><span /></MacroCard>;
   if (!data) return <MacroCard title={label} icon={DollarSign} index={index}><EmptyState message="Veri yok" /></MacroCard>;
 
-  const price = data.close || data.price || data.rate || data.value;
-  const change = Number(data.change_pct || data.change_percent || 0);
+  // Backend returns: {"currency": ..., "info": {...}, "history": [...]}
+  const info = (data.info && typeof data.info === "object" ? data.info : data) as Record<string, unknown>;
+  const historyArr = Array.isArray(data.history) ? data.history as Record<string, unknown>[] : [];
+  const lastHist = historyArr.length > 0 ? historyArr[historyArr.length - 1] : null;
+  const prevHist = historyArr.length > 1 ? historyArr[historyArr.length - 2] : null;
+
+  const price = info.close ?? info.price ?? info.rate ?? info.value ?? (lastHist ? lastHist.Close ?? lastHist.close : null);
+  const prevPrice = prevHist ? Number(prevHist.Close ?? prevHist.close ?? 0) : 0;
+  const curPrice = price != null ? Number(price) : 0;
+  const change = prevPrice > 0 ? ((curPrice - prevPrice) / prevPrice) * 100 : Number(info.change_pct ?? info.change_percent ?? 0);
   const isUp = change >= 0;
 
   return (
@@ -57,12 +65,23 @@ export default function MakroPage() {
   const gbpQ = useQuery({ queryKey: ["fx-gbp"], queryFn: () => api.fx("GBP") });
   const calQ = useQuery({ queryKey: ["calendar"], queryFn: () => api.calendar() });
 
+  // Backend returns: {"source": "TCMB", "policy_rate": ...}
   const rate = rateQ.data as Record<string, unknown> | null;
-  const rateVal = rate?.rate || rate?.policy_rate || rate?.value;
-  const inf = infQ.data as Record<string, unknown> | null;
+  const policyRateRaw = rate?.policy_rate;
+  const rateVal = typeof policyRateRaw === "object" && policyRateRaw != null
+    ? (policyRateRaw as Record<string, unknown>).value ?? (policyRateRaw as Record<string, unknown>).rate
+    : policyRateRaw ?? rate?.rate ?? rate?.value;
 
-  const calData = calQ.data;
-  const calArr = Array.isArray(calData) ? calData : (calData && typeof calData === "object" && "data" in (calData as Record<string,unknown>)) ? (calData as Record<string,unknown>).data : null;
+  // Backend returns: {"source": "TCMB", "latest": {...}, "tufe_history": [...]}
+  const infRaw = infQ.data as Record<string, unknown> | null;
+  const inf = (infRaw?.latest && typeof infRaw.latest === "object" ? infRaw.latest : infRaw) as Record<string, unknown> | null;
+
+  // Backend returns: {"calendar": [...]}
+  const calData = calQ.data as Record<string, unknown> | null;
+  const calArr = calData?.calendar ? calData.calendar
+    : Array.isArray(calData) ? calData
+    : (calData && typeof calData === "object" && "data" in calData) ? calData.data
+    : null;
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">

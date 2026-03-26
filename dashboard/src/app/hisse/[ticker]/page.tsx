@@ -50,9 +50,15 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   const ratios = Array.isArray(ratiosQ.data) && ratiosQ.data.length > 0 ? ratiosQ.data[0] : null;
   const events = Array.isArray(eventsQ.data) ? eventsQ.data : [];
 
-  const signals = signalsQ.data as Record<string, unknown> | null;
-  const summary = (signals?.signals as Record<string, unknown>)?.summary as Record<string, unknown> | undefined;
-  const recommendation = summary?.recommendation ? String(summary.recommendation) : null;
+  // Backend returns: {"ticker": ..., "signals": {...}}
+  // signals could be {"summary": {"recommendation": "BUY", ...}, "RSI": "AL", ...}
+  const signalsRaw = signalsQ.data as Record<string, unknown> | null;
+  const signalsObj = (signalsRaw?.signals && typeof signalsRaw.signals === "object"
+    ? signalsRaw.signals
+    : signalsRaw) as Record<string, unknown> | null;
+  const summary = signalsObj?.summary as Record<string, unknown> | undefined;
+  const recommendation = summary?.recommendation ? String(summary.recommendation)
+    : summary?.signal ? String(summary.signal) : null;
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">

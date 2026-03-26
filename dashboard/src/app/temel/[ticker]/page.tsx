@@ -42,13 +42,23 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
   const info = infoQ.data as Record<string, unknown> | null;
   const infoObj = (info?.info || info) as Record<string, unknown> | null;
 
-  const recs = recsQ.data;
-  const recsArr = Array.isArray(recs) ? recs : (recs && typeof recs === "object" && "data" in (recs as Record<string,unknown>)) ? (recs as Record<string,unknown>).data : Array.isArray((recs as Record<string,unknown>)?.recommendations) ? (recs as Record<string,unknown>).recommendations : null;
+  // Backend returns: {"ticker": ..., "recommendations": [...]}
+  const recs = recsQ.data as Record<string, unknown> | null;
+  const recsArr = recs?.recommendations ? recs.recommendations
+    : Array.isArray(recs) ? recs
+    : (recs?.data ? recs.data : null);
 
-  const holders = holdersQ.data;
-  const holdersArr = Array.isArray(holders) ? holders : (holders && typeof holders === "object" && "data" in (holders as Record<string,unknown>)) ? (holders as Record<string,unknown>).data : Array.isArray((holders as Record<string,unknown>)?.holders) ? (holders as Record<string,unknown>).holders : null;
+  // Backend returns: {"ticker": ..., "holders": [...]}
+  const holders = holdersQ.data as Record<string, unknown> | null;
+  const holdersArr = holders?.holders ? holders.holders
+    : Array.isArray(holders) ? holders
+    : (holders?.data ? holders.data : null);
 
-  const targets = targetsQ.data as Record<string, unknown> | null;
+  // Backend returns: {"ticker": ..., "targets": {...}}
+  const targetsRaw = targetsQ.data as Record<string, unknown> | null;
+  const targets = (targetsRaw?.targets && typeof targetsRaw.targets === "object"
+    ? targetsRaw.targets
+    : targetsRaw) as Record<string, unknown> | null;
 
   function handleTickerSelect(newTicker: string) {
     router.push(`/temel/${newTicker.toUpperCase()}`);
