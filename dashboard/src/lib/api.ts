@@ -126,6 +126,10 @@ export const api = {
     get(`/fundamentals/${ticker}/price-targets`),
   earningsDates: (ticker: string) =>
     get(`/fundamentals/${ticker}/earnings-dates`),
+  liveRatios: (ticker: string) =>
+    get(`/fundamentals/${ticker}/live-ratios`),
+  liveNews: (ticker: string) =>
+    get(`/fundamentals/${ticker}/live-news`),
 
   // Macro (backend caches 600s)
   tcmb: () => get("/macro/tcmb"),

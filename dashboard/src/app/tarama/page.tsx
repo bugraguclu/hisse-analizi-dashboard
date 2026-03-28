@@ -10,6 +10,7 @@ import { TickerSearch } from "@/components/shared/TickerSearch";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Filter, Search, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
+import { useLocale } from "@/lib/locale-context";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -20,6 +21,7 @@ const stagger = {
 };
 
 export default function TaramaPage() {
+  const { t } = useLocale();
   const [scanCondition, setScanCondition] = useState("");
 
   const screenerQ = useQuery({ queryKey: ["screener"], queryFn: () => api.screener() });
@@ -71,8 +73,8 @@ export default function TaramaPage() {
               <Search className="h-5 w-5 text-purple-500" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Hisse Tarama</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">Screener, sinyal tarama ve endeks verileri</p>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">{t("nav.screening")}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">{t("tarama.screenerDesc")}</p>
             </div>
           </div>
         </motion.div>
@@ -81,7 +83,7 @@ export default function TaramaPage() {
 
       {/* Indices */}
       <motion.div custom={1} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-3">BIST Endeksleri</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">{t("tarama.bistIndices")}</h2>
         {indicesLoading ? <LoadingSpinner /> : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {indicesArr.map((idx, i) => {
@@ -108,18 +110,18 @@ export default function TaramaPage() {
       {/* Screener Table */}
       <motion.div custom={6} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
         <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Hisse Tarama Sonuclari</h2>
-          <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{Array.isArray(stocks) ? stocks.length : 0} hisse</span>
+          <h2 className="text-sm font-semibold text-foreground">{t("tarama.results")}</h2>
+          <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{Array.isArray(stocks) ? stocks.length : 0} {t("common.stocks")}</span>
         </div>
-        {screenerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(stocks) || stocks.length === 0 ? <EmptyState message="Sonuc yok" /> : (
+        {screenerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(stocks) || stocks.length === 0 ? <EmptyState message={t("tarama.noResults")} /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/20">
                   <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Fiyat</th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Degisim</th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Hacim</th>
+                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.price")}</th>
+                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.change")}</th>
+                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("index.volume")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20">
@@ -158,27 +160,27 @@ export default function TaramaPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Teknik Sinyal Tarama</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("tarama.signalScanning")}</h2>
           </div>
           <select
             value={scanCondition}
             onChange={(e) => setScanCondition(e.target.value)}
             className="text-xs border border-border/60 rounded-lg px-3 py-1.5 bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all outline-none"
           >
-            <option value="">Tumu</option>
-            <option value="rsi_oversold">RSI Asiri Satim</option>
-            <option value="rsi_overbought">RSI Asiri Alim</option>
+            <option value="">{t("common.all")}</option>
+            <option value="rsi_oversold">{t("tarama.rsiOversold")}</option>
+            <option value="rsi_overbought">{t("tarama.rsiOverbought")}</option>
             <option value="golden_cross">Golden Cross</option>
           </select>
         </div>
-        {scannerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(scanResults) || scanResults.length === 0 ? <EmptyState message="Tarama sonucu yok" /> : (
+        {scannerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(scanResults) || scanResults.length === 0 ? <EmptyState message={t("tarama.scanNoResults")} /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/40">
                   <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Sinyal</th>
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Deger</th>
+                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.signal")}</th>
+                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("teknik.value")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20">

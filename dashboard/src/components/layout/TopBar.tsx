@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LocaleToggle } from "@/components/ui/locale-toggle";
+import { useLocale } from "@/lib/locale-context";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,24 +13,27 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import type { TranslationKey } from "@/lib/i18n";
 
-const routeLabels: Record<string, string> = {
-  "": "Dashboard",
-  events: "Olaylar & KAP",
-  hisse: "Hisse Analizi",
-  teknik: "Teknik Analiz",
-  temel: "Temel Analiz",
-  makro: "Makro Ekonomi",
-  tarama: "Hisse Tarama",
+const routeLabelKeys: Record<string, TranslationKey> = {
+  "": "nav.dashboard",
+  events: "nav.events",
+  hisse: "nav.stockAnalysis",
+  teknik: "nav.technicalAnalysis",
+  temel: "nav.fundamentalAnalysis",
+  makro: "nav.macroEconomy",
+  tarama: "nav.screening",
 };
 
 export function TopBar() {
   const pathname = usePathname();
+  const { t } = useLocale();
   const segments = pathname.split("/").filter(Boolean);
 
   const breadcrumbs = segments.map((segment, index) => {
     const href = "/" + segments.slice(0, index + 1).join("/");
-    const label = routeLabels[segment] || segment.toUpperCase();
+    const labelKey = routeLabelKeys[segment];
+    const label = labelKey ? t(labelKey) : segment.toUpperCase();
     const isLast = index === segments.length - 1;
     return { href, label, isLast };
   });
@@ -38,7 +43,7 @@ export function TopBar() {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+            <BreadcrumbLink href="/">{t("nav.dashboard")}</BreadcrumbLink>
           </BreadcrumbItem>
           {breadcrumbs.map((crumb) => (
             <span key={crumb.href} className="contents">
@@ -60,6 +65,7 @@ export function TopBar() {
           <TickerSearch />
         </div>
         <div className="h-6 w-px bg-border/40 hidden md:block" />
+        <LocaleToggle />
         <ThemeToggle />
       </div>
     </header>

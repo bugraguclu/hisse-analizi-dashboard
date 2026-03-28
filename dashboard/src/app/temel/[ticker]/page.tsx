@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Building2, TrendingUp, Users, Target } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -31,13 +32,14 @@ function InfoRow({ label, value }: { label: string; value: string | number }) {
 
 export default function TemelPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
-  const t = ticker.toUpperCase();
+  const tk = ticker.toUpperCase();
   const router = useRouter();
+  const { t } = useLocale();
 
-  const infoQ = useQuery({ queryKey: ["company-info", t], queryFn: () => api.companyInfo(t) });
-  const fastInfoQ = useQuery({ queryKey: ["fast-info", t], queryFn: () => api.fastInfo(t) });
-  const targetsQ = useQuery({ queryKey: ["targets", t], queryFn: () => api.priceTargets(t) });
-  const holdersQ = useQuery({ queryKey: ["holders", t], queryFn: () => api.holders(t) });
+  const infoQ = useQuery({ queryKey: ["company-info", tk], queryFn: () => api.companyInfo(tk) });
+  const fastInfoQ = useQuery({ queryKey: ["fast-info", tk], queryFn: () => api.fastInfo(tk) });
+  const targetsQ = useQuery({ queryKey: ["targets", tk], queryFn: () => api.priceTargets(tk) });
+  const holdersQ = useQuery({ queryKey: ["holders", tk], queryFn: () => api.holders(tk) });
 
   const info = infoQ.data as Record<string, unknown> | null;
   const fastInfo = fastInfoQ.data as Record<string, unknown> | null;
@@ -73,12 +75,12 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
               <Building2 className="h-5 w-5 text-blue-500" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Temel Analiz — {t}</h1>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">{t("nav.fundamentalAnalysis")} — {tk}</h1>
               <div className="flex items-center gap-2 mt-0.5">
-                <Link href={`/hisse/${t}`} className="text-[11px] text-primary hover:underline">Hisse</Link>
+                <Link href={`/hisse/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.stockAnalysis")}</Link>
                 <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/teknik/${t}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> Teknik
+                <Link href={`/teknik/${tk}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" /> {t("nav.technical")}
                 </Link>
               </div>
             </div>
@@ -92,21 +94,21 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
         <motion.div custom={1} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Building2 className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Sirket Bilgileri</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("temel.companyInfo")}</h2>
           </div>
-          {(infoQ.isLoading || fastInfoQ.isLoading) ? <LoadingSpinner /> : !infoObj || Object.keys(infoObj).length === 0 ? <EmptyState message="Sirket bilgisi bulunamadi — bu hisse icin yfinance verisi mevcut olmayabilir" /> : (
+          {(infoQ.isLoading || fastInfoQ.isLoading) ? <LoadingSpinner /> : !infoObj || Object.keys(infoObj).length === 0 ? <EmptyState message={t("temel.noCompanyInfo")} /> : (
             <div>
               {[
-                ["Isim", infoObj.longName || infoObj.shortName || infoObj.name || infoObj.long_name || infoObj.short_name || t],
-                ["Sektor", infoObj.sector || infoObj.industry || infoObj.sectorDisp || infoObj.industryDisp || "-"],
-                ["Piyasa Degeri", formatCompact(Number(infoObj.marketCap || infoObj.market_cap || infoObj.marketCapitalization || 0))],
-                ["F/K", (infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio) != null ? formatNumber(Number(infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio)) : "-"],
+                [t("temel.name"), infoObj.longName || infoObj.shortName || infoObj.name || infoObj.long_name || infoObj.short_name || tk],
+                [t("temel.sector"), infoObj.sector || infoObj.industry || infoObj.sectorDisp || infoObj.industryDisp || "-"],
+                [t("temel.marketCap"), formatCompact(Number(infoObj.marketCap || infoObj.market_cap || infoObj.marketCapitalization || 0))],
+                [t("hisse.peRatio"), (infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio) != null ? formatNumber(Number(infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio)) : "-"],
                 ["PD/DD", (infoObj.priceToBook ?? infoObj.price_to_book ?? infoObj.pb_ratio) != null ? formatNumber(Number(infoObj.priceToBook ?? infoObj.price_to_book ?? infoObj.pb_ratio)) : "-"],
-                ["Temettu Verimi", (infoObj.dividendYield ?? infoObj.dividend_yield ?? infoObj.lastDividendValue) != null ? formatPercent(Number(infoObj.dividendYield ?? infoObj.dividend_yield ?? 0) * 100) : "-"],
-                ["Son Fiyat", (infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose) != null ? `₺${formatNumber(Number(infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose))}` : "-"],
-                ["52H Yuksek/Dusuk", (infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh) != null ? `₺${formatNumber(Number(infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh))} / ₺${formatNumber(Number(infoObj.fiftyTwoWeekLow ?? infoObj.fifty_two_week_low ?? infoObj.yearLow ?? 0))}` : "-"],
-                ["Calisan", Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0) > 0 ? formatCompact(Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0)) : "-"],
-                ["Web", infoObj.website || infoObj.web_site || "-"],
+                [t("temel.dividendYield"), (infoObj.dividendYield ?? infoObj.dividend_yield ?? infoObj.lastDividendValue) != null ? formatPercent(Number(infoObj.dividendYield ?? infoObj.dividend_yield ?? 0) * 100) : "-"],
+                [t("temel.lastPrice"), (infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose) != null ? `₺${formatNumber(Number(infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose))}` : "-"],
+                [t("temel.52wHighLow"), (infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh) != null ? `₺${formatNumber(Number(infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh))} / ₺${formatNumber(Number(infoObj.fiftyTwoWeekLow ?? infoObj.fifty_two_week_low ?? infoObj.yearLow ?? 0))}` : "-"],
+                [t("temel.employees"), Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0) > 0 ? formatCompact(Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0)) : "-"],
+                [t("temel.website"), infoObj.website || infoObj.web_site || "-"],
               ].map(([label, value]) => (
                 <InfoRow key={String(label)} label={String(label)} value={String(value)} />
               ))}
@@ -118,17 +120,17 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
         <motion.div custom={3} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Target className="h-4 w-4 text-violet-500" />
-            <h2 className="text-sm font-semibold text-foreground">Hedef Fiyat</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("temel.priceTarget")}</h2>
           </div>
-          {targetsQ.isLoading ? <LoadingSpinner /> : !targets ? <EmptyState message="Hedef fiyat yok" /> : (
+          {targetsQ.isLoading ? <LoadingSpinner /> : !targets ? <EmptyState message={t("temel.noPriceTarget")} /> : (
             <div>
               {[
-                ["Mevcut Fiyat", targets.current || targets.currentPrice],
-                ["Dusuk Hedef", targets.low || targets.targetLowPrice],
-                ["Ortalama Hedef", targets.mean || targets.targetMeanPrice || targets.average],
-                ["Medyan Hedef", targets.median || targets.targetMedianPrice],
-                ["Yuksek Hedef", targets.high || targets.targetHighPrice],
-                ["Analist Sayisi", targets.numberOfAnalysts || targets.numberOfAnalystOpinions || targets.number_of_analysts || targets.count],
+                [t("temel.currentPrice"), targets.current || targets.currentPrice],
+                [t("temel.lowTarget"), targets.low || targets.targetLowPrice],
+                [t("temel.avgTarget"), targets.mean || targets.targetMeanPrice || targets.average],
+                [t("temel.medianTarget"), targets.median || targets.targetMedianPrice],
+                [t("temel.highTarget"), targets.high || targets.targetHighPrice],
+                [t("temel.analystCount"), targets.numberOfAnalysts || targets.numberOfAnalystOpinions || targets.number_of_analysts || targets.count],
               ].filter(([, v]) => v != null).map(([label, value]) => (
                 <InfoRow key={String(label)} label={String(label)} value={typeof value === "number" ? `₺${formatNumber(value)}` : String(value)} />
               ))}
@@ -140,9 +142,9 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
         <motion.div custom={4} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Users className="h-4 w-4 text-teal-500" />
-            <h2 className="text-sm font-semibold text-foreground">Buyuk Ortaklar</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("temel.majorHolders")}</h2>
           </div>
-          {holdersQ.isLoading ? <LoadingSpinner /> : !holdersArr || !Array.isArray(holdersArr) || holdersArr.length === 0 ? <EmptyState message="Ortaklik verisi yok" /> : (
+          {holdersQ.isLoading ? <LoadingSpinner /> : !holdersArr || !Array.isArray(holdersArr) || holdersArr.length === 0 ? <EmptyState message={t("temel.noHolders")} /> : (
             <div className="space-y-2.5">
               {(holdersArr as Record<string, unknown>[]).slice(0, 10).map((h, i) => {
                 const name = String(h.Holder || h.holder || h.name || h.institution || `Ortak ${i + 1}`);

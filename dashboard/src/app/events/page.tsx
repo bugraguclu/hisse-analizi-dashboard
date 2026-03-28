@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { Newspaper, ChevronLeft, ChevronRight, X, ExternalLink, Search } from "lucide-react";
 import type { EventOut, EventDetailOut } from "@/types";
+import { useLocale } from "@/lib/locale-context";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -27,6 +28,7 @@ function EventDetailModal({
   eventId: string;
   onClose: () => void;
 }) {
+  const { t } = useLocale();
   const { data, isLoading } = useQuery({
     queryKey: ["eventDetail", eventId],
     queryFn: () => api.eventDetail(eventId),
@@ -46,7 +48,7 @@ function EventDetailModal({
         className="relative bg-card border border-border/60 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
-          <h3 className="text-sm font-semibold text-foreground">Olay Detayi</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("events.detail")}</h3>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
@@ -59,12 +61,12 @@ function EventDetailModal({
           {isLoading ? (
             <LoadingSpinner />
           ) : !detail ? (
-            <EmptyState message="Olay detayi bulunamadi" />
+            <EmptyState message={t("events.detailNotFound")} />
           ) : (
             <>
               <div>
                 <h2 className="text-base font-semibold text-foreground leading-snug">
-                  {detail.title || "Basliks\u0131z"}
+                  {detail.title || t("events.untitled")}
                 </h2>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   {detail.ticker && (
@@ -105,14 +107,14 @@ function EventDetailModal({
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
                 >
                   <ExternalLink className="h-3 w-3" />
-                  Kaynaga git
+                  {t("events.goToSource")}
                 </a>
               )}
 
               {detail.metadata_json && Object.keys(detail.metadata_json).length > 0 && (
                 <div className="bg-muted/20 rounded-xl p-4">
                   <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Ek Bilgiler
+                    {t("events.additionalInfo")}
                   </h4>
                   <div className="space-y-1.5">
                     {Object.entries(detail.metadata_json).map(([key, val]) => (
@@ -133,6 +135,7 @@ function EventDetailModal({
 }
 
 export default function EventsPage() {
+  const { t } = useLocale();
   const [sourceFilter, setSourceFilter] = useState("");
   const [tickerInput, setTickerInput] = useState("");
   const [tickerFilter, setTickerFilter] = useState("");
@@ -209,9 +212,9 @@ export default function EventsPage() {
   const events: EventOut[] = Array.isArray(data) ? data : [];
   const sources = ["", "kap", "official_news", "official_ir", "price"];
   const sourceLabels: Record<string, string> = {
-    "": "Tumu",
+    "": t("common.all"),
     kap: "KAP",
-    official_news: "Haberler",
+    official_news: t("events.news"),
     official_ir: "IR",
     price: "Fiyat",
   };
@@ -225,8 +228,8 @@ export default function EventsPage() {
               <Newspaper className="h-5 w-5 text-orange-500" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Olaylar & KAP Bildirimleri</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">Tum KAP bildirimleri, haberler ve fiyat olaylari</p>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">{t("events.title")}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">{t("events.subtitle")}</p>
             </div>
           </div>
         </motion.div>
@@ -252,7 +255,7 @@ export default function EventsPage() {
         <div className="relative" ref={inputWrapperRef}>
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10" />
           <Input
-            placeholder="Ticker ara (orn: THY, GAR...)"
+            placeholder={t("events.searchTicker")}
             value={tickerInput}
             onChange={(e) => handleTickerChange(e.target.value)}
             onFocus={() => { if (suggestList.length > 0 && tickerInput.length >= 2) setShowSuggestions(true); }}
@@ -301,19 +304,19 @@ export default function EventsPage() {
         {isLoading ? (
           <LoadingSpinner />
         ) : events.length === 0 ? (
-          <EmptyState message={tickerFilter ? `"${tickerFilter}" icin olay bulunamadi — daha kisa bir arama deneyin` : "Filtreye uygun olay bulunamadi"} />
+          <EmptyState message={tickerFilter ? `"${tickerFilter}" ${t("events.noEventsForTicker")}` : t("events.noEventsFiltered")} />
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/20">
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Tarih</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("events.date")}</th>
                     <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Kaynak</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Baslik</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Kategori</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Onem</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("events.source")}</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("events.heading")}</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("events.category")}</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("events.severity")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/20">
@@ -335,21 +338,21 @@ export default function EventsPage() {
               </table>
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-t border-border/40">
-              <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{events.length} kayit</span>
+              <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{events.length} {t("common.records")}</span>
               <div className="flex gap-1.5">
                 <button
                   disabled={page === 0}
                   onClick={() => setPage(Math.max(0, page - 1))}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 text-foreground hover:bg-muted/30 disabled:opacity-30 transition-colors"
                 >
-                  <ChevronLeft className="h-3 w-3" /> Onceki
+                  <ChevronLeft className="h-3 w-3" /> {t("common.previous")}
                 </button>
                 <button
                   disabled={events.length < limit}
                   onClick={() => setPage(page + 1)}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 text-foreground hover:bg-muted/30 disabled:opacity-30 transition-colors"
                 >
-                  Sonraki <ChevronRight className="h-3 w-3" />
+                  {t("common.next")} <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatCompact, formatDate, formatPercent } from "@/lib/format";
@@ -13,6 +13,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, 
 import { ArrowUpRight, ArrowDownRight, TrendingUp, Building2, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useLocale } from "@/lib/locale-context";
+import type { TranslationKey } from "@/lib/i18n";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -22,36 +24,118 @@ const stagger = {
   }),
 };
 
+const pricePeriodMap: Record<string, string> = {
+  "1G": "1g",
+  "5G": "5g",
+  "1A": "1ay",
+  "3A": "3ay",
+  "6A": "6ay",
+  "YBK": "1y",
+  "1Y": "1y",
+  "5Y": "5y",
+  "Maks.": "max",
+};
+
+function formatPriceChartDate(dateStr: string, period: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  switch (period) {
+    case "1G":
+      return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    case "5G":
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+    case "1A":
+    case "3A":
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+    case "6A":
+      return d.toLocaleDateString("tr-TR", { month: "short", day: "2-digit" });
+    case "YBK":
+    case "1Y":
+      return d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" });
+    case "5Y":
+    case "Maks.":
+      return d.toLocaleDateString("tr-TR", { year: "numeric" });
+    default:
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+  }
+}
+
+function formatRecommendation(rec: string, t: (key: TranslationKey) => string): string {
+  const upper = rec.toUpperCase();
+  if (upper.includes("STRONG") && upper.includes("BUY")) return t("signal.strongBuy");
+  if (upper.includes("STRONG") && upper.includes("SELL")) return t("signal.strongSell");
+  if (upper.includes("BUY")) return t("signal.buy");
+  if (upper.includes("SELL")) return t("signal.sell");
+  if (upper.includes("NEUTRAL")) return t("signal.neutral");
+  return rec;
+}
+
 export default function HissePage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
-  const t = ticker.toUpperCase();
+  const sym = ticker.toUpperCase();
+  const { t } = useLocale();
+  const [pricePeriod, setPricePeriod] = useState("3A");
+  const borsapyPeriod = pricePeriodMap[pricePeriod] ?? "3ay";
 
-  const historyQ = useQuery({ queryKey: ["tickerHistory", t], queryFn: () => api.tickerHistory(t, "3ay") });
-  const ratiosQ = useQuery({ queryKey: ["ratios", t], queryFn: () => api.financialRatios(t) });
-  const eventsQ = useQuery({ queryKey: ["hisse-events", t], queryFn: () => api.events({ ticker: t, limit: 10 }) });
-  const signalsQ = useQuery({ queryKey: ["signals", t], queryFn: () => api.signals(t) });
+  const historyQ = useQuery({ queryKey: ["tickerHistory", sym, borsapyPeriod], queryFn: () => api.tickerHistory(sym, borsapyPeriod) });
+  const ratiosQ = useQuery({ queryKey: ["ratios", sym], queryFn: () => api.financialRatios(sym) });
+  const liveRatiosQ = useQuery({
+    queryKey: ["liveRatios", sym],
+    queryFn: () => api.liveRatios(sym),
+    enabled: !ratiosQ.isLoading && (!Array.isArray(ratiosQ.data) || ratiosQ.data.length === 0),
+  });
+  const eventsQ = useQuery({ queryKey: ["hisse-events", sym], queryFn: () => api.events({ ticker: sym, limit: 10 }) });
+  const liveNewsQ = useQuery({
+    queryKey: ["liveNews", sym],
+    queryFn: () => api.liveNews(sym),
+    enabled: !eventsQ.isLoading && (!Array.isArray(eventsQ.data) || eventsQ.data.length === 0),
+  });
+  const signalsQ = useQuery({ queryKey: ["signals", sym], queryFn: () => api.signals(sym) });
 
   const historyData = (historyQ.data as { data: Array<Record<string, unknown>> } | null)?.data ?? [];
-  const chartData = historyData.map((d) => ({
-    date: new Date(String(d.Date ?? "")).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
-    close: Number(d.Close ?? 0),
-    volume: Number(d.Volume ?? 0),
-    open: Number(d.Open ?? 0),
-    high: Number(d.High ?? 0),
-    low: Number(d.Low ?? 0),
-  }));
+  const chartData = historyData.map((d) => {
+    const dateRaw = String(d.Date ?? d.Datetime ?? d.date ?? d.datetime ?? d.timestamp ?? "");
+    return {
+      date: formatPriceChartDate(dateRaw, pricePeriod),
+      rawDate: dateRaw,
+      close: Number(d.Close ?? 0),
+      volume: Number(d.Volume ?? 0),
+      open: Number(d.Open ?? 0),
+      high: Number(d.High ?? 0),
+      low: Number(d.Low ?? 0),
+    };
+  });
 
+  const first = chartData.length > 0 ? chartData[0] : null;
   const lastPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-  const prevPrice = chartData.length > 1 ? chartData[chartData.length - 2] : null;
-  const change = lastPrice && prevPrice && prevPrice.close > 0
-    ? ((lastPrice.close - prevPrice.close) / prevPrice.close) * 100 : 0;
+  const lastClose = lastPrice?.close ?? 0;
+  const firstClose = first?.close ?? 0;
+  const changeAbs = lastClose - firstClose;
+  const change = firstClose > 0 ? (changeAbs / firstClose) * 100 : 0;
   const isUp = change >= 0;
 
-  const ratios = Array.isArray(ratiosQ.data) && ratiosQ.data.length > 0 ? ratiosQ.data[0] : null;
-  const events = Array.isArray(eventsQ.data) ? eventsQ.data : [];
+  // Try DB ratios first, then live ratios as fallback
+  const dbRatios = Array.isArray(ratiosQ.data) && ratiosQ.data.length > 0 ? ratiosQ.data[0] : null;
+  const liveRatiosRaw = liveRatiosQ.data as Record<string, unknown> | null;
+  const liveRatiosObj = liveRatiosRaw?.ratios as Record<string, unknown> | null;
+  const ratios = dbRatios || liveRatiosObj;
+  const ratiosLoading = ratiosQ.isLoading || (!dbRatios && liveRatiosQ.isLoading);
+
+  // Try DB events first, then live news as fallback
+  const dbEvents = Array.isArray(eventsQ.data) ? eventsQ.data : [];
+  const liveNewsRaw = liveNewsQ.data as Record<string, unknown> | null;
+  const liveNewsArr = Array.isArray(liveNewsRaw?.news) ? (liveNewsRaw.news as Array<Record<string, unknown>>) : [];
+  const liveEventsFormatted = liveNewsArr.map((n, i) => ({
+    id: `live-${i}`,
+    title: String(n.Title ?? n.title ?? "-"),
+    published_at: String(n.Date ?? n.date ?? ""),
+    source_code: "KAP",
+    severity: "INFO" as const,
+  }));
+  const events = dbEvents.length > 0 ? dbEvents : liveEventsFormatted;
+  const eventsLoading = eventsQ.isLoading || (dbEvents.length === 0 && liveNewsQ.isLoading);
 
   // Backend returns: {"ticker": ..., "signals": {...}}
-  // signals could be {"summary": {"recommendation": "BUY", ...}, "RSI": "AL", ...}
   const signalsRaw = signalsQ.data as Record<string, unknown> | null;
   const signalsObj = (signalsRaw?.signals && typeof signalsRaw.signals === "object"
     ? signalsRaw.signals
@@ -60,6 +144,8 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   const recommendation = summary?.recommendation ? String(summary.recommendation)
     : summary?.signal ? String(summary.signal) : null;
 
+  const pricePeriods = Object.keys(pricePeriodMap);
+
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
       {/* Header */}
@@ -67,30 +153,30 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         <motion.div custom={0} variants={stagger} initial="hidden" animate="show">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <span className="text-sm font-bold text-primary">{t.slice(0, 2)}</span>
+              <span className="text-sm font-bold text-primary">{sym.slice(0, 2)}</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">{t}</h1>
+              <h1 className="text-2xl font-bold text-foreground tracking-tight">{sym}</h1>
               <div className="flex items-center gap-2 mt-0.5">
-                <Link href={`/teknik/${t}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> Teknik
+                <Link href={`/teknik/${sym}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" /> {t("nav.technical")}
                 </Link>
                 <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/temel/${t}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
-                  <Building2 className="h-3 w-3" /> Temel
+                <Link href={`/temel/${sym}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
+                  <Building2 className="h-3 w-3" /> {t("nav.fundamental")}
                 </Link>
               </div>
             </div>
             {lastPrice && (
               <div className="flex items-center gap-2 ml-2">
                 <span className="text-2xl font-bold font-mono text-foreground">
-                  <SlidingNumber value={Math.round(lastPrice.close * 100) / 100} />
+                  <SlidingNumber value={Math.round(lastClose * 100) / 100} />
                 </span>
                 <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${
                   isUp ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"
                 }`}>
                   {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {isUp ? "+" : ""}{formatNumber(change)}%
+                  {isUp ? "+" : ""}{formatNumber(change, 2)}%
                 </span>
                 {recommendation && (
                   <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase ${
@@ -98,7 +184,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                       : recommendation.includes("SELL") ? "bg-red-500/10 text-red-600 dark:text-red-400"
                       : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                   }`}>
-                    {recommendation.replace("STRONG_", "Guclu ").replace("BUY", "Al").replace("SELL", "Sat").replace("NEUTRAL", "Notr")}
+                    {formatRecommendation(recommendation, t)}
                   </span>
                 )}
               </div>
@@ -112,11 +198,11 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
       {lastPrice && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: "Acilis", val: formatNumber(lastPrice.open) },
-            { label: "Yuksek", val: formatNumber(lastPrice.high) },
-            { label: "Dusuk", val: formatNumber(lastPrice.low) },
-            { label: "Kapanis", val: formatNumber(lastPrice.close) },
-            { label: "Hacim", val: formatCompact(lastPrice.volume) },
+            { label: t("index.open"), val: formatNumber(lastPrice.open) },
+            { label: t("index.high"), val: formatNumber(lastPrice.high) },
+            { label: t("index.low"), val: formatNumber(lastPrice.low) },
+            { label: t("index.close"), val: formatNumber(lastPrice.close) },
+            { label: t("index.volume"), val: formatCompact(lastPrice.volume) },
           ].map((item, i) => (
             <motion.div
               key={item.label}
@@ -133,25 +219,42 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         </div>
       )}
 
-      {/* Price Chart */}
+      {/* Price Chart with Period Selection */}
       <motion.div custom={6} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Fiyat Grafigi (3 Ay)</h2>
-        {historyQ.isLoading ? <LoadingSpinner /> : chartData.length === 0 ? <EmptyState message="Fiyat verisi bulunamadi" /> : (
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-semibold text-foreground">{t("hisse.priceChart")}</h2>
+        </div>
+        <div className="flex gap-0 border-b border-border/40 mb-4">
+          {pricePeriods.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPricePeriod(p)}
+              className={`px-3 py-2 text-xs font-semibold transition-all border-b-2 ${
+                p === pricePeriod
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+        {historyQ.isLoading ? <LoadingSpinner /> : chartData.length === 0 ? <EmptyState message={t("hisse.noPriceData")} /> : (
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
+                  <stop offset="5%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="4 8" stroke="var(--color-muted-foreground)" strokeOpacity={0.3} vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} interval="equidistantPreserveStart" minTickGap={50} />
               <YAxis tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
               <Tooltip
                 contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10, fontSize: 12, color: "var(--color-card-foreground)", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}
               />
-              <Area type="monotone" dataKey="close" stroke="var(--color-primary)" strokeWidth={2} fill="url(#colorClose)" />
+              <Area type="monotone" dataKey="close" stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} strokeWidth={2} fill="url(#colorClose)" dot={false} activeDot={{ r: 3, fill: isUp ? "rgb(16,185,129)" : "rgb(239,68,68)" }} />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -160,7 +263,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Volume Chart */}
         <motion.div custom={7} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Hacim</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">{t("index.volume")}</h2>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartData}>
@@ -175,19 +278,19 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
 
         {/* Financial Ratios */}
         <motion.div custom={8} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Finansal Oranlar</h2>
-          {ratiosQ.isLoading ? <LoadingSpinner /> : ratiosQ.isError ? <ErrorState message="Finansal oranlar yuklenemedi" onRetry={() => ratiosQ.refetch()} /> : !ratios ? <EmptyState message="Bu hisse icin finansal oran verisi henuz yok" /> : (
+          <h2 className="text-sm font-semibold text-foreground mb-4">{t("hisse.financialRatios")}</h2>
+          {ratiosLoading ? <LoadingSpinner /> : (ratiosQ.isError && liveRatiosQ.isError) ? <ErrorState message={t("hisse.ratiosLoadError")} onRetry={() => { ratiosQ.refetch(); liveRatiosQ.refetch(); }} /> : !ratios ? <EmptyState message={t("hisse.noRatios")} /> : (
             <div className="space-y-3">
               {[
-                { label: "Brut Kar Marji", value: ratios.gross_margin, max: 50, unit: "%", color: "from-amber-500 to-amber-400" },
-                { label: "EBITDA Marji", value: ratios.ebitda_margin, max: 40, unit: "%", color: "from-violet-500 to-violet-400" },
-                { label: "Net Kar Marji", value: ratios.net_margin, max: 30, unit: "%", color: "from-blue-500 to-blue-400" },
+                { label: t("hisse.grossMargin"), value: ratios.gross_margin, max: 50, unit: "%", color: "from-amber-500 to-amber-400" },
+                { label: t("hisse.ebitdaMargin"), value: ratios.ebitda_margin, max: 40, unit: "%", color: "from-violet-500 to-violet-400" },
+                { label: t("hisse.netMargin"), value: ratios.net_margin, max: 30, unit: "%", color: "from-blue-500 to-blue-400" },
                 { label: "ROE", value: ratios.roe, max: 30, unit: "%", color: "from-emerald-500 to-emerald-400" },
                 { label: "ROA", value: ratios.roa, max: 20, unit: "%", color: "from-cyan-500 to-cyan-400" },
-                { label: "Cari Oran", value: ratios.current_ratio, max: 3, unit: "x", color: "from-teal-500 to-teal-400" },
-                { label: "Net Borc/EBITDA", value: ratios.net_debt_ebitda, max: 10, unit: "x", color: "from-red-500 to-red-400" },
-                { label: "Borc/Ozsermaye", value: ratios.debt_to_equity, max: 3, unit: "x", color: "from-orange-500 to-orange-400" },
-                { label: "F/K", value: ratios.pe_ratio, max: 30, unit: "", color: "from-pink-500 to-pink-400" },
+                { label: t("hisse.currentRatio"), value: ratios.current_ratio, max: 3, unit: "x", color: "from-teal-500 to-teal-400" },
+                { label: t("hisse.netDebtEbitda"), value: ratios.net_debt_ebitda, max: 10, unit: "x", color: "from-red-500 to-red-400" },
+                { label: t("hisse.debtToEquity"), value: ratios.debt_to_equity, max: 3, unit: "x", color: "from-orange-500 to-orange-400" },
+                { label: t("hisse.peRatio"), value: ratios.pe_ratio, max: 30, unit: "", color: "from-pink-500 to-pink-400" },
               ].filter((r) => r.value != null).map((r) => {
                 const val = Number(r.value);
                 const pct = Math.min(Math.abs(val) / r.max * 100, 100);
@@ -212,14 +315,14 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                 );
               })}
               {[
-                { label: "Brut Kar Marji", value: ratios.gross_margin },
-                { label: "EBITDA Marji", value: ratios.ebitda_margin },
-                { label: "Net Kar Marji", value: ratios.net_margin },
+                { label: t("hisse.grossMargin"), value: ratios.gross_margin },
+                { label: t("hisse.ebitdaMargin"), value: ratios.ebitda_margin },
+                { label: t("hisse.netMargin"), value: ratios.net_margin },
                 { label: "ROE", value: ratios.roe },
                 { label: "ROA", value: ratios.roa },
-                { label: "Cari Oran", value: ratios.current_ratio },
+                { label: t("hisse.currentRatio"), value: ratios.current_ratio },
               ].every((r) => r.value == null) && (
-                <p className="text-xs text-muted-foreground text-center py-2">Bazi oranlar bu hisse icin hesaplanamamistir</p>
+                <p className="text-xs text-muted-foreground text-center py-2">{t("hisse.someRatiosMissing")}</p>
               )}
             </div>
           )}
@@ -229,9 +332,9 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
       {/* Recent Events */}
       <motion.div custom={9} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border/40">
-          <h2 className="text-sm font-semibold text-foreground">Son Olaylar</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("hisse.recentEvents")}</h2>
         </div>
-        {eventsQ.isLoading ? <LoadingSpinner /> : eventsQ.isError ? <ErrorState message="Olaylar yuklenemedi" onRetry={() => eventsQ.refetch()} /> : events.length === 0 ? <EmptyState message="Bu hisse icin henuz olay kaydedilmemis" /> : (
+        {eventsLoading ? <LoadingSpinner /> : events.length === 0 ? <EmptyState message={t("hisse.noEvents")} /> : (
           <div className="divide-y divide-border/30">
             {events.map((e, i) => (
               <div key={e.id || i} className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">

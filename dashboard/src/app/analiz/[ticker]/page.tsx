@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { TrendingUp, Building2, BarChart3 } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -41,6 +42,7 @@ function SignalIndicator({ label, signal }: { label: string; signal?: string }) 
 }
 
 function TeknikPanel({ ticker }: { ticker: string }) {
+  const { t } = useLocale();
   const rsiQ = useQuery({ queryKey: ["rsi", ticker], queryFn: () => api.rsi(ticker) });
   const macdQ = useQuery({ queryKey: ["macd", ticker], queryFn: () => api.macd(ticker) });
   const bollingerQ = useQuery({ queryKey: ["bollinger", ticker], queryFn: () => api.bollinger(ticker) });
@@ -76,7 +78,7 @@ function TeknikPanel({ ticker }: { ticker: string }) {
                 : rsiVal < 30 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
             }`}>
-              {rsiVal > 70 ? "Asiri Alim" : rsiVal < 30 ? "Asiri Satim" : "Notr"}
+              {rsiVal > 70 ? t("teknik.overbought") : rsiVal < 30 ? t("teknik.oversold") : t("teknik.neutral")}
             </span>
           </div>
         ) : <EmptyState message="RSI verisi yok" />}
@@ -103,13 +105,13 @@ function TeknikPanel({ ticker }: { ticker: string }) {
 
       {/* Bollinger */}
       <div className="bg-card rounded-xl border border-border/60 p-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Bollinger Bantlari</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("teknik.bollingerBands")}</h3>
         {bollData ? (
           <div className="grid grid-cols-3 gap-3">
             {[
-              ["Ust", bollData.upper],
-              ["Orta", bollData.middle],
-              ["Alt", bollData.lower],
+              [t("teknik.upper"), bollData.upper],
+              [t("teknik.middle"), bollData.middle],
+              [t("teknik.lower"), bollData.lower],
             ].map(([label, val]) => (
               <div key={String(label)}>
                 <span className="text-[10px] text-muted-foreground">{String(label)}</span>
@@ -123,7 +125,7 @@ function TeknikPanel({ ticker }: { ticker: string }) {
       {/* Signals */}
       {signalsObj && (
         <div className="bg-card rounded-xl border border-border/60 p-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sinyaller</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("teknik.signals")}</h3>
           {Object.entries(signalsObj)
             .filter(([key]) => key !== "summary" && typeof signalsObj[key] === "string")
             .map(([key, val]) => (
@@ -136,6 +138,7 @@ function TeknikPanel({ ticker }: { ticker: string }) {
 }
 
 function TemelPanel({ ticker }: { ticker: string }) {
+  const { t } = useLocale();
   const infoQ = useQuery({ queryKey: ["company-info", ticker], queryFn: () => api.companyInfo(ticker) });
   const targetsQ = useQuery({ queryKey: ["targets", ticker], queryFn: () => api.priceTargets(ticker) });
   const holdersQ = useQuery({ queryKey: ["holders", ticker], queryFn: () => api.holders(ticker) });
@@ -160,14 +163,14 @@ function TemelPanel({ ticker }: { ticker: string }) {
     <div className="space-y-4">
       {/* Company Info */}
       <div className="bg-card rounded-xl border border-border/60 p-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sirket Bilgileri</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("temel.companyInfo")}</h3>
         {infoObj && Object.keys(infoObj).length > 0 ? (
           <div className="space-y-0">
             {[
-              ["Isim", infoObj.longName || infoObj.shortName || infoObj.name || ticker],
-              ["Sektor", infoObj.sector || infoObj.industry || "-"],
-              ["Piyasa Degeri", formatCompact(Number(infoObj.marketCap || infoObj.market_cap || 0))],
-              ["F/K", infoObj.trailingPE != null ? formatNumber(Number(infoObj.trailingPE)) : "-"],
+              [t("temel.name"), infoObj.longName || infoObj.shortName || infoObj.name || ticker],
+              [t("temel.sector"), infoObj.sector || infoObj.industry || "-"],
+              [t("temel.marketCap"), formatCompact(Number(infoObj.marketCap || infoObj.market_cap || 0))],
+              [t("hisse.peRatio"), infoObj.trailingPE != null ? formatNumber(Number(infoObj.trailingPE)) : "-"],
               ["PD/DD", infoObj.priceToBook != null ? formatNumber(Number(infoObj.priceToBook)) : "-"],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex justify-between py-2 border-b border-border/30 last:border-0">
@@ -176,18 +179,18 @@ function TemelPanel({ ticker }: { ticker: string }) {
               </div>
             ))}
           </div>
-        ) : <EmptyState message="Sirket bilgisi yok" />}
+        ) : <EmptyState message={t("analiz.noCompanyInfo")} />}
       </div>
 
       {/* Price Targets */}
       <div className="bg-card rounded-xl border border-border/60 p-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Hedef Fiyat</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("temel.priceTarget")}</h3>
         {targets ? (
           <div className="space-y-0">
             {[
-              ["Dusuk", targets.low || targets.targetLowPrice],
-              ["Ortalama", targets.mean || targets.targetMeanPrice || targets.average],
-              ["Yuksek", targets.high || targets.targetHighPrice],
+              [t("temel.lowTarget"), targets.low || targets.targetLowPrice],
+              [t("temel.avgTarget"), targets.mean || targets.targetMeanPrice || targets.average],
+              [t("temel.highTarget"), targets.high || targets.targetHighPrice],
             ].filter(([, v]) => v != null).map(([label, value]) => (
               <div key={String(label)} className="flex justify-between py-2 border-b border-border/30 last:border-0">
                 <span className="text-xs text-muted-foreground">{String(label)}</span>
@@ -197,13 +200,13 @@ function TemelPanel({ ticker }: { ticker: string }) {
               </div>
             ))}
           </div>
-        ) : <EmptyState message="Hedef fiyat yok" />}
+        ) : <EmptyState message={t("temel.noPriceTarget")} />}
       </div>
 
       {/* Top Holders */}
       {holdersArr && Array.isArray(holdersArr) && holdersArr.length > 0 && (
         <div className="bg-card rounded-xl border border-border/60 p-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Buyuk Ortaklar</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("temel.majorHolders")}</h3>
           <div className="space-y-2">
             {(holdersArr as Record<string, unknown>[]).slice(0, 5).map((h, i) => {
               const name = String(h.Holder || h.holder || h.name || h.institution || `Ortak ${i + 1}`);
@@ -224,8 +227,9 @@ function TemelPanel({ ticker }: { ticker: string }) {
 
 export default function AnalizPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
-  const t = ticker.toUpperCase();
+  const tk = ticker.toUpperCase();
   const router = useRouter();
+  const { t } = useLocale();
   const [tab, setTab] = useState<Tab>("yan-yana");
 
   function handleTickerSelect(newTicker: string) {
@@ -233,9 +237,9 @@ export default function AnalizPage({ params }: { params: Promise<{ ticker: strin
   }
 
   const tabs: { key: Tab; label: string; icon: typeof TrendingUp }[] = [
-    { key: "yan-yana", label: "Yan Yana", icon: BarChart3 },
-    { key: "teknik", label: "Teknik", icon: TrendingUp },
-    { key: "temel", label: "Temel", icon: Building2 },
+    { key: "yan-yana", label: t("analiz.sideBySide"), icon: BarChart3 },
+    { key: "teknik", label: t("nav.technical"), icon: TrendingUp },
+    { key: "temel", label: t("nav.fundamental"), icon: Building2 },
   ];
 
   return (
@@ -247,13 +251,13 @@ export default function AnalizPage({ params }: { params: Promise<{ ticker: strin
               <BarChart3 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Kombine Analiz — {t}</h1>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">{t("analiz.combined")} — {tk}</h1>
               <div className="flex items-center gap-2 mt-0.5">
-                <Link href={`/hisse/${t}`} className="text-[11px] text-primary hover:underline">Hisse</Link>
+                <Link href={`/hisse/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.stockAnalysis")}</Link>
                 <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/teknik/${t}`} className="text-[11px] text-primary hover:underline">Teknik</Link>
+                <Link href={`/teknik/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.technical")}</Link>
                 <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/temel/${t}`} className="text-[11px] text-primary hover:underline">Temel</Link>
+                <Link href={`/temel/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.fundamental")}</Link>
               </div>
             </div>
           </div>
@@ -264,20 +268,20 @@ export default function AnalizPage({ params }: { params: Promise<{ ticker: strin
       {/* Tab Switcher */}
       <motion.div custom={1} variants={stagger} initial="hidden" animate="show">
         <div className="bg-muted/50 rounded-lg p-0.5 flex gap-0.5 w-fit">
-          {tabs.map((t) => {
-            const Icon = t.icon;
+          {tabs.map((tabItem) => {
+            const Icon = tabItem.icon;
             return (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={tabItem.key}
+                onClick={() => setTab(tabItem.key)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold transition-all ${
-                  tab === t.key
+                  tab === tabItem.key
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
-                {t.label}
+                {tabItem.label}
               </button>
             );
           })}
@@ -290,24 +294,24 @@ export default function AnalizPage({ params }: { params: Promise<{ ticker: strin
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-emerald-500" /> Teknik Analiz
+                <TrendingUp className="h-4 w-4 text-emerald-500" /> {t("nav.technicalAnalysis")}
               </h2>
-              <TeknikPanel ticker={t} />
+              <TeknikPanel ticker={tk} />
             </div>
             <div>
               <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-blue-500" /> Temel Analiz
+                <Building2 className="h-4 w-4 text-blue-500" /> {t("nav.fundamentalAnalysis")}
               </h2>
-              <TemelPanel ticker={t} />
+              <TemelPanel ticker={tk} />
             </div>
           </div>
         ) : tab === "teknik" ? (
           <div className="max-w-2xl">
-            <TeknikPanel ticker={t} />
+            <TeknikPanel ticker={tk} />
           </div>
         ) : (
           <div className="max-w-2xl">
-            <TemelPanel ticker={t} />
+            <TemelPanel ticker={tk} />
           </div>
         )}
       </motion.div>

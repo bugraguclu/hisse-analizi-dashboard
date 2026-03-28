@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { TrendingUp, Building2, Activity } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -55,15 +56,16 @@ function IndicatorCard({ label, value, subtitle, index }: { label: string; value
 
 export default function TeknikPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
-  const t = ticker.toUpperCase();
+  const tk = ticker.toUpperCase();
   const router = useRouter();
+  const { t } = useLocale();
 
-  const signalsQ = useQuery({ queryKey: ["signals", t], queryFn: () => api.signals(t) });
-  const rsiQ = useQuery({ queryKey: ["rsi", t], queryFn: () => api.rsi(t) });
-  const macdQ = useQuery({ queryKey: ["macd", t], queryFn: () => api.macd(t) });
-  const bollingerQ = useQuery({ queryKey: ["bollinger", t], queryFn: () => api.bollinger(t) });
-  const supertrendQ = useQuery({ queryKey: ["supertrend", t], queryFn: () => api.supertrend(t) });
-  const stochasticQ = useQuery({ queryKey: ["stochastic", t], queryFn: () => api.stochastic(t) });
+  const signalsQ = useQuery({ queryKey: ["signals", tk], queryFn: () => api.signals(tk) });
+  const rsiQ = useQuery({ queryKey: ["rsi", tk], queryFn: () => api.rsi(tk) });
+  const macdQ = useQuery({ queryKey: ["macd", tk], queryFn: () => api.macd(tk) });
+  const bollingerQ = useQuery({ queryKey: ["bollinger", tk], queryFn: () => api.bollinger(tk) });
+  const supertrendQ = useQuery({ queryKey: ["supertrend", tk], queryFn: () => api.supertrend(tk) });
+  const stochasticQ = useQuery({ queryKey: ["stochastic", tk], queryFn: () => api.stochastic(tk) });
 
   // Backend returns: {"ticker": ..., "signals": {...}}
   const signalsRaw = signalsQ.data as Record<string, unknown> | null;
@@ -104,12 +106,12 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
               <TrendingUp className="h-5 w-5 text-emerald-500" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Teknik Analiz — {t}</h1>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">{t("nav.technicalAnalysis")} — {tk}</h1>
               <div className="flex items-center gap-2 mt-0.5">
-                <Link href={`/hisse/${t}`} className="text-[11px] text-primary hover:underline">Hisse</Link>
+                <Link href={`/hisse/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.stockAnalysis")}</Link>
                 <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/temel/${t}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
-                  <Building2 className="h-3 w-3" /> Temel
+                <Link href={`/temel/${tk}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
+                  <Building2 className="h-3 w-3" /> {t("nav.fundamental")}
                 </Link>
               </div>
             </div>
@@ -125,11 +127,11 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
             <SignalCard key={key} label={key} signal={String(val)} index={index} />
           ))}
         </div>
-      ) : <EmptyState message="Sinyal verisi alinamadi" />}
+      ) : <EmptyState message={t("teknik.signalNoData")} />}
 
       {/* Indicator Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        <IndicatorCard index={8} label="RSI (14)" value={rsiVal != null ? formatNumber(rsiVal) : "-"} subtitle={rsiVal != null ? (rsiVal > 70 ? "Asiri alim" : rsiVal < 30 ? "Asiri satim" : "Normal bolge") : undefined} />
+        <IndicatorCard index={8} label="RSI (14)" value={rsiVal != null ? formatNumber(rsiVal) : "-"} subtitle={rsiVal != null ? (rsiVal > 70 ? t("teknik.overbought") : rsiVal < 30 ? t("teknik.oversold") : t("teknik.normalZone")) : undefined} />
         <IndicatorCard index={9} label="MACD" value={macdData?.macd != null ? formatNumber(Number(macdData.macd)) : "-"} />
         <IndicatorCard index={10} label="MACD Signal" value={macdData?.signal != null ? formatNumber(Number(macdData.signal)) : "-"} />
         <IndicatorCard index={11} label="MACD Histogram" value={macdData?.histogram != null ? formatNumber(Number(macdData.histogram)) : "-"} />
@@ -139,8 +141,8 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
         <IndicatorCard
           index={15}
           label="SuperTrend"
-          value={supertrendData?.direction != null ? (Number(supertrendData.direction) > 0 ? "YUKARI" : "ASAGI") : supertrendData?.value != null ? formatNumber(Number(supertrendData.value)) : "-"}
-          subtitle={supertrendData?.value != null ? `Deger: ${formatNumber(Number(supertrendData.value))}` : undefined}
+          value={supertrendData?.direction != null ? (Number(supertrendData.direction) > 0 ? t("teknik.up") : t("teknik.down")) : supertrendData?.value != null ? formatNumber(Number(supertrendData.value)) : "-"}
+          subtitle={supertrendData?.value != null ? `${t("teknik.value")}: ${formatNumber(Number(supertrendData.value))}` : undefined}
         />
       </div>
 
@@ -149,7 +151,7 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
         <motion.div custom={16} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Activity className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">RSI Gostergesi</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("teknik.rsiIndicator")}</h2>
           </div>
           <div className="relative h-3 bg-gradient-to-r from-emerald-500/20 via-amber-500/20 to-red-500/20 rounded-full overflow-hidden">
             <div className="absolute inset-0 flex">
@@ -166,16 +168,16 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
             />
           </div>
           <div className="flex justify-between mt-2 text-[10px] text-muted-foreground font-mono">
-            <span>0 (Asiri Satim)</span>
+            <span>0 ({t("teknik.oversold")})</span>
             <span>30</span>
             <span>50</span>
             <span>70</span>
-            <span>100 (Asiri Alim)</span>
+            <span>100 ({t("teknik.overbought")})</span>
           </div>
           <div className="mt-4 text-center">
             <span className="text-3xl font-bold font-mono text-foreground">{formatNumber(rsiVal)}</span>
             <span className="text-sm text-muted-foreground ml-2">
-              {rsiVal > 70 ? "Asiri Alim Bolgesi" : rsiVal < 30 ? "Asiri Satim Bolgesi" : "Normal Bolge"}
+              {rsiVal > 70 ? t("teknik.overboughtZone") : rsiVal < 30 ? t("teknik.oversoldZone") : t("teknik.normalZone")}
             </span>
           </div>
         </motion.div>

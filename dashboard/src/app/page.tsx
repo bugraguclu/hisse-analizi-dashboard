@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatDate, formatCompact } from "@/lib/format";
+import { useLocale } from "@/lib/locale-context";
 import { SlidingNumber } from "@/components/ui/sliding-number";
 import { CardSkeleton, TableSkeleton } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
@@ -39,6 +40,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { StatsOut, EventOut } from "@/types";
+import type { TranslationKey } from "@/lib/i18n";
 
 const watchlist = [
   { ticker: "THYAO", name: "Turk Hava Yollari" },
@@ -58,6 +60,7 @@ const stagger = {
 };
 
 function MarketDate() {
+  const { t } = useLocale();
   const now = new Date();
   const hour = now.getHours();
   const day = now.getDay();
@@ -68,12 +71,12 @@ function MarketDate() {
     <div>
       <p className="text-sm text-muted-foreground capitalize">{dateStr}</p>
       <div className="flex items-center gap-3 mt-0.5">
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">Piyasa Ozeti</h1>
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">{t("dashboard.marketOverview")}</h1>
         <span className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${
           isOpen ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"
         }`}>
           <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"}`} />
-          {isOpen ? "Piyasa Acik" : "Piyasa Kapali"}
+          {isOpen ? t("dashboard.marketOpen") : t("dashboard.marketClosed")}
         </span>
       </div>
     </div>
@@ -81,6 +84,7 @@ function MarketDate() {
 }
 
 function SystemStatusCard() {
+  const { t } = useLocale();
   const { data: stats, isLoading } = useQuery({
     queryKey: ["stats"],
     queryFn: () => api.stats(),
@@ -94,9 +98,9 @@ function SystemStatusCard() {
   const rawEvents = (stats as StatsOut)?.total_raw_events ?? 0;
 
   const metrics = [
-    { icon: Database, label: "Fiyat Kaydi", value: formatCompact(totalPrices), color: "text-blue-500" },
-    { icon: Zap, label: "Ham Olay", value: formatCompact(rawEvents), color: "text-amber-500" },
-    { icon: Clock, label: "Bekleyen", value: String(pending), color: "text-purple-500" },
+    { icon: Database, label: t("dashboard.priceRecords"), value: formatCompact(totalPrices), color: "text-blue-500" },
+    { icon: Zap, label: t("dashboard.rawEvents"), value: formatCompact(rawEvents), color: "text-amber-500" },
+    { icon: Clock, label: t("dashboard.pending"), value: String(pending), color: "text-purple-500" },
   ];
 
   return (
@@ -110,17 +114,17 @@ function SystemStatusCard() {
       <div className="absolute -top-20 -right-20 w-48 h-48 bg-primary/5 rounded-full blur-3xl" />
       <div className="relative">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Sistem Durumu</span>
+          <span className="text-[11px] font-bold text-primary uppercase tracking-wider">{t("dashboard.systemStatus")}</span>
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             <Activity className="h-3 w-3" />
-            Aktif
+            {t("dashboard.active")}
           </span>
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-4xl font-bold text-foreground font-mono tracking-tight">
             <SlidingNumber value={totalEvents} />
           </span>
-          <span className="text-sm text-muted-foreground">olay islendi</span>
+          <span className="text-sm text-muted-foreground">{t("dashboard.eventsProcessed")}</span>
         </div>
         <div className="grid grid-cols-3 gap-3 mt-5 pt-4 border-t border-border/40">
           {metrics.map((m) => (
@@ -147,6 +151,7 @@ function useIndexSummary(symbol: string) {
 }
 
 function MarketPulse() {
+  const { t } = useLocale();
   const xu100 = useIndexSummary("XU100");
   const xu030 = useIndexSummary("XU030");
   const xusin = useIndexSummary("XUSIN");
@@ -160,10 +165,10 @@ function MarketPulse() {
       const arr = raw?.data ?? [];
       if (arr.length === 0) return { name: raw?.symbol ?? "", value: 0, change: 0 };
       const last = arr[arr.length - 1];
-      const prev = arr.length > 1 ? arr[arr.length - 2] : last;
+      const first = arr[0];
       const close = Number(last.Close ?? 0);
-      const prevClose = Number(prev.Close ?? close);
-      const change = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
+      const firstClose = Number(first.Close ?? close);
+      const change = firstClose > 0 ? ((close - firstClose) / firstClose) * 100 : 0;
       return { name: raw.symbol, value: close, change };
     });
 
@@ -175,7 +180,7 @@ function MarketPulse() {
       animate="show"
       className="bg-card rounded-2xl border border-border/60 p-5"
     >
-      <h2 className="text-sm font-semibold text-foreground mb-4">Piyasa Nabzi</h2>
+      <h2 className="text-sm font-semibold text-foreground mb-4">{t("dashboard.marketPulse")}</h2>
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -231,29 +236,32 @@ const periodMap: Record<string, string> = {
   "Maks.": "max",
 };
 
-const periodLabels: Record<string, string> = {
-  "1G": "bugun",
-  "5G": "5 gun",
-  "1A": "1 ay",
-  "6A": "6 ay",
-  "YBK": "yil basindan",
-  "1Y": "1 yil",
-  "5Y": "5 yil",
-  "Maks.": "tum zamanlar",
+const periodLabelKeys: Record<string, TranslationKey> = {
+  "1G": "index.today",
+  "5G": "index.5days",
+  "1A": "index.1month",
+  "6A": "index.6months",
+  "YBK": "index.ytd",
+  "1Y": "index.1year",
+  "5Y": "index.5years",
+  "Maks.": "index.allTime",
 };
 
 function formatChartDate(dateStr: string, period: string): string {
-  const d = new Date(dateStr);
+  // borsapy may return dates like "2025-03-27 09:30:00+03:00" or ISO strings
+  // Replace space with T for proper parsing if needed
+  const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
+  const d = new Date(normalized);
   if (isNaN(d.getTime())) return dateStr;
   switch (period) {
     case "1G":
-      return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" });
     case "5G":
-      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" });
     case "1A":
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
     case "6A":
-      return d.toLocaleDateString("tr-TR", { month: "short" });
+      return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
     case "YBK":
     case "1Y":
       return d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" });
@@ -266,6 +274,7 @@ function formatChartDate(dateStr: string, period: string): string {
 }
 
 function PerformanceChart() {
+  const { t } = useLocale();
   const [period, setPeriod] = useState("1G");
   const borsapyPeriod = periodMap[period] ?? "1g";
 
@@ -276,6 +285,7 @@ function PerformanceChart() {
 
   const raw = data as { data: Array<Record<string, unknown>> } | null;
   const rawData = raw?.data ?? [];
+  // Deduplicate entries with same formatted date (can happen with intraday data)
   const chartData = rawData.map((d) => {
     const dateRaw = String(d.Date ?? d.Datetime ?? d.date ?? d.datetime ?? d.timestamp ?? "");
     return {
@@ -309,13 +319,17 @@ function PerformanceChart() {
 
   const periods = Object.keys(periodMap);
 
+  // Period label via i18n
+  const periodLabel = periodLabelKeys[period] ? t(periodLabelKeys[period]) : "";
+
   // Last update time
   const lastDateStr = last?.rawDate ?? "";
-  const lastDate = new Date(lastDateStr);
+  const normalizedLastDate = lastDateStr.includes("T") ? lastDateStr : lastDateStr.replace(" ", "T");
+  const lastDate = new Date(normalizedLastDate);
   const dateLabel = !isNaN(lastDate.getTime())
-    ? lastDate.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) +
+    ? lastDate.toLocaleDateString("tr-TR", { day: "numeric", month: "short", timeZone: "Europe/Istanbul" }) +
       " " +
-      lastDate.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) +
+      lastDate.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }) +
       " GMT+3"
     : "";
 
@@ -339,12 +353,12 @@ function PerformanceChart() {
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className={`text-sm font-semibold font-mono ${isUp ? "text-emerald-500" : "text-red-500"}`}>
-                {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "%" : "-%"}{formatNumber(Math.abs(changePct), 2)})
+                {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : "-"}%{formatNumber(Math.abs(changePct), 2)})
               </span>
               <span className={`text-sm ${isUp ? "text-emerald-500" : "text-red-500"}`}>
                 {isUp ? "\u2191" : "\u2193"}
               </span>
-              <span className="text-xs text-muted-foreground ml-1">{periodLabels[period] ?? ""}</span>
+              <span className="text-xs text-muted-foreground ml-1">{periodLabel}</span>
             </div>
             {dateLabel && (
               <p className="text-[10px] text-muted-foreground mt-0.5">{dateLabel}</p>
@@ -394,7 +408,7 @@ function PerformanceChart() {
                     strokeDasharray="4 4"
                     strokeOpacity={0.5}
                     label={{
-                      value: `Onceki kapanıs ${formatNumber(prevClose, 2)}`,
+                      value: `${t("index.prevClose")} ${formatNumber(prevClose, 2)}`,
                       position: "right",
                       fontSize: 9,
                       fill: "var(--color-muted-foreground)",
@@ -447,12 +461,12 @@ function PerformanceChart() {
           {/* Bottom stats bar - like Google Finance */}
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 mt-4 pt-3 border-t border-border/40">
             {[
-              ["Acilis", openPrice],
-              ["Yuksek", highPrice],
-              ["Dusuk", lowPrice],
-              ["Onc kapanıs", prevClose],
-              [period === "1G" || period === "5G" ? "Donem Yuksek" : "52h yuksek", maxClose],
-              [period === "1G" || period === "5G" ? "Donem Dusuk" : "52h dusuk", minClose],
+              [t("index.open"), openPrice],
+              [t("index.high"), highPrice],
+              [t("index.low"), lowPrice],
+              [t("index.prevClose"), prevClose],
+              [period === "1G" || period === "5G" ? t("index.periodHigh") : t("index.52wHigh"), maxClose],
+              [period === "1G" || period === "5G" ? t("index.periodLow") : t("index.52wLow"), minClose],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex flex-col">
                 <span className="text-[10px] text-muted-foreground">{String(label)}</span>
@@ -464,13 +478,14 @@ function PerformanceChart() {
           </div>
         </>
       ) : (
-        <EmptyState message="Grafik verisi bulunamadi" />
+        <EmptyState message={t("dashboard.chartNoData")} />
       )}
     </motion.div>
   );
 }
 
 function WatchlistTable() {
+  const { t } = useLocale();
   const { data: screenerData, isLoading } = useQuery({
     queryKey: ["screener"],
     queryFn: () => api.screener(),
@@ -496,10 +511,10 @@ function WatchlistTable() {
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
           <Eye className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Takip Listesi</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("dashboard.watchlist")}</h2>
         </div>
         <Link href="/tarama" className="text-[11px] font-medium text-primary hover:text-primary/80 flex items-center gap-0.5 transition-colors">
-          Tumu <ChevronRight className="h-3 w-3" />
+          {t("common.all")} <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
 
@@ -554,6 +569,7 @@ function WatchlistTable() {
 }
 
 function LatestInsights() {
+  const { t } = useLocale();
   const { data, isLoading } = useQuery({
     queryKey: ["latestEvents"],
     queryFn: () => api.latestEvents(),
@@ -572,17 +588,17 @@ function LatestInsights() {
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
           <Newspaper className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Son Gelismeler</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("dashboard.latestDevelopments")}</h2>
         </div>
         <Link href="/events" className="text-[11px] font-medium text-primary hover:text-primary/80 flex items-center gap-0.5 transition-colors">
-          Tum raporlar <ChevronRight className="h-3 w-3" />
+          {t("dashboard.allReports")} <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
 
       {isLoading ? (
         <TableSkeleton rows={4} />
       ) : events.length === 0 ? (
-        <div className="px-5 pb-5"><EmptyState message="Henuz olay kaydedilmemis" /></div>
+        <div className="px-5 pb-5"><EmptyState message={t("dashboard.noEventsYet")} /></div>
       ) : (
         <div className="divide-y divide-border/30">
           {events.map((e, i) => (
@@ -618,10 +634,11 @@ function LatestInsights() {
 }
 
 function QuickActions() {
+  const { t } = useLocale();
   const actions = [
-    { label: "Hisse Analizi", href: "/hisse/THYAO", icon: BarChart3, desc: "Detayli hisse analizi", gradient: "from-blue-500/10 to-blue-500/5", iconColor: "text-blue-500" },
-    { label: "Teknik Analiz", href: "/teknik/THYAO", icon: TrendingUp, desc: "RSI, MACD, Bollinger", gradient: "from-emerald-500/10 to-emerald-500/5", iconColor: "text-emerald-500" },
-    { label: "Hisse Tarama", href: "/tarama", icon: RefreshCw, desc: "Filtreli tarama", gradient: "from-purple-500/10 to-purple-500/5", iconColor: "text-purple-500" },
+    { label: t("quick.stockAnalysis"), href: "/hisse/THYAO", icon: BarChart3, desc: t("dashboard.detailedAnalysis"), gradient: "from-blue-500/10 to-blue-500/5", iconColor: "text-blue-500" },
+    { label: t("quick.technicalAnalysis"), href: "/teknik/THYAO", icon: TrendingUp, desc: t("quick.rsiMacdBollinger"), gradient: "from-emerald-500/10 to-emerald-500/5", iconColor: "text-emerald-500" },
+    { label: t("quick.screening"), href: "/tarama", icon: RefreshCw, desc: t("quick.filteredScreening"), gradient: "from-purple-500/10 to-purple-500/5", iconColor: "text-purple-500" },
   ];
 
   return (

@@ -7,6 +7,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Landmark, BarChart3, Globe, DollarSign, Calendar } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -30,9 +31,9 @@ function MacroCard({ title, icon: Icon, children, isLoading: loading, index = 0 
   );
 }
 
-function FxCard({ label, data, isLoading, index }: { label: string; data: Record<string, unknown> | null; isLoading: boolean; index: number }) {
+function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string; data: Record<string, unknown> | null; isLoading: boolean; index: number; noDataLabel: string }) {
   if (isLoading) return <MacroCard title={label} icon={DollarSign} isLoading={true} index={index}><span /></MacroCard>;
-  if (!data) return <MacroCard title={label} icon={DollarSign} index={index}><EmptyState message="Veri yok" /></MacroCard>;
+  if (!data) return <MacroCard title={label} icon={DollarSign} index={index}><EmptyState message={noDataLabel} /></MacroCard>;
 
   // Backend returns: {"currency": ..., "info": {...}, "history": [...]}
   const info = (data.info && typeof data.info === "object" ? data.info : data) as Record<string, unknown>;
@@ -58,6 +59,8 @@ function FxCard({ label, data, isLoading, index }: { label: string; data: Record
 }
 
 export default function MakroPage() {
+  const { t } = useLocale();
+
   const rateQ = useQuery({ queryKey: ["policy-rate"], queryFn: () => api.policyRate() });
   const infQ = useQuery({ queryKey: ["inflation"], queryFn: () => api.inflation() });
   const usdQ = useQuery({ queryKey: ["fx-usd"], queryFn: () => api.fx("USD") });
@@ -91,30 +94,30 @@ export default function MakroPage() {
             <Globe className="h-5 w-5 text-violet-500" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Makro Ekonomi</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">TCMB, enflasyon, doviz kurlari, ekonomik takvim</p>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">{t("nav.macroEconomy")}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{t("makro.tcmbFx")}</p>
           </div>
         </div>
       </motion.div>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MacroCard title="Politika Faizi" icon={Landmark} index={1}>
+        <MacroCard title={t("makro.policyRate")} icon={Landmark} index={1}>
           <div className="text-3xl font-bold font-mono text-primary tracking-tight">
             {rateVal != null ? formatPercent(Number(rateVal)) : rateQ.isLoading ? "..." : "-"}
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">TCMB Haftalik Repo</p>
+          <p className="text-[11px] text-muted-foreground mt-1">{t("makro.weeklyRepo")}</p>
         </MacroCard>
-        <MacroCard title="Enflasyon (TUFE)" icon={BarChart3} index={2}>
+        <MacroCard title={t("makro.inflation")} icon={BarChart3} index={2}>
           {inf ? (
             <>
               <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
                 {formatPercent(Number(inf.yearly_inflation ?? inf.rate ?? inf.value ?? inf.cpi ?? 0))}
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">Yillik TUFE</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{t("makro.yearlyCpi")}</p>
               {inf.monthly_inflation != null && (
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-muted-foreground">Aylik:</span>
+                  <span className="text-xs text-muted-foreground">{t("makro.monthly")}</span>
                   <span className="text-sm font-bold font-mono text-foreground">{formatPercent(Number(inf.monthly_inflation))}</span>
                 </div>
               )}
@@ -128,17 +131,17 @@ export default function MakroPage() {
             <div className="text-3xl font-bold font-mono tracking-tight">-</div>
           )}
         </MacroCard>
-        <FxCard label="USD/TRY" data={usdQ.data as Record<string, unknown> | null} isLoading={usdQ.isLoading} index={3} />
-        <FxCard label="EUR/TRY" data={eurQ.data as Record<string, unknown> | null} isLoading={eurQ.isLoading} index={4} />
+        <FxCard label="USD/TRY" data={usdQ.data as Record<string, unknown> | null} isLoading={usdQ.isLoading} index={3} noDataLabel={t("makro.noData")} />
+        <FxCard label="EUR/TRY" data={eurQ.data as Record<string, unknown> | null} isLoading={eurQ.isLoading} index={4} noDataLabel={t("makro.noData")} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <FxCard label="GBP/TRY" data={gbpQ.data as Record<string, unknown> | null} isLoading={gbpQ.isLoading} index={5} />
+        <FxCard label="GBP/TRY" data={gbpQ.data as Record<string, unknown> | null} isLoading={gbpQ.isLoading} index={5} noDataLabel={t("makro.noData")} />
 
         {/* Economic Calendar */}
-        <MacroCard title="Ekonomik Takvim" icon={Calendar} isLoading={calQ.isLoading} index={6}>
+        <MacroCard title={t("makro.calendar")} icon={Calendar} isLoading={calQ.isLoading} index={6}>
           {!calArr || !Array.isArray(calArr) || calArr.length === 0 ? (
-            <EmptyState message="Takvim verisi yok" />
+            <EmptyState message={t("makro.noCalendar")} />
           ) : (
             <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
               {(calArr as Record<string, unknown>[]).slice(0, 10).map((item, i) => (
