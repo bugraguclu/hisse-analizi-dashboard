@@ -43,7 +43,7 @@ export function LatestEvents() {
             >
               <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatDate(e.published_at)}</td>
               <td className="px-4 py-3 font-semibold text-primary text-xs">{e.ticker || "-"}</td>
-              <td className="px-4 py-3 text-xs text-muted-foreground">{e.source_code}</td>
+              <td className="px-4 py-3 text-xs text-muted-foreground">{e.source_code?.toUpperCase()}</td>
               <td className="px-4 py-3 text-foreground max-w-xs truncate text-sm">{e.title || "-"}</td>
               <td className="px-4 py-3"><CategoryBadge category={e.category} /></td>
               <td className="px-4 py-3"><SeverityBadge severity={e.severity} /></td>

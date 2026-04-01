@@ -80,13 +80,16 @@ function EventDetailModal({
                     {formatDate(detail.published_at)}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
-                    {detail.source_code}
+                    {detail.source_code?.toUpperCase()}
                   </span>
                 </div>
               </div>
 
               {detail.excerpt && (
                 <div className="bg-muted/30 rounded-xl p-4">
+                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    {t("events.summary")}
+                  </h4>
                   <p className="text-sm text-foreground leading-relaxed">{detail.excerpt}</p>
                 </div>
               )}
@@ -328,7 +331,7 @@ export default function EventsPage() {
                     >
                       <td className="px-5 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatDate(e.published_at)}</td>
                       <td className="px-5 py-3 font-semibold text-primary text-xs">{e.ticker || "-"}</td>
-                      <td className="px-5 py-3 text-xs text-muted-foreground">{e.source_code}</td>
+                      <td className="px-5 py-3 text-xs text-muted-foreground">{e.source_code?.toUpperCase()}</td>
                       <td className="px-5 py-3 text-xs text-foreground max-w-md truncate">{e.title || "-"}</td>
                       <td className="px-5 py-3"><CategoryBadge category={e.category} /></td>
                       <td className="px-5 py-3"><SeverityBadge severity={e.severity} /></td>

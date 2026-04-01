@@ -8,7 +8,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Filter, Search, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Filter, Search, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
 
@@ -23,6 +23,8 @@ const stagger = {
 export default function TaramaPage() {
   const { t } = useLocale();
   const [scanCondition, setScanCondition] = useState("");
+  const [stockPage, setStockPage] = useState(0);
+  const stocksPerPage = 25;
 
   const screenerQ = useQuery({ queryKey: ["screener"], queryFn: () => api.screener() });
   const scannerQ = useQuery({
@@ -114,44 +116,70 @@ export default function TaramaPage() {
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{Array.isArray(stocks) ? stocks.length : 0} {t("common.stocks")}</span>
         </div>
         {screenerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(stocks) || stocks.length === 0 ? <EmptyState message={t("tarama.noResults")} /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/20">
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.price")}</th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.change")}</th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("index.volume")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/20">
-                {(stocks as Record<string, unknown>[]).slice(0, 50).map((s, i) => {
-                  const tk = String(s.symbol || s.ticker || s.code || "");
-                  const name = String(s.name || "");
-                  const price = Number(s.criteria_7 || s.close || s.price || s.last || 0);
-                  const change = Number(s.change_pct || s.change_percent || 0);
-                  const vol = Number(s.volume || 0);
-                  const isUp = change >= 0;
-                  return (
-                    <tr key={i} className="hover:bg-muted/15 transition-colors">
-                      <td className="px-5 py-3">
-                        <Link href={`/hisse/${tk}`} className="font-semibold text-primary hover:underline text-xs">{tk}</Link>
-                        {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">{name}</p>}
-                      </td>
-                      <td className="px-5 py-3 font-mono text-xs text-foreground">{price > 0 ? formatNumber(price) : "-"}</td>
-                      <td className={`px-5 py-3 font-mono text-xs font-semibold ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                        <span className="flex items-center gap-1">
-                          {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                          {isUp ? "+" : ""}{formatNumber(change)}%
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{formatCompact(vol)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/20">
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.price")}</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.change")}</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("index.volume")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {(stocks as Record<string, unknown>[]).slice(stockPage * stocksPerPage, (stockPage + 1) * stocksPerPage).map((s, i) => {
+                    const tk = String(s.symbol || s.ticker || s.code || "");
+                    const name = String(s.name || "");
+                    const price = Number(s.criteria_7 || s.close || s.price || s.last || 0);
+                    const change = Number(s.change_pct || s.change_percent || 0);
+                    const vol = Number(s.volume || 0);
+                    const isUp = change >= 0;
+                    return (
+                      <tr key={i} className="hover:bg-muted/15 transition-colors">
+                        <td className="px-5 py-3">
+                          <Link href={`/hisse/${tk}`} className="font-semibold text-primary hover:underline text-xs">{tk}</Link>
+                          {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">{name}</p>}
+                        </td>
+                        <td className="px-5 py-3 font-mono text-xs text-foreground">{price > 0 ? formatNumber(price) : "-"}</td>
+                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                          <span className="flex items-center gap-1">
+                            {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                            {isUp ? "+" : ""}{formatNumber(change)}%
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{formatCompact(vol)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination */}
+            {stocks.length > stocksPerPage && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-border/40">
+                <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
+                  {t("tarama.page")} {stockPage + 1} / {Math.ceil(stocks.length / stocksPerPage)}
+                </span>
+                <div className="flex gap-1.5">
+                  <button
+                    disabled={stockPage === 0}
+                    onClick={() => setStockPage(Math.max(0, stockPage - 1))}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 text-foreground hover:bg-muted/30 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronLeft className="h-3 w-3" /> {t("common.previous")}
+                  </button>
+                  <button
+                    disabled={(stockPage + 1) * stocksPerPage >= stocks.length}
+                    onClick={() => setStockPage(stockPage + 1)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 text-foreground hover:bg-muted/30 disabled:opacity-30 transition-colors"
+                  >
+                    {t("common.next")} <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </motion.div>
 

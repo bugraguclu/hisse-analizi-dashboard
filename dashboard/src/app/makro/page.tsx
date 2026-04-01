@@ -50,7 +50,7 @@ function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string;
   return (
     <MacroCard title={label} icon={DollarSign} index={index}>
       <div className="text-3xl font-bold font-mono text-foreground tracking-tight">{price != null ? formatNumber(Number(price), 4) : "-"}</div>
-      <div className={`flex items-center gap-1.5 text-sm font-semibold mt-2 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+      <div className={`flex items-center gap-1.5 text-sm font-semibold mt-2 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
         {isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
         {isUp ? "+" : ""}{formatNumber(change)}%
       </div>

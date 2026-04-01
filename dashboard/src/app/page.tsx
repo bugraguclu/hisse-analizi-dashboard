@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatDate, formatCompact } from "@/lib/format";
@@ -26,6 +26,7 @@ import {
   Database,
   Zap,
   Clock,
+  X,
 } from "lucide-react";
 import {
   LineChart,
@@ -42,13 +43,47 @@ import {
 import type { StatsOut, EventOut } from "@/types";
 import type { TranslationKey } from "@/lib/i18n";
 
-const watchlist = [
-  { ticker: "THYAO", name: "Turk Hava Yollari" },
-  { ticker: "GARAN", name: "Garanti Bankasi" },
-  { ticker: "SISE", name: "Sise Cam" },
-  { ticker: "ASELS", name: "Aselsan" },
-  { ticker: "EREGL", name: "Eregli Demir Celik" },
+interface WatchlistItem {
+  ticker: string;
+  name: string;
+}
+
+interface WatchlistGroup {
+  id: string;
+  name: string;
+  items: WatchlistItem[];
+}
+
+const DEFAULT_WATCHLISTS: WatchlistGroup[] = [
+  {
+    id: "favorites",
+    name: "Favoriler",
+    items: [
+      { ticker: "THYAO", name: "Turk Hava Yollari" },
+      { ticker: "GARAN", name: "Garanti Bankasi" },
+      { ticker: "SISE", name: "Sise Cam" },
+      { ticker: "ASELS", name: "Aselsan" },
+      { ticker: "EREGL", name: "Eregli Demir Celik" },
+    ],
+  },
 ];
+
+function getWatchlists(): WatchlistGroup[] {
+  if (typeof window === "undefined") return DEFAULT_WATCHLISTS;
+  try {
+    const stored = localStorage.getItem("watchlists");
+    if (stored) {
+      const parsed = JSON.parse(stored) as WatchlistGroup[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_WATCHLISTS;
+}
+
+function saveWatchlists(lists: WatchlistGroup[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("watchlists", JSON.stringify(lists));
+}
 
 const stagger = {
   hidden: { opacity: 0, y: 16 },
@@ -486,19 +521,85 @@ function PerformanceChart() {
 
 function WatchlistTable() {
   const { t } = useLocale();
+  const [watchlists, setWatchlists] = useState<WatchlistGroup[]>(DEFAULT_WATCHLISTS);
+  const [activeListId, setActiveListId] = useState<string>("");
+  const [showManage, setShowManage] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const [addTickerInput, setAddTickerInput] = useState("");
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const loaded = getWatchlists();
+    setWatchlists(loaded);
+    setActiveListId(loaded[0]?.id ?? "");
+  }, []);
+
+  const activeList = watchlists.find((l) => l.id === activeListId) ?? watchlists[0];
+  const activeItems = activeList?.items ?? [];
+  const tickers = activeItems.map((w) => w.ticker);
+
   const { data: screenerData, isLoading } = useQuery({
     queryKey: ["screener"],
     queryFn: () => api.screener(),
     staleTime: 120_000,
   });
 
-  // Backend returns: {"filters": {...}, "results": [...]}
   const screenerObj = screenerData as Record<string, unknown> | null;
   const results = screenerObj?.results
     ? (screenerObj.results as Array<Record<string, unknown>>)
     : Array.isArray(screenerData)
       ? (screenerData as Array<Record<string, unknown>>)
       : [];
+
+  function handleCreateList() {
+    if (!newListName.trim()) return;
+    const newList: WatchlistGroup = {
+      id: `list-${Date.now()}`,
+      name: newListName.trim(),
+      items: [],
+    };
+    const updated = [...watchlists, newList];
+    setWatchlists(updated);
+    saveWatchlists(updated);
+    setActiveListId(newList.id);
+    setNewListName("");
+  }
+
+  function handleDeleteList(listId: string) {
+    if (watchlists.length <= 1) return;
+    const updated = watchlists.filter((l) => l.id !== listId);
+    setWatchlists(updated);
+    saveWatchlists(updated);
+    if (activeListId === listId) setActiveListId(updated[0]?.id ?? "");
+  }
+
+  function handleAddTicker() {
+    if (!addTickerInput.trim() || !activeList) return;
+    const ticker = addTickerInput.trim().toUpperCase();
+    if (activeList.items.some((i) => i.ticker === ticker)) {
+      setAddTickerInput("");
+      return;
+    }
+    const updated = watchlists.map((l) =>
+      l.id === activeList.id
+        ? { ...l, items: [...l.items, { ticker, name: "" }] }
+        : l
+    );
+    setWatchlists(updated);
+    saveWatchlists(updated);
+    setAddTickerInput("");
+  }
+
+  function handleRemoveTicker(ticker: string) {
+    if (!activeList) return;
+    const updated = watchlists.map((l) =>
+      l.id === activeList.id
+        ? { ...l, items: l.items.filter((i) => i.ticker !== ticker) }
+        : l
+    );
+    setWatchlists(updated);
+    saveWatchlists(updated);
+  }
 
   return (
     <motion.div
@@ -508,58 +609,132 @@ function WatchlistTable() {
       animate="show"
       className="bg-card rounded-2xl border border-border/60 overflow-hidden"
     >
+      {/* Header */}
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
           <Eye className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">{t("dashboard.watchlist")}</h2>
         </div>
-        <Link href="/tarama" className="text-[11px] font-medium text-primary hover:text-primary/80 flex items-center gap-0.5 transition-colors">
-          {t("common.all")} <ChevronRight className="h-3 w-3" />
-        </Link>
+        <button
+          onClick={() => setShowManage(!showManage)}
+          className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
+        >
+          {showManage ? t("index.close") : t("watchlist.editLists")}
+        </button>
       </div>
 
+      {/* List tabs */}
+      <div className="flex items-center gap-1 px-5 pb-2 overflow-x-auto">
+        {watchlists.map((list) => (
+          <button
+            key={list.id}
+            onClick={() => setActiveListId(list.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+              activeListId === list.id
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+            }`}
+          >
+            {list.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Manage panel */}
+      {showManage && (
+        <div className="px-5 pb-3 space-y-3 border-b border-border/40">
+          {/* New list */}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder={t("watchlist.listName")}
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateList(); }}
+              className="flex-1 h-8 px-3 text-xs border border-border/60 rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary/40 outline-none"
+            />
+            <button
+              onClick={handleCreateList}
+              disabled={!newListName.trim()}
+              className="px-3 h-8 text-xs font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-30 transition-colors"
+            >
+              {t("watchlist.newList")}
+            </button>
+          </div>
+          {/* Add ticker to active list */}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="THYAO, GARAN..."
+              value={addTickerInput}
+              onChange={(e) => setAddTickerInput(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddTicker(); }}
+              className="flex-1 h-8 px-3 text-xs border border-border/60 rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary/40 outline-none"
+            />
+            <button
+              onClick={handleAddTicker}
+              disabled={!addTickerInput.trim()}
+              className="px-3 h-8 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-30 transition-colors"
+            >
+              {t("watchlist.addStock")}
+            </button>
+          </div>
+          {/* Delete list */}
+          {watchlists.length > 1 && activeList && (
+            <button
+              onClick={() => handleDeleteList(activeList.id)}
+              className="text-[11px] text-red-500 hover:text-red-400 font-medium transition-colors"
+            >
+              {t("watchlist.deleteList")}: {activeList.name}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Stock list */}
       {isLoading ? (
         <div className="p-4 space-y-2">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-12 bg-muted/30 rounded-lg animate-pulse" />
           ))}
         </div>
+      ) : activeItems.length === 0 ? (
+        <div className="px-5 py-8 text-center">
+          <p className="text-xs text-muted-foreground">{t("watchlist.emptyList")}</p>
+        </div>
       ) : (
         <div className="divide-y divide-border/30">
-          {watchlist.map((w, i) => {
+          {activeItems.map((w) => {
             const match = results.find(
               (r) => String(r.symbol ?? r.ticker ?? "").toUpperCase() === w.ticker
             );
             const price = match ? Number(match.criteria_7 ?? match.close ?? match.price ?? 0) : 0;
 
             return (
-              <Link
-                key={w.ticker}
-                href={`/hisse/${w.ticker}`}
-                className="flex items-center justify-between px-5 py-3 hover:bg-muted/20 transition-colors"
-              >
-                <div className="flex items-center gap-3">
+              <div key={w.ticker} className="flex items-center justify-between px-5 py-3 hover:bg-muted/20 transition-colors">
+                <Link href={`/hisse/${w.ticker}`} className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <span className="text-[10px] font-bold text-primary">{w.ticker.slice(0, 2)}</span>
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">{w.ticker}</p>
-                    <p className="text-[11px] text-muted-foreground">{w.name}</p>
+                    {w.name && <p className="text-[11px] text-muted-foreground">{w.name}</p>}
                   </div>
-                </div>
-                <div className="text-right">
+                </Link>
+                <div className="flex items-center gap-3">
                   <p className="text-sm font-semibold text-foreground font-mono">
                     {price > 0 ? formatNumber(price) : "-"}
                   </p>
-                  <Link
-                    href={`/teknik/${w.ticker}`}
-                    className="text-[10px] text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Teknik
-                  </Link>
+                  {showManage && (
+                    <button
+                      onClick={() => handleRemoveTicker(w.ticker)}
+                      className="p-1 rounded hover:bg-red-500/10 transition-colors"
+                    >
+                      <X className="h-3 w-3 text-red-500" />
+                    </button>
+                  )}
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -623,7 +798,7 @@ function LatestInsights() {
                   <SeverityBadge severity={e.severity} />
                 </div>
                 <p className="text-sm text-foreground truncate">{e.title || "-"}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(e.published_at)} &middot; {e.source_code}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(e.published_at)} &middot; {e.source_code?.toUpperCase()}</p>
               </div>
             </Link>
           ))}

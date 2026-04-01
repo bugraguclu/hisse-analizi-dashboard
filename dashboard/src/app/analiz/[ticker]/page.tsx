@@ -9,7 +9,6 @@ import { EmptyState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { TrendingUp, Building2, BarChart3 } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 
@@ -252,13 +251,6 @@ export default function AnalizPage({ params }: { params: Promise<{ ticker: strin
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground tracking-tight">{t("analiz.combined")} — {tk}</h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Link href={`/hisse/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.stockAnalysis")}</Link>
-                <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/teknik/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.technical")}</Link>
-                <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/temel/${tk}`} className="text-[11px] text-primary hover:underline">{t("nav.fundamental")}</Link>
-              </div>
             </div>
           </div>
         </motion.div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatCompact, formatDate, formatPercent } from "@/lib/format";
@@ -10,7 +10,8 @@ import { TickerSearch } from "@/components/shared/TickerSearch";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
 import { SlidingNumber } from "@/components/ui/sliding-number";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from "recharts";
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Building2, BarChart3 } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, TrendingUp, Building2, BarChart3, Sparkles, X, ExternalLink, Loader2 } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
@@ -70,11 +71,80 @@ function formatRecommendation(rec: string, t: (key: TranslationKey) => string): 
   return rec;
 }
 
+function EventDetailModal({ eventId, onClose }: { eventId: string; onClose: () => void }) {
+  const { t } = useLocale();
+  const { data, isLoading } = useQuery({
+    queryKey: ["eventDetail", eventId],
+    queryFn: () => api.eventDetail(eventId),
+    enabled: !!eventId,
+  });
+  const detail = data as Record<string, unknown> | null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.2 }}
+        className="relative bg-card border border-border/60 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
+          <h3 className="text-sm font-semibold text-foreground">{t("events.detail")}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-5 space-y-4" style={{ maxHeight: "calc(80vh - 60px)" }}>
+          {isLoading ? (
+            <LoadingSpinner />
+          ) : !detail ? (
+            <EmptyState message={t("events.detailNotFound")} />
+          ) : (
+            <>
+              <h2 className="text-base font-semibold text-foreground leading-snug">
+                {String(detail.title || t("events.untitled"))}
+              </h2>
+              <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
+                {detail.ticker ? (
+                  <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{String(detail.ticker)}</span>
+                ) : null}
+                <SeverityBadge severity={String(detail.severity ?? "INFO")} />
+                <span className="font-mono">{formatDate(String(detail.published_at ?? ""))}</span>
+                <span>{String(detail.source_code ?? "").toUpperCase()}</span>
+              </div>
+              {detail.excerpt && (
+                <div className="bg-muted/30 rounded-xl p-4">
+                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("events.summary")}</h4>
+                  <p className="text-sm text-foreground leading-relaxed">{String(detail.excerpt)}</p>
+                </div>
+              )}
+              {detail.body_text && (
+                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{String(detail.body_text)}</p>
+              )}
+              {detail.event_url && (
+                <a href={String(detail.event_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+                  <ExternalLink className="h-3 w-3" /> {t("events.goToSource")}
+                </a>
+              )}
+            </>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function HissePage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
   const sym = ticker.toUpperCase();
   const { t } = useLocale();
   const [pricePeriod, setPricePeriod] = useState("3A");
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [showAiReport, setShowAiReport] = useState(false);
+  const [aiReportContent, setAiReportContent] = useState<string | null>(null);
+  const [aiReportLoading, setAiReportLoading] = useState(false);
   const borsapyPeriod = pricePeriodMap[pricePeriod] ?? "3ay";
 
   const historyQ = useQuery({ queryKey: ["tickerHistory", sym, borsapyPeriod], queryFn: () => api.tickerHistory(sym, borsapyPeriod) });
@@ -144,6 +214,32 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   const recommendation = summary?.recommendation ? String(summary.recommendation)
     : summary?.signal ? String(summary.signal) : null;
 
+  const handleGenerateReport = useCallback(async () => {
+    setAiReportLoading(true);
+    setShowAiReport(true);
+    setAiReportContent(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/ai/report/${sym}`,
+        { cache: "no-store" }
+      );
+      if (res.ok) {
+        const json = await res.json() as Record<string, unknown>;
+        setAiReportContent(String(json.report ?? json.content ?? json.analysis ?? JSON.stringify(json)));
+      } else {
+        setAiReportContent(
+          `${sym} icin AI rapor servisi su anda kullanilabilir degil. Lutfen daha sonra tekrar deneyin.`
+        );
+      }
+    } catch {
+      setAiReportContent(
+        `${sym} icin AI rapor servisi su anda kullanilabilir degil. Lutfen daha sonra tekrar deneyin.`
+      );
+    } finally {
+      setAiReportLoading(false);
+    }
+  }, [sym]);
+
   const pricePeriods = Object.keys(pricePeriodMap);
 
   return (
@@ -157,15 +253,6 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground tracking-tight">{sym}</h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Link href={`/teknik/${sym}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> {t("nav.technical")}
-                </Link>
-                <span className="text-muted-foreground text-[11px]">&middot;</span>
-                <Link href={`/temel/${sym}`} className="text-[11px] text-primary hover:underline flex items-center gap-1">
-                  <Building2 className="h-3 w-3" /> {t("nav.fundamental")}
-                </Link>
-              </div>
             </div>
             {lastPrice && (
               <div className="flex items-center gap-2 ml-2">
@@ -329,6 +416,59 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         </motion.div>
       </div>
 
+      {/* AI Report Button */}
+      <motion.div custom={8.5} variants={stagger} initial="hidden" animate="show">
+        <button
+          onClick={handleGenerateReport}
+          disabled={aiReportLoading}
+          className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-2xl px-6 py-4 transition-all shadow-lg hover:shadow-xl disabled:opacity-60"
+        >
+          {aiReportLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Sparkles className="h-5 w-5" />
+          )}
+          <div className="text-left">
+            <span className="text-sm font-semibold block">{t("ai.reportButton")}</span>
+            <span className="text-[11px] text-white/70">{t("ai.reportDesc")}</span>
+          </div>
+        </button>
+      </motion.div>
+
+      {/* AI Report Content */}
+      <AnimatePresence>
+        {showAiReport && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-card rounded-2xl border border-violet-500/30 overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/40">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-500" />
+                <h2 className="text-sm font-semibold text-foreground">{t("ai.reportTitle")} - {sym}</h2>
+              </div>
+              <button onClick={() => setShowAiReport(false)} className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors">
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5">
+              {aiReportLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                  <span className="ml-3 text-sm text-muted-foreground">{t("ai.generating")}</span>
+                </div>
+              ) : aiReportContent ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{aiReportContent}</p>
+                </div>
+              ) : null}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Recent Events */}
       <motion.div custom={9} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border/40">
@@ -337,10 +477,14 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         {eventsLoading ? <LoadingSpinner /> : events.length === 0 ? <EmptyState message={t("hisse.noEvents")} /> : (
           <div className="divide-y divide-border/30">
             {events.map((e, i) => (
-              <div key={e.id || i} className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">
+              <div
+                key={e.id || i}
+                onClick={() => e.id && !String(e.id).startsWith("live-") && setSelectedEventId(e.id)}
+                className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors cursor-pointer"
+              >
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-foreground truncate">{e.title || "-"}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{formatDate(e.published_at)} &middot; {e.source_code}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{formatDate(e.published_at)} &middot; {e.source_code?.toUpperCase()}</div>
                 </div>
                 <SeverityBadge severity={e.severity} />
               </div>
@@ -348,6 +492,16 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           </div>
         )}
       </motion.div>
+
+      {/* Event Detail Modal */}
+      <AnimatePresence>
+        {selectedEventId && (
+          <EventDetailModal
+            eventId={selectedEventId}
+            onClose={() => setSelectedEventId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

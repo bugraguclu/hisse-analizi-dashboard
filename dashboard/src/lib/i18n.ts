@@ -194,6 +194,30 @@ const translations = {
   "analiz.sideBySide": { tr: "Yan Yana", en: "Side by Side", fr: "Côte à côte" },
   "analiz.noCompanyInfo": { tr: "Şirket bilgisi yok", en: "No company info", fr: "Aucune info" },
 
+  // Watchlist
+  "watchlist.title": { tr: "Takip Listesi", en: "Watchlist", fr: "Liste de suivi" },
+  "watchlist.newList": { tr: "Yeni Liste", en: "New List", fr: "Nouvelle liste" },
+  "watchlist.editLists": { tr: "Listeleri Duzenle", en: "Edit Lists", fr: "Modifier les listes" },
+  "watchlist.addStock": { tr: "Hisse Ekle", en: "Add Stock", fr: "Ajouter une action" },
+  "watchlist.listName": { tr: "Liste Adi", en: "List Name", fr: "Nom de la liste" },
+  "watchlist.deleteList": { tr: "Listeyi Sil", en: "Delete List", fr: "Supprimer la liste" },
+  "watchlist.emptyList": { tr: "Bu listede hisse yok", en: "No stocks in this list", fr: "Aucune action dans cette liste" },
+  "watchlist.favorites": { tr: "Favoriler", en: "Favorites", fr: "Favoris" },
+  "watchlist.potential": { tr: "Potansiyel Yukselis", en: "Potential Rise", fr: "Hausse potentielle" },
+
+  // AI Report
+  "ai.reportButton": { tr: "AI Analiz Raporu", en: "AI Analysis Report", fr: "Rapport d'analyse IA" },
+  "ai.reportDesc": { tr: "Yapay zeka destekli detayli finansal analiz raporu", en: "AI-powered detailed financial analysis report", fr: "Rapport d'analyse financière détaillé par IA" },
+  "ai.generating": { tr: "Rapor hazirlaniyor...", en: "Generating report...", fr: "Génération du rapport..." },
+  "ai.reportTitle": { tr: "AI Finansal Analiz Raporu", en: "AI Financial Analysis Report", fr: "Rapport d'analyse financière IA" },
+
+  // Events summary
+  "events.summary": { tr: "Ozet", en: "Summary", fr: "Résumé" },
+
+  // Tarama pagination
+  "tarama.page": { tr: "Sayfa", en: "Page", fr: "Page" },
+  "tarama.perPage": { tr: "hisse/sayfa", en: "stocks/page", fr: "actions/page" },
+
   // Signal labels
   "signal.buy": { tr: "AL", en: "BUY", fr: "ACHAT" },
   "signal.sell": { tr: "SAT", en: "SELL", fr: "VENTE" },
