@@ -20,6 +20,8 @@ import { FinancialStatements } from "@/components/stock/FinancialStatements";
 import { DividendHistory } from "@/components/stock/DividendHistory";
 import { TweetsFeed } from "@/components/stock/TweetsFeed";
 import { EarningsCalendar } from "@/components/stock/EarningsCalendar";
+import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
+import { AllTimeframeSignals } from "@/components/stock/AllTimeframeSignals";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -35,7 +37,7 @@ const pricePeriodMap: Record<string, string> = {
   "1A": "1ay",
   "3A": "3ay",
   "6A": "6ay",
-  "YBK": "1y",
+  "YBK": "ytd",
   "1Y": "1y",
   "5Y": "5y",
   "Maks.": "max",
@@ -496,6 +498,12 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           </div>
         )}
       </motion.div>
+
+      {/* Analyst Recommendations & All Timeframe Signals */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AnalystRecommendations ticker={sym} />
+        <AllTimeframeSignals ticker={sym} />
+      </div>
 
       {/* Financial Statements */}
       <FinancialStatements ticker={sym} />

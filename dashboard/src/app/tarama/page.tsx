@@ -41,6 +41,7 @@ export default function TaramaPage() {
   const xu030Q = useQuery({ queryKey: ["indexData", "XU030"], queryFn: () => api.indexData("XU030", "1ay") });
   const xusinQ = useQuery({ queryKey: ["indexData", "XUSIN"], queryFn: () => api.indexData("XUSIN", "1ay") });
   const xbankQ = useQuery({ queryKey: ["indexData", "XBANK"], queryFn: () => api.indexData("XBANK", "1ay") });
+  const allCompaniesQ = useQuery({ queryKey: ["allCompanies"], queryFn: () => api.allCompanies(), staleTime: 300_000 });
 
   const screenerData = screenerQ.data;
   const stocks = screenerData && typeof screenerData === "object" && "results" in (screenerData as Record<string, unknown>)
@@ -70,6 +71,14 @@ export default function TaramaPage() {
       const change_pct = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
       return { symbol: raw.symbol || indexNames[idx], close, change_pct };
     });
+
+  const allCompaniesRaw = allCompaniesQ.data as Record<string, unknown> | null;
+  const allCompaniesList: Record<string, unknown>[] = Array.isArray(allCompaniesRaw) ? allCompaniesRaw as Record<string, unknown>[]
+    : allCompaniesRaw && typeof allCompaniesRaw === "object" && "companies" in allCompaniesRaw
+    ? (allCompaniesRaw.companies as Record<string, unknown>[])
+    : allCompaniesRaw && typeof allCompaniesRaw === "object" && "data" in allCompaniesRaw
+    ? (allCompaniesRaw.data as Record<string, unknown>[])
+    : [];
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
@@ -286,6 +295,34 @@ export default function TaramaPage() {
           </div>
         )}
       </motion.div>
+
+      {/* All BIST Companies */}
+      {allCompaniesList.length > 0 && (
+        <motion.div custom={8} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
+          <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-foreground">
+              {locale === "en" ? "All BIST Companies" : locale === "fr" ? "Toutes les societes BIST" : "Tum BIST Sirketleri"}
+            </h2>
+            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
+              {allCompaniesList.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-0 divide-x divide-y divide-border/20 max-h-96 overflow-y-auto">
+            {allCompaniesList.map((c, i) => {
+              const symbol = String(c.symbol ?? c.ticker ?? c.code ?? c.name ?? "");
+              const name = String(c.name ?? c.company_name ?? c.shortName ?? c.title ?? "");
+              return (
+                <Link key={i} href={`/hisse/${symbol}`} className="px-4 py-3 hover:bg-muted/10 transition-colors">
+                  <div className="text-xs font-bold text-primary">{symbol}</div>
+                  {name && name !== symbol && (
+                    <div className="text-[10px] text-muted-foreground truncate mt-0.5">{name}</div>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

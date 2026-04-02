@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { Building2, TrendingUp, Users, Target } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
+import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -136,6 +137,11 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
               ))}
             </div>
           )}
+        </motion.div>
+
+        {/* Analyst Recommendations */}
+        <motion.div custom={3.5} variants={stagger} initial="hidden" animate="show">
+          <AnalystRecommendations ticker={tk} />
         </motion.div>
 
         {/* Holders */}

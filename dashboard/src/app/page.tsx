@@ -264,8 +264,9 @@ const periodMap: Record<string, string> = {
   "1G": "1g",
   "5G": "5g",
   "1A": "1ay",
+  "3A": "3ay",
   "6A": "6ay",
-  "YBK": "1y",
+  "YBK": "ytd",
   "1Y": "1y",
   "5Y": "5y",
   "Maks.": "max",
@@ -275,6 +276,7 @@ const periodLabelKeys: Record<string, TranslationKey> = {
   "1G": "index.today",
   "5G": "index.5days",
   "1A": "index.1month",
+  "3A": "index.3months",
   "6A": "index.6months",
   "YBK": "index.ytd",
   "1Y": "index.1year",
@@ -294,6 +296,7 @@ function formatChartDate(dateStr: string, period: string): string {
     case "5G":
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" });
     case "1A":
+    case "3A":
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
     case "6A":
       return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
@@ -538,11 +541,26 @@ function WatchlistTable() {
   const activeItems = activeList?.items ?? [];
   const tickers = activeItems.map((w) => w.ticker);
 
-  const { data: screenerData, isLoading } = useQuery({
+  const { data: snapshotData, isLoading: snapshotLoading } = useQuery({
+    queryKey: ["snapshot", tickers.join(",")],
+    queryFn: () => api.snapshot(tickers),
+    enabled: tickers.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const { data: screenerData, isLoading: screenerLoading } = useQuery({
     queryKey: ["screener"],
     queryFn: () => api.screener(),
     staleTime: 120_000,
   });
+
+  const isLoading = snapshotLoading && screenerLoading;
+
+  const snapshotArr = Array.isArray(snapshotData) ? snapshotData as Record<string, unknown>[]
+    : snapshotData && typeof snapshotData === "object" && "data" in (snapshotData as Record<string, unknown>)
+    ? ((snapshotData as Record<string, unknown>).data as Record<string, unknown>[])
+    : [];
 
   const screenerObj = screenerData as Record<string, unknown> | null;
   const results = screenerObj?.results
@@ -705,10 +723,15 @@ function WatchlistTable() {
       ) : (
         <div className="divide-y divide-border/30">
           {activeItems.map((w) => {
-            const match = results.find(
+            const snapMatch = snapshotArr.find(
+              (s) => String(s.symbol ?? s.ticker ?? "").toUpperCase() === w.ticker
+            );
+            const scrMatch = results.find(
               (r) => String(r.symbol ?? r.ticker ?? "").toUpperCase() === w.ticker
             );
-            const price = match ? Number(match.criteria_7 ?? match.close ?? match.price ?? 0) : 0;
+            const price = snapMatch
+              ? Number(snapMatch.close ?? snapMatch.price ?? snapMatch.last ?? 0)
+              : scrMatch ? Number(scrMatch.criteria_7 ?? scrMatch.close ?? scrMatch.price ?? 0) : 0;
 
             return (
               <div key={w.ticker} className="flex items-center justify-between px-5 py-3 hover:bg-muted/20 transition-colors">

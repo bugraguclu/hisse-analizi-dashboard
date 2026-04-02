@@ -59,6 +59,7 @@ const translations = {
   "index.today": { tr: "bugün", en: "today", fr: "aujourd'hui" },
   "index.5days": { tr: "5 gün", en: "5 days", fr: "5 jours" },
   "index.1month": { tr: "1 ay", en: "1 month", fr: "1 mois" },
+  "index.3months": { tr: "3 ay", en: "3 months", fr: "3 mois" },
   "index.6months": { tr: "6 ay", en: "6 months", fr: "6 mois" },
   "index.ytd": { tr: "yıl başından", en: "year to date", fr: "depuis le début de l'année" },
   "index.1year": { tr: "1 yıl", en: "1 year", fr: "1 an" },
