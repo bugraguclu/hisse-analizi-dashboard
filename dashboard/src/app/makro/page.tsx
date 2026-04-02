@@ -59,7 +59,7 @@ function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string;
 }
 
 export default function MakroPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
 
   const rateQ = useQuery({ queryKey: ["policy-rate"], queryFn: () => api.policyRate() });
   const infQ = useQuery({ queryKey: ["inflation"], queryFn: () => api.inflation() });
@@ -67,6 +67,7 @@ export default function MakroPage() {
   const eurQ = useQuery({ queryKey: ["fx-eur"], queryFn: () => api.fx("EUR") });
   const gbpQ = useQuery({ queryKey: ["fx-gbp"], queryFn: () => api.fx("GBP") });
   const calQ = useQuery({ queryKey: ["calendar"], queryFn: () => api.calendar() });
+  const tcmbQ = useQuery({ queryKey: ["tcmb-detail"], queryFn: () => api.tcmb() });
 
   // Backend returns: {"source": "TCMB", "policy_rate": ...}
   const rate = rateQ.data as Record<string, unknown> | null;
@@ -162,6 +163,47 @@ export default function MakroPage() {
           )}
         </MacroCard>
       </div>
+
+      {/* TCMB Detail */}
+      {(() => {
+        const tcmbRaw = tcmbQ.data as Record<string, unknown> | null;
+        const rates = tcmbRaw?.rates ?? tcmbRaw?.interest_rates ?? tcmbRaw?.data;
+        const tcmbLabels: Record<string, Record<string, string>> = {
+          title: { tr: "TCMB Faiz Oranlari", en: "CBRT Interest Rates", fr: "Taux CBRT" },
+          overnight_lending: { tr: "Gecelik Faiz (Brc. Verme)", en: "Overnight Lending", fr: "Pret au jour le jour" },
+          overnight_borrowing: { tr: "Gecelik Faiz (Brc. Alma)", en: "Overnight Borrowing", fr: "Emprunt au jour le jour" },
+          late_liquidity_lending: { tr: "Gec Likidite (Brc. Verme)", en: "Late Liquidity Lending", fr: "Pret de liquidite tardive" },
+          late_liquidity_borrowing: { tr: "Gec Likidite (Brc. Alma)", en: "Late Liquidity Borrowing", fr: "Emprunt de liquidite tardive" },
+          policy_rate: { tr: "Politika Faizi", en: "Policy Rate", fr: "Taux directeur" },
+        };
+        const rateItems: Array<{ key: string; value: unknown }> = [];
+        if (rates && typeof rates === "object" && !Array.isArray(rates)) {
+          const r = rates as Record<string, unknown>;
+          for (const [k, v] of Object.entries(r)) {
+            if (v != null && typeof v !== "object") rateItems.push({ key: k, value: v });
+          }
+        }
+        return rateItems.length > 0 ? (
+          <motion.div custom={7} variants={stagger} initial="hidden" animate="show">
+            <div className="bg-card rounded-2xl border border-border/60 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Landmark className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">{tcmbLabels.title[locale]}</h2>
+              </div>
+              <div className="space-y-0">
+                {rateItems.map(({ key, value }) => (
+                  <div key={key} className="flex justify-between py-2.5 border-b border-border/30 last:border-0">
+                    <span className="text-xs text-muted-foreground">{tcmbLabels[key]?.[locale] ?? key.replace(/_/g, " ")}</span>
+                    <span className="text-xs font-bold font-mono text-foreground">
+                      {typeof value === "number" ? formatPercent(value) : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        ) : null;
+      })()}
     </div>
   );
 }

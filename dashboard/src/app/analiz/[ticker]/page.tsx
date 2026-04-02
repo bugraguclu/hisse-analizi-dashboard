@@ -11,6 +11,8 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { TrendingUp, Building2, BarChart3 } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
+import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
+import { AllTimeframeSignals } from "@/components/stock/AllTimeframeSignals";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -132,6 +134,9 @@ function TeknikPanel({ ticker }: { ticker: string }) {
             ))}
         </div>
       )}
+
+      {/* All Timeframe Signals */}
+      <AllTimeframeSignals ticker={ticker} />
     </div>
   );
 }
@@ -201,6 +206,9 @@ function TemelPanel({ ticker }: { ticker: string }) {
           </div>
         ) : <EmptyState message={t("temel.noPriceTarget")} />}
       </div>
+
+      {/* Analyst Recommendations */}
+      <AnalystRecommendations ticker={ticker} />
 
       {/* Top Holders */}
       {holdersArr && Array.isArray(holdersArr) && holdersArr.length > 0 && (

@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { TrendingUp, Building2, Activity } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
+import { AllTimeframeSignals } from "@/components/stock/AllTimeframeSignals";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -182,6 +183,9 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
           </div>
         </motion.div>
       )}
+
+      {/* All Timeframe Signals */}
+      <AllTimeframeSignals ticker={tk} />
 
       {/* Stochastic */}
       {stochasticData && (

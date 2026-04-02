@@ -21,12 +21,17 @@ const stagger = {
 };
 
 export default function TaramaPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [scanCondition, setScanCondition] = useState("");
   const [stockPage, setStockPage] = useState(0);
+  const [activeTemplate, setActiveTemplate] = useState<string>("");
   const stocksPerPage = 25;
 
-  const screenerQ = useQuery({ queryKey: ["screener"], queryFn: () => api.screener() });
+  const templatesQ = useQuery({ queryKey: ["screenerTemplates"], queryFn: () => api.screenerTemplates() });
+  const screenerQ = useQuery({
+    queryKey: ["screener", activeTemplate],
+    queryFn: () => activeTemplate ? api.screener({ template: activeTemplate }) : api.screener(),
+  });
   const scannerQ = useQuery({
     queryKey: ["scanner", scanCondition],
     queryFn: () => api.scanner(scanCondition || undefined),
@@ -108,6 +113,56 @@ export default function TaramaPage() {
           </div>
         )}
       </motion.div>
+
+      {/* Screener Templates */}
+      {(() => {
+        const rawTemplates = templatesQ.data;
+        const templates: string[] = Array.isArray(rawTemplates) ? rawTemplates.map(String) :
+          rawTemplates && typeof rawTemplates === "object" && "templates" in (rawTemplates as Record<string, unknown>)
+            ? ((rawTemplates as Record<string, unknown>).templates as string[]) : [];
+        const templateLabels: Record<string, Record<string, string>> = {
+          low_pe: { tr: "Dusuk F/K", en: "Low P/E", fr: "Faible PER" },
+          high_roe: { tr: "Yuksek ROE", en: "High ROE", fr: "ROE Eleve" },
+          high_dividend: { tr: "Yuksek Temettu", en: "High Dividend", fr: "Dividende Eleve" },
+          high_volume: { tr: "Yuksek Hacim", en: "High Volume", fr: "Volume Eleve" },
+          small_cap: { tr: "Kucuk Sermaye", en: "Small Cap", fr: "Petite Cap." },
+          mid_cap: { tr: "Orta Sermaye", en: "Mid Cap", fr: "Moyenne Cap." },
+          large_cap: { tr: "Buyuk Sermaye", en: "Large Cap", fr: "Grande Cap." },
+          high_upside: { tr: "Yuksek Potansiyel", en: "High Upside", fr: "Fort Potentiel" },
+          buy_recommendation: { tr: "Al Onerisi", en: "Buy Recommendation", fr: "Recommandation Achat" },
+          high_net_margin: { tr: "Yuksek Net Marj", en: "High Net Margin", fr: "Marge Nette Elevee" },
+          high_return: { tr: "Yuksek Getiri", en: "High Return", fr: "Rendement Eleve" },
+          high_foreign_ownership: { tr: "Yuksek Yabanci Oran", en: "High Foreign Ownership", fr: "Fort Taux Etranger" },
+        };
+        return templates.length > 0 ? (
+          <motion.div custom={5} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-3">
+              {locale === "en" ? "Quick Filters" : locale === "fr" ? "Filtres rapides" : "Hazir Filtreler"}
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => { setActiveTemplate(""); setStockPage(0); }}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
+                  !activeTemplate ? "bg-primary text-primary-foreground border-primary" : "border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                }`}
+              >
+                {t("common.all")}
+              </button>
+              {templates.map((tmpl) => (
+                <button
+                  key={tmpl}
+                  onClick={() => { setActiveTemplate(tmpl); setStockPage(0); }}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
+                    activeTemplate === tmpl ? "bg-primary text-primary-foreground border-primary" : "border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {templateLabels[tmpl]?.[locale] ?? tmpl.replace(/_/g, " ")}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        ) : null;
+      })()}
 
       {/* Screener Table */}
       <motion.div custom={6} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">

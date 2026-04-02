@@ -841,6 +841,48 @@ function QuickActions() {
   );
 }
 
+function IndicesOverview() {
+  const { locale } = useLocale();
+  const indicesQ = useQuery({ queryKey: ["allIndices"], queryFn: () => api.indices(), staleTime: 120_000 });
+  const rawIndices = indicesQ.data;
+  const indices: Record<string, unknown>[] = Array.isArray(rawIndices) ? rawIndices as Record<string, unknown>[]
+    : rawIndices && typeof rawIndices === "object" && "data" in (rawIndices as Record<string, unknown>)
+    ? ((rawIndices as Record<string, unknown>).data as Record<string, unknown>[]) : [];
+
+  if (indicesQ.isLoading) return <CardSkeleton />;
+  if (indices.length === 0) return null;
+
+  const title = locale === "en" ? "All BIST Indices" : locale === "fr" ? "Tous les indices BIST" : "Tum BIST Endeksleri";
+
+  return (
+    <motion.div custom={12} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
+      <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{indices.length}</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-0 divide-x divide-y divide-border/20">
+        {indices.slice(0, 18).map((idx, i) => {
+          const symbol = String(idx.symbol ?? idx.name ?? idx.code ?? "");
+          const close = Number(idx.close ?? idx.last ?? idx.value ?? 0);
+          const change = Number(idx.change_pct ?? idx.change_percent ?? idx.changePercent ?? 0);
+          const isUp = change >= 0;
+          return (
+            <Link key={i} href={`/tarama`} className="px-4 py-3 hover:bg-muted/10 transition-colors">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{symbol}</div>
+              <div className="text-sm font-bold font-mono text-foreground mt-0.5">{close > 0 ? formatCompact(close) : "-"}</div>
+              {change !== 0 && (
+                <div className={`text-[10px] font-semibold mt-0.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {isUp ? "+" : ""}{formatNumber(change)}%
+                </div>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function DashboardPage() {
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
@@ -867,6 +909,8 @@ export default function DashboardPage() {
         <PerformanceChart />
         <WatchlistTable />
       </div>
+
+      <IndicesOverview />
 
       <LatestInsights />
     </div>

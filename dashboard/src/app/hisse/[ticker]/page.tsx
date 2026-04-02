@@ -16,6 +16,10 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
 import type { TranslationKey } from "@/lib/i18n";
+import { FinancialStatements } from "@/components/stock/FinancialStatements";
+import { DividendHistory } from "@/components/stock/DividendHistory";
+import { TweetsFeed } from "@/components/stock/TweetsFeed";
+import { EarningsCalendar } from "@/components/stock/EarningsCalendar";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -492,6 +496,18 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
           </div>
         )}
       </motion.div>
+
+      {/* Financial Statements */}
+      <FinancialStatements ticker={sym} />
+
+      {/* Dividend & Earnings Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DividendHistory ticker={sym} />
+        <EarningsCalendar ticker={sym} />
+      </div>
+
+      {/* Social Media */}
+      <TweetsFeed ticker={sym} />
 
       {/* Event Detail Modal */}
       <AnimatePresence>
