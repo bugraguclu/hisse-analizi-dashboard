@@ -235,8 +235,8 @@ function MarketPulse() {
                 animate="show"
                 className={`flex items-center justify-between p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                   isUp
-                    ? "bg-emerald-500/5 border-emerald-500/10"
-                    : "bg-red-500/5 border-red-500/10"
+                    ? "bg-red-500/5 border-red-500/10"
+                    : "bg-emerald-500/5 border-emerald-500/10"
                 }`}
               >
                 <div>
@@ -246,7 +246,7 @@ function MarketPulse() {
                   </p>
                 </div>
                 <div className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg ${
-                  isUp ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10" : "text-red-700 dark:text-red-400 bg-red-500/10"
+                  isUp ? "text-red-700 dark:text-red-400 bg-red-500/10" : "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
                 }`}>
                   {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                   {isUp ? "+" : ""}{item.change !== 0 ? `${formatNumber(item.change)}%` : "-"}
@@ -387,10 +387,10 @@ function PerformanceChart() {
               {formatNumber(lastClose, 2)}
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-sm font-semibold font-mono ${isUp ? "text-emerald-500" : "text-red-500"}`}>
+              <span className={`text-sm font-semibold font-mono ${isUp ? "text-red-500" : "text-emerald-500"}`}>
                 {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : "-"}%{formatNumber(Math.abs(changePct), 2)})
               </span>
-              <span className={`text-sm ${isUp ? "text-emerald-500" : "text-red-500"}`}>
+              <span className={`text-sm ${isUp ? "text-red-500" : "text-emerald-500"}`}>
                 {isUp ? "\u2191" : "\u2193"}
               </span>
               <span className="text-xs text-muted-foreground ml-1">{periodLabel}</span>
@@ -431,8 +431,8 @@ function PerformanceChart() {
               <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="bist100Gradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.08} />
-                    <stop offset="100%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
+                    <stop offset="0%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0.08} />
+                    <stop offset="100%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.1} />
@@ -483,11 +483,11 @@ function PerformanceChart() {
                 <Area
                   type="monotone"
                   dataKey="close"
-                  stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"}
+                  stroke={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"}
                   strokeWidth={1.5}
                   fill="url(#bist100Gradient)"
                   dot={false}
-                  activeDot={{ r: 3, fill: isUp ? "rgb(16,185,129)" : "rgb(239,68,68)" }}
+                  activeDot={{ r: 3, fill: isUp ? "rgb(239,68,68)" : "rgb(16,185,129)" }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -812,7 +812,7 @@ function QuickActions() {
   const { t } = useLocale();
   const actions = [
     { label: t("quick.stockAnalysis"), href: "/hisse/THYAO", icon: BarChart3, desc: t("dashboard.detailedAnalysis"), gradient: "from-blue-500/10 to-blue-500/5", iconColor: "text-blue-500" },
-    { label: t("quick.technicalAnalysis"), href: "/teknik/THYAO", icon: TrendingUp, desc: t("quick.rsiMacdBollinger"), gradient: "from-emerald-500/10 to-emerald-500/5", iconColor: "text-emerald-500" },
+    { label: t("quick.technicalAnalysis"), href: "/analiz/THYAO", icon: TrendingUp, desc: t("quick.rsiMacdBollinger"), gradient: "from-emerald-500/10 to-emerald-500/5", iconColor: "text-emerald-500" },
     { label: t("quick.screening"), href: "/tarama", icon: RefreshCw, desc: t("quick.filteredScreening"), gradient: "from-purple-500/10 to-purple-500/5", iconColor: "text-purple-500" },
   ];
 

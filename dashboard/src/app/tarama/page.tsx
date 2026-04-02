@@ -96,7 +96,7 @@ export default function TaramaPage() {
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{idx.symbol}</div>
                     <div className="text-xl font-bold font-mono text-foreground">{idx.close > 0 ? formatCompact(idx.close) : "-"}</div>
                     {idx.change_pct !== 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                      <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                         {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                         {isUp ? "+" : ""}{formatNumber(idx.change_pct)}%
                       </div>
@@ -142,7 +142,7 @@ export default function TaramaPage() {
                           {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">{name}</p>}
                         </td>
                         <td className="px-5 py-3 font-mono text-xs text-foreground">{price > 0 ? formatNumber(price) : "-"}</td>
-                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                           <span className="flex items-center gap-1">
                             {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                             {isUp ? "+" : ""}{formatNumber(change)}%

@@ -260,7 +260,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                   <SlidingNumber value={Math.round(lastClose * 100) / 100} />
                 </span>
                 <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${
-                  isUp ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"
+                  isUp ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 }`}>
                   {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                   {isUp ? "+" : ""}{formatNumber(change, 2)}%
@@ -331,8 +331,8 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.15} />
-                  <stop offset="95%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
+                  <stop offset="5%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="4 8" stroke="var(--color-muted-foreground)" strokeOpacity={0.3} vertical={false} />
@@ -341,7 +341,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
               <Tooltip
                 contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10, fontSize: 12, color: "var(--color-card-foreground)", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}
               />
-              <Area type="monotone" dataKey="close" stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} strokeWidth={2} fill="url(#colorClose)" dot={false} activeDot={{ r: 3, fill: isUp ? "rgb(16,185,129)" : "rgb(239,68,68)" }} />
+              <Area type="monotone" dataKey="close" stroke={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} strokeWidth={2} fill="url(#colorClose)" dot={false} activeDot={{ r: 3, fill: isUp ? "rgb(239,68,68)" : "rgb(16,185,129)" }} />
             </AreaChart>
           </ResponsiveContainer>
         )}
