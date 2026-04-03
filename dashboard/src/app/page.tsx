@@ -391,7 +391,7 @@ function PerformanceChart() {
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className={`text-sm font-semibold font-mono ${isUp ? "text-red-500" : "text-emerald-500"}`}>
-                {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : "-"}%{formatNumber(Math.abs(changePct), 2)})
+                {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : ""}%{formatNumber(changePct, 2)})
               </span>
               <span className={`text-sm ${isUp ? "text-red-500" : "text-emerald-500"}`}>
                 {isUp ? "\u2191" : "\u2193"}
@@ -503,8 +503,8 @@ function PerformanceChart() {
               [t("index.high"), highPrice],
               [t("index.low"), lowPrice],
               [t("index.prevClose"), prevClose],
-              [period === "1G" || period === "5G" ? t("index.periodHigh") : t("index.52wHigh"), maxClose],
-              [period === "1G" || period === "5G" ? t("index.periodLow") : t("index.52wLow"), minClose],
+              [period === "1Y" ? t("index.52wHigh") : t("index.periodHigh"), maxClose],
+              [period === "1Y" ? t("index.52wLow") : t("index.periodLow"), minClose],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex flex-col">
                 <span className="text-[10px] text-muted-foreground">{String(label)}</span>

@@ -43,8 +43,21 @@ const pricePeriodMap: Record<string, string> = {
   "Maks.": "max",
 };
 
+const pricePeriodLabelKeys: Record<string, TranslationKey> = {
+  "1G": "index.today",
+  "5G": "index.5days",
+  "1A": "index.1month",
+  "3A": "index.3months",
+  "6A": "index.6months",
+  "YBK": "index.ytd",
+  "1Y": "index.1year",
+  "5Y": "index.5years",
+  "Maks.": "index.allTime",
+};
+
 function formatPriceChartDate(dateStr: string, period: string): string {
-  const d = new Date(dateStr);
+  const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
+  const d = new Date(normalized);
   if (isNaN(d.getTime())) return dateStr;
   switch (period) {
     case "1G":
@@ -174,11 +187,11 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
     return {
       date: formatPriceChartDate(dateRaw, pricePeriod),
       rawDate: dateRaw,
-      close: Number(d.Close ?? 0),
-      volume: Number(d.Volume ?? 0),
-      open: Number(d.Open ?? 0),
-      high: Number(d.High ?? 0),
-      low: Number(d.Low ?? 0),
+      close: Number(d.Close ?? d.close ?? 0),
+      volume: Number(d.Volume ?? d.volume ?? 0),
+      open: Number(d.Open ?? d.open ?? 0),
+      high: Number(d.High ?? d.high ?? 0),
+      low: Number(d.Low ?? d.low ?? 0),
     };
   });
 
@@ -261,25 +274,30 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
               <h1 className="text-2xl font-bold text-foreground tracking-tight">{sym}</h1>
             </div>
             {lastPrice && (
-              <div className="flex items-center gap-2 ml-2">
+              <div className="ml-2">
                 <span className="text-2xl font-bold font-mono text-foreground">
                   <SlidingNumber value={Math.round(lastClose * 100) / 100} />
                 </span>
-                <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${
-                  isUp ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                }`}>
-                  {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {isUp ? "+" : ""}{formatNumber(change, 2)}%
-                </span>
-                {recommendation && (
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase ${
-                    recommendation.includes("BUY") ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : recommendation.includes("SELL") ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                  }`}>
-                    {formatRecommendation(recommendation, t)}
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-sm font-semibold font-mono ${isUp ? "text-red-500" : "text-emerald-500"}`}>
+                    {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : "-"}%{formatNumber(Math.abs(change), 2)})
                   </span>
-                )}
+                  <span className={`text-sm ${isUp ? "text-red-500" : "text-emerald-500"}`}>
+                    {isUp ? "\u2191" : "\u2193"}
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {pricePeriodLabelKeys[pricePeriod] ? t(pricePeriodLabelKeys[pricePeriod]) : ""}
+                  </span>
+                  {recommendation && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase ml-2 ${
+                      recommendation.includes("BUY") ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : recommendation.includes("SELL") ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    }`}>
+                      {formatRecommendation(recommendation, t)}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
