@@ -6,6 +6,8 @@ All adapters should use these instead of maintaining local copies.
 import asyncio
 import math
 import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Any, Callable
 
@@ -22,13 +24,16 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 class TTLCache:
-    """Simple in-memory TTL cache. Thread-safe for reads/writes in asyncio context.
+    """In-memory TTL cache bounded by LRU eviction. Safe in asyncio context.
 
     Does NOT cache errors — only successful (non-None) results.
+    Entries beyond max_size evict the least recently used key, so the cache
+    cannot grow without bound even if expired keys are never read again.
     """
 
-    def __init__(self):
-        self._store: dict[str, tuple[float, Any]] = {}
+    def __init__(self, max_size: int = 1000):
+        self._store: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._max_size = max_size
 
     def get(self, key: str) -> tuple[bool, Any]:
         """Returns (hit, value). hit=False means cache miss or expired."""
@@ -39,10 +44,15 @@ class TTLCache:
         if time.monotonic() > expires_at:
             del self._store[key]
             return False, None
+        self._store.move_to_end(key)
         return True, value
 
     def set(self, key: str, value: Any, ttl_seconds: float) -> None:
+        if key in self._store:
+            self._store.move_to_end(key)
         self._store[key] = (time.monotonic() + ttl_seconds, value)
+        while len(self._store) > self._max_size:
+            self._store.popitem(last=False)
 
     def invalidate(self, key: str) -> None:
         self._store.pop(key, None)
@@ -132,12 +142,17 @@ async def close_http_client() -> None:
 # Thread Offload (replaces asyncio.get_event_loop().run_in_executor)
 # ---------------------------------------------------------------------------
 
-async def run_sync(func: Callable, *args) -> Any:
-    """Run a synchronous function in the default executor.
+# Bounded executor: caps OS threads spawned for sync borsapy/yfinance calls,
+# instead of the unbounded default asyncio.to_thread pool.
+_sync_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="adapter-sync")
 
-    Replaces the deprecated asyncio.get_event_loop().run_in_executor() pattern.
-    """
-    return await asyncio.to_thread(func, *args)
+
+async def run_sync(func: Callable, *args) -> Any:
+    """Run a synchronous function in a bounded thread pool executor."""
+    loop = asyncio.get_running_loop()
+    if args:
+        return await loop.run_in_executor(_sync_executor, lambda: func(*args))
+    return await loop.run_in_executor(_sync_executor, func)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +190,47 @@ def safe_serialize(obj) -> dict | list:
         return obj
     if hasattr(obj, "to_dict"):
         return obj.to_dict()
+    # Mapping-like objects (e.g. borsapy FastInfo keeps data in _data but
+    # exposes keys()/__getitem__) — plain __dict__ scraping would return {}.
+    if hasattr(obj, "keys") and callable(obj.keys):
+        try:
+            return {k: obj[k] for k in obj.keys()}
+        except Exception:
+            pass
     if hasattr(obj, "__dict__"):
-        return {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+        public = {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+        if public:
+            return public
     return {"value": str(obj)}
+
+
+# ---------------------------------------------------------------------------
+# Period normalization (Turkish UI periods -> borsapy period/interval)
+# ---------------------------------------------------------------------------
+
+# borsapy expects yfinance-style periods (1d, 5d, 1mo, ...) plus a separate
+# interval. The UI speaks Turkish periods (1g, 1ay, ...). Passing those
+# through unchanged makes borsapy silently fall back to its default (1mo/1d),
+# so every chart period looked identical.
+_PERIOD_MAP: dict[str, tuple[str, str]] = {
+    "1g": ("1d", "15m"),
+    "1d": ("1d", "15m"),
+    "5g": ("5d", "1h"),
+    "5d": ("5d", "1h"),
+    "1ay": ("1mo", "1d"),
+    "1mo": ("1mo", "1d"),
+    "3ay": ("3mo", "1d"),
+    "3mo": ("3mo", "1d"),
+    "6ay": ("6mo", "1d"),
+    "6mo": ("6mo", "1d"),
+    "ytd": ("ytd", "1d"),
+    "1y": ("1y", "1d"),
+    "2y": ("2y", "1wk"),
+    "5y": ("5y", "1wk"),
+    "max": ("max", "1mo"),
+}
+
+
+def normalize_period(period: str) -> tuple[str, str]:
+    """Map a UI period string to a valid borsapy (period, interval) pair."""
+    return _PERIOD_MAP.get(period.lower().strip(), ("1mo", "1d"))

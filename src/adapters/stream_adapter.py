@@ -47,20 +47,23 @@ class LivePriceStream:
                 self._stream = None
 
 
+async def _fetch_symbol_snapshot(symbol: str) -> dict:
+    try:
+        import borsapy as bp
+        t = await run_sync(lambda: bp.Ticker(symbol))
+        fi = await run_sync(lambda: t.fast_info)
+        return safe_serialize(fi) if fi else {}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @cached(TTL_PRICE_SNAPSHOT, "stream")
 async def get_snapshot(symbols: list[str]) -> dict:
     """Birden fazla sembol icin anlik fiyat snapshot'i (stream kullanmadan)."""
     try:
-        import borsapy as bp
-        results = {}
-        for symbol in symbols:
-            try:
-                t = await run_sync(lambda s=symbol: bp.Ticker(s))
-                fi = await run_sync(lambda: t.fast_info)
-                results[symbol] = safe_serialize(fi) if fi else {}
-            except Exception as e:
-                results[symbol] = {"error": str(e)}
-        return {"symbols": symbols, "snapshot": results}
+        import asyncio
+        values = await asyncio.gather(*(_fetch_symbol_snapshot(s) for s in symbols))
+        return {"symbols": symbols, "snapshot": dict(zip(symbols, values))}
     except Exception as e:
         logger.error("snapshot_error", symbols=symbols, error=str(e))
         return {"symbols": symbols, "snapshot": {}, "error": str(e)}

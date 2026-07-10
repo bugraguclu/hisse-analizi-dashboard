@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import { API_BASE } from "@/lib/api";
 import {
   Sidebar as SidebarRoot,
   SidebarBody,
@@ -72,7 +73,7 @@ export function AppSidebar() {
 
         <div className="pt-4 border-t border-sidebar-border/40">
           <a
-            href="http://localhost:8000/docs"
+            href={`${API_BASE}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2.5 py-2.5 px-2.5 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-all duration-200"

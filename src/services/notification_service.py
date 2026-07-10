@@ -27,7 +27,7 @@ from src.db.repository import (
 logger = structlog.get_logger(__name__)
 
 # Sanitize email subject to prevent header injection
-_CRLF_RE = re.compile(r"[\r\n]")
+_CRLF_RE = re.compile(r"[\r\n]+")
 
 
 def _sanitize_header(value: str) -> str:

@@ -2,7 +2,7 @@
 
 import { use, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, API_BASE } from "@/lib/api";
 import { formatNumber, formatCompact, formatDate, formatPercent } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
@@ -97,7 +97,7 @@ function EventDetailModal({ eventId, onClose }: { eventId: string; onClose: () =
     queryFn: () => api.eventDetail(eventId),
     enabled: !!eventId,
   });
-  const detail = data as Record<string, unknown> | null;
+  const detail = data as unknown as Record<string, unknown> | null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -181,7 +181,9 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   });
   const signalsQ = useQuery({ queryKey: ["signals", sym], queryFn: () => api.signals(sym) });
 
-  const historyData = (historyQ.data as { data: Array<Record<string, unknown>> } | null)?.data ?? [];
+  const historyRaw = historyQ.data as { data: Array<Record<string, unknown>>; info?: Record<string, unknown> } | null;
+  const historyData = historyRaw?.data ?? [];
+  const fastInfo = historyRaw?.info ?? {};
   const chartData = historyData.map((d) => {
     const dateRaw = String(d.Date ?? d.Datetime ?? d.date ?? d.datetime ?? d.timestamp ?? "");
     return {
@@ -197,11 +199,23 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
 
   const first = chartData.length > 0 ? chartData[0] : null;
   const lastPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-  const lastClose = lastPrice?.close ?? 0;
+  const liveLast = Number(fastInfo.last_price ?? 0);
+  const lastClose = liveLast > 0 ? liveLast : (lastPrice?.close ?? 0);
   const firstClose = first?.close ?? 0;
   const changeAbs = lastClose - firstClose;
   const change = firstClose > 0 ? (changeAbs / firstClose) * 100 : 0;
   const isUp = change >= 0;
+
+  // Key stats from live fast_info (fetched alongside history)
+  const keyStats = [
+    { label: t("temel.marketCap"), val: Number(fastInfo.market_cap ?? 0) > 0 ? formatCompact(Number(fastInfo.market_cap)) : null },
+    { label: t("hisse.peRatio"), val: fastInfo.pe_ratio != null ? formatNumber(Number(fastInfo.pe_ratio)) : null },
+    { label: t("hisse.pbRatio"), val: fastInfo.pb_ratio != null ? formatNumber(Number(fastInfo.pb_ratio)) : null },
+    { label: t("index.52wHigh"), val: Number(fastInfo.year_high ?? 0) > 0 ? formatNumber(Number(fastInfo.year_high)) : null },
+    { label: t("index.52wLow"), val: Number(fastInfo.year_low ?? 0) > 0 ? formatNumber(Number(fastInfo.year_low)) : null },
+    { label: t("hisse.freeFloat"), val: fastInfo.free_float != null ? `%${formatNumber(Number(fastInfo.free_float))}` : null },
+    { label: t("hisse.foreignRatio"), val: fastInfo.foreign_ratio != null ? `%${formatNumber(Number(fastInfo.foreign_ratio))}` : null },
+  ].filter((s) => s.val != null);
 
   // Try DB ratios first, then live ratios as fallback
   const dbRatios = Array.isArray(ratiosQ.data) && ratiosQ.data.length > 0 ? ratiosQ.data[0] : null;
@@ -239,7 +253,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
     setAiReportContent(null);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/ai/report/${sym}`,
+        `${API_BASE}/ai/report/${sym}`,
         { cache: "no-store" }
       );
       if (res.ok) {
@@ -305,15 +319,15 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         <div className="w-72 md:w-80"><TickerSearch /></div>
       </div>
 
-      {/* OHLCV Stats */}
+      {/* OHLCV Stats — live daily values when available, else last bar */}
       {lastPrice && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: t("index.open"), val: formatNumber(lastPrice.open) },
-            { label: t("index.high"), val: formatNumber(lastPrice.high) },
-            { label: t("index.low"), val: formatNumber(lastPrice.low) },
-            { label: t("index.close"), val: formatNumber(lastPrice.close) },
-            { label: t("index.volume"), val: formatCompact(lastPrice.volume) },
+            { label: t("index.open"), val: formatNumber(Number(fastInfo.open ?? 0) > 0 ? Number(fastInfo.open) : lastPrice.open) },
+            { label: t("index.high"), val: formatNumber(Number(fastInfo.day_high ?? 0) > 0 ? Number(fastInfo.day_high) : lastPrice.high) },
+            { label: t("index.low"), val: formatNumber(Number(fastInfo.day_low ?? 0) > 0 ? Number(fastInfo.day_low) : lastPrice.low) },
+            { label: t("index.close"), val: formatNumber(lastClose) },
+            { label: t("index.volume"), val: formatCompact(Number(fastInfo.volume ?? 0) > 0 ? Number(fastInfo.volume) : lastPrice.volume) },
           ].map((item, i) => (
             <motion.div
               key={item.label}
@@ -328,6 +342,20 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             </motion.div>
           ))}
         </div>
+      )}
+
+      {/* Key Stats (fast_info) */}
+      {keyStats.length > 0 && (
+        <motion.div custom={5.5} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 px-5 py-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-x-4 gap-y-3">
+            {keyStats.map((s) => (
+              <div key={s.label} className="flex flex-col">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</span>
+                <span className="text-sm font-bold font-mono text-foreground mt-0.5">{s.val}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       )}
 
       {/* Price Chart with Period Selection */}

@@ -56,8 +56,11 @@ async def _release_advisory_lock(session, source_code: str) -> None:
     await session.execute(text(f"SELECT pg_advisory_unlock({lock_id})"))
 
 
-async def poll_source_for_company(source_code: str, ticker: str) -> dict:
-    """Tek bir kaynak + tek bir sirket icin poll calistir."""
+async def poll_source_for_company(source_code: str, ticker: str, days: int | None = None) -> dict:
+    """Tek bir kaynak + tek bir sirket icin poll calistir.
+
+    days: backfill icin gun sayisi (yalnizca price kaynagi kullanir).
+    """
     started_at = utcnow()
     stats = {"source": source_code, "ticker": ticker, "started_at": started_at.isoformat()}
 
@@ -93,7 +96,7 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
 
             if source_code == "price":
                 adapter = PriceAdapter(ticker=ticker)
-                records = await adapter.fetch_prices(polling_state)
+                records = await adapter.fetch_prices(polling_state, days=days)
                 price_service = PriceService(session)
                 result = await price_service.process_prices(records, company)
                 stats.update(result)
@@ -150,7 +153,7 @@ async def poll_source_for_company(source_code: str, ticker: str) -> dict:
     return stats
 
 
-async def poll_source(source_code: str) -> list[dict]:
+async def poll_source(source_code: str, days: int | None = None) -> list[dict]:
     """Tum aktif sirketler icin tek bir kaynagi poll et.
 
     Uses bounded concurrency via asyncio.Semaphore.
@@ -172,7 +175,7 @@ async def poll_source(source_code: str) -> list[dict]:
 
         async def poll_with_limit(ticker: str) -> dict:
             async with semaphore:
-                result = await poll_source_for_company(source_code, ticker)
+                result = await poll_source_for_company(source_code, ticker, days=days)
                 # Rate limiting between companies
                 await asyncio.sleep(0.5)
                 return result
@@ -202,6 +205,20 @@ async def run_all_sources_once() -> list[dict]:
     results = []
     for source_code in ["kap", "price", "financials"]:
         source_results = await poll_source(source_code)
+        results.extend(source_results)
+    return results
+
+
+async def run_backfill(days: int | None = None, source_code: str | None = None) -> list[dict]:
+    """Backfill: istenen kaynak(lar)i istenen gun araligiyla poll et.
+
+    days yalnizca price kaynaginda gecmis aralik olarak kullanilir;
+    kap/financials kaynaklari artimli calisir.
+    """
+    sources = [source_code] if source_code else ["kap", "price", "financials"]
+    results = []
+    for code in sources:
+        source_results = await poll_source(code, days=days)
         results.extend(source_results)
     return results
 

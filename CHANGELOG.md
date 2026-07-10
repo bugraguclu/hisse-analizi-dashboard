@@ -4,6 +4,45 @@ Tum onemli degisiklikler burada tarih sirasiyla belgelenir.
 
 ---
 
+## [v0.5.1] — 10 Temmuz 2026
+
+**Branch:** `master`
+
+### Faz 0 Sertlestirme (Roadmap)
+- Frontend API hatalari artik yutulmuyor: `get/post` hata firlatir, React Query hata durumlarini gosterebilir (`ApiError`).
+- API base URL tek kaynakta (`API_BASE`, api.ts); Sidebar docs linki ve AI rapor fetch'i sabit `localhost:8000` yerine bunu kullanir.
+- `TTLCache` LRU ile sinirlandi (max 1000 kayit); `run_sync` sinirli thread havuzu kullanir (max 10).
+- `scripts/seed.py` BIST 100'u borsapy `Index("XU100").components` uzerinden canli ceker (statik BIST 30 yedek listesi ile); DB'de 100+ sirket.
+- `/admin/backfill` artik `days` ve `source_code` parametrelerini gercekten kullanir (`run_backfill`).
+- `pyproject.toml`: versiyon 0.5.0, `borsapy>=0.10.2`.
+- Olu kod temizligi: `anadoluefes_news.py`, `anadoluefes_ir.py`, ilgili fixture ve test kaldirildi.
+- E-posta baslik sanitizasyonunda `\r\n` cift bosluk hatasi duzeltildi.
+
+### Veri Dogrulugu Duzeltmeleri (kritik)
+- **Grafik periyotlari**: Turkce periyotlar (`1g`, `1ay`, ...) borsapy'nin bekledigi `1d/1mo/... + interval` ciftlerine map edilir (`normalize_period`). Onceden TUM periyot sekmeleri ayni 30 gunluk veriyi gosteriyordu; 1G artik gercek 15 dakikalik gun ici veridir.
+- **TCMB politika faizi**: borsapy 2010 satirini (%7,0) donduruyordu; `TCMB().history()` son satiri kullanilarak duzeltildi (%37,0 — 23 Oca 2026). `/macro/tcmb` tablosundaki policy satiri da duzeltilir.
+- **`/macro/tcmb`**: var olmayan `interest_rates` yerine `.rates` kullanilir; makro sayfasi tabloyu artik gosterir.
+- **Snapshot**: `FastInfo` `_data` altinda veri tuttugu icin bos donuyordu; `safe_serialize` mapping nesnelerini destekler. Snapshot cagrilari artik paralel (gather).
+- **`/market/indices`**: sembol listesine ek olarak 12 ana endeks icin canli kotasyon (`quotes`: last, change_percent, prev_close) doner; sinirli eszamanlilik + retry ile 12/12 guvenilirlik.
+- **`/fundamentals/{t}/live-ratios`**: fast_info her zaman merge edilir; F/K artik dolu.
+- FX gecmisi icin gecersiz `1ay` periyodu `1mo` yapildi; fiyat polling adaptorundeki `1ay` da duzeltildi ve backfill icin gun bazli periyot secimi eklendi.
+
+### UI Duzeltmeleri
+- Dashboard BIST 100 grafigi: 1G icin gercek onceki kapanis referans cizgisi ve gunluk degisim; diger periyotlarda "Donem basi" etiketi (yaniltici "Onceki kapanis" yerine). Y ekseni artik "14.1K" yerine tam sayi gosterir.
+- Piyasa Nabzi ve Tarama endeks kartlari canli kotasyon kullanir (aylik fark degil gercek gunluk degisim).
+- "BIST Endeksleri" bolumu artik calisiyor (onceden hic render olmuyordu).
+- Takip listesi: snapshot map'i dogru okunur, fiyat + gun araligi (dusuk–yuksek) gosterilir.
+- Hisse sayfasi: canli OHLCV (fast_info), yeni ozet satiri (Piyasa Degeri, F/K, PD/DD, 52H yuksek/dusuk, Halka Aciklik, Yabanci Orani).
+- Piyasa acik/kapali rozeti Istanbul saat dilimini kullanir.
+- Makro: ekonomik takvim buyuk harfli anahtarlarla (Event/Date/Actual) dogru render edilir; politika faizi karar tarihi gosterilir.
+- Analiz sayfasi: SINYALLER karti metadata (symbol/exchange/interval) yerine gercek oneri gruplarini gosterir; F/K ve PD/DD fast_info anahtarlarini da okur.
+- Tarama tablosu: eksik degisim/hacim alanlari icin sahte "+0,00% / 0" yerine "-".
+
+### Gelistirme Ortami
+- `docker-compose.override.yml`: backend kaynak kodu konteynerlere mount edilir; imaj rebuild etmeden restart yeterli.
+
+---
+
 ## [v0.5.0] — 21 Mart 2026
 
 **Branch:** `master`

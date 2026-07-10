@@ -11,43 +11,60 @@ import type {
   HealthResponse,
 } from "@/types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/** Single source of truth for the backend base URL — do not hardcode elsewhere. */
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export class ApiError extends Error {
+  status: number | null;
+  path: string;
+
+  constructor(message: string, path: string, status: number | null = null) {
+    super(message);
+    this.name = "ApiError";
+    this.path = path;
+    this.status = status;
+  }
+}
 
 /**
  * Endpoint-appropriate caching:
  * - "no-store": real-time data that must always be fresh (events, prices, outbox)
  * - "default": let browser/CDN cache with revalidation (companies, macro, fundamentals)
  * React Query handles client-side staleness via staleTime.
+ *
+ * Errors are THROWN (not swallowed) so React Query can retry and surface
+ * error states instead of rendering misleading "no data" screens.
  */
 type CacheStrategy = "no-store" | "default";
 
-async function get<T>(path: string, cache: CacheStrategy = "default"): Promise<T | null> {
+async function get<T>(path: string, cache: CacheStrategy = "default"): Promise<T> {
+  let res: Response;
   try {
-    const res = await fetch(`${BASE}${path}`, { cache });
-    if (!res.ok) {
-      console.warn(`API ${res.status}: ${path}`);
-      return null;
-    }
-    return (await res.json()) as T;
+    res = await fetch(`${API_BASE}${path}`, { cache });
   } catch (err) {
-    console.error(`API error: ${path}`, err);
-    return null;
+    throw new ApiError(`API'ye ulasilamiyor: ${path} (${String(err)})`, path);
   }
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${path}`, path, res.status);
+  }
+  return (await res.json()) as T;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T | null> {
+async function post<T>(path: string, body: unknown): Promise<T> {
+  let res: Response;
   try {
-    const res = await fetch(`${BASE}${path}`, {
+    res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
   } catch (err) {
-    console.error(`API error: ${path}`, err);
-    return null;
+    throw new ApiError(`API'ye ulasilamiyor: ${path} (${String(err)})`, path);
   }
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${path}`, path, res.status);
+  }
+  return (await res.json()) as T;
 }
 
 export const api = {

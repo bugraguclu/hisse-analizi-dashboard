@@ -97,10 +97,15 @@ const stagger = {
 function MarketDate() {
   const { t } = useLocale();
   const now = new Date();
-  const hour = now.getHours();
-  const day = now.getDay();
-  const isOpen = day >= 1 && day <= 5 && hour >= 10 && hour < 18;
-  const dateStr = now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
+  // BIST hours are Istanbul-local; the viewer's clock may be in another zone
+  const istanbulParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Istanbul", weekday: "short", hour: "numeric", hour12: false,
+  }).formatToParts(now);
+  const weekday = istanbulParts.find((p) => p.type === "weekday")?.value ?? "";
+  const hour = Number(istanbulParts.find((p) => p.type === "hour")?.value ?? 0);
+  const isWeekday = !["Sat", "Sun"].includes(weekday);
+  const isOpen = isWeekday && hour >= 10 && hour < 18;
+  const dateStr = now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Istanbul" });
 
   return (
     <div>
@@ -177,35 +182,29 @@ function SystemStatusCard() {
   );
 }
 
-function useIndexSummary(symbol: string) {
-  return useQuery({
-    queryKey: ["indexData", symbol],
-    queryFn: () => api.indexData(symbol, "1ay"),
-    staleTime: 120_000,
-  });
-}
+const PULSE_SYMBOLS = ["XU100", "XU030", "XBANK"];
 
 function MarketPulse() {
   const { t } = useLocale();
-  const xu100 = useIndexSummary("XU100");
-  const xu030 = useIndexSummary("XU030");
-  const xusin = useIndexSummary("XUSIN");
-  const queries = [xu100, xu030, xusin];
-  const isLoading = queries.some((q) => q.isLoading);
+  // /market/indices returns live quotes (last, change_percent, prev_close)
+  // for the main indices — real daily change, not a month-over-month diff.
+  const { data, isLoading } = useQuery({
+    queryKey: ["indexQuotes"],
+    queryFn: () => api.indices(),
+    staleTime: 120_000,
+  });
 
-  const items = [xu100.data, xu030.data, xusin.data]
-    .filter(Boolean)
-    .map((d) => {
-      const raw = d as { symbol: string; data: Array<Record<string, unknown>> };
-      const arr = raw?.data ?? [];
-      if (arr.length === 0) return { name: raw?.symbol ?? "", value: 0, change: 0 };
-      const last = arr[arr.length - 1];
-      const first = arr[0];
-      const close = Number(last.Close ?? 0);
-      const firstClose = Number(first.Close ?? close);
-      const change = firstClose > 0 ? ((close - firstClose) / firstClose) * 100 : 0;
-      return { name: raw.symbol, value: close, change };
-    });
+  const raw = data as { quotes?: Array<Record<string, unknown>> } | null;
+  const quotes = raw?.quotes ?? [];
+  const items = PULSE_SYMBOLS
+    .map((sym) => quotes.find((q) => String(q.symbol) === sym))
+    .filter((q): q is Record<string, unknown> => Boolean(q))
+    .map((q) => ({
+      name: String(q.name ?? q.symbol ?? ""),
+      symbol: String(q.symbol ?? ""),
+      value: Number(q.last ?? 0),
+      change: Number(q.change_percent ?? 0),
+    }));
 
   return (
     <motion.div
@@ -240,7 +239,7 @@ function MarketPulse() {
                 }`}
               >
                 <div>
-                  <p className="text-sm font-bold text-foreground">{item.name}</p>
+                  <p className="text-sm font-bold text-foreground">{item.symbol}</p>
                   <p className="text-xs text-muted-foreground font-mono mt-0.5">
                     {item.value > 0 ? formatNumber(item.value) : "-"}
                   </p>
@@ -321,8 +320,9 @@ function PerformanceChart() {
     queryFn: () => api.indexData("XU100", borsapyPeriod),
   });
 
-  const raw = data as { data: Array<Record<string, unknown>> } | null;
+  const raw = data as { data: Array<Record<string, unknown>>; info?: Record<string, unknown> } | null;
   const rawData = raw?.data ?? [];
+  const quote = raw?.info ?? {};
   // Deduplicate entries with same formatted date (can happen with intraday data)
   const chartData = rawData.map((d) => {
     const dateRaw = String(d.Date ?? d.Datetime ?? d.date ?? d.datetime ?? d.timestamp ?? "");
@@ -336,21 +336,40 @@ function PerformanceChart() {
     };
   });
 
-  // Price stats
+  // Live quote (from index info): current level + true daily change vs prev close
+  const liveLast = Number(quote.last ?? 0);
+  const livePrevClose = Number(quote.prev_close ?? 0);
+  const liveChangeAbs = Number(quote.change ?? 0);
+  const liveChangePct = Number(quote.change_percent ?? 0);
+
+  // Period stats from chart data
   const first = chartData.length > 0 ? chartData[0] : null;
   const last = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-  const lastClose = last?.close ?? 0;
-  const prevClose = first?.close ?? 0;
-  const changeAbs = lastClose - prevClose;
-  const changePct = prevClose > 0 ? (changeAbs / prevClose) * 100 : 0;
+  const lastClose = liveLast > 0 ? liveLast : (last?.close ?? 0);
+  const periodStart = first?.close ?? 0;
+  const periodChangeAbs = lastClose - periodStart;
+  const periodChangePct = periodStart > 0 ? (periodChangeAbs / periodStart) * 100 : 0;
+
+  const isIntraday = period === "1G";
+  // Header change: daily for 1G (vs prev close), period change otherwise
+  const changeAbs = isIntraday && livePrevClose > 0 ? liveChangeAbs : periodChangeAbs;
+  const changePct = isIntraday && livePrevClose > 0 ? liveChangePct : periodChangePct;
   const isUp = changeAbs >= 0;
 
-  // OHLC aggregated from chart data
-  const openPrice = first?.open ?? first?.close ?? 0;
-  const highPrice = chartData.length > 0 ? Math.max(...chartData.map((d) => d.high || d.close)) : 0;
-  const lowPrice = chartData.length > 0 ? Math.min(...chartData.filter((d) => (d.low || d.close) > 0).map((d) => d.low || d.close)) : 0;
+  // Baseline reference: true previous close for 1G, period start otherwise
+  const baseline = isIntraday && livePrevClose > 0 ? livePrevClose : periodStart;
+  const baselineLabelKey: TranslationKey = isIntraday && livePrevClose > 0 ? "index.prevClose" : "index.periodStart";
 
-  // 52-week high/low (approximate from data if period is long enough)
+  // OHLC: live daily values for 1G, aggregates over the period otherwise
+  const openPrice = isIntraday && Number(quote.open ?? 0) > 0 ? Number(quote.open) : (first?.open ?? first?.close ?? 0);
+  const highPrice = isIntraday && Number(quote.high ?? 0) > 0
+    ? Number(quote.high)
+    : chartData.length > 0 ? Math.max(...chartData.map((d) => d.high || d.close)) : 0;
+  const lowPrice = isIntraday && Number(quote.low ?? 0) > 0
+    ? Number(quote.low)
+    : chartData.length > 0 ? Math.min(...chartData.filter((d) => (d.low || d.close) > 0).map((d) => d.low || d.close)) : 0;
+
+  // Period high/low from closes (labeled 52W only for the 1Y period)
   const allCloses = chartData.map((d) => d.close).filter((v) => v > 0);
   const maxClose = allCloses.length > 0 ? Math.max(...allCloses) : 0;
   const minClose = allCloses.length > 0 ? Math.min(...allCloses) : 0;
@@ -439,14 +458,14 @@ function PerformanceChart() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.1} />
-                {prevClose > 0 && (
+                {baseline > 0 && (
                   <ReferenceLine
-                    y={prevClose}
+                    y={baseline}
                     stroke="var(--color-muted-foreground)"
                     strokeDasharray="4 4"
                     strokeOpacity={0.5}
                     label={{
-                      value: `${t("index.prevClose")} ${formatNumber(prevClose, 2)}`,
+                      value: `${t(baselineLabelKey)} ${formatNumber(baseline, 2)}`,
                       position: "right",
                       fontSize: 9,
                       fill: "var(--color-muted-foreground)",
@@ -467,8 +486,8 @@ function PerformanceChart() {
                   tickLine={false}
                   tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
                   tickMargin={8}
-                  tickFormatter={(v) => formatCompact(v)}
-                  domain={["dataMin - 30", "dataMax + 30"]}
+                  tickFormatter={(v) => formatNumber(Number(v), 0)}
+                  domain={["auto", "auto"]}
                   width={55}
                 />
                 <Tooltip
@@ -502,7 +521,7 @@ function PerformanceChart() {
               [t("index.open"), openPrice],
               [t("index.high"), highPrice],
               [t("index.low"), lowPrice],
-              [t("index.prevClose"), prevClose],
+              [t("index.prevClose"), livePrevClose],
               [period === "1Y" ? t("index.52wHigh") : t("index.periodHigh"), maxClose],
               [period === "1Y" ? t("index.52wLow") : t("index.periodLow"), minClose],
             ].map(([label, value]) => (
@@ -557,10 +576,11 @@ function WatchlistTable() {
 
   const isLoading = snapshotLoading && screenerLoading;
 
-  const snapshotArr = Array.isArray(snapshotData) ? snapshotData as Record<string, unknown>[]
-    : snapshotData && typeof snapshotData === "object" && "data" in (snapshotData as Record<string, unknown>)
-    ? ((snapshotData as Record<string, unknown>).data as Record<string, unknown>[])
-    : [];
+  // Backend shape: { symbols: [...], snapshot: { THYAO: {last_price, ...}, ... } }
+  const snapshotMap: Record<string, Record<string, unknown>> =
+    snapshotData && typeof snapshotData === "object" && "snapshot" in (snapshotData as Record<string, unknown>)
+      ? ((snapshotData as Record<string, unknown>).snapshot as Record<string, Record<string, unknown>>) ?? {}
+      : {};
 
   const screenerObj = screenerData as Record<string, unknown> | null;
   const results = screenerObj?.results
@@ -723,15 +743,15 @@ function WatchlistTable() {
       ) : (
         <div className="divide-y divide-border/30">
           {activeItems.map((w) => {
-            const snapMatch = snapshotArr.find(
-              (s) => String(s.symbol ?? s.ticker ?? "").toUpperCase() === w.ticker
-            );
+            const snapMatch = snapshotMap[w.ticker];
             const scrMatch = results.find(
               (r) => String(r.symbol ?? r.ticker ?? "").toUpperCase() === w.ticker
             );
             const price = snapMatch
-              ? Number(snapMatch.close ?? snapMatch.price ?? snapMatch.last ?? 0)
-              : scrMatch ? Number(scrMatch.criteria_7 ?? scrMatch.close ?? scrMatch.price ?? 0) : 0;
+              ? Number(snapMatch.last_price ?? snapMatch.close ?? snapMatch.price ?? snapMatch.last ?? 0)
+              : scrMatch ? Number(scrMatch.close ?? scrMatch.price ?? scrMatch.last ?? 0) : 0;
+            const dayLow = snapMatch ? Number(snapMatch.day_low ?? 0) : 0;
+            const dayHigh = snapMatch ? Number(snapMatch.day_high ?? 0) : 0;
 
             return (
               <div key={w.ticker} className="flex items-center justify-between px-5 py-3 hover:bg-muted/20 transition-colors">
@@ -745,9 +765,16 @@ function WatchlistTable() {
                   </div>
                 </Link>
                 <div className="flex items-center gap-3">
-                  <p className="text-sm font-semibold text-foreground font-mono">
-                    {price > 0 ? formatNumber(price) : "-"}
-                  </p>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-foreground font-mono">
+                      {price > 0 ? formatNumber(price) : "-"}
+                    </p>
+                    {dayLow > 0 && dayHigh > 0 && (
+                      <p className="text-[10px] text-muted-foreground font-mono">
+                        {formatNumber(dayLow)} – {formatNumber(dayHigh)}
+                      </p>
+                    )}
+                  </div>
                   {showManage && (
                     <button
                       onClick={() => handleRemoveTicker(w.ticker)}
@@ -866,39 +893,37 @@ function QuickActions() {
 
 function IndicesOverview() {
   const { locale } = useLocale();
-  const indicesQ = useQuery({ queryKey: ["allIndices"], queryFn: () => api.indices(), staleTime: 120_000 });
-  const rawIndices = indicesQ.data;
-  const indices: Record<string, unknown>[] = Array.isArray(rawIndices) ? rawIndices as Record<string, unknown>[]
-    : rawIndices && typeof rawIndices === "object" && "data" in (rawIndices as Record<string, unknown>)
-    ? ((rawIndices as Record<string, unknown>).data as Record<string, unknown>[]) : [];
+  const indicesQ = useQuery({ queryKey: ["indexQuotes"], queryFn: () => api.indices(), staleTime: 120_000 });
+  const raw = indicesQ.data as { indices?: unknown[]; quotes?: Array<Record<string, unknown>> } | null;
+  const quotes = raw?.quotes ?? [];
+  const totalCount = raw?.indices?.length ?? 0;
 
   if (indicesQ.isLoading) return <CardSkeleton />;
-  if (indices.length === 0) return null;
+  if (quotes.length === 0) return null;
 
-  const title = locale === "en" ? "All BIST Indices" : locale === "fr" ? "Tous les indices BIST" : "Tum BIST Endeksleri";
+  const title = locale === "en" ? "BIST Indices" : locale === "fr" ? "Indices BIST" : "BIST Endeksleri";
 
   return (
     <motion.div custom={12} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
       <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{indices.length}</span>
+        <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{quotes.length}/{totalCount}</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-0 divide-x divide-y divide-border/20">
-        {indices.slice(0, 18).map((idx, i) => {
-          const symbol = String(idx.symbol ?? idx.name ?? idx.code ?? "");
-          const close = Number(idx.close ?? idx.last ?? idx.value ?? 0);
-          const change = Number(idx.change_pct ?? idx.change_percent ?? idx.changePercent ?? 0);
+        {quotes.map((idx, i) => {
+          const symbol = String(idx.symbol ?? "");
+          const name = String(idx.name ?? symbol);
+          const close = Number(idx.last ?? 0);
+          const change = Number(idx.change_percent ?? 0);
           const isUp = change >= 0;
           return (
-            <Link key={i} href={`/tarama`} className="px-4 py-3 hover:bg-muted/10 transition-colors">
+            <div key={i} className="px-4 py-3 hover:bg-muted/10 transition-colors" title={name}>
               <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{symbol}</div>
-              <div className="text-sm font-bold font-mono text-foreground mt-0.5">{close > 0 ? formatCompact(close) : "-"}</div>
-              {change !== 0 && (
-                <div className={`text-[10px] font-semibold mt-0.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                  {isUp ? "+" : ""}{formatNumber(change)}%
-                </div>
-              )}
-            </Link>
+              <div className="text-sm font-bold font-mono text-foreground mt-0.5">{close > 0 ? formatNumber(close, 2) : "-"}</div>
+              <div className={`text-[10px] font-semibold mt-0.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                {isUp ? "+" : ""}{formatNumber(change)}%
+              </div>
+            </div>
           );
         })}
       </div>

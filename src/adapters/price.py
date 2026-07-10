@@ -16,19 +16,32 @@ class PriceAdapter(BasePriceAdapter):
     def get_source_code(self) -> str:
         return "price"
 
-    async def fetch_prices(self, polling_state: PollingState | None = None) -> list[PriceRecord]:
-        records = await self._fetch_via_borsapy()
+    async def fetch_prices(
+        self, polling_state: PollingState | None = None, days: int | None = None
+    ) -> list[PriceRecord]:
+        records = await self._fetch_via_borsapy(days=days)
         if not records:
             logger.warning("borsapy_price_empty_fallback_to_yfinance", ticker=self.ticker)
-            records = await self._fetch_via_yfinance()
+            records = await self._fetch_via_yfinance(days=days)
         return records
 
-    async def _fetch_via_borsapy(self) -> list[PriceRecord]:
+    @staticmethod
+    def _period_for_days(days: int | None) -> str:
+        """Map a backfill day count to the smallest covering borsapy period."""
+        if days is None:
+            return "1mo"
+        for limit, period in [(5, "5d"), (30, "1mo"), (90, "3mo"), (180, "6mo"), (365, "1y"), (730, "2y"), (1825, "5y")]:
+            if days <= limit:
+                return period
+        return "max"
+
+    async def _fetch_via_borsapy(self, days: int | None = None) -> list[PriceRecord]:
+        period = self._period_for_days(days)
         try:
             import borsapy as bp
 
             ticker = await run_sync(bp.Ticker, self.ticker)
-            df = await run_sync(lambda: ticker.history(period="1ay"))
+            df = await run_sync(lambda: ticker.history(period=period))
 
             if df is None or df.empty:
                 logger.info("borsapy_price_no_data", ticker=self.ticker)
@@ -57,13 +70,14 @@ class PriceAdapter(BasePriceAdapter):
             logger.error("borsapy_price_error", ticker=self.ticker, error=str(e))
             return []
 
-    async def _fetch_via_yfinance(self) -> list[PriceRecord]:
+    async def _fetch_via_yfinance(self, days: int | None = None) -> list[PriceRecord]:
+        period = self._period_for_days(days)
         try:
             import yfinance as yf
 
             yf_ticker = f"{self.ticker}.IS"
             ticker = await run_sync(yf.Ticker, yf_ticker)
-            df = await run_sync(lambda: ticker.history(period="1mo"))
+            df = await run_sync(lambda: ticker.history(period=period))
 
             if df is None or df.empty:
                 logger.info("yfinance_price_no_data", ticker=self.ticker)

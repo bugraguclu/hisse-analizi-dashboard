@@ -206,9 +206,9 @@ async def run_poll_once(body: PollRunRequest, background_tasks: BackgroundTasks)
 
 @admin_router.post("/backfill", status_code=202)
 async def backfill(body: BackfillRequest, background_tasks: BackgroundTasks):
-    from src.workers.polling_worker import run_all_sources_once
+    from src.workers.polling_worker import run_backfill
 
-    background_tasks.add_task(run_all_sources_once)
+    background_tasks.add_task(run_backfill, body.days, body.source_code)
     return {"status": "accepted", "days": body.days, "source_code": body.source_code or "all"}
 
 

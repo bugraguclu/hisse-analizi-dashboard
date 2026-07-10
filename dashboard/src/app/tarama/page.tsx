@@ -37,10 +37,7 @@ export default function TaramaPage() {
     queryFn: () => api.scanner(scanCondition || undefined),
     enabled: true,
   });
-  const xu100Q = useQuery({ queryKey: ["indexData", "XU100"], queryFn: () => api.indexData("XU100", "1ay") });
-  const xu030Q = useQuery({ queryKey: ["indexData", "XU030"], queryFn: () => api.indexData("XU030", "1ay") });
-  const xusinQ = useQuery({ queryKey: ["indexData", "XUSIN"], queryFn: () => api.indexData("XUSIN", "1ay") });
-  const xbankQ = useQuery({ queryKey: ["indexData", "XBANK"], queryFn: () => api.indexData("XBANK", "1ay") });
+  const indicesQ = useQuery({ queryKey: ["indexQuotes"], queryFn: () => api.indices(), staleTime: 120_000 });
   const allCompaniesQ = useQuery({ queryKey: ["allCompanies"], queryFn: () => api.allCompanies(), staleTime: 300_000 });
 
   const screenerData = screenerQ.data;
@@ -55,22 +52,18 @@ export default function TaramaPage() {
     ? ((scannerData as Record<string, unknown>).data as Record<string, unknown>[])
     : Array.isArray(scannerData) ? scannerData : [];
 
-  const indexQueries = [xu100Q, xu030Q, xusinQ, xbankQ];
-  const indicesLoading = indexQueries.some((q) => q.isLoading);
+  const indicesLoading = indicesQ.isLoading;
   const indexNames = ["XU100", "XU030", "XUSIN", "XBANK"];
-  const indicesArr = [xu100Q.data, xu030Q.data, xusinQ.data, xbankQ.data]
-    .map((d, idx) => {
-      if (!d) return { symbol: indexNames[idx], close: 0, change_pct: 0 };
-      const raw = d as { symbol: string; data: Array<Record<string, unknown>> };
-      const arr = raw?.data ?? [];
-      if (arr.length === 0) return { symbol: raw?.symbol ?? indexNames[idx], close: 0, change_pct: 0 };
-      const last = arr[arr.length - 1];
-      const prev = arr.length > 1 ? arr[arr.length - 2] : last;
-      const close = Number(last.Close ?? 0);
-      const prevClose = Number(prev.Close ?? close);
-      const change_pct = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
-      return { symbol: raw.symbol || indexNames[idx], close, change_pct };
-    });
+  const quotesRaw = indicesQ.data as { quotes?: Array<Record<string, unknown>> } | null;
+  const allQuotes = quotesRaw?.quotes ?? [];
+  const indicesArr = indexNames.map((sym) => {
+    const q = allQuotes.find((x) => String(x.symbol) === sym);
+    return {
+      symbol: sym,
+      close: Number(q?.last ?? 0),
+      change_pct: Number(q?.change_percent ?? 0),
+    };
+  });
 
   const allCompaniesRaw = allCompaniesQ.data as Record<string, unknown> | null;
   const allCompaniesList: Record<string, unknown>[] = Array.isArray(allCompaniesRaw) ? allCompaniesRaw as Record<string, unknown>[]
@@ -108,8 +101,8 @@ export default function TaramaPage() {
                 <motion.div key={i} custom={i + 2} variants={stagger} initial="hidden" animate="show">
                   <div className="bg-muted/30 rounded-xl p-4 hover:bg-muted/50 transition-colors">
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{idx.symbol}</div>
-                    <div className="text-xl font-bold font-mono text-foreground">{idx.close > 0 ? formatCompact(idx.close) : "-"}</div>
-                    {idx.change_pct !== 0 && (
+                    <div className="text-xl font-bold font-mono text-foreground">{idx.close > 0 ? formatNumber(idx.close, 2) : "-"}</div>
+                    {idx.close > 0 && (
                       <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                         {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                         {isUp ? "+" : ""}{formatNumber(idx.change_pct)}%
@@ -196,9 +189,13 @@ export default function TaramaPage() {
                     const tk = String(s.symbol || s.ticker || s.code || "");
                     const name = String(s.name || "");
                     const price = Number(s.criteria_7 || s.close || s.price || s.last || 0);
-                    const change = Number(s.change_pct || s.change_percent || 0);
-                    const vol = Number(s.volume || 0);
-                    const isUp = change >= 0;
+                    // Show "-" instead of fake +0,00% / 0 when the screener
+                    // response doesn't include these fields
+                    const changeRaw = s.change_pct ?? s.change_percent;
+                    const volRaw = s.volume;
+                    const change = changeRaw != null ? Number(changeRaw) : null;
+                    const vol = volRaw != null ? Number(volRaw) : null;
+                    const isUp = (change ?? 0) >= 0;
                     return (
                       <tr key={i} className="hover:bg-muted/15 transition-colors">
                         <td className="px-5 py-3">
@@ -206,13 +203,15 @@ export default function TaramaPage() {
                           {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">{name}</p>}
                         </td>
                         <td className="px-5 py-3 font-mono text-xs text-foreground">{price > 0 ? formatNumber(price) : "-"}</td>
-                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                          <span className="flex items-center gap-1">
-                            {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                            {isUp ? "+" : ""}{formatNumber(change)}%
-                          </span>
+                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${change == null ? "text-muted-foreground" : isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {change == null ? "-" : (
+                            <span className="flex items-center gap-1">
+                              {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                              {isUp ? "+" : ""}{formatNumber(change)}%
+                            </span>
+                          )}
                         </td>
-                        <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{formatCompact(vol)}</td>
+                        <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{vol != null && vol > 0 ? formatCompact(vol) : "-"}</td>
                       </tr>
                     );
                   })}

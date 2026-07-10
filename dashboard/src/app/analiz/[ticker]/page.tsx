@@ -123,12 +123,25 @@ function TeknikPanel({ ticker }: { ticker: string }) {
         ) : <EmptyState message="Bollinger verisi yok" />}
       </div>
 
-      {/* Signals */}
+      {/* Signals — nested groups (summary/oscillators/moving_averages) with
+          recommendation fields, plus any flat AL/SAT string entries */}
       {signalsObj && (
         <div className="bg-card rounded-xl border border-border/60 p-4">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("teknik.signals")}</h3>
+          {[
+            ["Genel", (signalsObj.summary as Record<string, unknown> | undefined)?.recommendation],
+            ["Osilatörler", (signalsObj.oscillators as Record<string, unknown> | undefined)?.recommendation],
+            ["Hareketli Ortalamalar", (signalsObj.moving_averages as Record<string, unknown> | undefined)?.recommendation],
+          ]
+            .filter(([, val]) => typeof val === "string")
+            .map(([label, val]) => (
+              <SignalIndicator key={String(label)} label={String(label)} signal={String(val)} />
+            ))}
           {Object.entries(signalsObj)
-            .filter(([key]) => key !== "summary" && typeof signalsObj[key] === "string")
+            .filter(([, val]) =>
+              typeof val === "string" &&
+              /^(AL|SAT|NOTR|NÖTR|BUY|SELL|NEUTRAL|STRONG_BUY|STRONG_SELL)$/i.test(val)
+            )
             .map(([key, val]) => (
               <SignalIndicator key={key} label={key} signal={String(val)} />
             ))}
@@ -174,8 +187,8 @@ function TemelPanel({ ticker }: { ticker: string }) {
               [t("temel.name"), infoObj.longName || infoObj.shortName || infoObj.name || ticker],
               [t("temel.sector"), infoObj.sector || infoObj.industry || "-"],
               [t("temel.marketCap"), formatCompact(Number(infoObj.marketCap || infoObj.market_cap || 0))],
-              [t("hisse.peRatio"), infoObj.trailingPE != null ? formatNumber(Number(infoObj.trailingPE)) : "-"],
-              ["PD/DD", infoObj.priceToBook != null ? formatNumber(Number(infoObj.priceToBook)) : "-"],
+              [t("hisse.peRatio"), (infoObj.trailingPE ?? infoObj.pe_ratio) != null ? formatNumber(Number(infoObj.trailingPE ?? infoObj.pe_ratio)) : "-"],
+              ["PD/DD", (infoObj.priceToBook ?? infoObj.pb_ratio) != null ? formatNumber(Number(infoObj.priceToBook ?? infoObj.pb_ratio)) : "-"],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex justify-between py-2 border-b border-border/30 last:border-0">
                 <span className="text-xs text-muted-foreground">{String(label)}</span>

@@ -14,7 +14,7 @@ async def main():
     setup_logging()
 
     parser = argparse.ArgumentParser(description="Manual poll runner")
-    parser.add_argument("--source", type=str, default=None, help="Source code to poll (kap, anadoluefes_news, anadoluefes_ir, price)")
+    parser.add_argument("--source", type=str, default=None, help="Source code to poll (kap, price, financials)")
     args = parser.parse_args()
 
     if args.source:

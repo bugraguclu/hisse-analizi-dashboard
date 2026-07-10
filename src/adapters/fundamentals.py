@@ -193,15 +193,18 @@ async def get_live_financial_ratios(ticker: str) -> dict:
         t = await _get_ticker(ticker)
         info = await run_sync(lambda: t.info)
         info_dict = safe_serialize(info) if info else {}
+        if not isinstance(info_dict, dict):
+            info_dict = {}
 
-        if not isinstance(info_dict, dict) or len(info_dict) < 3:
-            try:
-                fast = await run_sync(lambda: t.fast_info)
-                fast_dict = safe_serialize(fast) if fast else {}
-                if isinstance(fast_dict, dict) and fast_dict:
-                    info_dict = {**fast_dict, **(info_dict if isinstance(info_dict, dict) else {})}
-            except Exception:
-                pass
+        # Always merge fast_info underneath: it reliably carries pe_ratio /
+        # pb_ratio for BIST tickers even when t.info lacks ratio fields.
+        try:
+            fast = await run_sync(lambda: t.fast_info)
+            fast_dict = safe_serialize(fast) if fast else {}
+            if isinstance(fast_dict, dict) and fast_dict:
+                info_dict = {**fast_dict, **info_dict}
+        except Exception:
+            pass
 
         if not info_dict:
             return {"ticker": ticker, "ratios": None}
@@ -215,7 +218,7 @@ async def get_live_financial_ratios(ticker: str) -> dict:
             "current_ratio": _safe_float(info_dict.get("currentRatio") or info_dict.get("current_ratio")),
             "net_debt_ebitda": None,
             "debt_to_equity": _safe_float(info_dict.get("debtToEquity") or info_dict.get("debt_to_equity")),
-            "pe_ratio": _safe_float(info_dict.get("trailingPE") or info_dict.get("trailing_pe") or info_dict.get("forwardPE")),
+            "pe_ratio": _safe_float(info_dict.get("trailingPE") or info_dict.get("trailing_pe") or info_dict.get("forwardPE") or info_dict.get("pe_ratio")),
         }
 
         # Convert margins from decimal (0.25) to percentage (25.0) if they look like decimals

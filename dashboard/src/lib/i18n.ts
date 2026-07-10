@@ -56,6 +56,11 @@ const translations = {
   "quick.filteredScreening": { tr: "Filtreli tarama", en: "Filtered screening", fr: "Filtrage avancé" },
 
   // BIST 100 / Index Chart
+  "index.periodStart": { tr: "Dönem başı", en: "Period start", fr: "Début de période" },
+  "index.dailyChange": { tr: "Günlük", en: "Daily", fr: "Journalier" },
+  "hisse.pbRatio": { tr: "PD/DD", en: "P/B", fr: "C/VC" },
+  "hisse.freeFloat": { tr: "Halka Açıklık", en: "Free Float", fr: "Flottant" },
+  "hisse.foreignRatio": { tr: "Yabancı Oranı", en: "Foreign Ratio", fr: "Part étrangère" },
   "index.today": { tr: "bugün", en: "today", fr: "aujourd'hui" },
   "index.5days": { tr: "5 gün", en: "5 days", fr: "5 jours" },
   "index.1month": { tr: "1 ay", en: "1 month", fr: "1 mois" },

@@ -1,4 +1,8 @@
-"""Seed script: companies (BIST 30), sources, polling_state, notification_rules."""
+"""Seed script: companies (BIST 100), sources, polling_state, notification_rules.
+
+BIST 100 uyeleri borsapy uzerinden canli cekilir (Index("XU100").components);
+erisim yoksa asagidaki statik BIST 30 listesine geri duser.
+"""
 import asyncio
 import sys
 import os
@@ -15,8 +19,8 @@ from src.db.repository import (
 )
 
 
-# BIST 30 şirketleri (Mart 2026 — güncelleme gerekebilir)
-BIST30_COMPANIES = [
+# Statik yedek liste: BIST 30 (Mart 2026) — borsapy erisilemezse kullanilir
+FALLBACK_COMPANIES = [
     {"ticker": "AEFES", "legal_name": "ANADOLU EFES BİRACILIK VE MALT SANAYİİ A.Ş.", "display_name": "Anadolu Efes", "sector": "Gıda & İçecek"},
     {"ticker": "AKBNK", "legal_name": "AKBANK T.A.Ş.", "display_name": "Akbank", "sector": "Bankacılık"},
     {"ticker": "ARCLK", "legal_name": "ARÇELİK A.Ş.", "display_name": "Arçelik", "sector": "Dayanıklı Tüketim"},
@@ -74,7 +78,35 @@ SOURCES_DATA = [
 ]
 
 
+def fetch_bist100_companies() -> list[dict]:
+    """BIST 100 uyelerini borsapy'den cek; hata durumunda statik listeye don."""
+    try:
+        import borsapy as bp
+
+        components = bp.Index("XU100").components
+        fallback_by_ticker = {c["ticker"]: c for c in FALLBACK_COMPANIES}
+        companies = []
+        for comp in components:
+            ticker = comp["symbol"]
+            name = comp.get("name") or ticker
+            known = fallback_by_ticker.get(ticker, {})
+            companies.append({
+                "ticker": ticker,
+                "legal_name": known.get("legal_name", name.title()),
+                "display_name": known.get("display_name", name.title()),
+                "sector": known.get("sector"),
+            })
+        if len(companies) >= 50:
+            print(f"BIST 100 listesi borsapy'den alindi: {len(companies)} sirket")
+            return companies
+        print(f"borsapy beklenenden az sirket dondurdu ({len(companies)}), statik listeye donuluyor")
+    except Exception as e:
+        print(f"borsapy BIST 100 listesi alinamadi ({e}), statik listeye donuluyor")
+    return FALLBACK_COMPANIES
+
+
 async def seed():
+    company_list = fetch_bist100_companies()
     async with async_session_factory() as session:
         company_repo = CompanyRepository(session)
         source_repo = SourceRepository(session)
@@ -82,7 +114,7 @@ async def seed():
 
         # --- Şirketler ---
         companies = []
-        for c_data in BIST30_COMPANIES:
+        for c_data in company_list:
             company = await company_repo.upsert(
                 ticker=c_data["ticker"],
                 legal_name=c_data["legal_name"],
@@ -116,7 +148,7 @@ async def seed():
         await session.commit()
 
         print(f"Seed completed successfully!")
-        print(f"  Companies: {len(companies)} (BIST 30)")
+        print(f"  Companies: {len(companies)}")
         for c in companies:
             print(f"    - {c.ticker}: {c.display_name}")
         print(f"  Sources: {len(SOURCES_DATA)}")

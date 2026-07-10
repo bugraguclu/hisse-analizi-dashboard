@@ -43,18 +43,3 @@ def test_borsapy_companies():
     assert len(companies) > 700
     tickers = companies["ticker"].tolist()
     assert "THYAO" in tickers
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(not HAS_NETWORK, reason="Network tests disabled")
-def test_anadoluefes_news_page():
-    import httpx
-
-    resp = httpx.get(
-        "https://www.anadoluefes.com/haber-liste/247",
-        headers={"User-Agent": "HisseAnalizi/1.0"},
-        follow_redirects=True,
-        timeout=30,
-    )
-    assert resp.status_code == 200
-    assert len(resp.text) > 1000

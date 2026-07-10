@@ -108,6 +108,9 @@ export default function MakroPage() {
             {rateVal != null ? formatPercent(Number(rateVal)) : rateQ.isLoading ? "..." : "-"}
           </div>
           <p className="text-[11px] text-muted-foreground mt-1">{t("makro.weeklyRepo")}</p>
+          {typeof policyRateRaw === "object" && policyRateRaw != null && (policyRateRaw as Record<string, unknown>).date != null && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">{String((policyRateRaw as Record<string, unknown>).date)}</p>
+          )}
         </MacroCard>
         <MacroCard title={t("makro.inflation")} icon={BarChart3} index={2}>
           {inf ? (
@@ -145,20 +148,34 @@ export default function MakroPage() {
             <EmptyState message={t("makro.noCalendar")} />
           ) : (
             <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
-              {(calArr as Record<string, unknown>[]).slice(0, 10).map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-foreground truncate">{String(item.event || item.title || item.name || "-")}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{String(item.date || item.time || "")}</div>
-                  </div>
-                  {(item.actual || item.forecast) ? (
-                    <div className="text-[11px] font-mono text-muted-foreground ml-3 shrink-0 space-x-2">
-                      {item.actual != null && <span className="text-foreground font-semibold">G: {String(item.actual)}</span>}
-                      {item.forecast != null && <span>T: {String(item.forecast)}</span>}
+              {(calArr as Record<string, unknown>[]).slice(0, 12).map((item, i) => {
+                // borsapy calendar uses capitalized keys (Event, Date, Time, ...)
+                const name = String(item.Event ?? item.event ?? item.title ?? item.name ?? "-");
+                const dateRaw = String(item.Date ?? item.date ?? "");
+                const time = String(item.Time ?? item.time ?? "");
+                const country = String(item.Country ?? item.country ?? "");
+                const actual = item.Actual ?? item.actual;
+                const forecast = item.Forecast ?? item.forecast;
+                const previous = item.Previous ?? item.previous;
+                const dateLabel = dateRaw ? dateRaw.split("T")[0] : "";
+                return (
+                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-foreground truncate">{name}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {dateLabel}{time && time !== "00:00" ? ` ${time}` : ""}{country ? ` · ${country}` : ""}
+                      </div>
                     </div>
-                  ) : null}
-                </div>
-              ))}
+                    {(actual != null || forecast != null || previous != null) ? (
+                      <div className="text-[11px] font-mono text-muted-foreground ml-3 shrink-0 space-x-2">
+                        {actual != null && <span className="text-foreground font-semibold">G: {String(actual)}</span>}
+                        {forecast != null && <span>T: {String(forecast)}</span>}
+                        {previous != null && <span>Ö: {String(previous)}</span>}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
         </MacroCard>
@@ -177,7 +194,18 @@ export default function MakroPage() {
           policy_rate: { tr: "Politika Faizi", en: "Policy Rate", fr: "Taux directeur" },
         };
         const rateItems: Array<{ key: string; value: unknown }> = [];
-        if (rates && typeof rates === "object" && !Array.isArray(rates)) {
+        if (Array.isArray(rates)) {
+          // Backend shape: [{type: "policy"|"overnight"|"late_liquidity", borrowing, lending}, ...]
+          for (const row of rates as Array<Record<string, unknown>>) {
+            const kind = String(row.type ?? "");
+            if (kind === "policy" && row.lending != null) {
+              rateItems.push({ key: "policy_rate", value: row.lending });
+            } else {
+              if (row.borrowing != null) rateItems.push({ key: `${kind}_borrowing`, value: row.borrowing });
+              if (row.lending != null) rateItems.push({ key: `${kind}_lending`, value: row.lending });
+            }
+          }
+        } else if (rates && typeof rates === "object") {
           const r = rates as Record<string, unknown>;
           for (const [k, v] of Object.entries(r)) {
             if (v != null && typeof v !== "object") rateItems.push({ key: k, value: v });

@@ -15,10 +15,25 @@ async def get_tcmb_rates() -> dict:
     try:
         import borsapy as bp
         tcmb = await run_sync(bp.TCMB)
-        rates = await run_sync(lambda: tcmb.interest_rates if hasattr(tcmb, "interest_rates") else None)
+        # borsapy TCMB exposes `.rates` (DataFrame: policy/overnight/late_liquidity),
+        # not `.interest_rates`.
+        rates = await run_sync(lambda: tcmb.rates)
         if rates is None:
             return {"source": "TCMB", "data": {}}
         data = df_to_records(rates) if hasattr(rates, "iterrows") else safe_serialize(rates)
+
+        # borsapy's policy row carries the oldest (2010) rate due to a table
+        # ordering bug — overwrite it with the latest value from history.
+        try:
+            history = await run_sync(tcmb.history)
+            if history is not None and len(history) > 0:
+                current = float(history.iloc[-1]["lending"])
+                for row in data if isinstance(data, list) else []:
+                    if row.get("type") == "policy":
+                        row["lending"] = current
+        except Exception as e:
+            logger.warning("macro_tcmb_policy_patch_error", error=str(e))
+
         return {"source": "TCMB", "data": data}
     except Exception as e:
         logger.error("macro_tcmb_error", error=str(e))
@@ -29,8 +44,22 @@ async def get_tcmb_rates() -> dict:
 async def get_policy_rate() -> dict:
     try:
         import borsapy as bp
-        rate = await run_sync(bp.policy_rate)
-        return {"source": "TCMB", "policy_rate": safe_serialize(rate)}
+        # bp.policy_rate() reads the FIRST row of TCMB's rate table, but the
+        # table is oldest-first, so it returns the 2010 rate (7.0%). The
+        # history table's last row is the current policy rate.
+        tcmb = await run_sync(bp.TCMB)
+        history = await run_sync(tcmb.history)
+        if history is not None and len(history) > 0:
+            latest = history.iloc[-1]
+            return {
+                "source": "TCMB",
+                "policy_rate": {
+                    "value": float(latest["lending"]),
+                    "date": str(history.index[-1].date()) if hasattr(history.index[-1], "date") else str(history.index[-1]),
+                },
+                "history": df_to_records(history.tail(24)),
+            }
+        return {"source": "TCMB", "policy_rate": {}}
     except Exception as e:
         logger.error("macro_policy_rate_error", error=str(e))
         return {"source": "TCMB", "policy_rate": {}, "error": str(e)}
@@ -59,7 +88,7 @@ async def get_fx_rates(currency: str = "USD") -> dict:
         import borsapy as bp
         fx = await run_sync(lambda: bp.FX(currency))
         info = await run_sync(lambda: fx.info if hasattr(fx, "info") else None)
-        history = await run_sync(lambda: fx.history(period="1ay") if hasattr(fx, "history") else None)
+        history = await run_sync(lambda: fx.history(period="1mo") if hasattr(fx, "history") else None)
         return {
             "currency": currency,
             "info": info if isinstance(info, dict) else safe_serialize(info) if info else {},

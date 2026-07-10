@@ -1,0 +1,13 @@
+# Development override: mount backend source into containers so code changes
+# take effect on restart without rebuilding images.
+# docker compose picks this file up automatically; delete or rename for prod.
+services:
+  app:
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./alembic:/app/alembic
+  worker:
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
