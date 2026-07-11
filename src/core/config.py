@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     max_consecutive_failures: int = 5
 
     # AI / LLM (Phase 1)
+    ai_provider: str = "gemini"  # "gemini" (Google AI Studio) | "anthropic" (Claude)
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash"
     anthropic_api_key: str = ""
     ai_report_model: str = "claude-sonnet-5"
     ai_classifier_model: str = "claude-haiku-4-5"

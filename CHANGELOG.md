@@ -4,6 +4,21 @@ Tum onemli degisiklikler burada tarih sirasiyla belgelenir.
 
 ---
 
+## [v0.7.0] — 12 Temmuz 2026
+
+**Branch:** `master`
+
+### AI Motoru: Google AI Studio (Gemini) + kanita dayali rapor formati
+- **Saglayici-secmeli mimari** (`AI_PROVIDER=gemini|anthropic`, varsayilan gemini): `src/adapters/llm.py` yeniden yapilandirildi — `GeminiClient` (google-genai SDK, `gemini-3.5-flash`) ve `AnthropicClient` ayni arayuzu sunar, gunluk $5 butce kesici iki saglayici arasinda PAYLASILIR.
+- **Zengin veri beslemesi**: snapshot artik 30 gunluk fiyat serisi (gunluk kapanis+hacim, 1G/1H/1A degisimler), canli temel gostergeler (fast_info: piyasa degeri, F/K, 52H araligi...), teknik sinyaller, 4 doneme kadar finansal oranlar, son 10 KAP olayi (onem dereceli) ve makro baglam (TCMB politika faizi, enflasyon, USD/TRY aylik degisim) iceriyor.
+- **Kanita dayali amator-dostu prompt** (`report_tr.md` v2): her iddia JSON'daki somut degere "(kanit: ...)" formatiyla baglanmak zorunda; fiyat hareketleri tarihleriyle KAP/makro olaylarina eslestirilir, eslesme yoksa "veri bunu kanitlamiyor" denir; her jargon ilk kullanimda parantez ici sade aciklamayla tanimlanir; rapor "Bu Sonuca Nasil Vardim?" bolumuyle akil yurutme zincirini gosterir. SPK kurallari korundu.
+- Gece worker'i saglayiciya duyarli: anthropic'te Message Batches API (%50 indirim), gemini'de butce-korumal sirali uretim.
+- `/ai/status` artik saglayici + aktif modeli gosterir; 503 mesajlari saglayiciya ozel (GEMINI_API_KEY yonergesi AI Studio linkiyle).
+- `.env` ve `.env.example`'a `AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL` eklendi; `google-genai` bagimliligi.
+- Versiyon 0.7.0.
+
+---
+
 ## [v0.6.0] — 11 Temmuz 2026
 
 **Branch:** `master`

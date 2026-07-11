@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hisse-analizi-dashboard"
-version = "0.6.0"
+version = "0.7.0"
 description = "BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,6 +20,7 @@ dependencies = [
     "lxml>=5.1.0",
     "borsapy>=0.10.2",
     "anthropic>=0.92.0",
+    "google-genai>=1.0.0",
     "yfinance>=0.2.35",
     "apscheduler>=3.10.0",
     "structlog>=24.1.0",

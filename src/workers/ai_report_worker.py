@@ -3,10 +3,13 @@
 Her gece settings.ai_nightly_batch_hour saatinde (Europe/Istanbul):
 1. Aktif tum sirketler icin snapshot + hash hesaplanir
 2. Hash'i DB'deki rapordan farkli olanlar toplanir
-3. Anthropic Message Batches API'ye tek batch gonderilir (%50 indirimli)
-4. Batch bitince sonuclar ai_reports tablosuna yazilir
+3. Saglayiciya gore uretilir:
+   - anthropic: Message Batches API'ye tek batch (%50 indirimli)
+   - gemini (varsayilan): sirali uretim (flash modeli zaten dusuk maliyetli),
+     istekler arasi kisa bekleme ile rate limit korunur
+4. Sonuclar ai_reports tablosuna yazilir
 
-AI_NIGHTLY_BATCH_ENABLED=true ve ANTHROPIC_API_KEY gerektirir.
+AI_NIGHTLY_BATCH_ENABLED=true ve secili saglayicinin API anahtari gerektirir.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from src.adapters.llm import llm_client
+from src.adapters.llm import LLMBudgetExceededError, get_llm_client
 from src.core.config import settings
 from src.db.models import AIReport, Company
 from src.db.session import async_session_factory
@@ -136,13 +139,51 @@ async def _run_batch(stale: list[dict]) -> None:
     logger.info("ai_batch_done", batch_id=batch.id, saved=saved)
 
 
+async def _run_sequential(stale: list[dict]) -> None:
+    """Gemini ve digerleri: raporlari tek tek uretir (butce kesici devrede)."""
+    llm = get_llm_client()
+    system_prompt = ai_service.get_system_prompt()
+    saved = 0
+    async with async_session_factory() as session:
+        for item in stale:
+            try:
+                result = await llm.generate(system_prompt, ai_service._user_content(item["snapshot"]))
+            except LLMBudgetExceededError as e:
+                logger.warning("ai_sequential_budget_stop", error=str(e), saved=saved)
+                break
+            except Exception as e:
+                logger.warning("ai_sequential_item_failed", ticker=item["ticker"], error=str(e))
+                continue
+            stmt = (
+                pg_insert(AIReport)
+                .values(
+                    id=uuid.uuid4(),
+                    company_id=item["company_id"],
+                    content_hash=item["hash"],
+                    report_text=result.text,
+                    model=result.model,
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
+                    input_data_json=item["snapshot"],
+                )
+                .on_conflict_do_nothing(index_elements=["content_hash"])
+            )
+            await session.execute(stmt)
+            await session.commit()
+            saved += 1
+            await asyncio.sleep(2)  # rate limit nezaketi
+    logger.info("ai_sequential_done", saved=saved, total=len(stale))
+
+
 async def ai_report_loop() -> None:
     """Gece belirlenen saatte bir kez calisan dongu."""
-    if not settings.ai_nightly_batch_enabled or not llm_client.is_configured:
+    llm = get_llm_client()
+    if not settings.ai_nightly_batch_enabled or not llm.is_configured:
         logger.info(
             "ai_report_worker_disabled",
+            provider=settings.ai_provider,
             enabled=settings.ai_nightly_batch_enabled,
-            configured=llm_client.is_configured,
+            configured=llm.is_configured,
         )
         return
 
@@ -157,9 +198,12 @@ async def ai_report_loop() -> None:
             try:
                 async with async_session_factory() as session:
                     stale = await _collect_stale(session)
-                logger.info("ai_batch_stale_count", count=len(stale))
+                logger.info("ai_batch_stale_count", count=len(stale), provider=settings.ai_provider)
                 if stale:
-                    await _run_batch(stale)
+                    if settings.ai_provider == "anthropic":
+                        await _run_batch(stale)
+                    else:
+                        await _run_sequential(stale)
             except Exception as e:
                 logger.error("ai_batch_run_error", error=str(e))
         await asyncio.sleep(_POLL_INTERVAL_S)

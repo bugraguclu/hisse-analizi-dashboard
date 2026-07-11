@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.adapters.llm import LLMBudgetExceededError, LLMNotConfiguredError, llm_client
+from src.adapters.llm import LLMBudgetExceededError, LLMNotConfiguredError, get_llm_client
 from src.api.dependencies import require_admin, validate_ticker
 from src.api.limiter import limiter
 from src.core.config import settings
@@ -31,12 +31,14 @@ def _handle_llm_error(e: Exception) -> HTTPException:
 
 @ai_router.get("/status")
 async def ai_status():
-    """AI servisinin durumu: yapilandirma ve gunluk butce."""
+    """AI servisinin durumu: saglayici, yapilandirma ve gunluk butce."""
+    llm = get_llm_client()
     return {
-        "configured": llm_client.is_configured,
-        "report_model": settings.ai_report_model,
+        "provider": settings.ai_provider,
+        "configured": llm.is_configured,
+        "report_model": llm.default_model,
         "daily_budget_usd": settings.ai_daily_budget_usd,
-        "spent_today_usd": round(llm_client.budget.spent_today, 4),
+        "spent_today_usd": round(llm.budget.spent_today, 4),
     }
 
 
@@ -58,10 +60,12 @@ async def get_report(request: Request, ticker: str, db: DB):
 async def stream_report(request: Request, ticker: str, db: DB):
     """Raporu SSE ile token-token akitir. Cache varsa tek 'cached' olayi doner."""
     t = validate_ticker(ticker)
-    if not llm_client.is_configured:
+    llm = get_llm_client()
+    if not llm.is_configured:
+        key_name = "ANTHROPIC_API_KEY" if settings.ai_provider == "anthropic" else "GEMINI_API_KEY"
         raise HTTPException(
             status_code=503,
-            detail="ANTHROPIC_API_KEY tanimli degil. .env dosyasina ekleyin.",
+            detail=f"{key_name} tanimli degil. .env dosyasina ekleyin.",
         )
 
     async def event_gen():

@@ -1,10 +1,15 @@
 """AI analiz raporu servisi.
 
 Generate-Once modeli:
-1. Hisse verisi anlik goruntusu (snapshot) toplanir: fiyat, teknik sinyaller, oranlar, KAP olaylari
+1. Hisse verisi anlik goruntusu (snapshot) toplanir — fiyat serisi, canli temel
+   gostergeler, teknik sinyaller, finansal oranlar (4 donem), KAP olaylari ve
+   makro baglam (politika faizi, enflasyon, USD/TRY)
 2. Snapshot'in SHA-256 ozeti hesaplanir
 3. DB'de ayni hash'li rapor varsa aninda dondurulur (<1sn, LLM maliyeti yok)
-4. Yoksa Claude cagirilir ve sonuc hash ile birlikte kaydedilir
+4. Yoksa secili LLM (Gemini/Claude) cagirilir ve sonuc hash ile kaydedilir
+
+Snapshot bilincli olarak zengin tutulur: model her iddiasini bu JSON'daki
+verilere dayandirmak ve kanit gostermek zorundadir (bkz. prompts/report_tr.md).
 """
 
 from __future__ import annotations
@@ -20,7 +25,9 @@ from sqlalchemy import desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.adapters.llm import LLMResult, llm_client
+from src.adapters.llm import LLMResult, get_llm_client
+from src.adapters.fundamentals import get_fast_info
+from src.adapters.macro import get_fx_rates, get_inflation, get_policy_rate
 from src.adapters.technical import get_ta_signals
 from src.db.models import AIReport, Company, FinancialRatio, NormalizedEvent, PriceData
 
@@ -28,6 +35,10 @@ logger = structlog.get_logger(__name__)
 
 _PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "report_tr.md"
 _system_prompt_cache: str | None = None
+
+_PRICE_HISTORY_DAYS = 30
+_RATIO_PERIODS = 4
+_EVENT_COUNT = 10
 
 
 def get_system_prompt() -> str:
@@ -55,51 +66,68 @@ def compute_snapshot_hash(snapshot: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-async def build_snapshot(session: AsyncSession, company: Company) -> dict:
-    """Rapor girdisi: DB + canli teknik sinyallerden JSON anlik goruntusu."""
-    ticker = company.ticker
+def _pct(new: float, old: float) -> float | None:
+    if old == 0:
+        return None
+    return round((new - old) / old * 100, 2)
 
-    # Fiyat: son 5 gunluk kapanis (degisim hesabi icin)
+
+def _scalars_only(d: Any) -> dict:
+    """Sadece skaler alanlari birakir (token butcesini korur)."""
+    if not isinstance(d, dict):
+        return {}
+    return {
+        k: v
+        for k, v in d.items()
+        if isinstance(v, (int, float, str, bool)) and v is not None and str(v).lower() != "nan"
+    }
+
+
+async def _price_block(session: AsyncSession, ticker: str) -> dict[str, Any]:
     prices_res = await session.execute(
         select(PriceData)
         .where(PriceData.ticker == ticker)
         .order_by(desc(PriceData.trading_date))
-        .limit(5)
+        .limit(_PRICE_HISTORY_DAYS)
     )
     prices = list(prices_res.scalars().all())
-    price_block: dict[str, Any] = {}
-    if prices:
-        latest = prices[0]
-        price_block = {
-            "tarih": latest.trading_date,
-            "kapanis": latest.close,
-            "acilis": latest.open,
-            "yuksek": latest.high,
-            "dusuk": latest.low,
-            "hacim": latest.volume,
-        }
-        if len(prices) > 1 and prices[1].close and latest.close:
-            prev = float(prices[1].close)
-            if prev != 0:
-                price_block["gunluk_degisim_yuzde"] = round(
-                    (float(latest.close) - prev) / prev * 100, 2
-                )
+    if not prices:
+        return {}
 
-    # Teknik sinyaller (canli, borsapy)
-    signals = await get_ta_signals(ticker)
-    signals_block = signals.get("signals", {}) if isinstance(signals, dict) else {}
+    latest = prices[0]
+    closes = [float(p.close) for p in prices if p.close is not None]
+    block: dict[str, Any] = {
+        "son_islem_gunu": latest.trading_date,
+        "kapanis": latest.close,
+        "acilis": latest.open,
+        "yuksek": latest.high,
+        "dusuk": latest.low,
+        "hacim": latest.volume,
+    }
+    if len(closes) > 1:
+        block["gunluk_degisim_yuzde"] = _pct(closes[0], closes[1])
+    if len(closes) > 5:
+        block["haftalik_degisim_yuzde"] = _pct(closes[0], closes[5])
+    if len(closes) >= 21:
+        block["aylik_degisim_yuzde"] = _pct(closes[0], closes[20])
+    # Gunluk seri (eski -> yeni): olay-fiyat iliskisi kurabilmesi icin
+    block["gunluk_seri"] = [
+        {"tarih": p.trading_date, "kapanis": p.close, "hacim": p.volume}
+        for p in reversed(prices)
+    ]
+    return block
 
-    # Finansal oranlar: en guncel donem
+
+async def _ratios_block(session: AsyncSession, company: Company) -> list[dict[str, Any]]:
     ratios_res = await session.execute(
         select(FinancialRatio)
         .where(FinancialRatio.company_id == company.id)
         .order_by(desc(FinancialRatio.period))
-        .limit(1)
+        .limit(_RATIO_PERIODS)
     )
-    ratio = ratios_res.scalar_one_or_none()
-    ratios_block: dict[str, Any] = {}
-    if ratio:
-        ratios_block = {
+    out: list[dict[str, Any]] = []
+    for ratio in ratios_res.scalars().all():
+        row = {
             "donem": ratio.period,
             "roe": ratio.roe,
             "roa": ratio.roa,
@@ -110,35 +138,96 @@ async def build_snapshot(session: AsyncSession, company: Company) -> dict:
             "cari_oran": ratio.current_ratio,
             "net_borc_favok": ratio.net_debt_ebitda,
         }
-        ratios_block = {k: v for k, v in ratios_block.items() if v is not None}
+        out.append({k: v for k, v in row.items() if v is not None})
+    return out
 
-    # Son KAP olaylari (5 adet)
+
+async def _events_block(session: AsyncSession, company: Company) -> list[dict[str, Any]]:
     events_res = await session.execute(
         select(NormalizedEvent)
         .where(NormalizedEvent.company_id == company.id)
         .order_by(desc(NormalizedEvent.published_at))
-        .limit(5)
+        .limit(_EVENT_COUNT)
     )
-    events_block = [
-        {"baslik": e.title, "tarih": e.published_at, "kategori": str(e.category.value) if e.category else None}
+    return [
+        {
+            "baslik": e.title,
+            "tarih": e.published_at,
+            "kategori": str(e.category.value) if e.category else None,
+            "onem": str(e.severity.value) if e.severity else None,
+        }
         for e in events_res.scalars().all()
     ]
+
+
+async def _macro_block() -> dict[str, Any]:
+    """Makro baglam — TTL cache'li adapter'lar, hata durumunda bos birakilir."""
+    block: dict[str, Any] = {}
+    try:
+        pr = await get_policy_rate()
+        if pr.get("policy_rate"):
+            block["tcmb_politika_faizi"] = pr["policy_rate"]
+    except Exception as e:
+        logger.warning("ai_snapshot_macro_policy_error", error=str(e))
+    try:
+        inf = await get_inflation()
+        if inf.get("latest"):
+            block["enflasyon"] = _scalars_only(inf["latest"])
+    except Exception as e:
+        logger.warning("ai_snapshot_macro_inflation_error", error=str(e))
+    try:
+        fx = await get_fx_rates("USD")
+        hist = fx.get("history") or []
+        if hist:
+            last = hist[-1]
+            first = hist[0]
+            usd: dict[str, Any] = {"son": _scalars_only(last)}
+            lc = last.get("Close") or last.get("close")
+            fc = first.get("Close") or first.get("close")
+            if lc and fc:
+                usd["aylik_degisim_yuzde"] = _pct(float(lc), float(fc))
+            block["usd_try"] = usd
+    except Exception as e:
+        logger.warning("ai_snapshot_macro_fx_error", error=str(e))
+    return block
+
+
+async def build_snapshot(session: AsyncSession, company: Company) -> dict:
+    """Rapor girdisi: DB + canli adapter'lardan zengin JSON anlik goruntusu."""
+    ticker = company.ticker
+
+    price_block = await _price_block(session, ticker)
+
+    # Canli temel gostergeler (piyasa degeri, F/K, 52 hafta araligi vb.)
+    fast = await get_fast_info(ticker)
+    fast_block = _scalars_only(fast.get("fast_info", {}))
+
+    # Teknik sinyaller (canli, borsapy)
+    signals = await get_ta_signals(ticker)
+    signals_block = signals.get("signals", {}) if isinstance(signals, dict) else {}
+
+    ratios_block = await _ratios_block(session, company)
+    events_block = await _events_block(session, company)
+    macro_block = await _macro_block()
 
     return _to_jsonable(
         {
             "hisse": ticker,
             "sirket": company.display_name,
             "fiyat": price_block,
+            "canli_temel_gostergeler": fast_block,
             "teknik_sinyaller": signals_block,
-            "finansal_oranlar": ratios_block,
+            "finansal_oranlar_donemsel": ratios_block,
             "son_kap_olaylari": events_block,
+            "makro_baglam": macro_block,
         }
     )
 
 
 def _user_content(snapshot: dict) -> str:
     return (
-        "Asagidaki JSON verisine dayanarak analiz raporunu yaz:\n\n```json\n"
+        "Asagidaki JSON verisine dayanarak analiz raporunu yaz. Unutma: her iddiani "
+        "bu JSON'daki somut bir degere dayandir ve kanitini goster.\n\n```json\n"
         + json.dumps(snapshot, ensure_ascii=False, indent=2)
         + "\n```"
     )
@@ -182,7 +271,7 @@ async def _save_report(
 async def get_or_generate_report(
     session: AsyncSession, ticker: str, force: bool = False
 ) -> dict:
-    """Cache'ten rapor dondurur; yoksa (veya force ise) Claude ile uretir."""
+    """Cache'ten rapor dondurur; yoksa (veya force ise) LLM ile uretir."""
     company = await _get_company(session, ticker)
     if company is None:
         raise LookupError(f"{ticker} veritabaninda bulunamadi")
@@ -202,7 +291,8 @@ async def get_or_generate_report(
                 "input_hash": content_hash,
             }
 
-    result = await llm_client.generate(get_system_prompt(), _user_content(snapshot))
+    llm = get_llm_client()
+    result = await llm.generate(get_system_prompt(), _user_content(snapshot))
     await _save_report(session, company, content_hash, snapshot, result)
     logger.info("ai_report_generated", ticker=ticker, hash=content_hash[:12], cost_usd=round(result.cost_usd, 4))
     return {
@@ -231,8 +321,9 @@ async def stream_report(session: AsyncSession, ticker: str) -> AsyncIterator[dic
         yield {"event": "done", "data": ""}
         return
 
+    llm = get_llm_client()
     final: LLMResult | None = None
-    async for chunk in llm_client.generate_stream(get_system_prompt(), _user_content(snapshot)):
+    async for chunk in llm.generate_stream(get_system_prompt(), _user_content(snapshot)):
         if isinstance(chunk, LLMResult):
             final = chunk
         else:
