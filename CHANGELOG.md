@@ -4,6 +4,25 @@ Tum onemli degisiklikler burada tarih sirasiyla belgelenir.
 
 ---
 
+## [v0.6.0] — 11 Temmuz 2026
+
+**Branch:** `master`
+
+### Faz 1 — AI Core (Roadmap)
+- **LLM adapter** (`src/adapters/llm.py`): Anthropic Claude sarmalayici — prompt caching (sistem talimati `cache_control` ile, ~%90 girdi tasarrufu), model bazli maliyet hesabi, gunluk butce devre kesici (`AI_DAILY_BUDGET_USD`, varsayilan $5), streaming destegi. Modeller: rapor icin `claude-sonnet-5` (intro fiyat $2/$10 per MTok, 2026-08-31'e kadar), siniflandirma icin `claude-haiku-4-5` (yapilandirilabilir).
+- **Migration 003**: `ai_reports` tablosu (content_hash UNIQUE ile Generate-Once cache, input_data_json, token sayaclari).
+- **Turkce sistem promptu** (`src/services/prompts/report_tr.md`): sadece verilen JSON'a dayali analiz, SPK uyari zorunlulugu, al/sat tavsiyesi yasagi.
+- **AI servisi** (`src/services/ai_service.py`): snapshot toplama (fiyat + teknik sinyaller + finansal oranlar + son 5 KAP olayi) → SHA-256 hash → cache kontrolu → Claude cagrisi → DB kayit.
+- **Yeni endpointler** (`/ai/*`, 3/dk rate limit): `GET /ai/status`, `GET /ai/report/{ticker}` (cache'li JSON), `GET /ai/report/{ticker}/stream` (SSE token akisi), `POST /ai/report/{ticker}/regenerate` (admin).
+- **Gece batch worker** (`src/workers/ai_report_worker.py`): hash'i degisen BIST 100 hisseleri icin Message Batches API ile %50 indirimli toplu uretim. `AI_NIGHTLY_BATCH_ENABLED=true` ile acilir.
+- **Frontend**: "AI Analiz Raporu" butonu artik SSE stream endpoint'ini tuketiyor — daktilo efektiyle canli akis, cache'te varsa aninda tam metin, hata durumunda backend `detail` mesaji gosteriliyor.
+- `ANTHROPIC_API_KEY` tanimli degilse tum AI endpointleri kibar 503 doner; sistemin geri kalani etkilenmez.
+- slowapi limiter `src/api/limiter.py`'a tasindi (app + router paylasimi icin).
+- Dashboard Docker imaji yeniden derlendi (10 Temmuz'da Docker Hub erisim sorunu nedeniyle bekleyen tum UI duzeltmeleri artik canli).
+- Versiyon 0.6.0 (pyproject, FastAPI app, HealthOut).
+
+---
+
 ## [v0.5.1] — 10 Temmuz 2026
 
 **Branch:** `master`

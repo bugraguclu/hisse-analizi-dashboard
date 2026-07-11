@@ -290,6 +290,25 @@ class FinancialRatio(Base):
     company = relationship("Company", back_populates="financial_ratios")
 
 
+class AIReport(Base):
+    __tablename__ = "ai_reports"
+    __table_args__ = (
+        Index("ix_ai_reports_company_hash", "company_id", "content_hash"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    content_hash = Column(String(64), unique=True, nullable=False)
+    report_text = Column(Text, nullable=False)
+    model = Column(String(100), nullable=True)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    input_data_json = Column(JSONB, nullable=False, default=dict)
+    generated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company")
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

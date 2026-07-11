@@ -16,6 +16,7 @@ import asyncio
 from src.core.logging import setup_logging
 from src.workers.polling_worker import polling_loop
 from src.workers.notification_worker import notification_loop
+from src.workers.ai_report_worker import ai_report_loop
 
 
 async def main():
@@ -23,6 +24,7 @@ async def main():
     await asyncio.gather(
         polling_loop(),
         notification_loop(),
+        ai_report_loop(),
     )
 
 

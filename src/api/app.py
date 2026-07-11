@@ -5,21 +5,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from src.core.config import settings
 from src.core.logging import setup_logging
+from src.api.limiter import limiter
 from src.api.routers import router, admin_router
 from src.api.routers_technical import technical_router
 from src.api.routers_fundamentals import fundamentals_router
 from src.api.routers_macro import macro_router
 from src.api.routers_market import market_router
+from src.api.routers_ai import ai_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 @asynccontextmanager
@@ -37,7 +36,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Hisse Analizi Dashboard",
     description="BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi",
-    version="0.5.0",
+    version="0.6.0",
     lifespan=lifespan,
 )
 
@@ -59,6 +58,7 @@ app.include_router(technical_router)
 app.include_router(fundamentals_router)
 app.include_router(macro_router)
 app.include_router(market_router)
+app.include_router(ai_router)
 
 DASHBOARD_DIR = STATIC_DIR / "dashboard"
 

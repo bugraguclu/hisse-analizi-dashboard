@@ -252,17 +252,50 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
     setShowAiReport(true);
     setAiReportContent(null);
     try {
-      const res = await fetch(
-        `${API_BASE}/ai/report/${sym}`,
-        { cache: "no-store" }
-      );
-      if (res.ok) {
-        const json = await res.json() as Record<string, unknown>;
-        setAiReportContent(String(json.report ?? json.content ?? json.analysis ?? JSON.stringify(json)));
-      } else {
+      const res = await fetch(`${API_BASE}/ai/report/${sym}/stream`, { cache: "no-store" });
+      if (!res.ok || !res.body) {
+        const err = (await res.json().catch(() => null)) as { detail?: string } | null;
         setAiReportContent(
-          `${sym} icin AI rapor servisi su anda kullanilabilir degil. Lutfen daha sonra tekrar deneyin.`
+          err?.detail ??
+            `${sym} icin AI rapor servisi su anda kullanilabilir degil. Lutfen daha sonra tekrar deneyin.`
         );
+        return;
+      }
+      // SSE akisini parse et: event: delta|cached|error|done + data: {"text": ...}
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          let event = "message";
+          let data = "";
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            else if (line.startsWith("data: ")) data = line.slice(6);
+          }
+          if (!data) continue;
+          let text = "";
+          try {
+            text = String((JSON.parse(data) as { text?: string }).text ?? "");
+          } catch {
+            text = data;
+          }
+          if (event === "delta") {
+            acc += text;
+            setAiReportContent(acc);
+          } else if (event === "cached") {
+            acc = text;
+            setAiReportContent(acc);
+          } else if (event === "error") {
+            setAiReportContent(text || `${sym} icin AI rapor servisi su anda kullanilabilir degil.`);
+          }
+        }
       }
     } catch {
       setAiReportContent(
@@ -506,14 +539,17 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
               </button>
             </div>
             <div className="p-5">
-              {aiReportLoading ? (
+              {aiReportContent ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                    {aiReportContent}
+                    {aiReportLoading && <span className="animate-pulse text-violet-500">▍</span>}
+                  </p>
+                </div>
+              ) : aiReportLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
                   <span className="ml-3 text-sm text-muted-foreground">{t("ai.generating")}</span>
-                </div>
-              ) : aiReportContent ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{aiReportContent}</p>
                 </div>
               ) : null}
             </div>

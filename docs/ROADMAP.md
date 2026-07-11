@@ -147,10 +147,10 @@ To prevent high API costs, we will use a **Generate-Once** model. We generate a 
 
 ### Checklist & File References
 
-*   **[ ] Create LLM Client Adapter:**
+*   **[x] Create LLM Client Adapter:**
     *   **File:** `[NEW]` [src/adapters/llm.py](file:///Users/bugra/hisse-analizi-dashboard/src/adapters/llm.py)
     *   **Action:** Implement the Anthropic client wrapper. Set up client connection pooling, error retries, prompt caching markers, cost calculation methods, and a daily spend circuit-breaker stored in Redis or memory.
-*   **[ ] Define Database Schema & Migration 003:**
+*   **[x] Define Database Schema & Migration 003:**
     *   **File:** `[NEW]` [alembic/versions/003_ai_reports.py](file:///Users/bugra/hisse-analizi-dashboard/alembic/versions/003_add_ai_reports_table.py)
     *   **Action:** Create the `ai_reports` table:
         ```sql
@@ -164,22 +164,22 @@ To prevent high API costs, we will use a **Generate-Once** model. We generate a 
         );
         CREATE INDEX idx_ai_reports_company_hash ON ai_reports(company_id, content_hash);
         ```
-*   **[ ] Write Turkish AI Report System Prompt:**
+*   **[x] Write Turkish AI Report System Prompt:**
     *   **File:** `[NEW]` [src/services/prompts/report_tr.md](file:///Users/bugra/hisse-analizi-dashboard/src/services/prompts/report_tr.md)
     *   **Action:** Write the instruction template. Guidelines must dictate:
         1. Base analysis **exclusively** on the quantitative JSON context supplied (do not invent or recall numbers from memory).
         2. Embed SPK warning: *"Bu rapordaki analiz ve yorumlar yatırım tavsiyesi değildir (SPK Yatırım Danışmanlığı Tebliği uyarınca)."*
         3. Present technical indicator results strictly as data-readings (e.g. "RSI is high") rather than action signals like "Buy now".
-*   **[ ] Implement AI Analysis Service:**
+*   **[x] Implement AI Analysis Service:**
     *   **File:** `[NEW]` [src/services/ai_service.py](file:///Users/bugra/hisse-analizi-dashboard/src/services/ai_service.py)
     *   **Action:** Create `generate_report(ticker: str) -> str`. It gathers the stock details, technical signals, and income statement figures; compiles them into a JSON snapshot; generates a SHA-256 content hash; checks the database; and queries Claude if there is a cache miss.
-*   **[ ] Create AI Report Router Endpoints:**
+*   **[x] Create AI Report Router Endpoints:**
     *   **File:** `[NEW]` [src/api/routers_ai.py](file:///Users/bugra/hisse-analizi-dashboard/src/api/routers_ai.py)
     *   **Action:** Expose endpoints:
         *   `GET /ai/report/{ticker}`: Returns cached report or calls generation synchronously.
         *   `GET /ai/report/{ticker}/stream`: Streams report tokens using Server-Sent Events (SSE) for loading states.
         *   `POST /ai/report/{ticker}/regenerate`: Admin-only endpoint to clear cache and force fresh execution.
-*   **[ ] Implement Nightly Batch Worker:**
+*   **[x] Implement Nightly Batch Worker:**
     *   **File:** `[NEW]` [src/workers/ai_report_worker.py](file:///Users/bugra/hisse-analizi-dashboard/src/workers/ai_report_worker.py)
     *   **Action:** Run a nightly task querying the BIST 100. It computes hashes for each stock. If the hash differs from the saved DB report, it requests a new report. Use the **Anthropic Message Batches API** (runs asynchronously in the background and costs **50% less**).
 *   **[ ] Optional: LLM KAP Event Classifier:**

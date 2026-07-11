@@ -44,6 +44,16 @@ class Settings(BaseSettings):
     backoff_factor: int = 2
     max_consecutive_failures: int = 5
 
+    # AI / LLM (Phase 1)
+    anthropic_api_key: str = ""
+    ai_report_model: str = "claude-sonnet-5"
+    ai_classifier_model: str = "claude-haiku-4-5"
+    ai_report_max_tokens: int = 4096
+    ai_daily_budget_usd: float = 5.0
+    ai_nightly_batch_enabled: bool = False
+    ai_nightly_batch_hour: int = 2  # Europe/Istanbul saati
+    rate_limit_ai: str = "3/minute"
+
     # Worker concurrency
     worker_max_concurrency: int = 5
     worker_single_replica: bool = True  # TEMPORARY: set to False only after implementing advisory locks
