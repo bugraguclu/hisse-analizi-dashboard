@@ -290,6 +290,27 @@ class FinancialRatio(Base):
     company = relationship("Company", back_populates="financial_ratios")
 
 
+class NewsItem(Base):
+    __tablename__ = "news_items"
+    __table_args__ = (
+        Index("ix_news_published", "company_id", "published_at"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(512), nullable=False)
+    url = Column(String(1024), unique=True, nullable=False)
+    snippet = Column(Text, nullable=True)
+    source_name = Column(String(200), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=False)
+    sentiment = Column(String(20), nullable=True)   # 'pozitif' | 'notr' | 'negatif'
+    impact = Column(String(20), nullable=True)      # 'yuksek' | 'orta' | 'dusuk'
+    rationale = Column(String(300), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company")
+
+
 class AIReport(Base):
     __tablename__ = "ai_reports"
     __table_args__ = (

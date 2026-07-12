@@ -147,6 +147,8 @@ export const api = {
     get(`/fundamentals/${ticker}/live-ratios`),
   liveNews: (ticker: string) =>
     get(`/fundamentals/${ticker}/live-news`),
+  tickerNews: (ticker: string, hours = 48) =>
+    get(`/news/${ticker}?hours=${hours}`),
 
   // Macro (backend caches 600s)
   tcmb: () => get("/macro/tcmb"),

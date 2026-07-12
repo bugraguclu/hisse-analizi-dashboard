@@ -17,6 +17,7 @@ from src.core.logging import setup_logging
 from src.workers.polling_worker import polling_loop
 from src.workers.notification_worker import notification_loop
 from src.workers.ai_report_worker import ai_report_loop
+from src.workers.news_worker import news_loop
 
 
 async def main():
@@ -25,6 +26,7 @@ async def main():
         polling_loop(),
         notification_loop(),
         ai_report_loop(),
+        news_loop(),
     )
 
 

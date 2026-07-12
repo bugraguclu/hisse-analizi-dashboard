@@ -210,6 +210,12 @@ async def build_snapshot(session: AsyncSession, company: Company) -> dict:
     events_block = await _events_block(session, company)
     macro_block = await _macro_block()
 
+    # Son 48 saatin web haberleri (duygu/etki etiketli) — haber degisince
+    # snapshot hash'i de degisir ve rapor otomatik yenilenir
+    from src.services.news_service import news_summary_for_snapshot
+
+    news_block = await news_summary_for_snapshot(session, company, hours=48)
+
     return _to_jsonable(
         {
             "hisse": ticker,
@@ -219,6 +225,7 @@ async def build_snapshot(session: AsyncSession, company: Company) -> dict:
             "teknik_sinyaller": signals_block,
             "finansal_oranlar_donemsel": ratios_block,
             "son_kap_olaylari": events_block,
+            "son_web_haberleri": news_block,
             "makro_baglam": macro_block,
         }
     )

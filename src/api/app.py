@@ -17,6 +17,7 @@ from src.api.routers_fundamentals import fundamentals_router
 from src.api.routers_macro import macro_router
 from src.api.routers_market import market_router
 from src.api.routers_ai import ai_router
+from src.api.routers_news import news_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -36,7 +37,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Hisse Analizi Dashboard",
     description="BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi",
-    version="0.7.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -59,6 +60,7 @@ app.include_router(fundamentals_router)
 app.include_router(macro_router)
 app.include_router(market_router)
 app.include_router(ai_router)
+app.include_router(news_router)
 
 DASHBOARD_DIR = STATIC_DIR / "dashboard"
 

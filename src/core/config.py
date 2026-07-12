@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     ai_nightly_batch_hour: int = 2  # Europe/Istanbul saati
     rate_limit_ai: str = "3/minute"
 
+    # Haber toplama (Faz 2)
+    news_poll_enabled: bool = True
+    news_poll_interval_seconds: int = 900  # 15 dakika
+    news_fetch_concurrency: int = 4
+    ai_news_classify_enabled: bool = True  # LLM anahtari yoksa otomatik atlanir
+
     # Worker concurrency
     worker_max_concurrency: int = 5
     worker_single_replica: bool = True  # TEMPORARY: set to False only after implementing advisory locks

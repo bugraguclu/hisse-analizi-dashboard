@@ -198,10 +198,10 @@ Stock movements are not driven solely by past financial ratios. Breaking news an
 
 ### Checklist & File References
 
-*   **[ ] Write Google News RSS Adapter:**
+*   **[x] Write Google News RSS Adapter:**
     *   **File:** `[NEW]` [src/adapters/news.py](file:///Users/bugra/hisse-analizi-dashboard/src/adapters/news.py)
     *   **Action:** Write a parser query to ingest RSS updates for specific tickers via Google News (compliant with terms of service: fetch headlines, URL source, published dates, and brief descriptions).
-*   **[ ] Define News Database Schema & Migration 004:**
+*   **[x] Define News Database Schema & Migration 004:**
     *   **File:** `[NEW]` [alembic/versions/004_news_items.py](file:///Users/bugra/hisse-analizi-dashboard/alembic/versions/004_news_items.py)
     *   **Action:** Create the `news_items` database table:
         ```sql
@@ -219,19 +219,19 @@ Stock movements are not driven solely by past financial ratios. Breaking news an
         );
         CREATE INDEX idx_news_published ON news_items(company_id, published_at DESC);
         ```
-*   **[ ] Configure 15-Minute News Poll Loop:**
+*   **[x] Configure 15-Minute News Poll Loop:**
     *   **File:** [src/workers/polling_worker.py](file:///Users/bugra/hisse-analizi-dashboard/src/workers/polling_worker.py)
     *   **Action:** Register the news adapter into the system pool loop. Run news ingestion every 15 minutes for the active tickers, handling database upserts safely using `ON CONFLICT (url) DO NOTHING`.
-*   **[ ] news API Router Endpoint:**
+*   **[x] news API Router Endpoint:**
     *   **File:** `[NEW]` [src/api/routers_news.py](file:///Users/bugra/hisse-analizi-dashboard/src/api/routers_news.py)
     *   **Action:** Create `GET /news/{ticker}?hours=48`. Returns matching stock news from the database filtered by timeline.
-*   **[ ] Implement AI News Classifier:**
+*   **[x] Implement AI News Classifier:**
     *   **File:** [src/services/ai_service.py](file:///Users/bugra/hisse-analizi-dashboard/src/services/ai_service.py)
     *   **Action:** Create `classify_news_batch(news_list)` using `claude-3-5-haiku` with JSON structured outputs to label news sentiment, market impact, and a short 200-character rationale.
-*   **[ ] Feed News into AI Report Snapshot:**
+*   **[x] Feed News into AI Report Snapshot:**
     *   **File:** [src/services/ai_service.py](file:///Users/bugra/hisse-analizi-dashboard/src/services/ai_service.py)
     *   **Action:** Add summary statistics of the last 48 hours of news sentiment into the stock analysis snapshot. This guarantees that breaking news alters the data snapshot hash, triggering an automatic report refresh.
-*   **[ ] Integrate News Section into Stock Detail Page:**
+*   **[x] Integrate News Section into Stock Detail Page:**
     *   **File:** [dashboard/src/app/hisse/[ticker]/page.tsx](file:///Users/bugra/hisse-analizi-dashboard/dashboard/src/app/hisse/%5Bticker%5D/page.tsx)
     *   **Action:** Build a news timeline UI widget showing headlines, dates, and sentiment badges (green for Pozitif, yellow for Nötr, red for Negatif) with tooltips displaying the AI rationale.
 

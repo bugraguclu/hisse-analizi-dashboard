@@ -180,6 +180,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
     enabled: !eventsQ.isLoading && (!Array.isArray(eventsQ.data) || eventsQ.data.length === 0),
   });
   const signalsQ = useQuery({ queryKey: ["signals", sym], queryFn: () => api.signals(sym) });
+  const newsQ = useQuery({ queryKey: ["tickerNews", sym], queryFn: () => api.tickerNews(sym, 48) });
 
   const historyRaw = historyQ.data as { data: Array<Record<string, unknown>>; info?: Record<string, unknown> } | null;
   const historyData = historyRaw?.data ?? [];
@@ -579,6 +580,42 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             ))}
           </div>
         )}
+      </motion.div>
+
+      {/* Web News with AI sentiment (Faz 2) */}
+      <motion.div custom={9} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-border/40">
+          <h2 className="text-sm font-semibold text-foreground">{t("hisse.newsTitle")}</h2>
+        </div>
+        {(() => {
+          const newsData = newsQ.data as { news?: Array<{ title: string; url: string; source: string | null; published_at: string | null; sentiment: string | null; impact: string | null; rationale: string | null }> } | null;
+          const newsItems = Array.isArray(newsData?.news) ? newsData.news : [];
+          if (newsQ.isLoading) return <LoadingSpinner />;
+          if (newsItems.length === 0) return <EmptyState message={t("hisse.noNews")} />;
+          const badge = (s: string | null) =>
+            s === "pozitif" ? "bg-emerald-500/15 text-emerald-500"
+            : s === "negatif" ? "bg-red-500/15 text-red-500"
+            : "bg-yellow-500/15 text-yellow-600";
+          return (
+            <div className="divide-y divide-border/30">
+              {newsItems.map((n, i) => (
+                <a key={n.url || i} href={n.url} target="_blank" rel="noopener noreferrer" className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-foreground truncate">{n.title}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {n.published_at ? formatDate(n.published_at) : ""}{n.source ? ` · ${n.source}` : ""}
+                    </div>
+                  </div>
+                  {n.sentiment && (
+                    <span title={n.rationale ?? undefined} className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge(n.sentiment)}`}>
+                      {n.sentiment}{n.impact ? ` · ${n.impact}` : ""}
+                    </span>
+                  )}
+                </a>
+              ))}
+            </div>
+          );
+        })()}
       </motion.div>
 
       {/* Analyst Recommendations & All Timeframe Signals */}

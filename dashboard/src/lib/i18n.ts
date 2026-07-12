@@ -90,6 +90,8 @@ const translations = {
   "hisse.someRatiosMissing": { tr: "Bazı oranlar bu hisse için hesaplanamamıştır", en: "Some ratios could not be calculated for this stock", fr: "Certains ratios n'ont pas pu être calculés" },
   "hisse.recentEvents": { tr: "Son Olaylar", en: "Recent Events", fr: "Événements récents" },
   "hisse.noEvents": { tr: "Bu hisse için henüz olay kaydedilmemiş", en: "No events recorded for this stock yet", fr: "Aucun événement enregistré pour cette action" },
+  "hisse.newsTitle": { tr: "Haberler (48s)", en: "News (48h)", fr: "Actualités (48h)" },
+  "hisse.noNews": { tr: "Son 48 saatte haber bulunamadı", en: "No news in the last 48 hours", fr: "Aucune actualité ces dernières 48h" },
   "hisse.grossMargin": { tr: "Brüt Kâr Marjı", en: "Gross Margin", fr: "Marge brute" },
   "hisse.ebitdaMargin": { tr: "FAVÖK Marjı", en: "EBITDA Margin", fr: "Marge EBITDA" },
   "hisse.netMargin": { tr: "Net Kâr Marjı", en: "Net Margin", fr: "Marge nette" },

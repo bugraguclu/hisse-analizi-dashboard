@@ -4,6 +4,23 @@ Tum onemli degisiklikler burada tarih sirasiyla belgelenir.
 
 ---
 
+## [v0.8.0] — 12 Temmuz 2026
+
+**Branch:** `master`
+
+### Faz 2 — Haber + AI Yorumlama (Roadmap)
+- **Google News RSS adapter'i** (`src/adapters/news.py`): hisse bazli Turkce haber toplama (baslik, kaynak, tarih, ozet — yalnizca RSS meta verisi, kullanim kosullarina uygun).
+- **Migration 004**: `news_items` tablosu (url UNIQUE dedup, sentiment/impact/rationale alanlari).
+- **Haber worker'i** (`src/workers/news_worker.py`): 15 dk'da bir BIST 100 taramasi (es zamanlilik siniri 4); ilk turda 102 sirketten 473 haber toplandi.
+- **AI siniflandirici** (`src/services/news_service.py`): yeni haberler tek LLM cagrisiyla duygu (pozitif/notr/negatif) + etki (yuksek/orta/dusuk) + kisa gerekce etiketi alir; anahtar yoksa etiketsiz saklanir, anahtar gelince yeni haberler otomatik etiketlenir.
+- **`GET /news/{ticker}?hours=48`**: etiketli haber listesi.
+- **AI rapor beslemesi**: son 48 saatin haber ozeti (duygu dagilimi + basliklar) rapor snapshot'ina eklendi — onemli haber cikinca hash degisir, rapor otomatik yenilenir. Prompt'a "Gundemde Ne Var?" bolumu eklendi.
+- **Frontend**: hisse sayfasina "Haberler (48s)" bolumu — kaynaga tiklanabilir basliklar, duygu/etki rozetleri (yesil pozitif / sari notr / kirmizi negatif), rozet uzerinde AI gerekcesi (tooltip).
+- **Kritik altyapi duzeltmesi** (`src/adapters/utils.py`): paylasilan httpx client'in `Timeout` kurulumu eksikti (default'suz — kullanan ilk cagri patliyordu) ve Docker VM'de IPv6 cikisi olmadigi icin IPv6'ya cozulen hostlara (news.google.com) baglanti kurulamiyordu; timeout default eklendi, transport IPv4'e sabitlendi.
+- Versiyon 0.8.0.
+
+---
+
 ## [v0.7.0] — 12 Temmuz 2026
 
 **Branch:** `master`

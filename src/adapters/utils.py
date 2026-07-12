@@ -117,6 +117,7 @@ def get_http_client() -> httpx.AsyncClient:
     if _http_client is None or _http_client.is_closed:
         _http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(
+                settings.http_read_timeout,  # varsayilan (write/pool dahil)
                 connect=settings.http_connect_timeout,
                 read=settings.http_read_timeout,
             ),
@@ -126,6 +127,9 @@ def get_http_client() -> httpx.AsyncClient:
                 max_connections=20,
                 max_keepalive_connections=10,
             ),
+            # Docker VM'de IPv6 cikisi yok; IPv6'ya cozulen hostlar (news.google.com)
+            # baglanti hatasi veriyor. IPv4'e sabitle.
+            transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0"),
         )
     return _http_client
 
