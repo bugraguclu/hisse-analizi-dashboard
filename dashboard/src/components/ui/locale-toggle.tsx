@@ -21,12 +21,17 @@ export function LocaleToggle({ className }: LocaleToggleProps) {
         "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800",
         className,
       )}
+      role="group"
+      aria-label="Dil seçimi"
     >
       <Languages className="w-3.5 h-3.5 text-muted-foreground ml-1 mr-0.5 flex-shrink-0" />
       {locales.map((l) => (
         <button
+          type="button"
           key={l}
           onClick={() => setLocale(l)}
+          aria-label={`${localeLabels[l]} dilini seç`}
+          aria-pressed={locale === l}
           className={cn(
             "px-2 py-1 rounded-full text-[10px] font-bold transition-all duration-200",
             locale === l

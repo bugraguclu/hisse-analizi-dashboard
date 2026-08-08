@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -13,6 +13,7 @@ import Link from "next/link";
 import { TrendingUp, Building2, Activity } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { AllTimeframeSignals } from "@/components/stock/AllTimeframeSignals";
+import { MovingAveragesTable } from "@/components/stock/MovingAveragesTable";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -55,6 +56,19 @@ function IndicatorCard({ label, value, subtitle, index }: { label: string; value
   );
 }
 
+function signalEntries(raw: Record<string, unknown> | null): Array<[string, string]> {
+  if (!raw) return [];
+  const groups: Array<[string, string]> = [
+    ["Genel", String((raw.summary as Record<string, unknown> | undefined)?.recommendation ?? "")],
+    ["Osilatörler", String((raw.oscillators as Record<string, unknown> | undefined)?.recommendation ?? "")],
+    ["Hareketli Ortalamalar", String((raw.moving_averages as Record<string, unknown> | undefined)?.recommendation ?? "")],
+  ];
+  const flat = Object.entries(raw)
+    .filter(([, value]) => typeof value === "string" && /^(AL|SAT|NOTR|NÖTR|BUY|SELL|NEUTRAL|STRONG_BUY|STRONG_SELL)$/i.test(value))
+    .map(([key, value]) => [key, String(value)] as [string, string]);
+  return [...groups.filter(([, value]) => Boolean(value)), ...flat];
+}
+
 export default function TeknikPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
   const tk = ticker.toUpperCase();
@@ -72,7 +86,8 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
   const signalsRaw = signalsQ.data as Record<string, unknown> | null;
   const signalMap = (signalsRaw?.signals && typeof signalsRaw.signals === "object"
     ? signalsRaw.signals
-    : null) as Record<string, string> | null;
+    : null) as Record<string, unknown> | null;
+  const visibleSignals = signalEntries(signalMap);
 
   // Backend returns: {"ticker": ..., "indicator": "RSI", "period": 14, "value": 65.12}
   const rsiData = rsiQ.data as Record<string, unknown> | null;
@@ -122,10 +137,12 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
       </div>
 
       {/* Signal Summary */}
-      {signalsQ.isLoading ? <LoadingSpinner /> : signalMap && typeof signalMap === "object" && Object.keys(signalMap).length > 0 ? (
+      {signalsQ.isError ? (
+        <ErrorState message="Teknik sinyaller yüklenemedi" onRetry={() => { void signalsQ.refetch(); }} />
+      ) : signalsQ.isLoading ? <LoadingSpinner /> : visibleSignals.length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {Object.entries(signalMap).map(([key, val], index) => (
-            <SignalCard key={key} label={key} signal={String(val)} index={index} />
+          {visibleSignals.map(([key, val], index) => (
+            <SignalCard key={key} label={key} signal={val} index={index} />
           ))}
         </div>
       ) : <EmptyState message={t("teknik.signalNoData")} />}
@@ -186,6 +203,9 @@ export default function TeknikPage({ params }: { params: Promise<{ ticker: strin
 
       {/* All Timeframe Signals */}
       <AllTimeframeSignals ticker={tk} />
+
+      {/* Moving Averages & Pivot Points */}
+      <MovingAveragesTable ticker={tk} />
 
       {/* Stochastic */}
       {stochasticData && (

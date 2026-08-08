@@ -1,8 +1,7 @@
 """Tests for shared serialization utilities."""
 
-import math
 
-from src.adapters.utils import df_to_records, safe_serialize
+from src.adapters.utils import df_to_records, safe_serialize, sanitize_data
 
 
 class TestDfToRecords:
@@ -49,3 +48,11 @@ class TestSafeSerialize:
     def test_fallback_to_str(self):
         result = safe_serialize(42)
         assert result == {"value": "42"}
+
+    def test_nested_provider_sentinel_converted_to_none(self):
+        result = safe_serialize({"volume": 1e100, "nested": [{"value": float("inf")}]})
+        assert result == {"volume": None, "nested": [{"value": None}]}
+
+
+def test_sanitize_data_preserves_large_but_valid_financial_value():
+    assert sanitize_data(1e15) == 1e15

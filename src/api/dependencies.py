@@ -2,7 +2,7 @@
 
 import re
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
 from src.core.config import settings
@@ -22,6 +22,14 @@ def validate_ticker(ticker: str) -> str:
             detail="Invalid ticker format. Use 1-10 alphanumeric characters.",
         )
     return t
+
+
+def ensure_upstream_success(payload: dict):
+    """Convert adapter-level failures into an honest HTTP 502 response."""
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, str) and error.strip():
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=error)
+    return payload
 
 
 async def require_admin(api_key: str | None = Security(_api_key_header)) -> str:

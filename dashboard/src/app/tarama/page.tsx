@@ -8,7 +8,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Filter, Search, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { Filter, Search, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
 
@@ -103,7 +103,7 @@ export default function TaramaPage() {
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{idx.symbol}</div>
                     <div className="text-xl font-bold font-mono text-foreground">{idx.close > 0 ? formatNumber(idx.close, 2) : "-"}</div>
                     {idx.close > 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                      <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                         {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                         {isUp ? "+" : ""}{formatNumber(idx.change_pct)}%
                       </div>
@@ -139,7 +139,7 @@ export default function TaramaPage() {
         return templates.length > 0 ? (
           <motion.div custom={5} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
             <h2 className="text-sm font-semibold text-foreground mb-3">
-              {locale === "en" ? "Quick Filters" : locale === "fr" ? "Filtres rapides" : "Hazir Filtreler"}
+              {locale === "en" ? "Quick Filters" : locale === "fr" ? "Filtres rapides" : "Hazır Filtreler"}
             </h2>
             <div className="flex flex-wrap gap-2">
               <button
@@ -203,7 +203,7 @@ export default function TaramaPage() {
                           {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">{name}</p>}
                         </td>
                         <td className="px-5 py-3 font-mono text-xs text-foreground">{price > 0 ? formatNumber(price) : "-"}</td>
-                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${change == null ? "text-muted-foreground" : isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${change == null ? "text-muted-foreground" : isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                           {change == null ? "-" : (
                             <span className="flex items-center gap-1">
                               {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
@@ -300,7 +300,7 @@ export default function TaramaPage() {
         <motion.div custom={8} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
           <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">
-              {locale === "en" ? "All BIST Companies" : locale === "fr" ? "Toutes les societes BIST" : "Tum BIST Sirketleri"}
+              {locale === "en" ? "All BIST Companies" : locale === "fr" ? "Toutes les sociétés BIST" : "Tüm BIST Şirketleri"}
             </h2>
             <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
               {allCompaniesList.length}

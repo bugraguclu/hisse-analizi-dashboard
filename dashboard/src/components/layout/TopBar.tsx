@@ -21,6 +21,7 @@ const routeLabelKeys: Record<string, TranslationKey> = {
   hisse: "nav.stockAnalysis",
   teknik: "nav.technicalAnalysis",
   temel: "nav.fundamentalAnalysis",
+  analiz: "nav.combinedAnalysis",
   makro: "nav.macroEconomy",
   tarama: "nav.screening",
 };

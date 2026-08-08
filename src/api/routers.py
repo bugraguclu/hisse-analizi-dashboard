@@ -2,22 +2,18 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.core.enums import Severity
 from src.db.session import get_db
 from src.db.models import (
-    Company,
-    Source,
     NormalizedEvent,
     RawEvent,
     PriceData,
     EventOutbox,
     Notification,
-    PollingState,
     FinancialStatement,
 )
 from src.db.repository import (
@@ -238,7 +234,8 @@ async def test_notification(background_tasks: BackgroundTasks):
     return {"status": "accepted"}
 
 
-@admin_router.get("/stats", response_model=StatsOut)
+@router.get("/stats", response_model=StatsOut, tags=["system"])
+@admin_router.get("/stats", response_model=StatsOut, include_in_schema=False)
 async def get_stats(db: DB):
     raw_count = (await db.execute(select(func.count(RawEvent.id)))).scalar() or 0
     norm_count = (await db.execute(select(func.count(NormalizedEvent.id)))).scalar() or 0

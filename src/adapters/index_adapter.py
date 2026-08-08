@@ -15,11 +15,27 @@ from src.adapters.utils import (
 
 logger = structlog.get_logger(__name__)
 
-# Ana endeksler — list_indices bunlar icin canli kotasyon da dondurur.
+# UI'da gösterilen endeksler — tüm liste meta veri olarak ayrıca döner.
+# Kullanılmayan endeksler için 12 ayrı canlı bağlantı açmak sağlayıcı rate
+# limitini tetikliyordu.
 MAIN_INDICES = [
-    "XU100", "XU050", "XU030", "XBANK", "XUSIN", "XUTEK",
-    "XHOLD", "XUMAL", "XGIDA", "XULAS", "XTRZM", "XKMYA",
+    "XU100", "XU030", "XBANK", "XUSIN",
 ]
+
+
+def _normalize_quote(info) -> dict:
+    """Sanitize a quote and make daily-change fields arithmetically consistent."""
+    data = safe_serialize(info)
+    if not isinstance(data, dict):
+        return {}
+
+    last = data.get("last")
+    previous_close = data.get("prev_close")
+    if isinstance(last, (int, float)) and isinstance(previous_close, (int, float)) and previous_close > 0:
+        change = float(last) - float(previous_close)
+        data["change"] = round(change, 8)
+        data["change_percent"] = round(change / float(previous_close) * 100, 8)
+    return data
 
 
 @cached(TTL_MARKET, "index")
@@ -34,16 +50,13 @@ async def get_index_data(symbol: str = "XU100", period: str = "1ay") -> dict:
         import borsapy as bp
         idx = await run_sync(lambda: bp.Index(symbol))
         df = await run_sync(lambda: idx.history(period=bp_period, interval=bp_interval))
-        info = {}
-        try:
-            info = await run_sync(lambda: idx.info)
-        except Exception as e:
-            logger.warning("index_info_unavailable", symbol=symbol, error=str(e))
+        info = await _fetch_index_quote(symbol)
         return {
             "symbol": symbol,
             "period": period,
             "interval": bp_interval,
-            "info": safe_serialize(info),
+            "source": "Borsa Istanbul via TradingView (borsapy)",
+            "info": info or {},
             "data": df_to_records(df),
         }
     except Exception as e:
@@ -55,33 +68,41 @@ async def get_index_data(symbol: str = "XU100", period: str = "1ay") -> dict:
 async def get_index_info(symbol: str = "XU100") -> dict:
     """Endeks bilgileri."""
     try:
-        import borsapy as bp
-        idx = await run_sync(lambda: bp.Index(symbol))
-        info = await run_sync(lambda: idx.info if hasattr(idx, "info") else None)
+        info = await _fetch_index_quote(symbol)
         if info is None:
             return {"symbol": symbol, "info": {}}
-        return {"symbol": symbol, "info": safe_serialize(info)}
+        return {
+            "symbol": symbol,
+            "source": "Borsa Istanbul via TradingView (borsapy)",
+            "info": info,
+        }
     except Exception as e:
         logger.error("index_info_error", symbol=symbol, error=str(e))
         return {"symbol": symbol, "info": {}, "error": str(e)}
 
 
-async def _fetch_index_quote(symbol: str, semaphore: asyncio.Semaphore) -> dict | None:
+@cached(TTL_MARKET, "index_quote")
+async def _fetch_index_quote(symbol: str) -> dict | None:
     """Tek endeks icin canli kotasyon (info) getir; bir kez tekrar dene."""
     import borsapy as bp
-    async with semaphore:
-        for attempt in (1, 2):
-            try:
-                idx = await run_sync(lambda: bp.Index(symbol))
-                info = await run_sync(lambda: idx.info)
-                data = safe_serialize(info)
-                if isinstance(data, dict) and data.get("last") is not None:
-                    return data
-            except Exception as e:
-                if attempt == 2:
-                    logger.warning("index_quote_error", symbol=symbol, error=str(e))
-            await asyncio.sleep(0.3)
+
+    for attempt in (1, 2):
+        try:
+            idx = await run_sync(lambda: bp.Index(symbol))
+            info = await run_sync(lambda current_index=idx: current_index.info)
+            data = _normalize_quote(info)
+            if data.get("last") is not None:
+                return data
+        except Exception as e:
+            if attempt == 2:
+                logger.warning("index_quote_error", symbol=symbol, error=str(e))
+        await asyncio.sleep(1.0)
     return None
+
+
+async def _fetch_index_quote_bounded(symbol: str, semaphore: asyncio.Semaphore) -> dict | None:
+    async with semaphore:
+        return await _fetch_index_quote(symbol)
 
 
 @cached(TTL_MARKET, "index")
@@ -94,11 +115,12 @@ async def list_indices() -> dict:
 
         # Sinirli eszamanlilik: TradingView tarafinda rate-limit kaynakli
         # bos kotasyonlari azaltir.
-        semaphore = asyncio.Semaphore(4)
+        semaphore = asyncio.Semaphore(2)
         quotes = await asyncio.gather(
-            *(_fetch_index_quote(s, semaphore) for s in MAIN_INDICES)
+            *(_fetch_index_quote_bounded(s, semaphore) for s in MAIN_INDICES)
         )
         return {
+            "source": "Borsa Istanbul via TradingView (borsapy)",
             "indices": data,
             "quotes": [q for q in quotes if q is not None],
         }
@@ -122,6 +144,7 @@ async def get_ticker_history(ticker: str, period: str = "1ay") -> dict:
             logger.warning("ticker_fast_info_unavailable", ticker=ticker, error=str(e))
         return {
             "ticker": ticker,
+            "source": "Borsa Istanbul via TradingView (borsapy)",
             "period": period,
             "interval": bp_interval,
             "info": fast_info,

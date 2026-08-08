@@ -1,7 +1,6 @@
 import sys
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -51,7 +50,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_report_model: str = "claude-sonnet-5"
     ai_classifier_model: str = "claude-haiku-4-5"
-    ai_report_max_tokens: int = 4096
+    ai_report_max_tokens: int = 8192  # dusunen modellerde thinking tokenlari da bu butceden harcanir
     ai_daily_budget_usd: float = 5.0
     ai_nightly_batch_enabled: bool = False
     ai_nightly_batch_hour: int = 2  # Europe/Istanbul saati

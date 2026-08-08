@@ -33,13 +33,13 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 │                FastAPI (REST API) + Guvenlik                      │
 ├──────────────────────────────────────────────────────────────────┤
 │  [Rate Limiter] [CORS Allowlist] [Admin API Key Auth]            │
-│  Core:       /health /events /prices /companies                  │
+│  Core:       /health /stats /events /prices /companies           │
 │  Finansal:   /financials?ticker= /financials/ratios?ticker=      │
 │  Teknik:     /technical/{ticker}/rsi /macd /bollinger /signals   │
 │  Temel:      /fundamentals/{ticker}/info /balance-sheet          │
 │  Makro:      /macro/tcmb /inflation /fx/{symbol} /calendar       │
 │  Piyasa:     /market/screener /scanner /indices /search /tweets  │
-│  Admin:      /admin/poll/run-once /stats  [X-Admin-Key]          │
+│  Admin:      /admin/poll/run-once /backfill  [X-Admin-Key]       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,7 +53,7 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 
 ### Temel Analiz
 - Sirket bilgileri ve finansal veriler
-- Bilanco, gelir tablosu, nakit akis tablosu (yillik + ceyreklik)
+- Resmi KAP bilanco/gelir tablosu ve Is Yatirim nakit akis tablosu (yillik + ara donem)
 - Temettu gecmisi, ortaklik yapisi
 - Analist tavsiyeleri ve hedef fiyatlar
 - Kazanc aciklama tarihleri
@@ -68,8 +68,8 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 - BIST endeksleri (XU100, XU030, vb.)
 - Hisse tarama (screener) — ozel filtrelerle (F/K, ROE, vb.)
 - Teknik sinyal tarama (scanner)
-- 780+ BIST sirketi arama
-- Twitter/X finansal tweet'ler
+- 599 islem goren BIST payinda arama ve 15 hazir filtre
+- Opsiyonel Twitter/X endpoint'i (ayri kimlik dogrulama ve provider paketi gerektirir; yayin arayuzunde kapali)
 - Anlik fiyat snapshot (coklu sembol)
 
 ### Olay & Bildirim Sistemi
@@ -78,7 +78,7 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 - Fiyat verisi takibi (borsapy + yfinance yedek)
 - E-posta bildirim sistemi (outbox pattern, idempotent)
 
-### Guvenlik & Production Hardening (v0.5.0)
+### Guvenlik & Production Hardening (v0.8.0)
 - Admin API Key authentication (X-Admin-Key header)
 - Config-driven CORS allowlist
 - API rate limiting (slowapi)
@@ -100,7 +100,8 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 | Kurumsal Haberler | httpx + BS4 | - | 60sn |
 | Yatirimci Iliskileri | httpx + BS4 | - | 300sn |
 | Fiyat Verisi | borsapy | yfinance | 300sn |
-| Finansal Tablolar | borsapy | - | 3600sn (polling + DB) |
+| Bilanco / Gelir Tablosu | Resmi KAP finansal ozeti | - | on-demand (300s cache) |
+| Nakit Akis / Temettu / Ortaklik | Is Yatirim (borsapy) | - | on-demand (300s cache) |
 | Teknik Gostergeler | borsapy | - | on-demand (60s cache) |
 | Makro Veriler | borsapy (TCMB) | - | on-demand (600s cache) |
 | Endeks/Tarama | borsapy | - | on-demand (120s cache) |
@@ -113,9 +114,9 @@ BIST hisseleri icin kapsamli analiz platformu: teknik/temel analiz, makro ekonom
 cp .env.example .env
 # .env icinde ADMIN_API_KEY, CORS_ORIGINS, DB credentials ayarla
 
-docker-compose up -d
-docker-compose exec app alembic upgrade head
-docker-compose exec app python scripts/seed.py
+docker compose up -d
+docker compose exec app alembic upgrade head
+docker compose exec app python scripts/seed.py
 ```
 
 ### Local gelistirme
@@ -137,8 +138,8 @@ uvicorn src.api.app:app --reload
 |----------|----------|---------|
 | `DATABASE_URL` | PostgreSQL baglanti adresi | Evet |
 | `ADMIN_API_KEY` | Admin endpoint auth key | Production'da evet |
-| `CORS_ORIGINS` | Izin verilen origin'ler (virgul ayirmali) | Hayir (dev: *) |
-| `RATE_LIMIT_PER_MINUTE` | API rate limit | Hayir (varsayilan: 100) |
+| `CORS_ORIGINS` | Izin verilen origin'ler (virgul ayirmali) | Hayir (dev: localhost:3000/8000) |
+| `RATE_LIMIT_DEFAULT` | Varsayilan API rate limit | Hayir (varsayilan: 60/minute) |
 | `WORKER_MAX_CONCURRENCY` | Worker semaphore limiti | Hayir (varsayilan: 5) |
 | `WORKER_SINGLE_REPLICA` | Tek worker replica zorunlulugu | Hayir |
 | `SMTP_HOST`, `SMTP_PORT` | E-posta sunucusu | Bildirimler icin |
@@ -148,6 +149,7 @@ uvicorn src.api.app:app --reload
 ### Core
 ```
 GET  /health                              Sistem durumu
+GET  /stats                               Dashboard istatistikleri
 GET  /companies                           Sirket listesi
 GET  /events?source_code=kap&limit=50     Olay listesi
 GET  /events/latest                       Son 10 olay
@@ -220,15 +222,15 @@ GET  /admin/stats                         Istatistikler
 ## Test
 
 ```bash
-pytest tests/unit/ -v              # Unit testler (49+)
+pytest tests/unit/ -v              # Unit testler
 pytest tests/integration/ -v       # Integration testler
-pytest -v                          # Tumu
+pytest -v                          # Tumu (son dogrulama: 91)
 ```
 
 ## Bilinen Limitler
 
-1. **borsapy** 3rd party — aktif ama kirilabilir. Yedek kaynaklar mevcut.
-2. **KAP SPA API** resmi degil — habersiz degisebilir.
+1. **borsapy** ucuncu taraf kutuphane — aktif ama kaynak sozlesmeleri degisebilir.
+2. **KAP web sayfalari** resmi kaynaktir; HTML yapisi degisirse parser guncellenmelidir.
 3. **KAP** 30sn'den sik poll'lanmamali.
 4. Sistem **hukuki/finansal tavsiye araci degildir**.
 5. **yfinance** kisisel kullanim icindir — Yahoo TOS kontrol edin.
@@ -241,11 +243,11 @@ pytest -v                          # Tumu
 | Web Framework | FastAPI (async) |
 | ORM | SQLAlchemy 2.x (async) |
 | DB | PostgreSQL 16 |
-| Veri Kaynagi | borsapy 0.8.3 (MIT) |
+| Veri Kaynagi | borsapy 0.10.2+ (MIT), KAP, TCMB |
 | Yedek Fiyat | yfinance |
 | HTTP Client | httpx (async, shared pool) |
 | Rate Limiting | slowapi |
 | Logging | structlog (JSON) |
 | Cache | TTL in-memory (src/adapters/utils.py) |
 | Container | Docker + Compose |
-| Frontend | Next.js 14, TypeScript, Tailwind, shadcn/ui |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind, shadcn/ui |

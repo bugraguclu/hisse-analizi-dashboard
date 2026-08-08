@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatNumber, formatDate } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { useLocale } from "@/lib/locale-context";
 import { motion } from "framer-motion";
 import { Coins } from "lucide-react";
@@ -43,10 +43,10 @@ export function DividendHistory({ ticker }: DividendHistoryProps) {
   const dividends = parseDividends(divQ.data);
 
   const labels = {
-    title: { tr: "Temettu Gecmisi", en: "Dividend History", fr: "Historique des dividendes" },
+    title: { tr: "Temettü Geçmişi", en: "Dividend History", fr: "Historique des dividendes" },
     date: { tr: "Tarih", en: "Date", fr: "Date" },
     amount: { tr: "Tutar (TL)", en: "Amount (TRY)", fr: "Montant (TRY)" },
-    noData: { tr: "Temettu verisi yok", en: "No dividend data", fr: "Aucune donnee de dividende" },
+    noData: { tr: "Temettü verisi yok", en: "No dividend data", fr: "Aucune donnée de dividende" },
   };
 
   return (
@@ -61,12 +61,17 @@ export function DividendHistory({ ticker }: DividendHistoryProps) {
         <h2 className="text-sm font-semibold text-foreground">{labels.title[locale]}</h2>
         {dividends.length > 0 && (
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded ml-auto">
-            {dividends.length} {locale === "en" ? "records" : locale === "fr" ? "enregistrements" : "kayit"}
+            {dividends.length} {locale === "en" ? "records" : locale === "fr" ? "enregistrements" : "kayıt"}
           </span>
         )}
       </div>
       <div className="p-5">
-        {divQ.isLoading ? (
+        {divQ.isError ? (
+          <ErrorState
+            message={locale === "tr" ? "Temettü geçmişi yüklenemedi" : "Dividend history could not be loaded"}
+            onRetry={() => { void divQ.refetch(); }}
+          />
+        ) : divQ.isLoading ? (
           <LoadingSpinner />
         ) : dividends.length === 0 ? (
           <EmptyState message={labels.noData[locale]} />
@@ -86,7 +91,7 @@ export function DividendHistory({ ticker }: DividendHistoryProps) {
               <tbody className="divide-y divide-border/20">
                 {dividends.slice(0, 20).map((d, i) => {
                   const date = String(d.date ?? d.ex_date ?? d.payDate ?? d.Date ?? "");
-                  const amount = Number(d.amount ?? d.Dividends ?? d.value ?? d.dividend ?? 0);
+                  const amount = Number(d.Amount ?? d.amount ?? d.Dividends ?? d.value ?? d.dividend ?? 0);
                   return (
                     <tr key={i} className="hover:bg-muted/10 transition-colors">
                       <td className="py-2.5 text-xs text-muted-foreground font-mono">

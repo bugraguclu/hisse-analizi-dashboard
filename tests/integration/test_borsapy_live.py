@@ -32,6 +32,10 @@ def test_borsapy_price_data():
     assert "Close" in df.columns
     assert "Volume" in df.columns
 
+    # The live quote and the latest daily candle must describe the same grain.
+    fast_info = ticker.fast_info
+    assert fast_info["last_price"] == pytest.approx(float(df.iloc[-1]["Close"]), rel=0.01)
+
 
 @pytest.mark.integration
 @pytest.mark.skipif(not HAS_NETWORK, reason="Network tests disabled")

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from src.api.dependencies import require_admin
+from src.api.dependencies import ensure_upstream_success, require_admin
 
 
 @pytest.mark.asyncio
@@ -43,3 +43,16 @@ class TestRequireAdmin:
             mock_settings.is_production = True
             result = await require_admin(api_key="secret123")
             assert result == "secret123"
+
+
+def test_ensure_upstream_success_preserves_success_payload():
+    payload = {"data": [1, 2, 3]}
+    assert ensure_upstream_success(payload) is payload
+
+
+def test_ensure_upstream_success_raises_bad_gateway_for_adapter_error():
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_upstream_success({"data": [], "error": "provider unavailable"})
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "provider unavailable"

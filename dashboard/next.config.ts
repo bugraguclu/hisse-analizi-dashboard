@@ -2,15 +2,18 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // Optional same-origin proxy: lets the app call /api/* instead of a
-  // cross-origin backend URL (useful behind a single reverse proxy).
-  // Client code uses API_BASE from src/lib/api.ts; this stays as a
-  // deployment fallback.
-  async rewrites() {
+  poweredByHeader: false,
+  reactStrictMode: true,
+  async headers() {
     return [
       {
-        source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/:path*`,
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
       },
     ];
   },

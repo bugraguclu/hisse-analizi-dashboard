@@ -31,10 +31,10 @@ export default function RootLayout({
       <body className="min-h-full">
         <Providers>
           <div className="flex min-h-screen">
-            <div className="sticky top-0 h-screen flex-shrink-0">
+            <div className="fixed inset-x-0 top-0 z-40 h-14 w-full md:sticky md:inset-auto md:h-screen md:w-auto flex-shrink-0">
               <AppSidebar />
             </div>
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 w-full pt-14 md:pt-0">
               <TopBar />
               <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                 {children}

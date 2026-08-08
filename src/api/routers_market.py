@@ -8,7 +8,7 @@ from src.adapters.index_adapter import get_index_data, get_index_info, list_indi
 from src.adapters.search_adapter import search_symbol, list_companies
 from src.adapters.twitter_adapter import get_tweets
 from src.adapters.stream_adapter import get_snapshot
-from src.api.dependencies import validate_ticker
+from src.api.dependencies import ensure_upstream_success, validate_ticker
 
 market_router = APIRouter(prefix="/market", tags=["market"])
 
@@ -18,19 +18,19 @@ market_router = APIRouter(prefix="/market", tags=["market"])
 @market_router.get("/screener")
 async def screener():
     """Varsayilan filtrelerle hisse taramasi."""
-    return await screen_stocks()
+    return ensure_upstream_success(await screen_stocks())
 
 
 @market_router.post("/screener")
 async def screener_with_filters(filters: dict):
     """Ozel filtrelerle hisse taramasi."""
-    return await screen_stocks(filters=filters)
+    return ensure_upstream_success(await screen_stocks(filters=filters))
 
 
 @market_router.get("/screener/templates")
 async def screener_templates():
     """Hazir tarama sablonlari."""
-    return await get_screener_templates()
+    return ensure_upstream_success(await get_screener_templates())
 
 
 # --- Scanner ---
@@ -38,7 +38,7 @@ async def screener_templates():
 @market_router.get("/scanner")
 async def scanner(condition: str | None = None):
     """Teknik sinyal taramasi."""
-    return await scan_signals(condition=condition)
+    return ensure_upstream_success(await scan_signals(condition=condition))
 
 
 # --- Index ---
@@ -46,19 +46,19 @@ async def scanner(condition: str | None = None):
 @market_router.get("/indices")
 async def indices():
     """Tum BIST endekslerini listele."""
-    return await list_indices()
+    return ensure_upstream_success(await list_indices())
 
 
 @market_router.get("/index/{symbol}")
 async def index_data(symbol: str = "XU100", period: str = Query(default="1ay")):
     """Endeks fiyat verisi."""
-    return await get_index_data(validate_ticker(symbol), period=period)
+    return ensure_upstream_success(await get_index_data(validate_ticker(symbol), period=period))
 
 
 @market_router.get("/index/{symbol}/info")
 async def index_info(symbol: str = "XU100"):
     """Endeks bilgileri."""
-    return await get_index_info(validate_ticker(symbol))
+    return ensure_upstream_success(await get_index_info(validate_ticker(symbol)))
 
 
 # --- Search ---
@@ -66,13 +66,13 @@ async def index_info(symbol: str = "XU100"):
 @market_router.get("/search")
 async def search(q: str = Query(min_length=1)):
     """Hisse veya VIOP kontrati ara."""
-    return await search_symbol(q)
+    return ensure_upstream_success(await search_symbol(q))
 
 
 @market_router.get("/companies/all")
 async def all_companies():
     """Tum BIST sirketlerini listele."""
-    return await list_companies()
+    return ensure_upstream_success(await list_companies())
 
 
 # --- Twitter ---
@@ -80,7 +80,7 @@ async def all_companies():
 @market_router.get("/tweets/{ticker}")
 async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
     """Hisse ile ilgili tweet'leri getir."""
-    return await get_tweets(validate_ticker(ticker), limit=limit)
+    return ensure_upstream_success(await get_tweets(validate_ticker(ticker), limit=limit))
 
 
 # --- Ticker History (live) ---
@@ -88,7 +88,7 @@ async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
 @market_router.get("/ticker/{ticker}/history")
 async def ticker_history(ticker: str, period: str = Query(default="1ay")):
     """Hisse fiyat gecmisi (canli, borsapy uzerinden)."""
-    return await get_ticker_history(validate_ticker(ticker), period=period)
+    return ensure_upstream_success(await get_ticker_history(validate_ticker(ticker), period=period))
 
 
 # --- Snapshot ---
@@ -97,4 +97,4 @@ async def ticker_history(ticker: str, period: str = Query(default="1ay")):
 async def snapshot(symbols: str = Query(description="Virgul ile ayrilmis semboller, orn: THYAO,GARAN,SISE")):
     """Birden fazla hisse icin anlik fiyat snapshot'i."""
     symbol_list = [validate_ticker(s) for s in symbols.split(",") if s.strip()]
-    return await get_snapshot(symbol_list)
+    return ensure_upstream_success(await get_snapshot(symbol_list))

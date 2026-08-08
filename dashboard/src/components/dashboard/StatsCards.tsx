@@ -17,10 +17,10 @@ interface CardConfig {
 
 const cardConfig: readonly CardConfig[] = [
   { key: "total_normalized_events", label: "Toplam Olay", icon: Newspaper, gradient: "from-blue-500/10 to-indigo-500/10" },
-  { key: "total_price_records", label: "Fiyat Kaydi", icon: DollarSign, gradient: "from-emerald-500/10 to-teal-500/10" },
+  { key: "total_price_records", label: "Fiyat Kaydı", icon: DollarSign, gradient: "from-emerald-500/10 to-teal-500/10" },
   { key: "total_raw_events", label: "Ham Olay", icon: BarChart3, gradient: "from-violet-500/10 to-purple-500/10" },
   { key: "total_notifications", label: "Bildirim", icon: Bell, gradient: "from-amber-500/10 to-orange-500/10" },
-  { key: "total_financial_records", label: "Finansal Kayit", icon: FileText, gradient: "from-rose-500/10 to-pink-500/10" },
+  { key: "total_financial_records", label: "Finansal Kayıt", icon: FileText, gradient: "from-rose-500/10 to-pink-500/10" },
   { key: "pending_outbox", label: "Bekleyen", icon: Clock, gradient: "from-cyan-500/10 to-sky-500/10" },
 ] as const;
 

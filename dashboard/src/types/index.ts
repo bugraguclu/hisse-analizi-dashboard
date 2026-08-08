@@ -92,6 +92,26 @@ export interface TechnicalSignals {
   bollinger?: { upper: number; middle: number; lower: number };
 }
 
+export interface MovingAveragesOut {
+  ticker: string;
+  sma: Record<string, number | null>;
+  ema: Record<string, number | null>;
+  golden_cross?: boolean | null;
+}
+
+export interface PivotsOut {
+  ticker: string;
+  pivots?: {
+    pivot: number;
+    r1: number;
+    r2: number;
+    r3: number;
+    s1: number;
+    s2: number;
+    s3: number;
+  } | null;
+}
+
 export interface CompanyInfo {
   ticker?: string;
   info?: Record<string, unknown>;

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { useLocale } from "@/lib/locale-context";
 import { motion } from "framer-motion";
 import { CalendarDays } from "lucide-react";
@@ -18,6 +18,7 @@ function parseEarnings(raw: unknown): Record<string, unknown>[] {
   if (Array.isArray(raw)) return raw as Record<string, unknown>[];
   const obj = raw as Record<string, unknown>;
   if (obj.data && Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
+  if (obj.earnings_dates && Array.isArray(obj.earnings_dates)) return obj.earnings_dates as Record<string, unknown>[];
   if (obj.earnings && Array.isArray(obj.earnings)) return obj.earnings as Record<string, unknown>[];
   // DataFrame format: {col: {idx: val}}
   const keys = Object.keys(obj);
@@ -46,12 +47,12 @@ export function EarningsCalendar({ ticker }: EarningsCalendarProps) {
   const earnings = parseEarnings(earningsQ.data);
 
   const labels = {
-    title: { tr: "Kazanc Takvimleri", en: "Earnings Calendar", fr: "Calendrier des resultats" },
+    title: { tr: "Kazanç Takvimi", en: "Earnings Calendar", fr: "Calendrier des résultats" },
     date: { tr: "Tarih", en: "Date", fr: "Date" },
     epsEstimate: { tr: "HBK Tahmini", en: "EPS Estimate", fr: "BPA Estime" },
-    epsActual: { tr: "HBK Gerceklesen", en: "EPS Actual", fr: "BPA Reel" },
+    epsActual: { tr: "HBK Gerçekleşen", en: "EPS Actual", fr: "BPA Réel" },
     revenue: { tr: "Gelir Tahmini", en: "Revenue Estimate", fr: "Revenu Estime" },
-    noData: { tr: "Kazanc takvimi verisi yok", en: "No earnings data", fr: "Aucune donnee" },
+    noData: { tr: "Kazanç takvimi verisi yok", en: "No earnings data", fr: "Aucune donnée" },
   };
 
   return (
@@ -66,7 +67,12 @@ export function EarningsCalendar({ ticker }: EarningsCalendarProps) {
         <h2 className="text-sm font-semibold text-foreground">{labels.title[locale]}</h2>
       </div>
       <div className="p-5">
-        {earningsQ.isLoading ? (
+        {earningsQ.isError ? (
+          <ErrorState
+            message={locale === "tr" ? "Kazanç takvimi yüklenemedi" : "Earnings calendar could not be loaded"}
+            onRetry={() => { void earningsQ.refetch(); }}
+          />
+        ) : earningsQ.isLoading ? (
           <LoadingSpinner />
         ) : earnings.length === 0 ? (
           <EmptyState message={labels.noData[locale]} />
@@ -83,7 +89,7 @@ export function EarningsCalendar({ ticker }: EarningsCalendarProps) {
               </thead>
               <tbody className="divide-y divide-border/20">
                 {earnings.slice(0, 12).map((e, i) => {
-                  const date = String(e.date ?? e.earningsDate ?? e.Date ?? "");
+                  const date = String(e["Earnings Date"] ?? e.date ?? e.earningsDate ?? e.Date ?? "");
                   const epsEst = e["EPS Estimate"] ?? e.epsEstimate ?? e.eps_estimate;
                   const epsAct = e["Reported EPS"] ?? e.epsActual ?? e.eps_actual ?? e.reportedEPS;
                   const revEst = e["Revenue Estimate"] ?? e.revenueEstimate ?? e.revenue_estimate;

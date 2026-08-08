@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { useLocale } from "@/lib/locale-context";
 import { motion } from "framer-motion";
 import { Layers } from "lucide-react";
@@ -40,11 +40,11 @@ function getSignalColor(signal: string): string {
 function translateSignal(signal: string, locale: string): string {
   const s = signal.toUpperCase();
   if (locale === "tr") {
-    if (s.includes("STRONG") && s.includes("BUY")) return "Guclu Al";
+    if (s.includes("STRONG") && s.includes("BUY")) return "Güçlü Al";
     if (s.includes("BUY")) return "Al";
-    if (s.includes("STRONG") && s.includes("SELL")) return "Guclu Sat";
+    if (s.includes("STRONG") && s.includes("SELL")) return "Güçlü Sat";
     if (s.includes("SELL")) return "Sat";
-    return "Notr";
+    return "Nötr";
   }
   if (s.includes("STRONG") && s.includes("BUY")) return "Strong Buy";
   if (s.includes("BUY")) return "Buy";
@@ -57,11 +57,12 @@ const TIMEFRAME_LABELS: Record<string, Record<string, string>> = {
   "1m": { tr: "1 Dakika", en: "1 Minute", fr: "1 Minute" },
   "5m": { tr: "5 Dakika", en: "5 Minutes", fr: "5 Minutes" },
   "15m": { tr: "15 Dakika", en: "15 Minutes", fr: "15 Minutes" },
+  "30m": { tr: "30 Dakika", en: "30 Minutes", fr: "30 Minutes" },
   "1h": { tr: "1 Saat", en: "1 Hour", fr: "1 Heure" },
   "4h": { tr: "4 Saat", en: "4 Hours", fr: "4 Heures" },
-  "1d": { tr: "Gunluk", en: "Daily", fr: "Quotidien" },
-  "1W": { tr: "Haftalik", en: "Weekly", fr: "Hebdomadaire" },
-  "1M": { tr: "Aylik", en: "Monthly", fr: "Mensuel" },
+  "1d": { tr: "Günlük", en: "Daily", fr: "Quotidien" },
+  "1W": { tr: "Haftalık", en: "Weekly", fr: "Hebdomadaire" },
+  "1M": { tr: "Aylık", en: "Monthly", fr: "Mensuel" },
 };
 
 export function AllTimeframeSignals({ ticker }: AllTimeframeSignalsProps) {
@@ -75,7 +76,7 @@ export function AllTimeframeSignals({ ticker }: AllTimeframeSignalsProps) {
   const tfKeys = Object.keys(timeframes);
 
   const labels = {
-    title: { tr: "Tum Zaman Dilimleri", en: "All Timeframes", fr: "Tous les horizons" },
+    title: { tr: "Tüm Zaman Dilimleri", en: "All Timeframes", fr: "Tous les horizons" },
     noData: { tr: "Zaman dilimi verisi yok", en: "No timeframe data", fr: "Aucune donnee" },
     timeframe: { tr: "Zaman Dilimi", en: "Timeframe", fr: "Horizon" },
     signal: { tr: "Sinyal", en: "Signal", fr: "Signal" },
@@ -95,7 +96,12 @@ export function AllTimeframeSignals({ ticker }: AllTimeframeSignalsProps) {
         <Layers className="h-3.5 w-3.5" />
         {labels.title[locale]}
       </h3>
-      {sigQ.isLoading ? (
+      {sigQ.isError ? (
+        <ErrorState
+          message={locale === "tr" ? "Zaman dilimi sinyalleri yüklenemedi" : "Timeframe signals could not be loaded"}
+          onRetry={() => { void sigQ.refetch(); }}
+        />
+      ) : sigQ.isLoading ? (
         <LoadingSpinner />
       ) : tfKeys.length === 0 ? (
         <EmptyState message={labels.noData[locale]} />

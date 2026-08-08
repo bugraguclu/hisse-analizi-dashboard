@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hisse Analizi Dashboard — Web
 
-## Getting Started
+BIST analiz platformunun Next.js 16 ve React 19 ile geliştirilen web arayüzüdür. Tarayıcı, backend'e varsayılan olarak aynı origin altındaki `/api/*` adreslerinden erişir; Next.js route handler istekleri sunucu tarafında FastAPI'ye iletir. Böylece backend adresi ve Docker servis adı istemci paketine gömülmez.
 
-First, run the development server:
+## Gereksinimler
+
+- Node.js 20+
+- Çalışan Hisse Analizi FastAPI servisi
+
+## Yerel geliştirme
 
 ```bash
+cp .env.example .env.local
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Arayüz `http://localhost:3000`, varsayılan backend ise `http://localhost:8000` adresinde çalışır.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Ortam değişkenleri
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Değişken | Kullanım | Varsayılan |
+|---|---|---|
+| `API_URL` | Next.js sunucusunun bağlanacağı dahili FastAPI adresi. Üretimde önerilen seçenektir. | `http://localhost:8000` |
+| `NEXT_PUBLIC_API_URL` | İsteğe bağlı doğrudan tarayıcı API adresi. Yalnızca ayrı origin ve doğru CORS yapılandırması gerektiğinde kullanın. | `/api` |
 
-## Learn More
+`API_URL` yalnızca sunucu tarafında okunur ve çalışma zamanında değiştirilebilir. Gizli anahtarları `NEXT_PUBLIC_*` değişkenlerine koymayın.
 
-To learn more about Next.js, take a look at the following resources:
+## Kalite kontrolleri
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Üretim derlemesini yerelde çalıştırmak için:
 
-## Deploy on Vercel
+```bash
+npm run build
+API_URL=http://localhost:8000 npm run start
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Docker
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Repo kökünden tüm sistemi başlatın:
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+docker compose exec app alembic upgrade head
+docker compose exec app python scripts/seed.py
+```
+
+Dashboard `http://localhost:3000` adresinde yayınlanır. Compose yapılandırması dashboard container'ına `API_URL=http://app:8000` verir; bu değer tarayıcıya açılmaz.
+
+## Yayınlama kontrol listesi
+
+- Üretim `API_URL`, veritabanı ve `ADMIN_API_KEY` değerlerini secret/env yönetiminde tanımlayın.
+- Migration'ları yeni sürümden önce çalıştırın.
+- `/health` ve dashboard üzerinden `/api/health` yanıtlarını doğrulayın.
+- `npm run lint`, `npm run build` ve backend testlerini geçmeden yayınlamayın.
+- TLS'i ve reverse proxy güvenlik başlıklarını platform katmanında etkinleştirin.

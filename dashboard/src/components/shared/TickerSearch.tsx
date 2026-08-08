@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useId } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLocale } from "@/lib/locale-context";
 
 interface SearchResult {
   symbol?: string;
@@ -46,24 +47,34 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const requestIdRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
   const router = useRouter();
   const pathname = usePathname();
+  const { t, locale } = useLocale();
 
   const search = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); setIsSearching(false); return; }
+    const requestId = ++requestIdRef.current;
     setIsSearching(true);
+    setSearchFailed(false);
     try {
       const data = await api.search(q);
+      if (requestId !== requestIdRef.current) return;
       const extracted = extractResults(data);
       setResults(extracted.slice(0, 8));
-      setIsOpen(extracted.length > 0);
+      setIsOpen(true);
     } catch {
+      if (requestId !== requestIdRef.current) return;
       setResults([]);
+      setSearchFailed(true);
+      setIsOpen(true);
     } finally {
-      setIsSearching(false);
+      if (requestId === requestIdRef.current) setIsSearching(false);
     }
   }, []);
 
@@ -73,8 +84,10 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
       setIsSearching(true);
       timerRef.current = setTimeout(() => search(query), 300);
     } else {
+      requestIdRef.current += 1;
       setResults([]);
       setIsOpen(false);
+      setSearchFailed(false);
     }
     return () => clearTimeout(timerRef.current);
   }, [query, search]);
@@ -108,9 +121,9 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
-    } else if (e.key === "Enter" && selectedIndex >= 0) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      const r = results[selectedIndex];
+      const r = results[selectedIndex >= 0 ? selectedIndex : 0];
       const ticker = r.symbol || r.ticker || "";
       if (ticker) select(ticker);
     } else if (e.key === "Escape") {
@@ -133,25 +146,43 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
           }}
           onKeyDown={handleKeyDown}
           onFocus={() => { if (results.length > 0) setIsOpen(true); }}
-          placeholder="Hisse ara... (THYAO, GARAN)"
+          placeholder={t("common.search")}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-controls={listboxId}
+          aria-activedescendant={selectedIndex >= 0 ? `${listboxId}-${selectedIndex}` : undefined}
           className="pl-10 pr-9 h-10 text-sm bg-card border-border shadow-sm focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/60"
         />
       </div>
       <AnimatePresence>
-        {isOpen && results.length > 0 && (
+        {isOpen && query.length >= 2 && !isSearching && (
           <motion.div
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15 }}
+            id={listboxId}
+            role="listbox"
+            aria-label={t("common.search")}
             className="absolute z-50 top-full mt-1.5 w-full bg-popover/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-xl shadow-black/10 overflow-hidden"
           >
-            {results.map((r, i) => {
+            {results.length === 0 ? (
+              <div className="px-3.5 py-3 text-xs text-muted-foreground" role="status">
+                {searchFailed
+                  ? locale === "en" ? "Search is temporarily unavailable" : locale === "fr" ? "La recherche est temporairement indisponible" : "Arama geçici olarak kullanılamıyor"
+                  : locale === "en" ? "No matching stock found" : locale === "fr" ? "Aucune action correspondante" : "Eşleşen hisse bulunamadı"}
+              </div>
+            ) : results.map((r, i) => {
               const ticker = r.symbol || r.ticker || "";
               const isSelected = i === selectedIndex;
               return (
                 <button
+                  type="button"
                   key={`${ticker}-${i}`}
+                  id={`${listboxId}-${i}`}
+                  role="option"
+                  aria-selected={isSelected}
                   onClick={() => select(ticker)}
                   onMouseEnter={() => setSelectedIndex(i)}
                   className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between border-b border-border/30 last:border-0 transition-colors ${
@@ -168,11 +199,15 @@ export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void
                 </button>
               );
             })}
-            <div className="px-3.5 py-1.5 bg-muted/30 border-t border-border/30">
+            {results.length > 0 && <div className="px-3.5 py-1.5 bg-muted/30 border-t border-border/30">
               <span className="text-[10px] text-muted-foreground">
-                {results.length} sonuc &middot; Enter ile sec &middot; Esc ile kapat
+                {locale === "en"
+                  ? `${results.length} results · Enter to select · Esc to close`
+                  : locale === "fr"
+                    ? `${results.length} résultats · Entrée pour choisir · Échap pour fermer`
+                    : `${results.length} sonuç · Enter ile seç · Esc ile kapat`}
               </span>
-            </div>
+            </div>}
           </motion.div>
         )}
       </AnimatePresence>

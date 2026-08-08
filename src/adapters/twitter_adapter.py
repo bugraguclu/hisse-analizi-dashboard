@@ -13,14 +13,14 @@ async def get_tweets(ticker: str, limit: int = 20) -> dict:
     try:
         import borsapy as bp
         t = await run_sync(lambda: bp.Ticker(ticker))
-        tweets = await run_sync(lambda: t.tweets)
+        tweets = await run_sync(lambda: t.tweets(limit=limit, lang="tr"))
         if tweets is None:
             return {"ticker": ticker, "tweets": []}
         if hasattr(tweets, "iterrows"):
             records = df_to_records(tweets.head(limit))
-            return {"ticker": ticker, "count": len(records), "tweets": records}
+            return {"ticker": ticker, "source": "X/Twitter (borsapy)", "count": len(records), "tweets": records}
         if isinstance(tweets, list):
-            return {"ticker": ticker, "count": len(tweets[:limit]), "tweets": tweets[:limit]}
+            return {"ticker": ticker, "source": "X/Twitter (borsapy)", "count": len(tweets[:limit]), "tweets": tweets[:limit]}
         return {"ticker": ticker, "tweets": []}
     except Exception as e:
         logger.error("twitter_error", ticker=ticker, error=str(e))

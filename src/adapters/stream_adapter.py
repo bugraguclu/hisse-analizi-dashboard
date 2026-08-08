@@ -2,7 +2,7 @@
 
 import structlog
 
-from src.adapters.utils import cached, safe_serialize, run_sync, TTL_PRICE_SNAPSHOT
+from src.adapters.utils import TTL_PRICE_SNAPSHOT, cached, df_to_records, run_sync, safe_serialize
 
 logger = structlog.get_logger(__name__)
 
@@ -47,23 +47,67 @@ class LivePriceStream:
                 self._stream = None
 
 
-async def _fetch_symbol_snapshot(symbol: str) -> dict:
-    try:
-        import borsapy as bp
-        t = await run_sync(lambda: bp.Ticker(symbol))
-        fi = await run_sync(lambda: t.fast_info)
-        return safe_serialize(fi) if fi else {}
-    except Exception as e:
-        return {"error": str(e)}
+def _snapshot_from_records(symbols: list[str], records: list[dict]) -> dict[str, dict]:
+    """Map one TradingView Scanner response to the existing snapshot contract."""
+    by_symbol = {str(row.get("symbol", "")).upper(): row for row in records}
+    snapshot: dict[str, dict] = {}
+    for symbol in symbols:
+        row = by_symbol.get(symbol.upper())
+        if row is None:
+            snapshot[symbol] = {"error": "Sembol için güncel fiyat bulunamadı"}
+            continue
+
+        last_price = row.get("close")
+        change_percent = row.get("change")
+        previous_close = None
+        if isinstance(last_price, (int, float)) and isinstance(change_percent, (int, float)):
+            denominator = 1 + float(change_percent) / 100
+            if denominator > 0:
+                previous_close = float(last_price) / denominator
+
+        snapshot[symbol] = safe_serialize({
+            "currency": "TRY",
+            "exchange": "BIST",
+            "timezone": "Europe/Istanbul",
+            "last_price": last_price,
+            "open": row.get("open"),
+            "day_high": row.get("high"),
+            "day_low": row.get("low"),
+            "previous_close": previous_close,
+            "change_percent": change_percent,
+            "volume": row.get("volume"),
+            "market_cap": row.get("market_cap"),
+        })
+    return snapshot
 
 
 @cached(TTL_PRICE_SNAPSHOT, "stream")
 async def get_snapshot(symbols: list[str]) -> dict:
-    """Birden fazla sembol icin anlik fiyat snapshot'i (stream kullanmadan)."""
+    """Birden fazla sembol için tek batch isteğinde fiyat snapshot'ı."""
     try:
-        import asyncio
-        values = await asyncio.gather(*(_fetch_symbol_snapshot(s) for s in symbols))
-        return {"symbols": symbols, "snapshot": dict(zip(symbols, values))}
+        import borsapy as bp
+
+        def scan_symbols():
+            scanner = bp.TechnicalScanner().set_universe(symbols)
+            scanner.add_condition("close > 0")
+            for column in ("open", "high", "low", "volume"):
+                scanner.add_column(column)
+            return scanner.run(limit=len(symbols))
+
+        result = await run_sync(scan_symbols)
+        records = df_to_records(result) if hasattr(result, "iterrows") else []
+        if not records:
+            return {
+                "symbols": symbols,
+                "snapshot": {},
+                "source": "TradingView Scanner API (borsapy)",
+                "error": "Fiyat sağlayıcısı boş snapshot döndürdü",
+            }
+        return {
+            "symbols": symbols,
+            "snapshot": _snapshot_from_records(symbols, records),
+            "source": "TradingView Scanner API (borsapy)",
+        }
     except Exception as e:
         logger.error("snapshot_error", symbols=symbols, error=str(e))
         return {"symbols": symbols, "snapshot": {}, "error": str(e)}

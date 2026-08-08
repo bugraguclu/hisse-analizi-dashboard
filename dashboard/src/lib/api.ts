@@ -6,13 +6,23 @@ import type {
   FinancialStatementOut,
   FinancialRatioOut,
   TechnicalSignals,
+  MovingAveragesOut,
+  PivotsOut,
   CompanyInfo,
   StatsOut,
   HealthResponse,
 } from "@/types";
 
-/** Single source of truth for the backend base URL — do not hardcode elsewhere. */
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/**
+ * Single source of truth for browser requests.
+ *
+ * Same-origin `/api` is the safe production default: the browser never needs
+ * to know a Docker-internal hostname and Next.js can proxy to the backend.
+ * A public URL remains supported for deployments that intentionally expose
+ * the API on a separate origin.
+ */
+const configuredApiBase = process.env.NEXT_PUBLIC_API_URL?.trim();
+export const API_BASE = (configuredApiBase || "/api").replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number | null;
@@ -37,40 +47,85 @@ export class ApiError extends Error {
  */
 type CacheStrategy = "no-store" | "default";
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function getErrorMessage(res: Response, path: string): Promise<string> {
+  try {
+    const payload = (await res.json()) as { detail?: unknown; message?: unknown };
+    const detail = payload.detail ?? payload.message;
+    if (typeof detail === "string" && detail.trim()) return detail;
+  } catch {
+    // Non-JSON error responses fall back to a stable, user-safe message.
+  }
+  return `API ${res.status}: ${path}`;
+}
+
 async function get<T>(path: string, cache: CacheStrategy = "default"): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { cache });
+    res = await fetchWithTimeout(`${API_BASE}${path}`, { cache });
   } catch (err) {
-    throw new ApiError(`API'ye ulasilamiyor: ${path} (${String(err)})`, path);
+    const timedOut = err instanceof DOMException && err.name === "AbortError";
+    throw new ApiError(
+      timedOut ? `İstek zaman aşımına uğradı: ${path}` : `API'ye ulaşılamıyor: ${path}`,
+      path,
+    );
   }
   if (!res.ok) {
-    throw new ApiError(`API ${res.status}: ${path}`, path, res.status);
+    throw new ApiError(await getErrorMessage(res, path), path, res.status);
   }
-  return (await res.json()) as T;
+  const payload = (await res.json()) as T;
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const upstreamError = (payload as { error?: unknown }).error;
+    if (typeof upstreamError === "string" && upstreamError.trim()) {
+      throw new ApiError(upstreamError, path, 502);
+    }
+  }
+  return payload;
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetchWithTimeout(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
   } catch (err) {
-    throw new ApiError(`API'ye ulasilamiyor: ${path} (${String(err)})`, path);
+    const timedOut = err instanceof DOMException && err.name === "AbortError";
+    throw new ApiError(
+      timedOut ? `İstek zaman aşımına uğradı: ${path}` : `API'ye ulaşılamıyor: ${path}`,
+      path,
+    );
   }
   if (!res.ok) {
-    throw new ApiError(`API ${res.status}: ${path}`, path, res.status);
+    throw new ApiError(await getErrorMessage(res, path), path, res.status);
   }
-  return (await res.json()) as T;
+  const payload = (await res.json()) as T;
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const upstreamError = (payload as { error?: unknown }).error;
+    if (typeof upstreamError === "string" && upstreamError.trim()) {
+      throw new ApiError(upstreamError, path, 502);
+    }
+  }
+  return payload;
 }
 
 export const api = {
   // Core
   health: () => get<HealthResponse>("/health"),
-  stats: () => get<StatsOut>("/admin/stats", "no-store"),
+  stats: () => get<StatsOut>("/stats", "no-store"),
   companies: () => get<Company[]>("/companies"),
   company: (ticker: string) => get<Company>(`/companies/${ticker}`),
 
@@ -122,6 +177,10 @@ export const api = {
     get(`/technical/${ticker}/sma${period ? `?period=${period}` : ""}`),
   ema: (ticker: string, period?: number) =>
     get(`/technical/${ticker}/ema${period ? `?period=${period}` : ""}`),
+  movingAverages: (ticker: string) =>
+    get<MovingAveragesOut>(`/technical/${ticker}/moving-averages`),
+  pivots: (ticker: string) =>
+    get<PivotsOut>(`/technical/${ticker}/pivots`),
 
   // Fundamentals (backend caches 300s)
   companyInfo: (ticker: string) =>

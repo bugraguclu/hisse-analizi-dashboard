@@ -33,7 +33,7 @@ class CompanyRepository:
         return result.scalar_one_or_none()
 
     async def get_all(self) -> Sequence[Company]:
-        result = await self.session.execute(select(Company).where(Company.is_active == True).order_by(Company.ticker))
+        result = await self.session.execute(select(Company).where(Company.is_active.is_(True)).order_by(Company.ticker))
         return result.scalars().all()
 
     async def upsert(self, **kwargs) -> Company:
@@ -57,7 +57,7 @@ class SourceRepository:
         return result.scalar_one_or_none()
 
     async def get_enabled(self) -> Sequence[Source]:
-        result = await self.session.execute(select(Source).where(Source.enabled == True))
+        result = await self.session.execute(select(Source).where(Source.enabled.is_(True)))
         return result.scalars().all()
 
     async def get_all(self) -> Sequence[Source]:
@@ -316,7 +316,6 @@ class OutboxRepository:
         """Reclaim entries stuck in PROCESSING state for too long.
         Returns number of reclaimed entries.
         """
-        cutoff = utcnow()
         stmt = (
             update(EventOutbox)
             .where(
@@ -362,7 +361,7 @@ class NotificationRuleRepository:
             select(NotificationRule).where(
                 and_(
                     NotificationRule.company_id == company_id,
-                    NotificationRule.enabled == True,
+                    NotificationRule.enabled.is_(True),
                 )
             )
         )

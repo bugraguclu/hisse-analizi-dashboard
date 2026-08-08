@@ -2,9 +2,10 @@
 
 import time
 
-import pytest
+import asyncio
 
-from src.adapters.utils import TTLCache
+
+from src.adapters.utils import TTLCache, adapter_cache, cached
 
 
 class TestTTLCache:
@@ -50,3 +51,24 @@ class TestTTLCache:
         cache.set("key1", "new", ttl_seconds=10)
         hit, value = cache.get("key1")
         assert value == "new"
+
+
+async def test_cached_coalesces_concurrent_identical_requests():
+    adapter_cache.clear()
+    calls = 0
+    release = asyncio.Event()
+
+    @cached(10, "singleflight-test")
+    async def fetch_value(key: str):
+        nonlocal calls
+        calls += 1
+        await release.wait()
+        return {"key": key}
+
+    first = asyncio.create_task(fetch_value("same"))
+    second = asyncio.create_task(fetch_value("same"))
+    await asyncio.sleep(0)
+    release.set()
+
+    assert await asyncio.gather(first, second) == [{"key": "same"}, {"key": "same"}]
+    assert calls == 1

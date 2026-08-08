@@ -1,10 +1,9 @@
 import structlog
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.db.models import Company, FinancialStatement, PriceData
+from src.db.models import Company
 from src.db.repository import FinancialStatementRepository, PriceDataRepository
 
 logger = structlog.get_logger(__name__)

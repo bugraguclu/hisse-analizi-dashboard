@@ -147,7 +147,7 @@ async def seed():
 
         await session.commit()
 
-        print(f"Seed completed successfully!")
+        print("Seed completed successfully!")
         print(f"  Companies: {len(companies)}")
         for c in companies:
             print(f"    - {c.ticker}: {c.display_name}")

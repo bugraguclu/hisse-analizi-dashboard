@@ -257,6 +257,9 @@ async def _save_report(
     snapshot: dict,
     result: LLMResult,
 ) -> None:
+    if not result.text.strip():
+        logger.warning("ai_report_empty_not_saved", ticker=company.ticker, hash=content_hash[:12])
+        return
     stmt = (
         pg_insert(AIReport)
         .values(

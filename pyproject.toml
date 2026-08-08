@@ -52,6 +52,9 @@ markers = [
 target-version = "py311"
 line-length = 120
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B023"]
+
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true

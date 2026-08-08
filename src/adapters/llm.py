@@ -154,6 +154,24 @@ class GeminiClient:
             int(getattr(meta, "candidates_token_count", 0) or 0),
         )
 
+    @staticmethod
+    def _visible_text(resp: Any) -> str:
+        """Yanittan SADECE gorunur metni ayiklar — dusunme (thought) parcalari atlanir.
+
+        Gemini'nin dusunen modellerinde chunk.text dusunme metnini de icerebiliyor;
+        parts uzerinden thought=True olanlari filtrelemek tek guvenli yol.
+        """
+        out: list[str] = []
+        for cand in getattr(resp, "candidates", None) or []:
+            content = getattr(cand, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                if getattr(part, "thought", False):
+                    continue
+                text = getattr(part, "text", None)
+                if text:
+                    out.append(text)
+        return "".join(out)
+
     async def generate(
         self,
         system_prompt: str,
@@ -171,7 +189,14 @@ class GeminiClient:
             contents=user_content,
             config=self._config(system_prompt, max_tokens),
         )
-        text = resp.text or ""
+        text = self._visible_text(resp)
+        if not text.strip():
+            # Dusunme tokenlari cikti butcesini tuketmis olabilir — bos raporu
+            # cache'e yazmamak icin hata firlat
+            raise RuntimeError(
+                "Model bos yanit dondurdu (finish_reason cikti limiti olabilir); "
+                "AI_REPORT_MAX_TOKENS degerini artirmayi deneyin."
+            )
         in_tok, out_tok = self._usage(resp)
         cost = _simple_cost(model, in_tok, out_tok)
         spent = await self.budget.add(cost)
@@ -206,9 +231,10 @@ class GeminiClient:
             config=self._config(system_prompt, max_tokens),
         )
         async for chunk in stream:
-            if chunk.text:
-                parts.append(chunk.text)
-                yield chunk.text
+            visible = self._visible_text(chunk)
+            if visible:
+                parts.append(visible)
+                yield visible
             ci, co = self._usage(chunk)
             in_tok = max(in_tok, ci)
             out_tok = max(out_tok, co)

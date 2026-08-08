@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useSyncExternalStore, useCallback, type ReactNode } from "react";
 import { type Locale, type TranslationKey, t as translate } from "./i18n";
 
 interface LocaleContextValue {
@@ -15,20 +15,32 @@ const LocaleContext = createContext<LocaleContextValue>({
   t: (key) => translate(key, "tr"),
 });
 
+const localeListeners = new Set<() => void>();
+
+function readStoredLocale(): Locale {
+  if (typeof window === "undefined") return "tr";
+  const saved = window.localStorage.getItem("locale");
+  return saved === "en" || saved === "fr" || saved === "tr" ? saved : "tr";
+}
+
+function subscribeToLocale(onStoreChange: () => void) {
+  localeListeners.add(onStoreChange);
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === "locale") onStoreChange();
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    localeListeners.delete(onStoreChange);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("locale") as Locale | null;
-      if (saved && ["tr", "en", "fr"].includes(saved)) return saved;
-    }
-    return "tr";
-  });
+  const locale = useSyncExternalStore(subscribeToLocale, readStoredLocale, (): Locale => "tr");
 
   const setLocale = useCallback((newLocale: Locale) => {
-    setLocaleState(newLocale);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("locale", newLocale);
-    }
+    window.localStorage.setItem("locale", newLocale);
+    localeListeners.forEach((listener) => listener());
   }, []);
 
   const t = useCallback(

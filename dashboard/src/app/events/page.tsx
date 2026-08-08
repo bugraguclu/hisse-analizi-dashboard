@@ -6,12 +6,13 @@ import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { SeverityBadge, CategoryBadge } from "@/components/shared/SeverityBadge";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { Newspaper, ChevronLeft, ChevronRight, X, ExternalLink, Search } from "lucide-react";
 import type { EventOut, EventDetailOut } from "@/types";
 import { useLocale } from "@/lib/locale-context";
+import { safeExternalUrl } from "@/lib/url";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -29,13 +30,22 @@ function EventDetailModal({
   onClose: () => void;
 }) {
   const { t } = useLocale();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["eventDetail", eventId],
     queryFn: () => api.eventDetail(eventId),
     enabled: !!eventId,
   });
 
   const detail = data as EventDetailOut | null;
+  const eventUrl = safeExternalUrl(detail?.event_url);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -46,11 +56,16 @@ function EventDetailModal({
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         transition={{ duration: 0.2 }}
         className="relative bg-card border border-border/60 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="event-detail-title"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
-          <h3 className="text-sm font-semibold text-foreground">{t("events.detail")}</h3>
+          <h3 id="event-detail-title" className="text-sm font-semibold text-foreground">{t("events.detail")}</h3>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Olay detayını kapat"
             className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
           >
             <X className="h-4 w-4 text-muted-foreground" />
@@ -58,7 +73,9 @@ function EventDetailModal({
         </div>
 
         <div className="overflow-y-auto p-5 space-y-4" style={{ maxHeight: "calc(80vh - 60px)" }}>
-          {isLoading ? (
+          {isError ? (
+            <ErrorState message="Olay detayı yüklenemedi" onRetry={() => { void refetch(); }} />
+          ) : isLoading ? (
             <LoadingSpinner />
           ) : !detail ? (
             <EmptyState message={t("events.detailNotFound")} />
@@ -102,9 +119,9 @@ function EventDetailModal({
                 </div>
               )}
 
-              {detail.event_url && (
+              {eventUrl && (
                 <a
-                  href={detail.event_url}
+                  href={eventUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -157,7 +174,14 @@ export default function EventsPage() {
     enabled: suggestQuery.length >= 2,
     staleTime: 60_000,
   });
-  const suggestList = Array.isArray(suggestions) ? suggestions.slice(0, 6) : [];
+  const suggestionPayload = suggestions as { results?: unknown[]; data?: unknown[] } | null;
+  const suggestList = (Array.isArray(suggestions)
+    ? suggestions
+    : Array.isArray(suggestionPayload?.results)
+      ? suggestionPayload.results
+      : Array.isArray(suggestionPayload?.data)
+        ? suggestionPayload.data
+        : []).slice(0, 6);
 
   const handleTickerChange = useCallback((value: string) => {
     const upper = value.toUpperCase();
@@ -201,7 +225,7 @@ export default function EventsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["events", sourceFilter, tickerFilter, page],
     queryFn: () =>
       api.events({
@@ -304,7 +328,9 @@ export default function EventsPage() {
 
       {/* Table */}
       <motion.div custom={2} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
-        {isLoading ? (
+        {isError ? (
+          <ErrorState message="Olaylar yüklenemedi" onRetry={() => { void refetch(); }} />
+        ) : isLoading ? (
           <LoadingSpinner />
         ) : events.length === 0 ? (
           <EmptyState message={tickerFilter ? `"${tickerFilter}" ${t("events.noEventsForTicker")}` : t("events.noEventsFiltered")} />

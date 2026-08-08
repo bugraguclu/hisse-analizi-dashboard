@@ -3,25 +3,26 @@
 import { use, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, API_BASE } from "@/lib/api";
-import { formatNumber, formatCompact, formatDate, formatPercent } from "@/lib/format";
+import { formatNumber, formatCompact, formatDate } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
 import { SlidingNumber } from "@/components/ui/sliding-number";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from "recharts";
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Building2, BarChart3, Sparkles, X, ExternalLink, Loader2 } from "lucide-react";
+import { Sparkles, X, ExternalLink, Loader2 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
+import { safeExternalUrl } from "@/lib/url";
 import type { TranslationKey } from "@/lib/i18n";
 import { FinancialStatements } from "@/components/stock/FinancialStatements";
 import { DividendHistory } from "@/components/stock/DividendHistory";
-import { TweetsFeed } from "@/components/stock/TweetsFeed";
 import { EarningsCalendar } from "@/components/stock/EarningsCalendar";
 import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
 import { AllTimeframeSignals } from "@/components/stock/AllTimeframeSignals";
+import { FinancialHealthScorecard } from "@/components/stock/FinancialHealthScorecard";
+import { MovingAveragesTable } from "@/components/stock/MovingAveragesTable";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -92,12 +93,13 @@ function formatRecommendation(rec: string, t: (key: TranslationKey) => string): 
 
 function EventDetailModal({ eventId, onClose }: { eventId: string; onClose: () => void }) {
   const { t } = useLocale();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["eventDetail", eventId],
     queryFn: () => api.eventDetail(eventId),
     enabled: !!eventId,
   });
   const detail = data as unknown as Record<string, unknown> | null;
+  const eventUrl = safeExternalUrl(detail?.event_url);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -111,12 +113,14 @@ function EventDetailModal({ eventId, onClose }: { eventId: string; onClose: () =
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
           <h3 className="text-sm font-semibold text-foreground">{t("events.detail")}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors">
+          <button type="button" onClick={onClose} aria-label="Olay detayını kapat" className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors">
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
         <div className="overflow-y-auto p-5 space-y-4" style={{ maxHeight: "calc(80vh - 60px)" }}>
-          {isLoading ? (
+          {isError ? (
+            <ErrorState message="Olay detayı yüklenemedi" onRetry={() => { void refetch(); }} />
+          ) : isLoading ? (
             <LoadingSpinner />
           ) : !detail ? (
             <EmptyState message={t("events.detailNotFound")} />
@@ -142,8 +146,8 @@ function EventDetailModal({ eventId, onClose }: { eventId: string; onClose: () =
               {detail.body_text && (
                 <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{String(detail.body_text)}</p>
               )}
-              {detail.event_url && (
-                <a href={String(detail.event_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+              {eventUrl && (
+                <a href={eventUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
                   <ExternalLink className="h-3 w-3" /> {t("events.goToSource")}
                 </a>
               )}
@@ -238,6 +242,15 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
   }));
   const events = dbEvents.length > 0 ? dbEvents : liveEventsFormatted;
   const eventsLoading = eventsQ.isLoading || (dbEvents.length === 0 && liveNewsQ.isLoading);
+  const liveNewsFormatted = liveNewsArr.map((n) => ({
+    title: String(n.Title ?? n.title ?? "-"),
+    url: String(n.URL ?? n.url ?? ""),
+    source: "KAP",
+    published_at: String(n.Date ?? n.date ?? ""),
+    sentiment: null,
+    impact: null,
+    rationale: null,
+  }));
 
   // Backend returns: {"ticker": ..., "signals": {...}}
   const signalsRaw = signalsQ.data as Record<string, unknown> | null;
@@ -327,10 +340,10 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                   <SlidingNumber value={Math.round(lastClose * 100) / 100} />
                 </span>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`text-sm font-semibold font-mono ${isUp ? "text-red-500" : "text-emerald-500"}`}>
+                  <span className={`text-sm font-semibold font-mono ${isUp ? "text-emerald-500" : "text-red-500"}`}>
                     {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : "-"}%{formatNumber(Math.abs(change), 2)})
                   </span>
-                  <span className={`text-sm ${isUp ? "text-red-500" : "text-emerald-500"}`}>
+                  <span className={`text-sm ${isUp ? "text-emerald-500" : "text-red-500"}`}>
                     {isUp ? "\u2191" : "\u2193"}
                   </span>
                   <span className="text-xs text-muted-foreground ml-1">
@@ -392,6 +405,11 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         </motion.div>
       )}
 
+      {/* Financial Health Scorecard */}
+      <motion.div custom={5.8} variants={stagger} initial="hidden" animate="show">
+        <FinancialHealthScorecard info={fastInfo} ratios={(liveRatiosObj || dbRatios) as Record<string, unknown> | null} signals={signalsObj} />
+      </motion.div>
+
       {/* Price Chart with Period Selection */}
       <motion.div custom={6} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
         <div className="flex items-center justify-between mb-1">
@@ -402,6 +420,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             <button
               key={p}
               onClick={() => setPricePeriod(p)}
+              aria-pressed={pricePeriod === p}
               className={`px-3 py-2 text-xs font-semibold transition-all border-b-2 ${
                 p === pricePeriod
                   ? "border-primary text-primary"
@@ -412,13 +431,19 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             </button>
           ))}
         </div>
-        {historyQ.isLoading ? <LoadingSpinner /> : chartData.length === 0 ? <EmptyState message={t("hisse.noPriceData")} /> : (
-          <ResponsiveContainer width="100%" height={300}>
+        {historyQ.isError ? <ErrorState message="Fiyat grafiği yüklenemedi" onRetry={() => { void historyQ.refetch(); }} /> : historyQ.isLoading ? <LoadingSpinner /> : chartData.length === 0 ? <EmptyState message={t("hisse.noPriceData")} /> : (
+          <ResponsiveContainer
+            width="100%"
+            height={300}
+            minWidth={0}
+            minHeight={0}
+            initialDimension={{ width: 320, height: 300 }}
+          >
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0.15} />
-                  <stop offset="95%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0} />
+                  <stop offset="5%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="4 8" stroke="var(--color-muted-foreground)" strokeOpacity={0.3} vertical={false} />
@@ -427,7 +452,7 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
               <Tooltip
                 contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10, fontSize: 12, color: "var(--color-card-foreground)", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}
               />
-              <Area type="monotone" dataKey="close" stroke={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} strokeWidth={2} fill="url(#colorClose)" dot={false} activeDot={{ r: 3, fill: isUp ? "rgb(239,68,68)" : "rgb(16,185,129)" }} />
+              <Area type="monotone" dataKey="close" stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} strokeWidth={2} fill="url(#colorClose)" dot={false} activeDot={{ r: 3, fill: isUp ? "rgb(16,185,129)" : "rgb(239,68,68)" }} />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -438,7 +463,13 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         <motion.div custom={7} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <h2 className="text-sm font-semibold text-foreground mb-4">{t("index.volume")}</h2>
           {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer
+              width="100%"
+              height={200}
+              minWidth={0}
+              minHeight={0}
+              initialDimension={{ width: 320, height: 200 }}
+            >
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="4 8" stroke="var(--color-muted-foreground)" strokeOpacity={0.3} vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
@@ -589,8 +620,10 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         </div>
         {(() => {
           const newsData = newsQ.data as { news?: Array<{ title: string; url: string; source: string | null; published_at: string | null; sentiment: string | null; impact: string | null; rationale: string | null }> } | null;
-          const newsItems = Array.isArray(newsData?.news) ? newsData.news : [];
-          if (newsQ.isLoading) return <LoadingSpinner />;
+          const dbNewsItems = Array.isArray(newsData?.news) ? newsData.news : [];
+          const newsItems = dbNewsItems.length > 0 ? dbNewsItems : liveNewsFormatted;
+          if (newsQ.isError && liveNewsQ.isError) return <ErrorState message="Haberler yüklenemedi" onRetry={() => { void newsQ.refetch(); void liveNewsQ.refetch(); }} />;
+          if (newsQ.isLoading || (dbNewsItems.length === 0 && liveNewsQ.isLoading)) return <LoadingSpinner />;
           if (newsItems.length === 0) return <EmptyState message={t("hisse.noNews")} />;
           const badge = (s: string | null) =>
             s === "pozitif" ? "bg-emerald-500/15 text-emerald-500"
@@ -598,8 +631,10 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
             : "bg-yellow-500/15 text-yellow-600";
           return (
             <div className="divide-y divide-border/30">
-              {newsItems.map((n, i) => (
-                <a key={n.url || i} href={n.url} target="_blank" rel="noopener noreferrer" className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">
+              {newsItems.map((n, i) => {
+                const newsUrl = safeExternalUrl(n.url);
+                const content = (
+                  <>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-foreground truncate">{n.title}</div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -611,8 +646,14 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
                       {n.sentiment}{n.impact ? ` · ${n.impact}` : ""}
                     </span>
                   )}
-                </a>
-              ))}
+                  </>
+                );
+                return newsUrl ? (
+                  <a key={newsUrl} href={newsUrl} target="_blank" rel="noopener noreferrer" className="px-5 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">{content}</a>
+                ) : (
+                  <div key={`${n.title}-${i}`} className="px-5 py-3 flex items-center gap-3">{content}</div>
+                );
+              })}
             </div>
           );
         })()}
@@ -632,9 +673,6 @@ export default function HissePage({ params }: { params: Promise<{ ticker: string
         <DividendHistory ticker={sym} />
         <EarningsCalendar ticker={sym} />
       </div>
-
-      {/* Social Media */}
-      <TweetsFeed ticker={sym} />
 
       {/* Event Detail Modal */}
       <AnimatePresence>

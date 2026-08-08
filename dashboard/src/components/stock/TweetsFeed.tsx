@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/shared/ErrorState";
 import { useLocale } from "@/lib/locale-context";
 import { motion } from "framer-motion";
 import { MessageCircle, ExternalLink } from "lucide-react";
+import { safeExternalUrl } from "@/lib/url";
 
 interface TweetsFeedProps {
   ticker: string;
@@ -43,8 +44,8 @@ export function TweetsFeed({ ticker }: TweetsFeedProps) {
   const tweets = parseTweets(tweetsQ.data);
 
   const labels = {
-    title: { tr: "Sosyal Medya", en: "Social Media", fr: "Medias sociaux" },
-    noData: { tr: "Tweet bulunamadi", en: "No tweets found", fr: "Aucun tweet trouve" },
+    title: { tr: "Sosyal Medya", en: "Social Media", fr: "Médias sociaux" },
+    noData: { tr: "Gönderi bulunamadı", en: "No posts found", fr: "Aucune publication trouvée" },
   };
 
   return (
@@ -69,7 +70,7 @@ export function TweetsFeed({ ticker }: TweetsFeedProps) {
               const text = String(tw.text ?? tw.content ?? tw.body ?? "");
               const author = String(tw.user ?? tw.author ?? tw.username ?? tw.screen_name ?? "");
               const date = String(tw.created_at ?? tw.date ?? tw.timestamp ?? "");
-              const url = String(tw.url ?? tw.link ?? "");
+              const url = safeExternalUrl(tw.url ?? tw.link);
               return (
                 <div key={i} className="px-5 py-3.5 hover:bg-muted/10 transition-colors">
                   <div className="flex items-center gap-2 mb-1.5">
@@ -80,7 +81,7 @@ export function TweetsFeed({ ticker }: TweetsFeedProps) {
                       <span className="text-[10px] text-muted-foreground">{timeAgo(date, locale)}</span>
                     )}
                     {url && (
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="ml-auto text-muted-foreground hover:text-primary transition-colors">
+                      <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Gönderiyi yeni sekmede aç" className="ml-auto text-muted-foreground hover:text-primary transition-colors">
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     )}

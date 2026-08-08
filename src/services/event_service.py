@@ -1,4 +1,3 @@
-import uuid
 from src.core.time import utcnow
 
 import structlog

@@ -2,8 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { formatNumber, formatPercent } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { useLocale } from "@/lib/locale-context";
 import { motion } from "framer-motion";
 import { ThumbsUp } from "lucide-react";
@@ -33,12 +34,22 @@ const REC_COLORS: Record<string, string> = {
 };
 
 const REC_LABELS: Record<string, Record<string, string>> = {
-  strongBuy: { tr: "Guclu Al", en: "Strong Buy", fr: "Achat fort" },
+  strongBuy: { tr: "Güçlü Al", en: "Strong Buy", fr: "Achat fort" },
   buy: { tr: "Al", en: "Buy", fr: "Achat" },
   hold: { tr: "Tut", en: "Hold", fr: "Conserver" },
   sell: { tr: "Sat", en: "Sell", fr: "Vente" },
-  strongSell: { tr: "Guclu Sat", en: "Strong Sell", fr: "Vente forte" },
+  strongSell: { tr: "Güçlü Sat", en: "Strong Sell", fr: "Vente forte" },
 };
+
+function recommendationLabel(value: unknown, locale: string): string {
+  const signal = String(value ?? "").toUpperCase();
+  if (signal === "AL" || signal === "BUY") return locale === "tr" ? "Al" : locale === "fr" ? "Achat" : "Buy";
+  if (signal === "SAT" || signal === "SELL") return locale === "tr" ? "Sat" : locale === "fr" ? "Vente" : "Sell";
+  if (signal.includes("STRONG") && signal.includes("BUY")) return REC_LABELS.strongBuy[locale];
+  if (signal.includes("STRONG") && signal.includes("SELL")) return REC_LABELS.strongSell[locale];
+  if (signal === "TUT" || signal === "HOLD" || signal === "NEUTRAL") return REC_LABELS.hold[locale];
+  return String(value ?? "");
+}
 
 export function AnalystRecommendations({ ticker }: AnalystRecommendationsProps) {
   const { locale } = useLocale();
@@ -50,9 +61,12 @@ export function AnalystRecommendations({ ticker }: AnalystRecommendationsProps) 
   const data = parseRecommendations(recQ.data);
 
   const labels = {
-    title: { tr: "Analist Onerileri", en: "Analyst Recommendations", fr: "Recommandations d'analystes" },
-    noData: { tr: "Analist onerisi yok", en: "No analyst recommendations", fr: "Aucune recommandation" },
+    title: { tr: "Analist Önerileri", en: "Analyst Recommendations", fr: "Recommandations d'analystes" },
+    noData: { tr: "Analist önerisi yok", en: "No analyst recommendations", fr: "Aucune recommandation" },
     analysts: { tr: "analist", en: "analysts", fr: "analystes" },
+    consensus: { tr: "Konsensüs", en: "Consensus", fr: "Consensus" },
+    target: { tr: "Hedef Fiyat", en: "Target Price", fr: "Cours cible" },
+    upside: { tr: "Yükseliş Potansiyeli", en: "Upside Potential", fr: "Potentiel de hausse" },
   };
 
   // Try to extract recommendation counts
@@ -85,6 +99,11 @@ export function AnalystRecommendations({ ticker }: AnalystRecommendationsProps) 
     }
   }
 
+  const consensus = data?.recommendation ?? data?.consensus;
+  const target = data?.target_price ?? data?.targetPrice;
+  const upside = data?.upside_potential ?? data?.upsidePotential;
+  const hasSummary = consensus != null || target != null || upside != null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -96,10 +115,36 @@ export function AnalystRecommendations({ ticker }: AnalystRecommendationsProps) 
         <ThumbsUp className="h-3.5 w-3.5" />
         {labels.title[locale]}
       </h3>
-      {recQ.isLoading ? (
+      {recQ.isError ? (
+        <ErrorState
+          message={locale === "tr" ? "Analist verisi yüklenemedi" : "Analyst data could not be loaded"}
+          onRetry={() => { void recQ.refetch(); }}
+        />
+      ) : recQ.isLoading ? (
         <LoadingSpinner />
-      ) : total === 0 ? (
+      ) : total === 0 && !hasSummary ? (
         <EmptyState message={labels.noData[locale]} />
+      ) : total === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {consensus != null && (
+            <div className="rounded-lg bg-emerald-500/8 border border-emerald-500/20 p-3">
+              <div className="text-[10px] text-muted-foreground mb-1">{labels.consensus[locale]}</div>
+              <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{recommendationLabel(consensus, locale)}</div>
+            </div>
+          )}
+          {target != null && (
+            <div className="rounded-lg bg-muted/30 p-3">
+              <div className="text-[10px] text-muted-foreground mb-1">{labels.target[locale]}</div>
+              <div className="text-sm font-bold font-mono text-foreground">₺{formatNumber(Number(target))}</div>
+            </div>
+          )}
+          {upside != null && (
+            <div className="rounded-lg bg-muted/30 p-3">
+              <div className="text-[10px] text-muted-foreground mb-1">{labels.upside[locale]}</div>
+              <div className="text-sm font-bold font-mono text-foreground">{formatPercent(Number(upside))}</div>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {/* Bar chart */}

@@ -32,6 +32,7 @@ function MacroCard({ title, icon: Icon, children, isLoading: loading, index = 0 
 }
 
 function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string; data: Record<string, unknown> | null; isLoading: boolean; index: number; noDataLabel: string }) {
+  const { locale } = useLocale();
   if (isLoading) return <MacroCard title={label} icon={DollarSign} isLoading={true} index={index}><span /></MacroCard>;
   if (!data) return <MacroCard title={label} icon={DollarSign} index={index}><EmptyState message={noDataLabel} /></MacroCard>;
 
@@ -41,19 +42,34 @@ function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string;
   const lastHist = historyArr.length > 0 ? historyArr[historyArr.length - 1] : null;
   const prevHist = historyArr.length > 1 ? historyArr[historyArr.length - 2] : null;
 
-  const price = info.close ?? info.price ?? info.rate ?? info.value ?? (lastHist ? lastHist.Close ?? lastHist.close : null);
+  const price = info.close ?? info.last ?? info.price ?? info.rate ?? info.value ?? (lastHist ? lastHist.Close ?? lastHist.close : null);
   const prevPrice = prevHist ? Number(prevHist.Close ?? prevHist.close ?? 0) : 0;
   const curPrice = price != null ? Number(price) : 0;
-  const change = prevPrice > 0 ? ((curPrice - prevPrice) / prevPrice) * 100 : Number(info.change_pct ?? info.change_percent ?? 0);
-  const isUp = change >= 0;
+  const rawChange = info.change_pct ?? info.change_percent;
+  const change = prevPrice > 0
+    ? ((curPrice - prevPrice) / prevPrice) * 100
+    : rawChange != null ? Number(rawChange) : null;
+  const isUp = (change ?? 0) >= 0;
+  const source = String(data.source ?? "");
+  const asOf = String(data.as_of ?? info.update_time ?? "");
+  const sourceLabel = source === "TCMB"
+    ? locale === "tr" ? "TCMB döviz satış" : locale === "fr" ? "Vente devises CBRT" : "CBRT forex selling"
+    : source;
 
   return (
     <MacroCard title={label} icon={DollarSign} index={index}>
       <div className="text-3xl font-bold font-mono text-foreground tracking-tight">{price != null ? formatNumber(Number(price), 4) : "-"}</div>
-      <div className={`flex items-center gap-1.5 text-sm font-semibold mt-2 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-        {isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-        {isUp ? "+" : ""}{formatNumber(change)}%
-      </div>
+      {change != null && Number.isFinite(change) && (
+        <div className={`flex items-center gap-1.5 text-sm font-semibold mt-2 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          {isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+          {isUp ? "+" : ""}{formatNumber(change)}%
+        </div>
+      )}
+      {(sourceLabel || asOf) && (
+        <p className="text-[10px] text-muted-foreground mt-1">
+          {[sourceLabel, asOf].filter(Boolean).join(" · ")}
+        </p>
+      )}
     </MacroCard>
   );
 }

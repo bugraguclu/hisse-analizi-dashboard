@@ -136,3 +136,81 @@ async def get_ta_signals_all_timeframes(ticker: str) -> dict:
     except Exception as e:
         logger.error("technical_ta_all_tf_error", ticker=ticker, error=str(e))
         return {"ticker": ticker, "timeframes": {}, "error": str(e)}
+
+
+@cached(TTL_TECHNICAL, "tech")
+async def get_moving_averages(ticker: str) -> dict:
+    """Fetch SMA/EMA 10, 20, 50, 100, 200 values and compute Golden Cross status."""
+    try:
+        t = await _get_ticker(ticker)
+
+        periods = [10, 20, 50, 100, 200]
+        sma_vals = {}
+        ema_vals = {}
+
+        for p in periods:
+            try:
+                val = await run_sync(lambda: t.sma(period=p))
+                sma_vals[f"sma_{p}"] = round(float(val), 4) if val is not None else None
+            except Exception:
+                sma_vals[f"sma_{p}"] = None
+
+            try:
+                val = await run_sync(lambda: t.ema(period=p))
+                ema_vals[f"ema_{p}"] = round(float(val), 4) if val is not None else None
+            except Exception:
+                ema_vals[f"ema_{p}"] = None
+
+        sma50 = sma_vals.get("sma_50")
+        sma200 = sma_vals.get("sma_200")
+        golden_cross = (sma50 > sma200) if (sma50 is not None and sma200 is not None) else None
+
+        return {
+            "ticker": ticker,
+            "sma": sma_vals,
+            "ema": ema_vals,
+            "golden_cross": golden_cross,
+        }
+    except Exception as e:
+        logger.error("technical_moving_averages_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "sma": {}, "ema": {}, "golden_cross": None, "error": str(e)}
+
+
+@cached(TTL_TECHNICAL, "tech")
+async def get_pivot_points(ticker: str) -> dict:
+    """Calculate Classic Pivot Points (P, R1-R3, S1-S3) from recent price data."""
+    try:
+        t = await _get_ticker(ticker)
+        fast = await run_sync(lambda: t.fast_info)
+
+        high = float(fast.get("day_high") or fast.get("year_high") or 0)
+        low = float(fast.get("day_low") or fast.get("year_low") or 0)
+        close = float(fast.get("last_price") or fast.get("previous_close") or 0)
+
+        if high <= 0 or low <= 0 or close <= 0:
+            return {"ticker": ticker, "pivots": None}
+
+        pivot = round((high + low + close) / 3, 2)
+        r1 = round((2 * pivot) - low, 2)
+        s1 = round((2 * pivot) - high, 2)
+        r2 = round(pivot + (high - low), 2)
+        s2 = round(pivot - (high - low), 2)
+        r3 = round(high + 2 * (pivot - low), 2)
+        s3 = round(low - 2 * (high - pivot), 2)
+
+        return {
+            "ticker": ticker,
+            "pivots": {
+                "pivot": pivot,
+                "r1": r1,
+                "r2": r2,
+                "r3": r3,
+                "s1": s1,
+                "s2": s2,
+                "s3": s3,
+            },
+        }
+    except Exception as e:
+        logger.error("technical_pivot_points_error", ticker=ticker, error=str(e))
+        return {"ticker": ticker, "pivots": None, "error": str(e)}
+

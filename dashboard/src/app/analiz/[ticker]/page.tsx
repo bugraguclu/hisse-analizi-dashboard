@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatNumber, formatCompact, formatPercent } from "@/lib/format";
+import { formatNumber, formatCompact } from "@/lib/format";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";

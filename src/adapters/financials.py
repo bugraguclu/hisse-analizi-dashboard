@@ -1,11 +1,8 @@
 """Şirket detay bilgileri, finansal tablolar, temettü, ortaklık yapısı adapter'ı."""
 import asyncio
-from datetime import datetime
 
 import structlog
 
-from src.adapters.base import BasePriceAdapter
-from src.db.models import PollingState
 
 logger = structlog.get_logger(__name__)
 

@@ -2,7 +2,6 @@ import structlog
 
 from src.adapters.base import BaseAdapter, RawEventData
 from src.adapters.utils import run_sync, get_http_client
-from src.core.config import settings
 from src.db.models import PollingState
 from src.parsers.helpers import compute_content_hash, parse_date, clean_whitespace
 

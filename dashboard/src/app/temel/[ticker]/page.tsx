@@ -10,9 +10,11 @@ import { TickerSearch } from "@/components/shared/TickerSearch";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Building2, TrendingUp, Users, Target } from "lucide-react";
+import { Building2, TrendingUp, Users, Target, BarChart3, ShieldAlert, CalendarDays } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
+import { EarningsCalendar } from "@/components/stock/EarningsCalendar";
+import { CompanyRiskScores } from "@/components/stock/CompanyRiskScores";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },
@@ -39,14 +41,18 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
 
   const infoQ = useQuery({ queryKey: ["company-info", tk], queryFn: () => api.companyInfo(tk) });
   const fastInfoQ = useQuery({ queryKey: ["fast-info", tk], queryFn: () => api.fastInfo(tk) });
+  const liveRatiosQ = useQuery({ queryKey: ["live-ratios", tk], queryFn: () => api.liveRatios(tk) });
   const targetsQ = useQuery({ queryKey: ["targets", tk], queryFn: () => api.priceTargets(tk) });
   const holdersQ = useQuery({ queryKey: ["holders", tk], queryFn: () => api.holders(tk) });
 
   const info = infoQ.data as Record<string, unknown> | null;
   const fastInfo = fastInfoQ.data as Record<string, unknown> | null;
+  const liveRatios = liveRatiosQ.data as { ratios?: Record<string, number | null> } | null;
+  const liveRatioObj = liveRatios?.ratios || {};
+
   const fastInfoObj = (fastInfo?.fast_info && typeof fastInfo.fast_info === "object" ? fastInfo.fast_info : fastInfo) as Record<string, unknown> | null;
   const rawInfoObj = (info?.info || info) as Record<string, unknown> | null;
-  // Merge fast_info as fallback for missing fields
+  // Merge fast_info & rawInfoObj
   const infoObj = rawInfoObj && fastInfoObj
     ? { ...fastInfoObj, ...rawInfoObj }
     : rawInfoObj || fastInfoObj;
@@ -66,6 +72,17 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
   function handleTickerSelect(newTicker: string) {
     router.push(`/temel/${newTicker.toUpperCase()}`);
   }
+
+  // Extract variables safely
+  const marketCap = Number(infoObj?.marketCap || infoObj?.market_cap || infoObj?.marketCapitalization || 0);
+  const sharesOutstanding = Number(infoObj?.sharesOutstanding || infoObj?.shares_outstanding || infoObj?.shares || 0);
+  const floatShares = Number(infoObj?.floatShares || infoObj?.float_shares || 0);
+  const freeFloatPct = sharesOutstanding > 0 && floatShares > 0 ? (floatShares / sharesOutstanding) * 100 : null;
+
+  const peRatio = liveRatioObj.pe_ratio ?? infoObj?.trailingPE ?? infoObj?.trailing_pe ?? infoObj?.pe_ratio;
+  const pbRatio = liveRatioObj.pb_ratio ?? infoObj?.priceToBook ?? infoObj?.price_to_book ?? infoObj?.pb_ratio;
+  const psRatio = liveRatioObj.ps_ratio ?? infoObj?.priceToSalesTrailing12Months ?? infoObj?.ps_ratio;
+  const netDebtEbitda = liveRatioObj.net_debt_ebitda ?? infoObj?.netDebtToEBITDA ?? infoObj?.net_debt_ebitda;
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
@@ -91,7 +108,7 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Company Info */}
+        {/* Company Info & Capital Structure */}
         <motion.div custom={1} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Building2 className="h-4 w-4 text-primary" />
@@ -102,19 +119,55 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
               {[
                 [t("temel.name"), infoObj.longName || infoObj.shortName || infoObj.name || infoObj.long_name || infoObj.short_name || tk],
                 [t("temel.sector"), infoObj.sector || infoObj.industry || infoObj.sectorDisp || infoObj.industryDisp || "-"],
-                [t("temel.marketCap"), formatCompact(Number(infoObj.marketCap || infoObj.market_cap || infoObj.marketCapitalization || 0))],
-                [t("hisse.peRatio"), (infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio) != null ? formatNumber(Number(infoObj.trailingPE ?? infoObj.trailing_pe ?? infoObj.pe_ratio)) : "-"],
-                ["PD/DD", (infoObj.priceToBook ?? infoObj.price_to_book ?? infoObj.pb_ratio) != null ? formatNumber(Number(infoObj.priceToBook ?? infoObj.price_to_book ?? infoObj.pb_ratio)) : "-"],
-                [t("temel.dividendYield"), (infoObj.dividendYield ?? infoObj.dividend_yield ?? infoObj.lastDividendValue) != null ? formatPercent(Number(infoObj.dividendYield ?? infoObj.dividend_yield ?? 0) * 100) : "-"],
+                [t("temel.exchange"), infoObj.exchange || infoObj.fullExchangeName || infoObj.market || "BİST"],
+                [t("temel.marketCap"), marketCap > 0 ? formatCompact(marketCap) : "-"],
+                [t("temel.freeFloat"), freeFloatPct != null ? formatPercent(freeFloatPct) : "-"],
+                [t("temel.freeFloatShares"), floatShares > 0 ? formatCompact(floatShares) : "-"],
+                [t("temel.sharesOutstanding"), sharesOutstanding > 0 ? formatCompact(sharesOutstanding) : "-"],
+                [t("temel.beta"), infoObj.beta != null ? formatNumber(Number(infoObj.beta)) : "-"],
                 [t("temel.lastPrice"), (infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose) != null ? `₺${formatNumber(Number(infoObj.currentPrice ?? infoObj.current_price ?? infoObj.regularMarketPrice ?? infoObj.last_price ?? infoObj.previousClose))}` : "-"],
-                [t("temel.52wHighLow"), (infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh) != null ? `₺${formatNumber(Number(infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh))} / ₺${formatNumber(Number(infoObj.fiftyTwoWeekLow ?? infoObj.fifty_two_week_low ?? infoObj.yearLow ?? 0))}` : "-"],
+                [t("temel.52wHighLow"), (infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh ?? infoObj.year_high) != null ? `₺${formatNumber(Number(infoObj.fiftyTwoWeekHigh ?? infoObj.fifty_two_week_high ?? infoObj.yearHigh ?? infoObj.year_high))} / ₺${formatNumber(Number(infoObj.fiftyTwoWeekLow ?? infoObj.fifty_two_week_low ?? infoObj.yearLow ?? infoObj.year_low ?? 0))}` : "-"],
                 [t("temel.employees"), Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0) > 0 ? formatCompact(Number(infoObj.fullTimeEmployees || infoObj.full_time_employees || 0)) : "-"],
                 [t("temel.website"), infoObj.website || infoObj.web_site || "-"],
-              ].map(([label, value]) => (
+              ].filter(([, value]) => value !== "-").map(([label, value]) => (
                 <InfoRow key={String(label)} label={String(label)} value={String(value)} />
               ))}
             </div>
           )}
+        </motion.div>
+
+        {/* Valuation Multiples & Ratios */}
+        <motion.div custom={2} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="h-4 w-4 text-emerald-500" />
+            <h2 className="text-sm font-semibold text-foreground">{t("temel.valuationMultiples")}</h2>
+          </div>
+          {(infoQ.isLoading || liveRatiosQ.isLoading) ? <LoadingSpinner /> : !infoObj ? <EmptyState message={t("temel.noCompanyInfo")} /> : (
+            <div>
+              {[
+                [t("hisse.peRatio"), peRatio != null ? formatNumber(Number(peRatio)) : "-"],
+                [t("temel.forwardPE"), (infoObj.forwardPE ?? infoObj.forward_pe) != null ? formatNumber(Number(infoObj.forwardPE ?? infoObj.forward_pe)) : "-"],
+                [t("temel.pegRatio"), infoObj.pegRatio != null ? formatNumber(Number(infoObj.pegRatio)) : "-"],
+                ["PD/DD (P/B)", pbRatio != null ? formatNumber(Number(pbRatio)) : "-"],
+                [t("temel.bookValue"), (infoObj.bookValue ?? infoObj.book_value) != null ? `₺${formatNumber(Number(infoObj.bookValue ?? infoObj.book_value))}` : "-"],
+                [t("temel.psRatio"), psRatio != null ? formatNumber(Number(psRatio)) : "-"],
+                [t("temel.enterpriseValue"), (infoObj.enterpriseValue ?? infoObj.enterprise_value) != null ? formatCompact(Number(infoObj.enterpriseValue ?? infoObj.enterprise_value)) : "-"],
+                [t("temel.evEbitda"), (infoObj.enterpriseToEbitda ?? infoObj.enterprise_to_ebitda) != null ? formatNumber(Number(infoObj.enterpriseToEbitda ?? infoObj.enterprise_to_ebitda)) : "-"],
+                [t("temel.evRevenue"), (infoObj.enterpriseToRevenue ?? infoObj.enterprise_to_revenue) != null ? formatNumber(Number(infoObj.enterpriseToRevenue ?? infoObj.enterprise_to_revenue)) : "-"],
+                [t("temel.netDebtEbitda"), netDebtEbitda != null ? formatNumber(Number(netDebtEbitda)) : "-"],
+                [t("temel.epsTrailing"), (infoObj.trailingEps ?? infoObj.trailing_eps) != null ? `₺${formatNumber(Number(infoObj.trailingEps ?? infoObj.trailing_eps))}` : "-"],
+                [t("temel.epsForward"), (infoObj.forwardEps ?? infoObj.forward_eps) != null ? `₺${formatNumber(Number(infoObj.forwardEps ?? infoObj.forward_eps))}` : "-"],
+                [t("temel.dividendYield"), (infoObj.dividendYield ?? infoObj.dividend_yield ?? infoObj.lastDividendValue) != null ? formatPercent(Number(infoObj.dividendYield ?? infoObj.dividend_yield ?? 0) * 100) : "-"],
+              ].filter(([, value]) => value !== "-").map(([label, value]) => (
+                <InfoRow key={String(label)} label={String(label)} value={String(value)} />
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        {/* Corporate Risk Scores */}
+        <motion.div custom={2.5} variants={stagger} initial="hidden" animate="show" className="lg:col-span-2">
+          <CompanyRiskScores info={infoObj} />
         </motion.div>
 
         {/* Price Targets */}
@@ -126,14 +179,14 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
           {targetsQ.isLoading ? <LoadingSpinner /> : !targets ? <EmptyState message={t("temel.noPriceTarget")} /> : (
             <div>
               {[
-                [t("temel.currentPrice"), targets.current || targets.currentPrice],
-                [t("temel.lowTarget"), targets.low || targets.targetLowPrice],
-                [t("temel.avgTarget"), targets.mean || targets.targetMeanPrice || targets.average],
-                [t("temel.medianTarget"), targets.median || targets.targetMedianPrice],
-                [t("temel.highTarget"), targets.high || targets.targetHighPrice],
-                [t("temel.analystCount"), targets.numberOfAnalysts || targets.numberOfAnalystOpinions || targets.number_of_analysts || targets.count],
-              ].filter(([, v]) => v != null).map(([label, value]) => (
-                <InfoRow key={String(label)} label={String(label)} value={typeof value === "number" ? `₺${formatNumber(value)}` : String(value)} />
+                [t("temel.currentPrice"), targets.current ?? targets.currentPrice, true],
+                [t("temel.lowTarget"), targets.low ?? targets.targetLowPrice, true],
+                [t("temel.avgTarget"), targets.mean ?? targets.targetMeanPrice ?? targets.average, true],
+                [t("temel.medianTarget"), targets.median ?? targets.targetMedianPrice, true],
+                [t("temel.highTarget"), targets.high ?? targets.targetHighPrice, true],
+                [t("temel.analystCount"), targets.numberOfAnalysts ?? targets.numberOfAnalystOpinions ?? targets.number_of_analysts ?? targets.count, false],
+              ].filter(([, v]) => v != null).map(([label, value, currency]) => (
+                <InfoRow key={String(label)} label={String(label)} value={typeof value === "number" ? `${currency ? "₺" : ""}${formatNumber(value, currency ? 2 : 0)}` : String(value)} />
               ))}
             </div>
           )}
@@ -176,7 +229,13 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
             </div>
           )}
         </motion.div>
+
+        {/* Earnings Calendar */}
+        <motion.div custom={4.5} variants={stagger} initial="hidden" animate="show" className="lg:col-span-2">
+          <EarningsCalendar ticker={tk} />
+        </motion.div>
       </div>
     </div>
   );
 }
+

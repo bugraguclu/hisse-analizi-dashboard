@@ -18,6 +18,10 @@ from src.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
+# TradingView occasionally uses 1e100 as a missing numeric value.  It is a
+# transport sentinel, not a real market value, and must never reach the UI.
+INVALID_NUMERIC_SENTINEL_ABS = 1e90
+
 
 # ---------------------------------------------------------------------------
 # TTL Cache
@@ -67,6 +71,7 @@ class TTLCache:
 
 # Module-level cache instance shared by all adapters
 adapter_cache = TTLCache()
+_inflight_requests: dict[str, asyncio.Task[Any]] = {}
 
 # TTL constants (seconds)
 TTL_TECHNICAL = 60          # Technical indicators change fast
@@ -92,7 +97,18 @@ def cached(ttl_seconds: float, key_prefix: str):
                 logger.debug("cache_hit", key=cache_key)
                 return value
 
-            result = await func(*args, **kwargs)
+            # Concurrent dashboard widgets often request the same upstream
+            # quote at once. Share one task so a cold page load does not open
+            # duplicate TradingView/TCMB connections and trigger rate limits.
+            task = _inflight_requests.get(cache_key)
+            if task is None:
+                task = asyncio.create_task(func(*args, **kwargs))
+                _inflight_requests[cache_key] = task
+            try:
+                result = await asyncio.shield(task)
+            finally:
+                if task.done() and _inflight_requests.get(cache_key) is task:
+                    _inflight_requests.pop(cache_key, None)
 
             # Only cache successful results (not None, not error dicts)
             if result is not None and not (isinstance(result, dict) and "error" in result):
@@ -175,15 +191,28 @@ def df_to_records(df) -> list[dict]:
     try:
         result = df.reset_index()
         records = result.to_dict(orient="records")
-        return [
-            {
-                k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
-                for k, v in row.items()
-            }
-            for row in records
-        ]
+        return sanitize_data(records)
     except Exception:
         return []
+
+
+def sanitize_data(value: Any) -> Any:
+    """Recursively replace non-finite/provider-sentinel numbers with ``None``.
+
+    Financial values can legitimately be large, so the bound intentionally
+    only targets the 1e100-style missing-value sentinel used by TradingView.
+    """
+    if isinstance(value, float):
+        if not math.isfinite(value) or abs(value) >= INVALID_NUMERIC_SENTINEL_ABS:
+            return None
+        return value
+    if isinstance(value, dict):
+        return {key: sanitize_data(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [sanitize_data(item) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_data(item) for item in value]
+    return value
 
 
 def safe_serialize(obj) -> dict | list:
@@ -191,20 +220,20 @@ def safe_serialize(obj) -> dict | list:
     if obj is None:
         return {}
     if isinstance(obj, (dict, list)):
-        return obj
+        return sanitize_data(obj)
     if hasattr(obj, "to_dict"):
-        return obj.to_dict()
+        return sanitize_data(obj.to_dict())
     # Mapping-like objects (e.g. borsapy FastInfo keeps data in _data but
     # exposes keys()/__getitem__) — plain __dict__ scraping would return {}.
     if hasattr(obj, "keys") and callable(obj.keys):
         try:
-            return {k: obj[k] for k in obj.keys()}
+            return sanitize_data({k: obj[k] for k in obj.keys()})
         except Exception:
             pass
     if hasattr(obj, "__dict__"):
         public = {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
         if public:
-            return public
+            return sanitize_data(public)
     return {"value": str(obj)}
 
 

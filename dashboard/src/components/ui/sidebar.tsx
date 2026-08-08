@@ -128,10 +128,17 @@ export const MobileSidebar = ({
         className="h-14 px-4 flex flex-row md:hidden items-center justify-between bg-sidebar border-b border-sidebar-border/60 w-full"
         {...props}
       >
-        <div className="flex justify-end z-20 w-full">
+        <div className="flex items-center justify-between z-20 w-full">
+          <Link href="/" className="flex items-center gap-2" aria-label="Hisse Analizi ana sayfa">
+            <span className="h-7 w-7 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-[10px] font-black">HA</span>
+            <span className="text-sm font-semibold text-sidebar-foreground">Hisse Analizi</span>
+          </Link>
           <button
+            type="button"
             onClick={() => setOpen(!open)}
             className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+            aria-label="Menüyü aç"
+            aria-expanded={open}
           >
             <Menu className="h-5 w-5 text-sidebar-foreground" />
           </button>
@@ -149,8 +156,10 @@ export const MobileSidebar = ({
               )}
             >
               <button
+                type="button"
                 className="absolute right-6 top-6 z-50 p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
                 onClick={() => setOpen(!open)}
+                aria-label="Menüyü kapat"
               >
                 <X className="h-5 w-5 text-sidebar-foreground" />
               </button>
@@ -174,10 +183,12 @@ export const SidebarLink = ({
   active?: boolean;
   props?: LinkProps;
 }) => {
-  const { open, animate } = useSidebar();
+  const { open, setOpen, animate } = useSidebar();
   return (
     <Link
       href={link.href}
+      aria-label={link.label}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center justify-start gap-2.5 group/sidebar py-2.5 px-2.5 rounded-lg transition-all duration-200 relative",
         active
@@ -185,6 +196,7 @@ export const SidebarLink = ({
           : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
         className
       )}
+      onClick={() => setOpen(false)}
       {...props}
     >
       {active && (

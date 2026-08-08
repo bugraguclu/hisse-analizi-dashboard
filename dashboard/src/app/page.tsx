@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNumber, formatDate, formatCompact } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import { SlidingNumber } from "@/components/ui/sliding-number";
 import { CardSkeleton, TableSkeleton } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
+import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { SeverityBadge, CategoryBadge } from "@/components/shared/SeverityBadge";
 import { motion } from "framer-motion";
@@ -29,8 +29,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -59,11 +57,11 @@ const DEFAULT_WATCHLISTS: WatchlistGroup[] = [
     id: "favorites",
     name: "Favoriler",
     items: [
-      { ticker: "THYAO", name: "Turk Hava Yollari" },
+      { ticker: "THYAO", name: "Türk Hava Yolları" },
       { ticker: "GARAN", name: "Garanti Bankasi" },
-      { ticker: "SISE", name: "Sise Cam" },
+      { ticker: "SISE", name: "Şişecam" },
       { ticker: "ASELS", name: "Aselsan" },
-      { ticker: "EREGL", name: "Eregli Demir Celik" },
+      { ticker: "EREGL", name: "Ereğli Demir Çelik" },
     ],
   },
 ];
@@ -96,6 +94,19 @@ const stagger = {
 
 function MarketDate() {
   const { t } = useLocale();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  if (!mounted) {
+    return (
+      <div>
+        <div className="h-5 w-32 rounded bg-muted/40 animate-pulse" />
+        <h1 className="text-2xl font-bold text-foreground tracking-tight mt-1">{t("dashboard.marketOverview")}</h1>
+      </div>
+    );
+  }
   const now = new Date();
   // BIST hours are Istanbul-local; the viewer's clock may be in another zone
   const istanbulParts = new Intl.DateTimeFormat("en-US", {
@@ -125,12 +136,19 @@ function MarketDate() {
 
 function SystemStatusCard() {
   const { t } = useLocale();
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError, refetch } = useQuery({
     queryKey: ["stats"],
     queryFn: () => api.stats(),
   });
 
   if (isLoading) return <CardSkeleton />;
+  if (isError) {
+    return (
+      <div className="col-span-full lg:col-span-2 bg-card rounded-2xl border border-border/60">
+        <ErrorState message="Sistem durumuna ulaşılamadı" onRetry={() => { void refetch(); }} />
+      </div>
+    );
+  }
 
   const totalEvents = (stats as StatsOut)?.total_normalized_events ?? 0;
   const totalPrices = (stats as StatsOut)?.total_price_records ?? 0;
@@ -188,7 +206,7 @@ function MarketPulse() {
   const { t } = useLocale();
   // /market/indices returns live quotes (last, change_percent, prev_close)
   // for the main indices — real daily change, not a month-over-month diff.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["indexQuotes"],
     queryFn: () => api.indices(),
     staleTime: 120_000,
@@ -215,7 +233,9 @@ function MarketPulse() {
       className="bg-card rounded-2xl border border-border/60 p-5"
     >
       <h2 className="text-sm font-semibold text-foreground mb-4">{t("dashboard.marketPulse")}</h2>
-      {isLoading ? (
+      {isError ? (
+        <ErrorState message="Piyasa verisi yüklenemedi" onRetry={() => { void refetch(); }} />
+      ) : isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-14 rounded-xl bg-muted/40 animate-pulse" />
@@ -234,8 +254,8 @@ function MarketPulse() {
                 animate="show"
                 className={`flex items-center justify-between p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                   isUp
-                    ? "bg-red-500/5 border-red-500/10"
-                    : "bg-emerald-500/5 border-emerald-500/10"
+                    ? "bg-emerald-500/5 border-emerald-500/10"
+                    : "bg-red-500/5 border-red-500/10"
                 }`}
               >
                 <div>
@@ -245,7 +265,7 @@ function MarketPulse() {
                   </p>
                 </div>
                 <div className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg ${
-                  isUp ? "text-red-700 dark:text-red-400 bg-red-500/10" : "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                  isUp ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10" : "text-red-700 dark:text-red-400 bg-red-500/10"
                 }`}>
                   {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                   {isUp ? "+" : ""}{item.change !== 0 ? `${formatNumber(item.change)}%` : "-"}
@@ -315,7 +335,7 @@ function PerformanceChart() {
   const [period, setPeriod] = useState("1G");
   const borsapyPeriod = periodMap[period] ?? "1g";
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["indexChart", "XU100", borsapyPeriod],
     queryFn: () => api.indexData("XU100", borsapyPeriod),
   });
@@ -365,14 +385,14 @@ function PerformanceChart() {
   const highPrice = isIntraday && Number(quote.high ?? 0) > 0
     ? Number(quote.high)
     : chartData.length > 0 ? Math.max(...chartData.map((d) => d.high || d.close)) : 0;
+  const positiveLows = chartData.map((d) => d.low || d.close).filter((value) => value > 0);
   const lowPrice = isIntraday && Number(quote.low ?? 0) > 0
     ? Number(quote.low)
-    : chartData.length > 0 ? Math.min(...chartData.filter((d) => (d.low || d.close) > 0).map((d) => d.low || d.close)) : 0;
+    : positiveLows.length > 0 ? Math.min(...positiveLows) : 0;
 
-  // Period high/low from closes (labeled 52W only for the 1Y period)
-  const allCloses = chartData.map((d) => d.close).filter((v) => v > 0);
-  const maxClose = allCloses.length > 0 ? Math.max(...allCloses) : 0;
-  const minClose = allCloses.length > 0 ? Math.min(...allCloses) : 0;
+  // Period range must use traded highs/lows, not closing prices.
+  const periodHigh = highPrice;
+  const periodLow = lowPrice;
 
   const periods = Object.keys(periodMap);
 
@@ -409,10 +429,10 @@ function PerformanceChart() {
               {formatNumber(lastClose, 2)}
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-sm font-semibold font-mono ${isUp ? "text-red-500" : "text-emerald-500"}`}>
+              <span className={`text-sm font-semibold font-mono ${isUp ? "text-emerald-500" : "text-red-500"}`}>
                 {isUp ? "+" : ""}{formatNumber(changeAbs, 2)} ({isUp ? "+" : ""}%{formatNumber(changePct, 2)})
               </span>
-              <span className={`text-sm ${isUp ? "text-red-500" : "text-emerald-500"}`}>
+              <span className={`text-sm ${isUp ? "text-emerald-500" : "text-red-500"}`}>
                 {isUp ? "\u2191" : "\u2193"}
               </span>
               <span className="text-xs text-muted-foreground ml-1">{periodLabel}</span>
@@ -432,6 +452,7 @@ function PerformanceChart() {
           <button
             key={p}
             onClick={() => setPeriod(p)}
+            aria-pressed={p === period}
             className={`px-3 py-2 text-xs font-semibold transition-all border-b-2 ${
               p === period
                 ? "border-primary text-primary"
@@ -444,17 +465,25 @@ function PerformanceChart() {
       </div>
 
       {/* Chart */}
-      {isLoading ? (
+      {isError ? (
+        <ErrorState message="BIST 100 grafiği yüklenemedi" onRetry={() => { void refetch(); }} />
+      ) : isLoading ? (
         <div className="h-[200px] bg-muted/20 rounded-xl animate-pulse" />
       ) : chartData.length > 0 ? (
         <>
           <div className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={0}
+              minHeight={0}
+              initialDimension={{ width: 320, height: 200 }}
+            >
               <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="bist100Gradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0.08} />
-                    <stop offset="100%" stopColor={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"} stopOpacity={0} />
+                    <stop offset="0%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0.08} />
+                    <stop offset="100%" stopColor={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="var(--color-muted-foreground)" strokeOpacity={0.1} />
@@ -505,11 +534,11 @@ function PerformanceChart() {
                 <Area
                   type="monotone"
                   dataKey="close"
-                  stroke={isUp ? "rgb(239,68,68)" : "rgb(16,185,129)"}
+                  stroke={isUp ? "rgb(16,185,129)" : "rgb(239,68,68)"}
                   strokeWidth={1.5}
                   fill="url(#bist100Gradient)"
                   dot={false}
-                  activeDot={{ r: 3, fill: isUp ? "rgb(239,68,68)" : "rgb(16,185,129)" }}
+                  activeDot={{ r: 3, fill: isUp ? "rgb(16,185,129)" : "rgb(239,68,68)" }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -522,8 +551,8 @@ function PerformanceChart() {
               [t("index.high"), highPrice],
               [t("index.low"), lowPrice],
               [t("index.prevClose"), livePrevClose],
-              [period === "1Y" ? t("index.52wHigh") : t("index.periodHigh"), maxClose],
-              [period === "1Y" ? t("index.52wLow") : t("index.periodLow"), minClose],
+              [period === "1Y" ? t("index.52wHigh") : t("index.periodHigh"), periodHigh],
+              [period === "1Y" ? t("index.52wLow") : t("index.periodLow"), periodLow],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex flex-col">
                 <span className="text-[10px] text-muted-foreground">{String(label)}</span>
@@ -544,23 +573,26 @@ function PerformanceChart() {
 function WatchlistTable() {
   const { t } = useLocale();
   const [watchlists, setWatchlists] = useState<WatchlistGroup[]>(DEFAULT_WATCHLISTS);
-  const [activeListId, setActiveListId] = useState<string>("");
+  const [activeListId, setActiveListId] = useState<string>("favorites");
   const [showManage, setShowManage] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [addTickerInput, setAddTickerInput] = useState("");
 
   // Load from localStorage on mount
   useEffect(() => {
-    const loaded = getWatchlists();
-    setWatchlists(loaded);
-    setActiveListId(loaded[0]?.id ?? "");
+    const frame = window.requestAnimationFrame(() => {
+      const loaded = getWatchlists();
+      setWatchlists(loaded);
+      setActiveListId(loaded[0]?.id ?? "favorites");
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   const activeList = watchlists.find((l) => l.id === activeListId) ?? watchlists[0];
   const activeItems = activeList?.items ?? [];
   const tickers = activeItems.map((w) => w.ticker);
 
-  const { data: snapshotData, isLoading: snapshotLoading } = useQuery({
+  const { data: snapshotData, isLoading: snapshotLoading, isError: snapshotError, refetch: refetchSnapshot } = useQuery({
     queryKey: ["snapshot", tickers.join(",")],
     queryFn: () => api.snapshot(tickers),
     enabled: tickers.length > 0,
@@ -568,13 +600,13 @@ function WatchlistTable() {
     refetchInterval: 60_000,
   });
 
-  const { data: screenerData, isLoading: screenerLoading } = useQuery({
+  const { data: screenerData, isLoading: screenerLoading, isError: screenerError, refetch: refetchScreener } = useQuery({
     queryKey: ["screener"],
     queryFn: () => api.screener(),
     staleTime: 120_000,
   });
 
-  const isLoading = snapshotLoading && screenerLoading;
+  const isLoading = (snapshotLoading || screenerLoading) && !snapshotData && !screenerData;
 
   // Backend shape: { symbols: [...], snapshot: { THYAO: {last_price, ...}, ... } }
   const snapshotMap: Record<string, Record<string, unknown>> =
@@ -657,7 +689,7 @@ function WatchlistTable() {
           onClick={() => setShowManage(!showManage)}
           className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
         >
-          {showManage ? t("index.close") : t("watchlist.editLists")}
+          {showManage ? t("common.close") : t("watchlist.editLists")}
         </button>
       </div>
 
@@ -667,6 +699,7 @@ function WatchlistTable() {
           <button
             key={list.id}
             onClick={() => setActiveListId(list.id)}
+            aria-pressed={activeListId === list.id}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeListId === list.id
                 ? "bg-primary/10 text-primary"
@@ -730,7 +763,12 @@ function WatchlistTable() {
       )}
 
       {/* Stock list */}
-      {isLoading ? (
+      {snapshotError && screenerError ? (
+        <ErrorState
+          message="Takip listesi fiyatları yüklenemedi"
+          onRetry={() => { void refetchSnapshot(); void refetchScreener(); }}
+        />
+      ) : isLoading ? (
         <div className="p-4 space-y-2">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-12 bg-muted/30 rounded-lg animate-pulse" />
@@ -777,7 +815,9 @@ function WatchlistTable() {
                   </div>
                   {showManage && (
                     <button
+                      type="button"
                       onClick={() => handleRemoveTicker(w.ticker)}
+                      aria-label={`${w.ticker} hissesini listeden çıkar`}
                       className="p-1 rounded hover:bg-red-500/10 transition-colors"
                     >
                       <X className="h-3 w-3 text-red-500" />
@@ -795,7 +835,7 @@ function WatchlistTable() {
 
 function LatestInsights() {
   const { t } = useLocale();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["latestEvents"],
     queryFn: () => api.latestEvents(),
   });
@@ -820,7 +860,9 @@ function LatestInsights() {
         </Link>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <ErrorState message="Son gelişmeler yüklenemedi" onRetry={() => { void refetch(); }} />
+      ) : isLoading ? (
         <TableSkeleton rows={4} />
       ) : events.length === 0 ? (
         <div className="px-5 pb-5"><EmptyState message={t("dashboard.noEventsYet")} /></div>
@@ -899,6 +941,13 @@ function IndicesOverview() {
   const totalCount = raw?.indices?.length ?? 0;
 
   if (indicesQ.isLoading) return <CardSkeleton />;
+  if (indicesQ.isError) {
+    return (
+      <div className="bg-card rounded-2xl border border-border/60">
+        <ErrorState message="Endeks verileri yüklenemedi" onRetry={() => { void indicesQ.refetch(); }} />
+      </div>
+    );
+  }
   if (quotes.length === 0) return null;
 
   const title = locale === "en" ? "BIST Indices" : locale === "fr" ? "Indices BIST" : "BIST Endeksleri";
@@ -920,7 +969,7 @@ function IndicesOverview() {
             <div key={i} className="px-4 py-3 hover:bg-muted/10 transition-colors" title={name}>
               <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{symbol}</div>
               <div className="text-sm font-bold font-mono text-foreground mt-0.5">{close > 0 ? formatNumber(close, 2) : "-"}</div>
-              <div className={`text-[10px] font-semibold mt-0.5 ${isUp ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              <div className={`text-[10px] font-semibold mt-0.5 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                 {isUp ? "+" : ""}{formatNumber(change)}%
               </div>
             </div>
