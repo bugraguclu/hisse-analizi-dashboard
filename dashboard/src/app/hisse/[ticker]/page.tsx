@@ -22,7 +22,6 @@ import { EarningsCalendar } from "@/components/stock/EarningsCalendar";
 import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
 import { AllTimeframeSignals } from "@/components/stock/AllTimeframeSignals";
 import { FinancialHealthScorecard } from "@/components/stock/FinancialHealthScorecard";
-import { MovingAveragesTable } from "@/components/stock/MovingAveragesTable";
 
 const stagger = {
   hidden: { opacity: 0, y: 12 },

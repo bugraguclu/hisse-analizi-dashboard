@@ -1,6 +1,24 @@
-# Degisiklik Gunlugu (Changelog)
+# Değişiklik Günlüğü (Changelog)
 
-Tum onemli degisiklikler burada tarih sirasiyla belgelenir.
+Tüm önemli değişiklikler burada tarih sırasıyla belgelenir.
+
+## [Unreleased] — 11 Ağustos 2026
+
+### Veri doğruluğu ve yayın hazırlığı
+
+- Resmî KAP bilanço/gelir tablosu parser’ı, dönem/sunum birimi metadata’sı ve canlı finansal oran hesaplamaları güçlendirildi.
+- Screener, teknik scanner ve sembol arama güncel `borsapy` sözleşmesine ve işlem gören BIST pay evrenine hizalandı.
+- Finansal tablolar, temettü, hedef fiyat, ortaklık, earnings takvimi ve çoklu zaman dilimi UI veri sözleşmeleri düzeltildi.
+- Makro, piyasa ve temel veri doğruluğu için regresyon testleri eklendi; upstream hataların boş/uydurma veri gibi gösterilmesi engellendi.
+- Global loading/error/not-found deneyimi ve Next.js aynı-origin API proxy’si production kullanımına hazırlandı.
+
+### Repo standardı
+
+- Ana README ürün vitrini, veri kaynakları, mimari, kurulum, API, kalite ve yayın akışıyla baştan yazıldı.
+- GitHub Actions ile backend, frontend, npm audit ve Compose doğrulama pipeline’ı; dış veri sözleşmeleri için ayrı zamanlanmış smoke test eklendi.
+- Katkı rehberi, güvenlik politikası, issue formları ve pull request şablonu eklendi.
+- Mimari, API, yol haritası ve proje bağlamındaki eski sürüm/özellik çelişkileri giderildi.
+- Docker build context’lerinden secret, cache ve geliştirme dosyaları çıkarıldı; backend image’ı non-root kullanıcıyla çalışacak şekilde sertleştirildi.
 
 ---
 

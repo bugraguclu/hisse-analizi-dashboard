@@ -1,7 +1,16 @@
 {
-  "name": "dashboard",
+  "name": "hisse-analizi-dashboard-web",
   "version": "0.8.0",
   "private": true,
+  "description": "Hisse Analizi Dashboard için Next.js web arayüzü",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bugraguclu/hisse-analizi-dashboard.git",
+    "directory": "dashboard"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -150,13 +150,13 @@ async def get_moving_averages(ticker: str) -> dict:
 
         for p in periods:
             try:
-                val = await run_sync(lambda: t.sma(period=p))
+                val = await run_sync(lambda period=p: t.sma(period=period))
                 sma_vals[f"sma_{p}"] = round(float(val), 4) if val is not None else None
             except Exception:
                 sma_vals[f"sma_{p}"] = None
 
             try:
-                val = await run_sync(lambda: t.ema(period=p))
+                val = await run_sync(lambda period=p: t.ema(period=period))
                 ema_vals[f"ema_{p}"] = round(float(val), 4) if val is not None else None
             except Exception:
                 ema_vals[f"ema_{p}"] = None
@@ -213,4 +213,3 @@ async def get_pivot_points(ticker: str) -> dict:
     except Exception as e:
         logger.error("technical_pivot_points_error", ticker=ticker, error=str(e))
         return {"ticker": ticker, "pivots": None, "error": str(e)}
-

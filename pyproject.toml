@@ -6,7 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "hisse-analizi-dashboard"
 version = "0.8.0"
 description = "BIST Hisse Analizi Dashboard — teknik/temel analiz, makro veri, tarama ve bildirim sistemi"
+readme = "README.md"
 requires-python = ">=3.11"
+keywords = ["bist", "borsa-istanbul", "fastapi", "nextjs", "fintech", "stock-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+]
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
@@ -40,6 +50,12 @@ dev = [
     "ruff>=0.2.0",
     "mypy>=1.8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bugraguclu/hisse-analizi-dashboard"
+Repository = "https://github.com/bugraguclu/hisse-analizi-dashboard"
+Documentation = "https://github.com/bugraguclu/hisse-analizi-dashboard#readme"
+Changelog = "https://github.com/bugraguclu/hisse-analizi-dashboard/blob/master/CHANGELOG.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

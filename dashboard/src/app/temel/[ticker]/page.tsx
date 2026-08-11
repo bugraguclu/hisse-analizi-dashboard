@@ -10,7 +10,7 @@ import { TickerSearch } from "@/components/shared/TickerSearch";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Building2, TrendingUp, Users, Target, BarChart3, ShieldAlert, CalendarDays } from "lucide-react";
+import { Building2, TrendingUp, Users, Target, BarChart3 } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { AnalystRecommendations } from "@/components/stock/AnalystRecommendations";
 import { EarningsCalendar } from "@/components/stock/EarningsCalendar";
@@ -238,4 +238,3 @@ export default function TemelPage({ params }: { params: Promise<{ ticker: string
     </div>
   );
 }
-

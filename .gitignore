@@ -6,6 +6,8 @@ dist/
 build/
 *.egg
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 env/
@@ -19,3 +21,6 @@ htmlcov/
 *.log
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+coverage.xml

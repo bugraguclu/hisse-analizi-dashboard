@@ -1,0 +1,35 @@
+name: Live data smoke test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 05 * * 1-5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-data-smoke
+  cancel-in-progress: true
+
+jobs:
+  borsapy:
+    name: BIST upstream contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run live integration tests
+        run: pytest tests/integration -q

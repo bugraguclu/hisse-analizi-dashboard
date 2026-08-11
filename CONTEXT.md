@@ -1,43 +1,54 @@
-# Hisse Analizi Dashboard — Proje Baglami
+# Hisse Analizi Dashboard — Proje Bağlamı
 
-## Proje
-- Repo: github.com/bugraguclu/hisse-analizi-dashboard
-- Stack: Python/FastAPI + Next.js, PostgreSQL, Docker
-- Desteklenen hisseler: Tum BIST sirketleri (780+), varsayilan: THYAO
-- Versiyon: 0.5.0 (production-hardened)
+Bu kısa belge geliştirici/agent oturumları için güncel başlangıç bağlamıdır. Kullanıcı dokümantasyonu için [README.md](./README.md) esas alınmalıdır.
 
-## Mimari
-- Backend: Python/FastAPI (53+ endpoint, rate limited, admin auth)
-- Frontend: Next.js 14 (dashboard/ klasoru)
-- DB: PostgreSQL 16 (async, SQLAlchemy 2.x, ON CONFLICT upsert, advisory locks)
-- Worker: Ayri proses (API'den bagimsiz, semaphore ile sinirli concurrency)
-- Cache: TTL in-memory cache (adapter sonuclari, 30s-600s)
-- Guvenlik: X-Admin-Key auth, CORS allowlist, slowapi rate limiting
-- Deploy: Docker Compose (4 servis: db, app, worker, dashboard)
+## Ürün
 
-## Calistirma
+- Repo: `github.com/bugraguclu/hisse-analizi-dashboard`
+- Sürüm: `0.8.0`
+- Kapsam: BIST piyasa görünümü; teknik, temel ve makro analiz; tarama; KAP/haber arşivi; isteğe bağlı AI raporu
+- Varsayılan örnek sembol: `THYAO`
+- Finansal tavsiye üretmez; kaynaklı karar desteği sunar
+
+## Stack
+
+- Backend: Python 3.11+, FastAPI, Pydantic, SQLAlchemy 2.x async
+- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS, Recharts, TanStack Query
+- DB: PostgreSQL 16 + Alembic (`001`–`004`)
+- Worker: API’den bağımsız polling/news/AI/notification görevleri
+- Veri: KAP, TCMB ve `borsapy` üzerinden İş Yatırım/TradingView/BIST kaynakları
+- Deploy: Docker Compose (`db`, `app`, `worker`, `dashboard`; opsiyonel `mailhog`)
+
+## Kritik davranışlar
+
+- Tarayıcı varsayılan olarak `/api/*` Next.js route handler üzerinden `API_URL` değerine bağlanır.
+- Canlı adaptör endpoint’leri DB’den bağımsız çalışabilir; `/stats`, `/events`, `/news` ve AI rapor cache’i PostgreSQL’e bağlıdır.
+- Upstream hatalar boş veri gibi gizlenmez; açıklayıcı HTTP hata durumu döner.
+- Finansal tablolar resmî KAP dönem/sunum birimi metadata’sını korur.
+- Admin endpoint’leri production’da `X-Admin-Key` ister.
+- AI anahtarı yoksa AI endpoint’leri `503` döner, diğer bölümler çalışır.
+- Worker production başlangıcında tek replica çalıştırılmalıdır.
+
+## Çalıştırma
+
 ```bash
 cp .env.example .env
-# .env icinde ADMIN_API_KEY, CORS_ORIGINS, DB credentials ayarla
-docker-compose up -d
-docker-compose exec app alembic upgrade head
-docker-compose exec app python scripts/seed.py
+docker compose up --build -d
+docker compose exec app alembic upgrade head
+docker compose exec app python scripts/seed.py
 ```
-- Backend: http://localhost:8000
-- Dashboard: http://localhost:3000
-- API Docs: http://localhost:8000/docs
 
-## Onemli Ortam Degiskenleri
-- `DATABASE_URL` — PostgreSQL baglanti adresi
-- `ADMIN_API_KEY` — Admin endpoint'leri icin API key (production'da zorunlu)
-- `CORS_ORIGINS` — Izin verilen origin'ler (virgul ayirmali)
-- `RATE_LIMIT_PER_MINUTE` — API rate limit (varsayilan: 100)
-- `WORKER_MAX_CONCURRENCY` — Worker semaphore limiti
-- `WORKER_SINGLE_REPLICA` — Tek worker replica zorunlulugu
+- Dashboard: `http://localhost:3000`
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
 
-## Notlar
-- .env dosyasi .env.example'dan kopyalanmali
-- Alembic migration: `alembic upgrade head` (001 + 002)
-- Seed: `python scripts/seed.py`
-- Admin endpoint'leri `X-Admin-Key` header gerektirir (dev modda bypass)
-- Worker ayri proses olarak calisir (`src/workers/run_workers.py`)
+## Doğrulama
+
+```bash
+.venv/bin/ruff check src tests
+.venv/bin/pytest -q
+cd dashboard && npm run lint -- --max-warnings=0 && npm run build
+cd .. && docker compose config --quiet
+```
+
+Repo değişikliklerinde [CONTRIBUTING.md](./CONTRIBUTING.md), güvenlik bildirimlerinde [SECURITY.md](./SECURITY.md) izlenmelidir.
