@@ -1,4 +1,4 @@
-"""Piyasa verileri API endpoint'leri — tarama, endeks, arama, twitter, snapshot."""
+"""Piyasa verileri API endpoint'leri — tarama, endeks, arama ve snapshot."""
 
 from fastapi import APIRouter, Query
 
@@ -6,7 +6,6 @@ from src.adapters.screener_adapter import screen_stocks, get_screener_templates
 from src.adapters.scanner_adapter import scan_signals
 from src.adapters.index_adapter import get_index_data, get_index_info, list_indices, get_ticker_history
 from src.adapters.search_adapter import search_symbol, list_companies
-from src.adapters.twitter_adapter import get_tweets
 from src.adapters.stream_adapter import get_snapshot
 from src.api.dependencies import ensure_upstream_success, validate_ticker
 
@@ -73,14 +72,6 @@ async def search(q: str = Query(min_length=1)):
 async def all_companies():
     """Tum BIST sirketlerini listele."""
     return ensure_upstream_success(await list_companies())
-
-
-# --- Twitter ---
-
-@market_router.get("/tweets/{ticker}")
-async def tweets(ticker: str, limit: int = Query(default=20, le=100)):
-    """Hisse ile ilgili tweet'leri getir."""
-    return ensure_upstream_success(await get_tweets(validate_ticker(ticker), limit=limit))
 
 
 # --- Ticker History (live) ---

@@ -1,10 +1,8 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -18,9 +16,6 @@ from src.api.routers_macro import macro_router
 from src.api.routers_market import market_router
 from src.api.routers_ai import ai_router
 from src.api.routers_news import news_router
-
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -62,28 +57,6 @@ app.include_router(market_router)
 app.include_router(ai_router)
 app.include_router(news_router)
 
-DASHBOARD_DIR = STATIC_DIR / "dashboard"
-
-
-# Dashboard UI routes (must be before static mount)
 @app.get("/", include_in_schema=False)
 async def root_redirect():
-    """Redirect root to main dashboard."""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/dashboard")
-
-
-@app.get("/dashboard", include_in_schema=False)
-async def dashboard():
-    """Main user dashboard UI."""
-    return FileResponse(str(DASHBOARD_DIR / "index.html"))
-
-
-@app.get("/test-ui", include_in_schema=False)
-async def test_ui():
-    """Developer test UI (API endpoint tester)."""
-    return FileResponse(str(STATIC_DIR / "index.html"))
-
-
-# Static files (CSS/JS) — must be last
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    return RedirectResponse(url="/docs")

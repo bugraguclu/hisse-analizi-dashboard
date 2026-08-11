@@ -41,6 +41,11 @@ jobs:
         env:
           SKIP_NETWORK_TESTS: "1"
 
+      - name: Validate Compose
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yml config --quiet
+
   frontend:
     name: Frontend · Node.js 20
     runs-on: ubuntu-latest
@@ -73,18 +78,3 @@ jobs:
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
-
-  compose:
-    name: Docker Compose configuration
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create local environment file
-        run: cp .env.example .env
-
-      - name: Validate Compose configuration
-        run: docker compose -f docker-compose.yml config --quiet

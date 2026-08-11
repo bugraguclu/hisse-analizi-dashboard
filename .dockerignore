@@ -1,6 +1,5 @@
 .git
 .github
-.claude
 .env
 .env.*
 !.env.example
@@ -17,7 +16,6 @@ env
 htmlcov
 coverage.xml
 dashboard
-docs
 tests
 *.log
 .DS_Store
