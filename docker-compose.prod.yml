@@ -1,0 +1,109 @@
+# Production overlay — layer this on top of the dev compose file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Requires POSTGRES_PASSWORD, ADMIN_API_KEY, CORS_ORIGINS, DOMAIN and ACME_EMAIL
+# to be set (in the shell environment or in .env) — the merged config refuses to
+# start without them. Caddy is the only published service
+# (80/443); db, app and dashboard are reachable on the compose network only.
+
+x-backend-db-urls-prod: &backend-db-urls-prod
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@db:5432/${POSTGRES_DB:-hisse_analizi}
+  DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@db:5432/${POSTGRES_DB:-hisse_analizi}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-resources-standard: &resources-standard
+  limits:
+    cpus: "2"
+    memory: 1G
+
+x-resources-light: &resources-light
+  limits:
+    cpus: "1"
+    memory: 512M
+
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
+    ports: !reset []
+    restart: always
+    logging: *default-logging
+    deploy:
+      resources: *resources-standard
+
+  migrate:
+    environment:
+      <<: *backend-db-urls-prod
+      # alembic/env.py imports src.core.config, which runs the same
+      # validate_production_config() gate as app/worker at import time — without
+      # APP_ENV forced here, migrate silently runs as "development" (skipping the
+      # weak-password/ADMIN_API_KEY checks) unless the deploy's .env file happens
+      # to set APP_ENV=production itself, in which case it needs ADMIN_API_KEY
+      # here too or that gate fails and blocks app/worker/dashboard from ever
+      # starting (they all depend_on migrate completing).
+      APP_ENV: production
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY must be set in production}
+    logging: *default-logging
+
+  app:
+    environment:
+      <<: *backend-db-urls-prod
+      APP_ENV: production
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY must be set in production}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set in production}
+    ports: !reset []
+    restart: always
+    logging: *default-logging
+    deploy:
+      resources: *resources-standard
+
+  worker:
+    environment:
+      <<: *backend-db-urls-prod
+      APP_ENV: production
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY must be set in production}
+    restart: always
+    logging: *default-logging
+    deploy:
+      resources: *resources-light
+
+  dashboard:
+    environment:
+      # Caddy replaces X-Forwarded-For from untrusted clients with the real
+      # client IP, so exactly one hop (Caddy itself) is trustworthy.
+      TRUSTED_PROXY_HOPS: "1"
+    ports: !reset []
+    restart: always
+    logging: *default-logging
+    deploy:
+      resources: *resources-light
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set in production (e.g. hisse.example.com)}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set in production (Let's Encrypt contact address)}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    restart: always
+    logging: *default-logging
+    deploy:
+      resources: *resources-light
+
+volumes:
+  caddy_data:
+  caddy_config:

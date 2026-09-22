@@ -1,73 +1,65 @@
 import * as React from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ChevronRight, MoreHorizontal } from "lucide-react";
 
-function Breadcrumb({ ...props }: React.ComponentProps<"nav"> & { separator?: React.ReactNode }) {
-  return <nav data-slot="breadcrumb" aria-label="breadcrumb" {...props} />;
+function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
+  return <nav data-slot="breadcrumb" {...props} />;
 }
 
 function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
   return (
     <ol
       data-slot="breadcrumb-list"
-      className={cn("flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground", className)}
+      className={cn("flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground", className)}
       {...props}
     />
   );
 }
 
 function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
-  return <li data-slot="breadcrumb-item" className={cn("inline-flex items-center gap-1.5", className)} {...props} />;
+  return <li data-slot="breadcrumb-item" className={cn("inline-flex min-w-0 items-center gap-1.5", className)} {...props} />;
 }
 
-function BreadcrumbLink({ className, ...props }: React.ComponentProps<"a">) {
-  return <a data-slot="breadcrumb-link" className={cn("transition-colors hover:text-foreground", className)} {...props} />;
+/** Client-side navigation link (a plain <a> would force a full page reload). */
+function BreadcrumbLink({ className, ...props }: React.ComponentProps<typeof Link>) {
+  return (
+    <Link
+      data-slot="breadcrumb-link"
+      className={cn("truncate rounded-sm transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring", className)}
+      {...props}
+    />
+  );
+}
+
+/** Non-navigable crumb (current page or a section without an index page). */
+function BreadcrumbText({ className, ...props }: React.ComponentProps<"span">) {
+  return <span data-slot="breadcrumb-text" className={cn("truncate", className)} {...props} />;
 }
 
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="breadcrumb-page"
-      role="link"
-      aria-disabled="true"
       aria-current="page"
-      className={cn("font-normal text-foreground", className)}
+      className={cn("truncate font-medium text-foreground", className)}
       {...props}
     />
   );
 }
 
-const BreadcrumbSeparator = ({ children, className, ...props }: React.ComponentProps<"li">) => (
-  <li
-    data-slot="breadcrumb-separator"
-    role="presentation"
-    aria-hidden="true"
-    className={cn("[&>svg]:w-3.5 [&>svg]:h-3.5", className)}
-    {...props}
-  >
-    {children ?? <ChevronRight className="rtl:rotate-180" />}
-  </li>
-);
+function BreadcrumbSeparator({ children, className, ...props }: React.ComponentProps<"li">) {
+  return (
+    <li
+      data-slot="breadcrumb-separator"
+      role="presentation"
+      aria-hidden="true"
+      className={cn("[&>svg]:h-3.5 [&>svg]:w-3.5", className)}
+      {...props}
+    >
+      {children ?? <ChevronRight className="rtl:rotate-180" />}
+    </li>
+  );
+}
 
-const BreadcrumbEllipsis = ({ className, ...props }: React.ComponentProps<"span">) => (
-  <span
-    data-slot="breadcrumb-ellipsis"
-    role="presentation"
-    aria-hidden="true"
-    className={cn("flex h-9 w-9 items-center justify-center", className)}
-    {...props}
-  >
-    <MoreHorizontal className="h-4 w-4" />
-    <span className="sr-only">More</span>
-  </span>
-);
-
-export {
-  Breadcrumb,
-  BreadcrumbEllipsis,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-};
+export { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, BreadcrumbText };

@@ -11,6 +11,7 @@ from src.core.enums import (
     PriceInterval,
 )
 from src.core.logging import setup_logging, get_logger
+from src.core.version import get_version
 
 __all__ = [
     "settings",
@@ -25,4 +26,5 @@ __all__ = [
     "PriceInterval",
     "setup_logging",
     "get_logger",
+    "get_version",
 ]

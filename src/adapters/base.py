@@ -37,8 +37,22 @@ class PriceRecord:
 
 
 class BaseAdapter(ABC):
+    """Event source bound to one company at construction time (e.g. KAP)."""
+
     @abstractmethod
     async def fetch(self, polling_state: PollingState | None = None) -> list[RawEventData]:
+        ...
+
+    @abstractmethod
+    def get_source_code(self) -> str:
+        ...
+
+
+class BaseTickerAdapter(ABC):
+    """Event source that receives the ticker per call (e.g. financial statements)."""
+
+    @abstractmethod
+    async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
         ...
 
     @abstractmethod

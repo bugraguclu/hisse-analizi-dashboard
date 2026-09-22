@@ -1,66 +1,39 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Moon, Sun } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
 import { cn } from "@/lib/utils";
 
-interface ThemeToggleProps {
-  className?: string;
-}
-
-export function ThemeToggle({ className }: ThemeToggleProps) {
+/**
+ * Light/dark switch. The visual state comes purely from the `.dark` class that
+ * next-themes sets before first paint, so there is no hydration flash and no
+ * "mounted" gate. The accessible name describes the action for both themes.
+ */
+export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-  const isDark = mounted && resolvedTheme === "dark";
+  const { t } = useLocale();
 
   return (
     <button
       type="button"
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       className={cn(
-        "flex w-16 h-8 p-1 rounded-full cursor-pointer transition-all duration-300 disabled:cursor-wait",
-        isDark
-          ? "bg-zinc-950 border border-zinc-800"
-          : "bg-white border border-zinc-200",
-        className
+        "group relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border p-0.5 transition-colors",
+        "border-border bg-background hover:bg-muted/60",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        className,
       )}
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      aria-label={isDark ? "Açık temaya geç" : "Koyu temaya geç"}
-      aria-pressed={mounted ? isDark : undefined}
-      disabled={!mounted}
     >
-      <div className="flex justify-between items-center w-full">
-        <div
-          className={cn(
-            "flex justify-center items-center w-6 h-6 rounded-full transition-transform duration-300",
-            isDark
-              ? "transform translate-x-0 bg-zinc-800"
-              : "transform translate-x-8 bg-gray-200"
-          )}
-        >
-          {mounted && isDark ? (
-            <Moon className="w-4 h-4 text-white" strokeWidth={1.5} />
-          ) : (
-            <Sun className="w-4 h-4 text-gray-700" strokeWidth={1.5} />
-          )}
-        </div>
-        <div
-          className={cn(
-            "flex justify-center items-center w-6 h-6 rounded-full transition-transform duration-300",
-            isDark ? "bg-transparent" : "transform -translate-x-8"
-          )}
-        >
-          {mounted && isDark ? (
-            <Sun className="w-4 h-4 text-gray-500" strokeWidth={1.5} />
-          ) : (
-            <Moon className="w-4 h-4 text-black" strokeWidth={1.5} />
-          )}
-        </div>
-      </div>
+      <span className="sr-only dark:hidden">{t("theme.toDark")}</span>
+      <span className="sr-only hidden dark:inline">{t("theme.toLight")}</span>
+      <span
+        aria-hidden="true"
+        className="flex h-6 w-6 translate-x-0 items-center justify-center rounded-full bg-muted shadow-sm transition-transform duration-300 dark:translate-x-6"
+      >
+        <Sun className="h-3.5 w-3.5 text-amber-500 dark:hidden" strokeWidth={2} />
+        <Moon className="hidden h-3.5 w-3.5 text-foreground dark:block" strokeWidth={2} />
+      </span>
     </button>
   );
 }

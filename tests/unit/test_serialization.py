@@ -56,3 +56,24 @@ class TestSafeSerialize:
 
 def test_sanitize_data_preserves_large_but_valid_financial_value():
     assert sanitize_data(1e15) == 1e15
+
+
+def test_sanitize_data_converts_numpy_scalars_and_nat():
+    import numpy as np
+    import pandas as pd
+
+    result = sanitize_data({"i": np.int64(5), "f": np.float32("nan"), "b": np.bool_(True), "t": pd.NaT,
+                            "a": np.array([1.0, np.inf])})
+    assert result == {"i": 5, "f": None, "b": True, "t": None, "a": [1.0, None]}
+    assert type(result["i"]) is int
+
+
+def test_finite_float():
+    from src.adapters.utils import finite_float
+
+    assert finite_float("1.5") == 1.5
+    assert finite_float(None) is None
+    assert finite_float(True) is None
+    assert finite_float(float("nan")) is None
+    assert finite_float(1e100) is None
+    assert finite_float("abc") is None

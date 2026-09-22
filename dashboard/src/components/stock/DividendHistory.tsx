@@ -1,113 +1,106 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatNumber } from "@/lib/format";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
-import { useLocale } from "@/lib/locale-context";
-import { motion } from "framer-motion";
+import { useState } from "react";
 import { Coins } from "lucide-react";
+import { useNow } from "@/hooks/use-now";
+import { formatCompact, formatDay, formatNumber, formatPercent } from "@/lib/format";
+import { useDividends, useQuote } from "./hooks";
+import { useStockI18n } from "./i18n";
+import { trailingDividendYield } from "./parsers";
+import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
 
-interface DividendHistoryProps {
-  ticker: string;
+const VISIBLE_ROWS = 8;
+
+/** TL per share with up to 4 decimals (dividends like 0,1444 TL). */
+function perShare(value: number | null): string {
+  if (value == null) return formatNumber(null);
+  return formatNumber(value, value < 1 ? 4 : 3);
 }
 
-function parseDividends(raw: unknown): Record<string, unknown>[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw as Record<string, unknown>[];
-  const obj = raw as Record<string, unknown>;
-  if (obj.data && Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
-  if (obj.dividends && Array.isArray(obj.dividends)) return obj.dividends as Record<string, unknown>[];
-  // DataFrame format: {"Dividends": {"2024-05-10": 3.5, ...}}
-  if (obj.Dividends && typeof obj.Dividends === "object") {
-    return Object.entries(obj.Dividends as Record<string, unknown>).map(([date, val]) => ({
-      date, amount: val,
-    }));
-  }
-  // Generic {date: value} pairs
-  const entries = Object.entries(obj).filter(([, v]) => typeof v === "number");
-  if (entries.length > 0) {
-    return entries.map(([date, amount]) => ({ date, amount }));
-  }
-  return [];
-}
-
-export function DividendHistory({ ticker }: DividendHistoryProps) {
-  const { locale } = useLocale();
-  const divQ = useQuery({
-    queryKey: ["dividends", ticker],
-    queryFn: () => api.dividends(ticker),
-  });
-
-  const dividends = parseDividends(divQ.data);
-
-  const labels = {
-    title: { tr: "Temettü Geçmişi", en: "Dividend History", fr: "Historique des dividendes" },
-    date: { tr: "Tarih", en: "Date", fr: "Date" },
-    amount: { tr: "Tutar (TL)", en: "Amount (TRY)", fr: "Montant (TRY)" },
-    noData: { tr: "Temettü verisi yok", en: "No dividend data", fr: "Aucune donnée de dividende" },
-  };
+/**
+ * Cash dividends from İş Yatırım: gross/net TL per share, gross rate on
+ * nominal value and total payout. Trailing yield = gross dividends paid in
+ * the last 12 months / current price.
+ */
+export function DividendHistory({ ticker }: { ticker: string }) {
+  const { t } = useStockI18n();
+  const now = useNow();
+  const [expanded, setExpanded] = useState(false);
+  const dividendsQ = useDividends(ticker);
+  const { quote } = useQuote(ticker);
+  const dividends = dividendsQ.data ?? [];
+  const trailing = now !== null ? trailingDividendYield(dividends, quote?.last ?? null, now) : null;
+  const lastPaid = now !== null ? (dividends.find((d) => d.time <= now) ?? null) : null;
+  const visible = expanded ? dividends : dividends.slice(0, VISIBLE_ROWS);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-      className="bg-card rounded-2xl border border-border/60 overflow-hidden"
-    >
-      <div className="px-5 py-4 border-b border-border/40 flex items-center gap-2">
-        <Coins className="h-4 w-4 text-amber-500" />
-        <h2 className="text-sm font-semibold text-foreground">{labels.title[locale]}</h2>
-        {dividends.length > 0 && (
-          <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded ml-auto">
-            {dividends.length} {locale === "en" ? "records" : locale === "fr" ? "enregistrements" : "kayıt"}
-          </span>
-        )}
-      </div>
-      <div className="p-5">
-        {divQ.isError ? (
-          <ErrorState
-            message={locale === "tr" ? "Temettü geçmişi yüklenemedi" : "Dividend history could not be loaded"}
-            onRetry={() => { void divQ.refetch(); }}
-          />
-        ) : divQ.isLoading ? (
-          <LoadingSpinner />
-        ) : dividends.length === 0 ? (
-          <EmptyState message={labels.noData[locale]} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+    <SectionCard title={t("div.title")} icon={<Coins className="text-amber-500" />} footer={t("div.footer")}>
+      {dividendsQ.isPending ? (
+        <SectionSkeleton rows={6} />
+      ) : dividendsQ.isError ? (
+        <SectionError error={dividendsQ.error} onRetry={() => void dividendsQ.refetch()} />
+      ) : dividends.length === 0 ? (
+        <SectionEmpty message={t("div.empty")} />
+      ) : (
+        <>
+          {trailing ? (
+            <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-xl bg-muted/30 p-3 text-xs">
+              {trailing.count > 0 ? (
+                <>
+                  <span className="text-muted-foreground">{t("div.trailingYield")}</span>
+                  <span className="font-mono text-sm font-bold tabular-nums text-foreground">{formatPercent(trailing.yieldPct)}</span>
+                  <span className="text-muted-foreground">
+                    {t("div.trailingPerShare", { amount: perShare(trailing.perShare) })}
+                  </span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  {lastPaid ? t("div.noTrailing", { date: formatDay(lastPaid.date) }) : t("div.noPaid")}
+                </span>
+              )}
+            </div>
+          ) : null}
+          <div className="-mx-4 overflow-x-auto sm:-mx-5">
+            <table className="w-full min-w-[30rem] text-xs">
               <thead>
-                <tr className="border-b border-border/40">
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {labels.date[locale]}
-                  </th>
-                  <th className="pb-2.5 text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {labels.amount[locale]}
-                  </th>
+                <tr className="border-b border-border/50 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <th scope="col" className="py-2 pl-4 pr-3 text-left font-semibold sm:pl-5">{t("div.date")}</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">{t("div.gross")}</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">{t("div.net")}</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">{t("div.grossRate")}</th>
+                  <th scope="col" className="py-2 pl-3 pr-4 text-right font-semibold sm:pr-5">{t("div.total")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/20">
-                {dividends.slice(0, 20).map((d, i) => {
-                  const date = String(d.date ?? d.ex_date ?? d.payDate ?? d.Date ?? "");
-                  const amount = Number(d.Amount ?? d.amount ?? d.Dividends ?? d.value ?? d.dividend ?? 0);
-                  return (
-                    <tr key={i} className="hover:bg-muted/10 transition-colors">
-                      <td className="py-2.5 text-xs text-muted-foreground font-mono">
-                        {date.length > 10 ? date.substring(0, 10) : date}
-                      </td>
-                      <td className="py-2.5 text-right text-xs font-semibold font-mono text-emerald-600 dark:text-emerald-400">
-                        {formatNumber(amount, 2)} TL
-                      </td>
-                    </tr>
-                  );
-                })}
+              <tbody>
+                {visible.map((d) => (
+                  <tr key={`${d.date}-${d.grossPerShare}`} className="border-b border-border/20 transition-colors hover:bg-muted/20">
+                    <th scope="row" className="whitespace-nowrap py-2 pl-4 pr-3 text-left font-mono font-normal text-muted-foreground sm:pl-5">
+                      {formatDay(d.date)}
+                      {now !== null && d.time > now ? (
+                        <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[9px] font-semibold text-primary">{t("div.upcoming")}</span>
+                      ) : null}
+                    </th>
+                    <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-foreground">{perShare(d.grossPerShare)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground/85">{perShare(d.netPerShare)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground/85">{formatPercent(d.grossRate)}</td>
+                    <td className="py-2 pl-3 pr-4 text-right font-mono tabular-nums text-foreground/85 sm:pr-5">{formatCompact(d.total)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-    </motion.div>
+          {dividends.length > VISIBLE_ROWS ? (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-3 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              {expanded ? t("common.showLess") : t("common.showAllCount", { count: dividends.length })}
+            </button>
+          ) : null}
+        </>
+      )}
+    </SectionCard>
   );
 }

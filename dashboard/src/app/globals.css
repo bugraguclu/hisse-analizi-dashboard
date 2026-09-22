@@ -6,9 +6,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* UI text: IBM Plex Sans. Figures & tickers: IBM Plex Mono. Page titles: Newsreader. */
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-newsreader), ui-serif, Georgia, serif;
+  --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +41,15 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Price-direction tokens (text-up, bg-down/10, stroke-up, ...).
+     Flip the convention for the whole app by swapping --up/--down below. */
+  --color-up: var(--up);
+  --color-down: var(--down);
+  /* Neutral/"caution" tone (NÖTR signals, medium severity) — never for price direction. */
+  --color-warn: var(--warn);
+  /* Raised inner surface for tiles inside a card, and chart gridlines. */
+  --color-surface: var(--surface);
+  --color-grid: var(--grid);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,74 +60,93 @@
 }
 
 :root {
-  --background: oklch(0.98 0.002 250);
-  --foreground: oklch(0.145 0.015 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0.015 260);
+  /* Neutral "paper" palette: warm off-white page, white panels, ink text.
+     Hue 80 at chroma <= 0.006 reads as neutral, never blue. */
+  --background: oklch(0.975 0.003 85);
+  --foreground: oklch(0.205 0.006 75);
+  --card: oklch(0.997 0.001 85);
+  --card-foreground: oklch(0.205 0.006 75);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.015 260);
-  --primary: oklch(0.45 0.18 260);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0.005 260);
-  --secondary-foreground: oklch(0.25 0.015 260);
-  --muted: oklch(0.96 0.005 260);
-  --muted-foreground: oklch(0.55 0.015 260);
-  --accent: oklch(0.96 0.005 260);
-  --accent-foreground: oklch(0.25 0.015 260);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.91 0.005 260);
-  --input: oklch(0.91 0.005 260);
-  --ring: oklch(0.45 0.18 260);
-  --chart-1: oklch(0.55 0.2 260);
-  --chart-2: oklch(0.65 0.18 150);
-  --chart-3: oklch(0.7 0.15 50);
-  --chart-4: oklch(0.6 0.2 320);
-  --chart-5: oklch(0.55 0.15 30);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.98 0.002 250);
-  --sidebar-foreground: oklch(0.35 0.015 260);
-  --sidebar-primary: oklch(0.45 0.18 260);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.93 0.01 260);
-  --sidebar-accent-foreground: oklch(0.2 0.015 260);
-  --sidebar-border: oklch(0.91 0.005 260);
-  --sidebar-ring: oklch(0.45 0.18 260);
+  --popover-foreground: oklch(0.205 0.006 75);
+  /* Ink blue: links, focus, the selected tab — used sparingly. */
+  --primary: oklch(0.47 0.115 252);
+  --primary-foreground: oklch(0.985 0.002 85);
+  --secondary: oklch(0.948 0.004 85);
+  --secondary-foreground: oklch(0.25 0.006 75);
+  --muted: oklch(0.948 0.004 85);
+  --muted-foreground: oklch(0.5 0.008 75);
+  --accent: oklch(0.948 0.004 85);
+  --accent-foreground: oklch(0.205 0.006 75);
+  --destructive: oklch(0.545 0.2 26);
+  --destructive-foreground: oklch(0.985 0.002 85);
+  --border: oklch(0.912 0.004 85);
+  --input: oklch(0.885 0.005 85);
+  --ring: oklch(0.47 0.115 252);
+  /* Categorical chart palette — deliberately avoids the green/red hues reserved for
+     --up/--down: ink blue, ochre, plum, teal, warm grey. */
+  --chart-1: oklch(0.5 0.12 252);
+  --chart-2: oklch(0.66 0.13 70);
+  --chart-3: oklch(0.52 0.13 320);
+  --chart-4: oklch(0.58 0.08 212);
+  --chart-5: oklch(0.56 0.01 75);
+  /* Small radii: panels (rounded-2xl) ~7px, controls (rounded-md/lg) 3-4px. */
+  --radius: 0.25rem;
+  --sidebar: oklch(0.975 0.003 85);
+  --sidebar-foreground: oklch(0.36 0.008 75);
+  --sidebar-primary: oklch(0.205 0.006 75);
+  --sidebar-primary-foreground: oklch(0.985 0.002 85);
+  --sidebar-accent: oklch(0.935 0.004 85);
+  --sidebar-accent-foreground: oklch(0.205 0.006 75);
+  --sidebar-border: oklch(0.912 0.004 85);
+  --sidebar-ring: oklch(0.47 0.115 252);
+  /* Price direction: UP = green, DOWN = red (both >= 4.5:1 on the light panels). */
+  --up: oklch(0.54 0.13 155);
+  --down: oklch(0.545 0.2 26);
+  --warn: oklch(0.58 0.12 68);
+  --surface: oklch(0.965 0.003 85);
+  --grid: oklch(0.925 0.004 85);
 }
 
 .dark {
-  --background: oklch(0.12 0.015 260);
-  --foreground: oklch(0.93 0.005 260);
-  --card: oklch(0.16 0.015 260);
-  --card-foreground: oklch(0.93 0.005 260);
-  --popover: oklch(0.16 0.015 260);
-  --popover-foreground: oklch(0.93 0.005 260);
-  --primary: oklch(0.65 0.2 260);
-  --primary-foreground: oklch(0.12 0.015 260);
-  --secondary: oklch(0.22 0.015 260);
-  --secondary-foreground: oklch(0.93 0.005 260);
-  --muted: oklch(0.22 0.015 260);
-  --muted-foreground: oklch(0.65 0.01 260);
-  --accent: oklch(0.22 0.015 260);
-  --accent-foreground: oklch(0.93 0.005 260);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.32 0.015 260);
-  --input: oklch(0.32 0.015 260);
-  --ring: oklch(0.65 0.2 260);
-  --chart-1: oklch(0.65 0.2 260);
-  --chart-2: oklch(0.7 0.18 150);
-  --chart-3: oklch(0.75 0.15 50);
-  --chart-4: oklch(0.65 0.2 320);
-  --chart-5: oklch(0.6 0.15 30);
-  --sidebar: oklch(0.14 0.015 260);
-  --sidebar-foreground: oklch(0.85 0.005 260);
-  --sidebar-primary: oklch(0.65 0.2 260);
-  --sidebar-primary-foreground: oklch(0.12 0.015 260);
-  --sidebar-accent: oklch(0.2 0.02 260);
-  --sidebar-accent-foreground: oklch(0.93 0.005 260);
-  --sidebar-border: oklch(0.25 0.015 260);
-  --sidebar-ring: oklch(0.65 0.2 260);
+  /* Neutral near-black: #0e0e0e page, #161616 panels, #2b2b2b hairlines. */
+  --background: oklch(0.165 0.002 75);
+  --foreground: oklch(0.93 0.004 85);
+  --card: oklch(0.2 0.002 75);
+  --card-foreground: oklch(0.93 0.004 85);
+  --popover: oklch(0.215 0.003 75);
+  --popover-foreground: oklch(0.93 0.004 85);
+  --primary: oklch(0.75 0.095 250);
+  --primary-foreground: oklch(0.17 0.01 250);
+  --secondary: oklch(0.245 0.003 75);
+  --secondary-foreground: oklch(0.93 0.004 85);
+  --muted: oklch(0.245 0.003 75);
+  --muted-foreground: oklch(0.67 0.006 80);
+  --accent: oklch(0.245 0.003 75);
+  --accent-foreground: oklch(0.93 0.004 85);
+  --destructive: oklch(0.68 0.17 25);
+  --destructive-foreground: oklch(0.985 0.002 85);
+  --border: oklch(0.29 0.003 75);
+  --input: oklch(0.32 0.003 75);
+  --ring: oklch(0.75 0.095 250);
+  --chart-1: oklch(0.73 0.1 250);
+  --chart-2: oklch(0.8 0.12 78);
+  --chart-3: oklch(0.72 0.12 320);
+  --chart-4: oklch(0.76 0.08 205);
+  --chart-5: oklch(0.66 0.008 80);
+  --sidebar: oklch(0.165 0.002 75);
+  --sidebar-foreground: oklch(0.8 0.004 85);
+  --sidebar-primary: oklch(0.93 0.004 85);
+  --sidebar-primary-foreground: oklch(0.165 0.002 75);
+  --sidebar-accent: oklch(0.235 0.003 75);
+  --sidebar-accent-foreground: oklch(0.93 0.004 85);
+  --sidebar-border: oklch(0.29 0.003 75);
+  --sidebar-ring: oklch(0.75 0.095 250);
+  /* Price direction: UP = green, DOWN = red. */
+  --up: oklch(0.75 0.15 157);
+  --down: oklch(0.69 0.175 25);
+  --warn: oklch(0.8 0.12 80);
+  --surface: oklch(0.225 0.002 75);
+  --grid: oklch(0.255 0.003 75);
 }
 
 @layer base {
@@ -128,5 +158,133 @@
   }
   html {
     @apply font-sans;
+    text-rendering: optimizeLegibility;
+  }
+  /* Page titles are set in the display serif; everything else stays in Plex Sans. */
+  h1 {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.012em;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 24%, transparent);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Motion — entry/reveal animations used across cards and charts.
+   All are CSS (compositor-driven, no hydration dependency) and are switched
+   off by the prefers-reduced-motion block below. Stagger with an inline
+   `style={{ animationDelay: "80ms" }}`.
+   --------------------------------------------------------------------------- */
+@theme {
+  --animate-enter: enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade: fade 0.35s ease-out both;
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+  --animate-reveal-x: reveal-x 1s cubic-bezier(0.65, 0, 0.35, 1) both;
+  --animate-grow-x: grow-x 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-grow-y: grow-y 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-ping-soft: ping-soft 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-flash-up: flash-up 1.4s ease-out;
+  --animate-flash-down: flash-down 1.4s ease-out;
+
+  @keyframes enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+  /* Left-to-right "drawing" reveal for lines/sparklines/areas. */
+  @keyframes reveal-x {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+  /* Bars/meters growing from their origin (pair with origin-left / origin-bottom). */
+  @keyframes grow-x {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  @keyframes grow-y {
+    from { transform: scaleY(0); }
+    to { transform: scaleY(1); }
+  }
+  /* Live-dot halo. */
+  @keyframes ping-soft {
+    0% { transform: scale(1); opacity: 0.5; }
+    80%, 100% { transform: scale(2.6); opacity: 0; }
+  }
+  /* Background flash when a live price ticks up / down. */
+  @keyframes flash-up {
+    from { background-color: color-mix(in oklab, var(--up) 26%, transparent); }
+    to { background-color: transparent; }
+  }
+  @keyframes flash-down {
+    from { background-color: color-mix(in oklab, var(--down) 26%, transparent); }
+    to { background-color: transparent; }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Utilities
+   --------------------------------------------------------------------------- */
+
+/* The one card surface used by every panel (DashboardCard, SectionCard, ...). */
+@utility card-surface {
+  /* Flat panel: hairline border, no shadow, no glow. */
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--border);
+  background-color: var(--card);
+}
+
+/* Horizontal scrollers (tab bars, segmented controls, wide tables) without a visible bar. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Slim, theme-aware scrollbar for scrollable panels. */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
+}
+
+/* Fades the left/right edges of a horizontal scroller. */
+@utility mask-fade-x {
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+}
+
+/* Moving highlight for skeletons (combine with bg-muted/40 + rounded-*). */
+@utility skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Numbers that must not jitter while they change. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

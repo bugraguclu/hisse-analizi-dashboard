@@ -1,107 +1,71 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatNumber, formatPercent } from "@/lib/format";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Landmark, BarChart3, Globe, DollarSign, Calendar } from "lucide-react";
+import { Landmark, BarChart3, Globe } from "lucide-react";
+import { api, isApiError } from "@/lib/api";
+import { formatPercent, formatMarketDate, toFiniteNumber } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
+import { MacroStatCard, SourceFooter } from "@/components/makro/MacroStatCard";
+import { FxCard, type FxData } from "@/components/makro/FxCard";
+import { HistoryChart, type HistoryPoint } from "@/components/makro/HistoryChart";
+import { EconomicCalendar, type CalendarItem } from "@/components/makro/EconomicCalendar";
+import { TcmbRatesCard, type TcmbData } from "@/components/makro/TcmbRatesCard";
 
 const stagger = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 10 },
   show: (i: number) => ({
     opacity: 1, y: 0,
-    transition: { delay: i * 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as const },
+    transition: { delay: Math.min(i * 0.04, 0.12), duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const },
   }),
 };
 
-function MacroCard({ title, icon: Icon, children, isLoading: loading, index = 0 }: { title: string; icon?: React.ComponentType<{ className?: string }>; children: React.ReactNode; isLoading?: boolean; index?: number }) {
-  return (
-    <motion.div custom={index} variants={stagger} initial="hidden" animate="show">
-      <div className="bg-card rounded-2xl border border-border/60 p-5 hover:shadow-sm transition-all h-full">
-        <div className="flex items-center gap-2 mb-4">
-          {Icon && <Icon className="h-4 w-4 text-primary" />}
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        </div>
-        {loading ? <LoadingSpinner /> : children}
-      </div>
-    </motion.div>
-  );
+interface PolicyRateOut {
+  source?: string;
+  policy_rate?: { value?: number; date?: string };
+  history?: Array<{ date?: string; lending?: number | null }>;
 }
 
-function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string; data: Record<string, unknown> | null; isLoading: boolean; index: number; noDataLabel: string }) {
-  const { locale } = useLocale();
-  if (isLoading) return <MacroCard title={label} icon={DollarSign} isLoading={true} index={index}><span /></MacroCard>;
-  if (!data) return <MacroCard title={label} icon={DollarSign} index={index}><EmptyState message={noDataLabel} /></MacroCard>;
+interface InflationOut {
+  source?: string;
+  latest?: { year_month?: string; yearly_inflation?: number; monthly_inflation?: number };
+  tufe_history?: Array<{ Date?: string; YearlyInflation?: number }>;
+}
 
-  // Backend returns: {"currency": ..., "info": {...}, "history": [...]}
-  const info = (data.info && typeof data.info === "object" ? data.info : data) as Record<string, unknown>;
-  const historyArr = Array.isArray(data.history) ? data.history as Record<string, unknown>[] : [];
-  const lastHist = historyArr.length > 0 ? historyArr[historyArr.length - 1] : null;
-  const prevHist = historyArr.length > 1 ? historyArr[historyArr.length - 2] : null;
-
-  const price = info.close ?? info.last ?? info.price ?? info.rate ?? info.value ?? (lastHist ? lastHist.Close ?? lastHist.close : null);
-  const prevPrice = prevHist ? Number(prevHist.Close ?? prevHist.close ?? 0) : 0;
-  const curPrice = price != null ? Number(price) : 0;
-  const rawChange = info.change_pct ?? info.change_percent;
-  const change = prevPrice > 0
-    ? ((curPrice - prevPrice) / prevPrice) * 100
-    : rawChange != null ? Number(rawChange) : null;
-  const isUp = (change ?? 0) >= 0;
-  const source = String(data.source ?? "");
-  const asOf = String(data.as_of ?? info.update_time ?? "");
-  const sourceLabel = source === "TCMB"
-    ? locale === "tr" ? "TCMB döviz satış" : locale === "fr" ? "Vente devises CBRT" : "CBRT forex selling"
-    : source;
-
-  return (
-    <MacroCard title={label} icon={DollarSign} index={index}>
-      <div className="text-3xl font-bold font-mono text-foreground tracking-tight">{price != null ? formatNumber(Number(price), 4) : "-"}</div>
-      {change != null && Number.isFinite(change) && (
-        <div className={`flex items-center gap-1.5 text-sm font-semibold mt-2 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-          {isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-          {isUp ? "+" : ""}{formatNumber(change)}%
-        </div>
-      )}
-      {(sourceLabel || asOf) && (
-        <p className="text-[10px] text-muted-foreground mt-1">
-          {[sourceLabel, asOf].filter(Boolean).join(" · ")}
-        </p>
-      )}
-    </MacroCard>
-  );
+interface CalendarOut {
+  calendar?: CalendarItem[];
 }
 
 export default function MakroPage() {
-  const { t, locale } = useLocale();
+  const { t } = useLocale();
 
-  const rateQ = useQuery({ queryKey: ["policy-rate"], queryFn: () => api.policyRate() });
-  const infQ = useQuery({ queryKey: ["inflation"], queryFn: () => api.inflation() });
-  const usdQ = useQuery({ queryKey: ["fx-usd"], queryFn: () => api.fx("USD") });
-  const eurQ = useQuery({ queryKey: ["fx-eur"], queryFn: () => api.fx("EUR") });
-  const gbpQ = useQuery({ queryKey: ["fx-gbp"], queryFn: () => api.fx("GBP") });
-  const calQ = useQuery({ queryKey: ["calendar"], queryFn: () => api.calendar() });
-  const tcmbQ = useQuery({ queryKey: ["tcmb-detail"], queryFn: () => api.tcmb() });
+  const rateQ = useQuery({ queryKey: ["policy-rate"], queryFn: () => api.policyRate() as Promise<PolicyRateOut> });
+  const infQ = useQuery({ queryKey: ["inflation"], queryFn: () => api.inflation() as Promise<InflationOut> });
+  const usdQ = useQuery({ queryKey: ["fx-usd"], queryFn: () => api.fx("USD") as Promise<FxData> });
+  const eurQ = useQuery({ queryKey: ["fx-eur"], queryFn: () => api.fx("EUR") as Promise<FxData> });
+  const gbpQ = useQuery({ queryKey: ["fx-gbp"], queryFn: () => api.fx("GBP") as Promise<FxData> });
+  const calQ = useQuery({ queryKey: ["calendar"], queryFn: () => api.calendar() as Promise<CalendarOut> });
+  const tcmbQ = useQuery({ queryKey: ["tcmb-detail"], queryFn: () => api.tcmb() as Promise<TcmbData> });
 
-  // Backend returns: {"source": "TCMB", "policy_rate": ...}
-  const rate = rateQ.data as Record<string, unknown> | null;
-  const policyRateRaw = rate?.policy_rate;
-  const rateVal = typeof policyRateRaw === "object" && policyRateRaw != null
-    ? (policyRateRaw as Record<string, unknown>).value ?? (policyRateRaw as Record<string, unknown>).rate
-    : policyRateRaw ?? rate?.rate ?? rate?.value;
+  const rate = rateQ.data;
+  const rateValue = toFiniteNumber(rate?.policy_rate?.value);
+  const rateDate = rate?.policy_rate?.date;
+  const rateHistory: HistoryPoint[] = (rate?.history ?? [])
+    .map((h) => ({ date: String(h.date ?? ""), value: Number(h.lending) }))
+    .filter((p) => p.date && Number.isFinite(p.value))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Backend returns: {"source": "TCMB", "latest": {...}, "tufe_history": [...]}
-  const infRaw = infQ.data as Record<string, unknown> | null;
-  const inf = (infRaw?.latest && typeof infRaw.latest === "object" ? infRaw.latest : infRaw) as Record<string, unknown> | null;
+  const inf = infQ.data;
+  const yearlyInflation = toFiniteNumber(inf?.latest?.yearly_inflation);
+  const monthlyInflation = toFiniteNumber(inf?.latest?.monthly_inflation);
+  const inflationHistory: HistoryPoint[] = (inf?.tufe_history ?? [])
+    .map((h) => ({ date: String(h.Date ?? ""), value: Number(h.YearlyInflation) }))
+    .filter((p) => p.date && Number.isFinite(p.value))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-36);
 
-  // Backend returns: {"calendar": [...]}
-  const calData = calQ.data as Record<string, unknown> | null;
-  const calArr = calData?.calendar ? calData.calendar
-    : Array.isArray(calData) ? calData
-    : (calData && typeof calData === "object" && "data" in calData) ? calData.data
-    : null;
+  const calData = calQ.data;
+  const calItems = Array.isArray(calData?.calendar) ? calData.calendar : [];
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
@@ -117,137 +81,124 @@ export default function MakroPage() {
         </div>
       </motion.div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MacroCard title={t("makro.policyRate")} icon={Landmark} index={1}>
-          <div className="text-3xl font-bold font-mono text-primary tracking-tight">
-            {rateVal != null ? formatPercent(Number(rateVal)) : rateQ.isLoading ? "..." : "-"}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">{t("makro.weeklyRepo")}</p>
-          {typeof policyRateRaw === "object" && policyRateRaw != null && (policyRateRaw as Record<string, unknown>).date != null && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">{String((policyRateRaw as Record<string, unknown>).date)}</p>
-          )}
-        </MacroCard>
-        <MacroCard title={t("makro.inflation")} icon={BarChart3} index={2}>
-          {inf ? (
-            <>
-              <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
-                {formatPercent(Number(inf.yearly_inflation ?? inf.rate ?? inf.value ?? inf.cpi ?? 0))}
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">{t("makro.yearlyCpi")}</p>
-              {inf.monthly_inflation != null && (
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-muted-foreground">{t("makro.monthly")}</span>
-                  <span className="text-sm font-bold font-mono text-foreground">{formatPercent(Number(inf.monthly_inflation))}</span>
+      {/* Rate/FX cards share one row; items-start keeps a shorter card from
+          being stretched into an empty box by a taller sibling (e.g. once a
+          trend chart renders). */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start">
+        <motion.div custom={1} variants={stagger} initial="hidden" animate="show">
+          <MacroStatCard
+            title={t("makro.policyRate")}
+            icon={Landmark}
+            isLoading={rateQ.isLoading}
+            isError={rateQ.isError}
+            errorMessage={isApiError(rateQ.error) ? rateQ.error.detail : undefined}
+            onRetry={() => { void rateQ.refetch(); }}
+          >
+            <div className="text-3xl font-bold font-mono text-primary tracking-tight">
+              {rateValue != null ? formatPercent(rateValue) : "-"}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{t("makro.weeklyRepo")}</p>
+            {rateHistory.length >= 2 && (
+              <HistoryChart data={rateHistory} color="var(--chart-1)" valueFormatter={(v) => formatPercent(v, 1)} height={80} />
+            )}
+            <SourceFooter
+              source={rate?.source}
+              asOf={rateDate ? `${t("makro.lastDecisionDate")}: ${formatMarketDate(rateDate, "date")}` : null}
+            />
+          </MacroStatCard>
+        </motion.div>
+
+        <motion.div custom={2} variants={stagger} initial="hidden" animate="show">
+          <MacroStatCard
+            title={t("makro.inflation")}
+            icon={BarChart3}
+            isLoading={infQ.isLoading}
+            isError={infQ.isError}
+            errorMessage={isApiError(infQ.error) ? infQ.error.detail : undefined}
+            onRetry={() => { void infQ.refetch(); }}
+          >
+            {inf?.latest ? (
+              <>
+                <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
+                  {yearlyInflation != null ? formatPercent(yearlyInflation) : "-"}
                 </div>
-              )}
-              {inf.year_month && (
-                <p className="text-[10px] text-muted-foreground mt-1">{String(inf.year_month)}</p>
-              )}
-            </>
-          ) : infQ.isLoading ? (
-            <div className="text-3xl font-bold font-mono tracking-tight">...</div>
-          ) : (
-            <div className="text-3xl font-bold font-mono tracking-tight">-</div>
-          )}
-        </MacroCard>
-        <FxCard label="USD/TRY" data={usdQ.data as Record<string, unknown> | null} isLoading={usdQ.isLoading} index={3} noDataLabel={t("makro.noData")} />
-        <FxCard label="EUR/TRY" data={eurQ.data as Record<string, unknown> | null} isLoading={eurQ.isLoading} index={4} noDataLabel={t("makro.noData")} />
+                <p className="text-[11px] text-muted-foreground mt-1">{t("makro.yearlyCpi")}</p>
+                {monthlyInflation != null && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-xs text-muted-foreground">{t("makro.monthly")}</span>
+                    <span className="text-sm font-bold font-mono text-foreground">{formatPercent(monthlyInflation)}</span>
+                  </div>
+                )}
+                {inflationHistory.length >= 2 && (
+                  <HistoryChart data={inflationHistory} color="var(--chart-3)" valueFormatter={(v) => formatPercent(v, 0)} height={80} />
+                )}
+                <SourceFooter
+                  source={inf?.source}
+                  asOf={inf?.latest?.year_month ? formatMarketDate(inf.latest.year_month, "monthYear") : null}
+                />
+              </>
+            ) : (
+              <div className="text-3xl font-bold font-mono tracking-tight">-</div>
+            )}
+          </MacroStatCard>
+        </motion.div>
+
+        <motion.div custom={3} variants={stagger} initial="hidden" animate="show">
+          <FxCard
+            label="USD/TRY"
+            data={usdQ.data}
+            isLoading={usdQ.isLoading}
+            isError={usdQ.isError}
+            errorMessage={isApiError(usdQ.error) ? usdQ.error.detail : undefined}
+            onRetry={() => { void usdQ.refetch(); }}
+            noDataLabel={t("makro.noData")}
+          />
+        </motion.div>
+        <motion.div custom={4} variants={stagger} initial="hidden" animate="show">
+          <FxCard
+            label="EUR/TRY"
+            data={eurQ.data}
+            isLoading={eurQ.isLoading}
+            isError={eurQ.isError}
+            errorMessage={isApiError(eurQ.error) ? eurQ.error.detail : undefined}
+            onRetry={() => { void eurQ.refetch(); }}
+            noDataLabel={t("makro.noData")}
+          />
+        </motion.div>
+        <motion.div custom={5} variants={stagger} initial="hidden" animate="show">
+          <FxCard
+            label="GBP/TRY"
+            data={gbpQ.data}
+            isLoading={gbpQ.isLoading}
+            isError={gbpQ.isError}
+            errorMessage={isApiError(gbpQ.error) ? gbpQ.error.detail : undefined}
+            onRetry={() => { void gbpQ.refetch(); }}
+            noDataLabel={t("makro.noData")}
+          />
+        </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <FxCard label="GBP/TRY" data={gbpQ.data as Record<string, unknown> | null} isLoading={gbpQ.isLoading} index={5} noDataLabel={t("makro.noData")} />
+      <motion.div custom={6} variants={stagger} initial="hidden" animate="show">
+        <EconomicCalendar
+          items={calItems}
+          isLoading={calQ.isLoading}
+          isError={calQ.isError}
+          errorMessage={isApiError(calQ.error) ? calQ.error.detail : undefined}
+          onRetry={() => { void calQ.refetch(); }}
+          noDataLabel={t("makro.noCalendar")}
+        />
+      </motion.div>
 
-        {/* Economic Calendar */}
-        <MacroCard title={t("makro.calendar")} icon={Calendar} isLoading={calQ.isLoading} index={6}>
-          {!calArr || !Array.isArray(calArr) || calArr.length === 0 ? (
-            <EmptyState message={t("makro.noCalendar")} />
-          ) : (
-            <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
-              {(calArr as Record<string, unknown>[]).slice(0, 12).map((item, i) => {
-                // borsapy calendar uses capitalized keys (Event, Date, Time, ...)
-                const name = String(item.Event ?? item.event ?? item.title ?? item.name ?? "-");
-                const dateRaw = String(item.Date ?? item.date ?? "");
-                const time = String(item.Time ?? item.time ?? "");
-                const country = String(item.Country ?? item.country ?? "");
-                const actual = item.Actual ?? item.actual;
-                const forecast = item.Forecast ?? item.forecast;
-                const previous = item.Previous ?? item.previous;
-                const dateLabel = dateRaw ? dateRaw.split("T")[0] : "";
-                return (
-                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-foreground truncate">{name}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">
-                        {dateLabel}{time && time !== "00:00" ? ` ${time}` : ""}{country ? ` · ${country}` : ""}
-                      </div>
-                    </div>
-                    {(actual != null || forecast != null || previous != null) ? (
-                      <div className="text-[11px] font-mono text-muted-foreground ml-3 shrink-0 space-x-2">
-                        {actual != null && <span className="text-foreground font-semibold">G: {String(actual)}</span>}
-                        {forecast != null && <span>T: {String(forecast)}</span>}
-                        {previous != null && <span>Ö: {String(previous)}</span>}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </MacroCard>
-      </div>
-
-      {/* TCMB Detail */}
-      {(() => {
-        const tcmbRaw = tcmbQ.data as Record<string, unknown> | null;
-        const rates = tcmbRaw?.rates ?? tcmbRaw?.interest_rates ?? tcmbRaw?.data;
-        const tcmbLabels: Record<string, Record<string, string>> = {
-          title: { tr: "TCMB Faiz Oranlari", en: "CBRT Interest Rates", fr: "Taux CBRT" },
-          overnight_lending: { tr: "Gecelik Faiz (Brc. Verme)", en: "Overnight Lending", fr: "Pret au jour le jour" },
-          overnight_borrowing: { tr: "Gecelik Faiz (Brc. Alma)", en: "Overnight Borrowing", fr: "Emprunt au jour le jour" },
-          late_liquidity_lending: { tr: "Gec Likidite (Brc. Verme)", en: "Late Liquidity Lending", fr: "Pret de liquidite tardive" },
-          late_liquidity_borrowing: { tr: "Gec Likidite (Brc. Alma)", en: "Late Liquidity Borrowing", fr: "Emprunt de liquidite tardive" },
-          policy_rate: { tr: "Politika Faizi", en: "Policy Rate", fr: "Taux directeur" },
-        };
-        const rateItems: Array<{ key: string; value: unknown }> = [];
-        if (Array.isArray(rates)) {
-          // Backend shape: [{type: "policy"|"overnight"|"late_liquidity", borrowing, lending}, ...]
-          for (const row of rates as Array<Record<string, unknown>>) {
-            const kind = String(row.type ?? "");
-            if (kind === "policy" && row.lending != null) {
-              rateItems.push({ key: "policy_rate", value: row.lending });
-            } else {
-              if (row.borrowing != null) rateItems.push({ key: `${kind}_borrowing`, value: row.borrowing });
-              if (row.lending != null) rateItems.push({ key: `${kind}_lending`, value: row.lending });
-            }
-          }
-        } else if (rates && typeof rates === "object") {
-          const r = rates as Record<string, unknown>;
-          for (const [k, v] of Object.entries(r)) {
-            if (v != null && typeof v !== "object") rateItems.push({ key: k, value: v });
-          }
-        }
-        return rateItems.length > 0 ? (
-          <motion.div custom={7} variants={stagger} initial="hidden" animate="show">
-            <div className="bg-card rounded-2xl border border-border/60 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Landmark className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">{tcmbLabels.title[locale]}</h2>
-              </div>
-              <div className="space-y-0">
-                {rateItems.map(({ key, value }) => (
-                  <div key={key} className="flex justify-between py-2.5 border-b border-border/30 last:border-0">
-                    <span className="text-xs text-muted-foreground">{tcmbLabels[key]?.[locale] ?? key.replace(/_/g, " ")}</span>
-                    <span className="text-xs font-bold font-mono text-foreground">
-                      {typeof value === "number" ? formatPercent(value) : String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        ) : null;
-      })()}
+      <motion.div custom={7} variants={stagger} initial="hidden" animate="show">
+        <TcmbRatesCard
+          data={tcmbQ.data}
+          isLoading={tcmbQ.isLoading}
+          isError={tcmbQ.isError}
+          errorMessage={isApiError(tcmbQ.error) ? tcmbQ.error.detail : undefined}
+          onRetry={() => { void tcmbQ.refetch(); }}
+          noDataLabel={t("makro.noData")}
+        />
+      </motion.div>
     </div>
   );
 }

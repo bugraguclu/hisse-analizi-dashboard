@@ -1,9 +1,13 @@
 """Unit tests for parsers/helpers.py — fixture-bağımsız."""
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from src.parsers.helpers import (
     compute_content_hash,
     compute_dedup_key,
+    restore_turkish_name,
+    turkish_title,
     parse_date,
     strip_html,
     clean_whitespace,
@@ -48,6 +52,13 @@ class TestDedupKey:
         k1 = compute_dedup_key("kap", "url", "date", "title")
         k2 = compute_dedup_key("anadoluefes_news", "url", "date", "title")
         assert k1 != k2
+
+    def test_scope_separates_multi_company_disclosures(self):
+        legacy = compute_dedup_key("kap", "url", "date", "title")
+        assert compute_dedup_key("kap", "url", "date", "title", scope="") == legacy
+        kchol = compute_dedup_key("kap", "url", "date", "title", scope="KCHOL")
+        arclk = compute_dedup_key("kap", "url", "date", "title", scope="ARCLK")
+        assert len({legacy, kchol, arclk}) == 3
 
 
 class TestParseDate:
@@ -136,3 +147,46 @@ class TestTruncate:
 
     def test_none(self):
         assert truncate(None) == ""
+
+
+class TestParseDateTurkish:
+    def test_uppercase_turkish_month_with_dotless_i(self):
+        dt = parse_date("30 ARALIK 2025 14:00")
+        assert dt is not None
+        assert (dt.year, dt.month, dt.day, dt.hour) == (2025, 12, 30, 14)
+
+    def test_ascii_folded_month_name(self):
+        dt = parse_date("9 Subat 2026")
+        assert dt is not None and (dt.month, dt.day) == (2, 9)
+
+    def test_kap_local_time_is_istanbul_instant(self):
+        dt = parse_date("22.09.2026 11:16:04")
+        assert dt is not None
+        assert dt.tzinfo == ISTANBUL
+        assert dt.utcoffset().total_seconds() == 3 * 3600  # 08:16:04 UTC
+
+    def test_explicit_offset_is_kept(self):
+        dt = parse_date("2026-09-22T08:16:04+00:00")
+        assert dt is not None and dt.utcoffset().total_seconds() == 0
+
+
+class TestRestoreTurkishName:
+    @pytest.mark.parametrize(
+        ("short", "official", "expected"),
+        [
+            ("Eczacibasi Ilac", "ECZACIBAŞI İLAÇ, SINAİ VE FİNANSAL YATIRIMLAR SANAYİ VE TİCARET A.Ş.", "Eczacıbaşı İlaç"),
+            ("Isiklar Enerji Yapi Hol.", "IŞIKLAR ENERJİ YAPI HOLDİNG A.Ş.", "Işıklar Enerji Yapı Hol."),
+            ("BIM Magazalar", "BİM BİRLEŞİK MAĞAZALAR A.Ş.", "BİM Mağazalar"),
+            ("Tukas", "TUKAŞ GIDA SANAYİ VE TİCARET A.Ş.", "Tukaş"),
+        ],
+    )
+    def test_restores_letters_from_official_title(self, short, official, expected):
+        assert restore_turkish_name(short, official) == expected
+
+    def test_unmatched_words_and_missing_title_are_kept(self):
+        assert restore_turkish_name("Sisecam", "TÜRKİYE ŞİŞE VE CAM FABRİKALARI A.Ş.") == "Sisecam"
+        assert restore_turkish_name("Eczacibasi Ilac", "") == "Eczacibasi Ilac"
+
+    def test_turkish_title_casing(self):
+        assert turkish_title("İLAÇ") == "İlaç"
+        assert turkish_title("IŞIKLAR") == "Işıklar"

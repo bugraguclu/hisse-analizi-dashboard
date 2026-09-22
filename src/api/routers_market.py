@@ -1,91 +1,147 @@
 """Piyasa verileri API endpoint'leri — tarama, endeks, arama ve snapshot."""
 
-from fastapi import APIRouter, Query
+from typing import Any
 
-from src.adapters.screener_adapter import screen_stocks, get_screener_templates
-from src.adapters.scanner_adapter import scan_signals
-from src.adapters.index_adapter import get_index_data, get_index_info, list_indices, get_ticker_history
-from src.adapters.search_adapter import search_symbol, list_companies
+from fastapi import APIRouter, Body, HTTPException, Query
+
+from src.adapters.index_adapter import get_index_data, get_index_info, get_ticker_history, list_indices
+from src.adapters.scanner_adapter import resolve_condition, scan_signals
+from src.adapters.screener_adapter import get_screener_templates, normalize_filters, screen_stocks
+from src.adapters.search_adapter import list_companies, normalize_query, search_symbol
 from src.adapters.stream_adapter import get_snapshot
-from src.api.dependencies import ensure_upstream_success, validate_ticker
+from src.adapters.utils import MarketDataError, normalize_symbol, resolve_period, upstream_failure
 
 market_router = APIRouter(prefix="/market", tags=["market"])
+
+MAX_SNAPSHOT_SYMBOLS = 50
+
+
+def _ok(payload: dict) -> dict:
+    """Turn an adapter error payload into an HTTP error with a short Turkish detail."""
+    failure = upstream_failure(payload)
+    if failure is not None:
+        raise HTTPException(status_code=failure[0], detail=failure[1])
+    return payload
+
+
+def _symbol(raw: str) -> str:
+    try:
+        return normalize_symbol(raw)
+    except MarketDataError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+
+
+def _period(raw: str) -> str:
+    try:
+        resolve_period(raw)
+    except MarketDataError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+    return raw.strip().lower()
 
 
 # --- Screener ---
 
 @market_router.get("/screener")
 async def screener():
-    """Varsayilan filtrelerle hisse taramasi."""
-    return ensure_upstream_success(await screen_stocks())
+    """Varsayilan filtrelerle hisse taramasi (fiyat, gunluk degisim, hacim, piyasa degeri, sektor)."""
+    return _ok(await screen_stocks())
 
 
 @market_router.post("/screener")
-async def screener_with_filters(filters: dict):
-    """Ozel filtrelerle hisse taramasi."""
-    return ensure_upstream_success(await screen_stocks(filters=filters))
+async def screener_with_filters(filters: dict[str, Any] = Body(...)):
+    """Ozel filtrelerle hisse taramasi.
+
+    Kabul edilen alanlar: template, sector, index, recommendation (AL/SAT/TUT),
+    <kriter>_min/_max (market_cap milyon TL; pe, pb, dividend_yield,
+    upside_potential, net_margin, roe) ve TradingView tarzi [min, max]
+    araliklari (market_cap_basic TL, price_earnings_ttm, price_book_fq,
+    dividend_yield_recent, return_on_equity).
+    """
+    try:
+        normalize_filters(filters)
+    except MarketDataError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+    return _ok(await screen_stocks(filters=filters))
 
 
 @market_router.get("/screener/templates")
 async def screener_templates():
     """Hazir tarama sablonlari."""
-    return ensure_upstream_success(await get_screener_templates())
+    return _ok(await get_screener_templates())
 
 
 # --- Scanner ---
 
 @market_router.get("/scanner")
-async def scanner(condition: str | None = None):
-    """Teknik sinyal taramasi."""
-    return ensure_upstream_success(await scan_signals(condition=condition))
+async def scanner(condition: str | None = Query(default=None, max_length=40)):
+    """XU100 teknik sinyal taramasi (rsi_oversold, rsi_overbought, golden_cross, death_cross)."""
+    try:
+        resolve_condition(condition)
+    except MarketDataError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+    normalized = condition.strip().lower() if condition and condition.strip() else None
+    return _ok(await scan_signals(condition=normalized))
 
 
 # --- Index ---
 
 @market_router.get("/indices")
 async def indices():
-    """Tum BIST endekslerini listele."""
-    return ensure_upstream_success(await list_indices())
+    """Tum BIST endekslerini listele (ana endeksler icin canli kotasyon)."""
+    return _ok(await list_indices())
 
 
 @market_router.get("/index/{symbol}")
-async def index_data(symbol: str = "XU100", period: str = Query(default="1ay")):
-    """Endeks fiyat verisi."""
-    return ensure_upstream_success(await get_index_data(validate_ticker(symbol), period=period))
+async def index_data(symbol: str, period: str = Query(default="1ay", max_length=10)):
+    """Endeks fiyat verisi. period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max."""
+    return _ok(await get_index_data(_symbol(symbol), period=_period(period)))
 
 
 @market_router.get("/index/{symbol}/info")
-async def index_info(symbol: str = "XU100"):
+async def index_info(symbol: str):
     """Endeks bilgileri."""
-    return ensure_upstream_success(await get_index_info(validate_ticker(symbol)))
+    return _ok(await get_index_info(_symbol(symbol)))
 
 
 # --- Search ---
 
 @market_router.get("/search")
-async def search(q: str = Query(min_length=1)):
-    """Hisse veya VIOP kontrati ara."""
-    return ensure_upstream_success(await search_symbol(q))
+async def search(q: str = Query(min_length=1, max_length=100)):
+    """BIST hisse ara (en az 2 karakter)."""
+    try:
+        query = normalize_query(q)
+    except MarketDataError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+    return _ok(await search_symbol(query))
 
 
 @market_router.get("/companies/all")
 async def all_companies():
     """Tum BIST sirketlerini listele."""
-    return ensure_upstream_success(await list_companies())
+    return _ok(await list_companies())
 
 
 # --- Ticker History (live) ---
 
 @market_router.get("/ticker/{ticker}/history")
-async def ticker_history(ticker: str, period: str = Query(default="1ay")):
-    """Hisse fiyat gecmisi (canli, borsapy uzerinden)."""
-    return ensure_upstream_success(await get_ticker_history(validate_ticker(ticker), period=period))
+async def ticker_history(ticker: str, period: str = Query(default="1ay", max_length=10)):
+    """Hisse fiyat gecmisi (canli). period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max."""
+    return _ok(await get_ticker_history(_symbol(ticker), period=_period(period)))
 
 
 # --- Snapshot ---
 
 @market_router.get("/snapshot")
-async def snapshot(symbols: str = Query(description="Virgul ile ayrilmis semboller, orn: THYAO,GARAN,SISE")):
+async def snapshot(
+    symbols: str = Query(
+        max_length=1000,
+        description=f"Virgul ile ayrilmis semboller (en fazla {MAX_SNAPSHOT_SYMBOLS}), orn: THYAO,GARAN,SISE",
+    ),
+):
     """Birden fazla hisse icin anlik fiyat snapshot'i."""
-    symbol_list = [validate_ticker(s) for s in symbols.split(",") if s.strip()]
-    return ensure_upstream_success(await get_snapshot(symbol_list))
+    symbol_list = list(dict.fromkeys(_symbol(s) for s in symbols.split(",") if s.strip()))
+    if not symbol_list:
+        raise HTTPException(status_code=400, detail="En az bir sembol belirtin")
+    if len(symbol_list) > MAX_SNAPSHOT_SYMBOLS:
+        raise HTTPException(status_code=400, detail=f"En fazla {MAX_SNAPSHOT_SYMBOLS} sembol sorgulanabilir")
+    return _ok(await get_snapshot(symbol_list))

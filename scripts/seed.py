@@ -2,21 +2,29 @@
 
 BIST 100 uyeleri borsapy uzerinden canli cekilir (Index("XU100").components);
 erisim yoksa asagidaki statik BIST 30 listesine geri duser.
+
+Idempotent: every row is upserted by its natural key (ticker / source code /
+source_id), so running the script again refreshes names and company data but keeps
+operator-tuned source settings (poll_interval_seconds is only set on insert). The demo notification
+rule (test@example.com) is created only outside production/staging and only when no
+rule exists yet.
 """
 import asyncio
-import sys
 import os
+import sys
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.core.enums import SourceKind, Severity, NotificationChannel, NotificationFrequency
-from src.db.session import async_session_factory
-from src.db.repository import (
+from src.core.config import settings  # noqa: E402
+from src.core.enums import NotificationChannel, NotificationFrequency, Severity, SourceKind  # noqa: E402
+from src.db.repository import (  # noqa: E402
     CompanyRepository,
-    SourceRepository,
-    PollingStateRepository,
     NotificationRuleRepository,
+    PollingStateRepository,
+    SourceRepository,
 )
+from src.db.session import async_session_factory, dispose_engine  # noqa: E402
 
 
 # Statik yedek liste: BIST 30 (Mart 2026) — borsapy erisilemezse kullanilir
@@ -53,24 +61,24 @@ FALLBACK_COMPANIES = [
     {"ticker": "YKBNK", "legal_name": "YAPI VE KREDİ BANKASI A.Ş.", "display_name": "Yapı Kredi", "sector": "Bankacılık"},
 ]
 
-SOURCES_DATA = [
+SOURCES_DATA: list[dict[str, Any]] = [
     {
         "code": "kap",
         "name": "KAP Bildirimleri",
         "base_url": "https://www.kap.org.tr",
         "kind": SourceKind.KAP,
-        "poll_interval_seconds": 30,
+        "poll_interval_seconds": 300,
     },
     {
         "code": "price",
-        "name": "Fiyat Verisi (borsapy / yfinance)",
+        "name": "Fiyat Verisi",
         "base_url": None,
         "kind": SourceKind.PRICE_DATA,
         "poll_interval_seconds": 300,
     },
     {
         "code": "financials",
-        "name": "Finansal Tablolar (borsapy)",
+        "name": "Finansal Tablolar",
         "base_url": None,
         "kind": SourceKind.FINANCIAL_STATEMENTS,
         "poll_interval_seconds": 3600,
@@ -78,7 +86,7 @@ SOURCES_DATA = [
 ]
 
 
-def fetch_bist100_companies() -> list[dict]:
+def fetch_bist100_companies() -> list[dict[str, Any]]:
     """BIST 100 uyelerini borsapy'den cek; hata durumunda statik listeye don."""
     try:
         import borsapy as bp
@@ -105,54 +113,86 @@ def fetch_bist100_companies() -> list[dict]:
     return FALLBACK_COMPANIES
 
 
-async def seed():
+async def apply_official_names(company_list: list[dict[str, Any]]) -> None:
+    """Official KAP titles as legal names; Turkish letters restored in feed short names.
+
+    Curated entries (FALLBACK_COMPANIES) are left untouched. If KAP is unreachable the
+    market-data names are kept.
+    """
+    from src.adapters.fundamentals import get_kap_company_titles
+    from src.parsers.helpers import restore_turkish_name
+
+    try:
+        titles = await get_kap_company_titles()
+    except Exception as e:
+        print(f"KAP sirket unvanlari alinamadi ({e}); borsapy adlari kullaniliyor")
+        return
+    curated = {c["ticker"] for c in FALLBACK_COMPANIES}
+    updated = 0
+    for company in company_list:
+        title = titles.get(company["ticker"])
+        if not title or company["ticker"] in curated:
+            continue
+        company["legal_name"] = title
+        company["display_name"] = restore_turkish_name(company["display_name"], title)
+        updated += 1
+    print(f"KAP resmi unvanlari uygulandi: {updated} sirket")
+
+
+async def seed() -> None:
     company_list = fetch_bist100_companies()
-    async with async_session_factory() as session:
-        company_repo = CompanyRepository(session)
-        source_repo = SourceRepository(session)
-        polling_repo = PollingStateRepository(session)
+    await apply_official_names(company_list)
+    try:
+        async with async_session_factory() as session:
+            company_repo = CompanyRepository(session)
+            source_repo = SourceRepository(session)
+            polling_repo = PollingStateRepository(session)
 
-        # --- Şirketler ---
-        companies = []
-        for c_data in company_list:
-            company = await company_repo.upsert(
-                ticker=c_data["ticker"],
-                legal_name=c_data["legal_name"],
-                display_name=c_data["display_name"],
-                isin=None,
-                exchange="BIST",
-                aliases=[c_data["ticker"], c_data["display_name"]],
-                is_active=True,
-            )
-            companies.append(company)
+            # --- Şirketler ---
+            companies = []
+            for c_data in company_list:
+                company = await company_repo.upsert(
+                    ticker=c_data["ticker"],
+                    legal_name=c_data["legal_name"],
+                    display_name=c_data["display_name"],
+                    isin=None,
+                    exchange="BIST",
+                    aliases=[c_data["ticker"], c_data["display_name"]],
+                    is_active=True,
+                )
+                companies.append(company)
 
-        # --- Kaynaklar ---
-        for s_data in SOURCES_DATA:
-            source = await source_repo.upsert(**s_data)
-            await polling_repo.upsert(source.id)
+            # --- Kaynaklar ---
+            for s_data in SOURCES_DATA:
+                source = await source_repo.upsert(**s_data, keep_existing=("poll_interval_seconds",))
+                await polling_repo.upsert(source.id)
 
-        # --- Bildirim kuralı (opsiyonel, test için) ---
-        rule_repo = NotificationRuleRepository(session)
-        existing_rules = await rule_repo.get_all()
-        if not existing_rules and companies:
-            await rule_repo.create(
-                company_id=companies[0].id,
-                email="test@example.com",
-                channel=NotificationChannel.EMAIL,
-                frequency=NotificationFrequency.INSTANT,
-                min_severity=Severity.INFO,
-                source_filters=[],
-                enabled=True,
-            )
+            # --- Bildirim kuralı (yalnızca geliştirme/test için demo) ---
+            rule_repo = NotificationRuleRepository(session)
+            existing_rules = await rule_repo.get_all()
+            created_demo_rule = False
+            if not existing_rules and companies and not settings.is_production:
+                await rule_repo.create(
+                    company_id=companies[0].id,
+                    email="test@example.com",
+                    channel=NotificationChannel.EMAIL,
+                    frequency=NotificationFrequency.INSTANT,
+                    min_severity=Severity.INFO,
+                    source_filters=[],
+                    enabled=True,
+                )
+                created_demo_rule = True
 
-        await session.commit()
+            await session.commit()
 
-        print("Seed completed successfully!")
-        print(f"  Companies: {len(companies)}")
-        for c in companies:
-            print(f"    - {c.ticker}: {c.display_name}")
-        print(f"  Sources: {len(SOURCES_DATA)}")
-        print(f"  Notification rules: {len(existing_rules) or 1}")
+            print("Seed completed successfully!")
+            print(f"  Companies: {len(companies)}")
+            for c in companies:
+                print(f"    - {c.ticker}: {c.display_name}")
+            print(f"  Sources: {len(SOURCES_DATA)}")
+            print(f"  Notification rules: {len(existing_rules) + int(created_demo_rule)}")
+    finally:
+        await dispose_engine()
 
 
 if __name__ == "__main__":

@@ -1,69 +1,63 @@
 # BIST Hisse Analizi Platformu — Yönetici Özeti
 
-**Son güncelleme:** 4 Ağustos 2026
+**Son güncelleme:** 22 Eylül 2026
 
-**Uygulama sürümü:** 0.8.0
+**Uygulama sürümü:** 1.0.0
 
-**Durum:** Canlı veri ekranları yayın adayı; olay arşivi ve operasyonel sayaçlar için PostgreSQL ile worker servislerinin deployment ortamında çalışması gerekir.
+**Durum:** Üretime hazır. Uygulama, `docker-compose.prod.yml` ile otomatik HTTPS (Caddy), otomatik veritabanı migration’ı, yedekleme betikleri ve sağlık kontrolleriyle tek komutla yayına alınabilir.
 
 ## Ürün ne sunuyor?
 
-Uygulama, Borsa İstanbul paylarını tek bir ekranda izlemek ve analiz etmek için geliştirilmiş bir web platformudur. Anlık piyasa görünümü, hisse fiyat grafikleri, teknik göstergeler, resmi finansal tablolar, analist hedefleri, makroekonomik veriler, KAP açıklamaları ve hisse tarama araçlarını bir araya getirir.
+Uygulama, Borsa İstanbul paylarını tek bir ekranda izlemek ve analiz etmek için geliştirilmiş bir web platformudur. Anlık piyasa görünümü, hisse fiyat grafikleri, teknik göstergeler, resmi finansal tablolar, analist hedefleri, makroekonomik veriler, KAP açıklamaları, haberler ve hisse tarama araçlarını bir araya getirir.
 
-Hedef kullanıcılar; BIST'i takip eden bireysel yatırımcılar, araştırma ekipleri ve piyasa verisini hızlı biçimde karşılaştırmak isteyen profesyonellerdir. Uygulama yatırım tavsiyesi üretmez; doğrulanabilir veriyi karar desteği formatında sunar.
+Hedef kullanıcılar; BIST’i takip eden bireysel yatırımcılar, araştırma ekipleri ve piyasa verisini hızlı biçimde karşılaştırmak isteyen profesyonellerdir. Uygulama yatırım tavsiyesi üretmez; doğrulanabilir veriyi karar desteği formatında sunar.
 
 ## Uygulamadaki ana bölümler
 
 | Bölüm | Kullanıcıya sunduğu değer |
 |---|---|
-| Dashboard | BIST 100 görünümü, endeksler, takip listesi, gün içi OHLC ve hacim |
-| Hisse Analizi | Fiyat/hacim grafikleri, canlı oranlar, KAP açıklamaları, analist görüşü, finansal tablolar, temettü ve beklenen finansal rapor tarihleri |
-| Teknik Analiz | RSI, MACD, Bollinger, SuperTrend, Stochastic ve dokuz zaman diliminde AL/SAT/NÖTR özeti |
-| Temel Analiz | Şirket özeti, piyasa değeri, F/K, PD/DD, 52 hafta aralığı, ortaklık yapısı ve analist hedef fiyatları |
-| Kombine Analiz | Teknik ve temel verilerin yan yana karşılaştırılması |
-| Makro Ekonomi | TCMB politika/faiz koridoru, TÜFE, USD/EUR/GBP kurları ve ekonomik takvim |
-| Hisse Tarama | 599 işlem gören BIST payı, 15 hazır filtre, fiyat/değişim/hacim tablosu ve teknik sinyal taraması |
-| Olaylar & KAP | Veritabanında toplanan KAP, haber, yatırımcı ilişkileri ve fiyat olaylarının filtrelenebilir arşivi |
+| Piyasa Özeti | BIST 100 seviyesi ve gün içi grafik, piyasa genişliği (yükselen/düşen), günün en çok yükselen/düşen hisseleri, endeksler, takip listesi, son KAP gelişmeleri |
+| Hisse sayfası | Günlük fiyat ve değişim, grafik, piyasa istatistikleri, son 12 ay finansal oranları, analiz karnesi, KAP bildirimleri, haberler, analist hedefleri, finansal tablolar, temettü |
+| Teknik / Temel / Kombine | Aynı hisse sayfasında sekmeler: göstergeler ve dokuz zaman dilimi özeti; şirket profili, değerleme ve ortaklık yapısı; ikisinin karşılaştırması |
+| Makro Ekonomi | TCMB politika faizi ve koridor, TÜFE, USD/EUR/GBP kurları, önem ve ülke filtreli ekonomik takvim |
+| Hisse Tarama | 600+ işlem gören BIST payı, 15 hazır şablon, gelişmiş filtreler, sıralanabilir tablo, teknik sinyal taraması |
+| Olaylar & KAP | Kaynak, kategori, önem, tarih ve hisse filtreli KAP/haber arşivi; sunucu tarafı sayfalama |
 
 ## Veri kaynakları ve doğruluk yaklaşımı
 
 | Veri | Birincil kaynak | Uygulamadaki kontrol |
 |---|---|---|
-| Bilanço ve gelir tablosu | Resmi KAP şirket finansalları | Sunum birimi gerçek TL'ye çevrilir; dönem ve kaynak ekranda gösterilir |
-| Fiyat, endeks ve teknik sinyaller | Borsa İstanbul/TradingView, borsapy üzerinden | Önceki kapanıştan değişim yeniden hesaplanır; anlamsız hacim değerleri elenir |
-| Tarama ve şirket evreni | İş Yatırım + TradingView, borsapy üzerinden | Yalnızca işlem gören BIST payları listelenir; global semboller aramaya alınmaz |
-| Nakit akışı, temettü ve ortaklık | İş Yatırım, borsapy üzerinden | Alan adları normalize edilir; dönemler yeniden eskiye sıralanır |
-| Analist hedefleri | İş Yatırım ve Hedef Fiyat konsensüsü, borsapy üzerinden | Güncel fiyat, düşük/ortalama/medyan/yüksek hedef ve analist sayısı ayrı gösterilir |
-| Politika faizi ve döviz | TCMB | Resmi tarih ve kur türü gösterilir; birim bazlı kurlar normalize edilir |
-| Enflasyon | TÜİK verisi, TCMB veri tablosu üzerinden | En son dönem tarihe göre seçilir; yıllık ve aylık oran ayrılır |
-| Şirket açıklamaları ve takvim | KAP | `GG.AA.YYYY` tarihleri yerel biçimde ayrıştırılır; açıklama bağlantıları doğrudan KAP'a gider |
+| Bilanço, gelir tablosu, nakit akışı | KAP | Sunum birimi her kolon için ayrı okunur ve TL’ye çevrilir; dönem, kümülatif/çeyreklik niteliği ve kaynak gösterilir |
+| Finansal oranlar | KAP tabloları | Gelir kalemleri son 4 çeyrek (TTM), bilanço kalemleri dönem sonu; FAVÖK = esas faaliyet kârı + amortisman; hesaplama dönemi ekranda yazar |
+| Fiyat, endeks, teknik göstergeler | Borsa İstanbul/TradingView (borsapy) | Değişim önceki kapanışa göre; grafikler gerçek zaman penceresine kırpılır; göstergeler bağımsız hesapla doğrulandı |
+| Değerleme çarpanları (F/K, PD/DD) | TradingView | Konsolide ve son 12 ay bazlı; sayfanın tamamında aynı değer kullanılır |
+| Tarama ve şirket evreni | İş Yatırım + TradingView (borsapy) | Yalnızca işlem gören BIST payları; şirket adları KAP resmi unvanlarından |
+| Politika faizi, döviz, enflasyon | TCMB / TÜİK | Politika faizi TCMB’nin resmi tablosuyla karşılaştırıldı; en güncel dönem tarihe göre seçilir |
+| Şirket açıklamaları | KAP | Hisse koduna tam eşleşme; çok şirketli bildirimler her şirkete kaydedilir; önem derecesi kurallarla sınıflandırılır |
+| Haberler | Google News RSS | Şirket adıyla eşleştirme, ilgisiz başlıkların elenmesi, tekrarların ayıklanması, isteğe bağlı AI duygu etiketi |
 
-Sosyal medya alanı, kimlik doğrulaması yapılmış güvenilir bir X/Twitter sağlayıcısı olmadığı için yayın arayüzünden kaldırılmıştır. Boş veya uydurma gönderi gösterilmez.
+Eksik veri hiçbir ekranda `0` olarak gösterilmez; hata, boş veri ve yükleniyor durumları ayrıdır.
 
-## Son kalite kontrolü
+## Son kalite kontrolü (22 Eylül 2026)
 
-4 Ağustos 2026 tarihinde THYAO ve BIST örnekleriyle tüm canlı veri sözleşmeleri ve kullanıcı akışları yeniden test edildi:
+- 589 otomatik test geçti (6 canlı sağlayıcı testi CI’da atlanır); başlangıçta 88 testti. Kod, yazanlardan bağımsız 8 gözden geçirme ajanıyla ayrıca denetlendi.
+- Python lint (ruff) ve tip kontrolü (mypy, 55 dosya) hatasız; başlangıçta 99 tip hatası vardı.
+- Frontend ESLint, TypeScript ve Next.js production build başarılı; `npm audit`: 0 açık (Next.js’teki kritik RCE açığı kapatıldı).
+- Veritabanı migration’ları sıfırdan kurulum, geri alma ve yeniden kurulumla test edildi; model–şema farkı yok.
+- Worker canlı çalıştırıldı: KAP, fiyat, finansal tablo ve haber döngüleri çalışıyor; kapatma sinyalinde 2 saniyede düzgün kapanıyor.
+- Tüm sayfalar masaüstü ve mobilde kullanıcı gibi gezildi; konsolda hata yok.
+- Örnek doğrulamalar: THYAO 2025/12 toplam varlık 1.996.745 milyon TL ve hasılat 955.472 milyon TL, 2026/03 toplam varlık 2.158.033 milyon TL (KAP ile aynı); THYAO F/K 3,69 (TradingView 3,70); TCMB politika faizi %37,00 (TCMB resmi tablosu ile aynı).
 
-- 91 backend/unit/integration testi geçti.
-- Python lint, frontend ESLint ve TypeScript kontrolleri geçti.
-- Next.js production build başarıyla tamamlandı.
-- `npm audit --audit-level=high` sonucu: 0 açık.
-- Docker Compose yapılandırması geçerli.
-- Tarayıcı konsolunda hata veya uyarı görülmedi.
-- Hisse arama, hazır filtre, RSI taraması, yıllık/ara dönem finansal tablo sekmeleri ve tüm ana sayfalar kullanıcı gibi çalıştırıldı.
-- Örnek doğrulama: THYAO 2025/12 toplam varlıkları 1.996.745 milyon TL, hasılatı 955.472 milyon TL; 2026/03 toplam varlıkları 2.158.033 milyon TL olarak resmi KAP verisiyle eşleşti.
+## Yayına alma
 
-## Yayına alma koşulları
+1. Sunucuda `.env` dosyasına production değerleri girilir: veritabanı parolası, yönetim anahtarı, alan adı, Let’s Encrypt e-postası, CORS adresi (ve isteğe bağlı AI anahtarı).
+2. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` ile servisler başlatılır; migration’lar otomatik çalışır, sertifika otomatik alınır.
+3. Şirket listesi `scripts/seed.py` ile yüklenir; `/health/ready` ve ana sayfalar kontrol edilir.
+4. `scripts/backup.sh` günlük çalışacak şekilde zamanlanır.
 
-Canlı piyasa, makro, teknik ve temel analiz ekranları dış sağlayıcılardan doğrudan ve kaynak belirterek çalışır. Aşağıdaki servisler ise deployment sırasında birlikte ayağa kaldırılmalıdır:
+## Bilinen sınırlar
 
-1. PostgreSQL: olay arşivi, sistem sayaçları, haber sınıflandırmaları ve bildirim kayıtları.
-2. Worker: KAP/haber/fiyat verisini periyodik toplama ve normalize etme.
-3. FastAPI: veri ve yönetim API'si.
-4. Next.js dashboard: kullanıcı arayüzü ve aynı-origin API proxy'si.
-
-Repo bu dört servisi `docker compose` ile tanımlar. İlk yayında migration, seed, production secret'ları, CORS origin'i ve health-check sonuçları doğrulanmalıdır.
-
-## Yönetim açısından sonuç
-
-Ürünün piyasa ve analiz tarafındaki kritik veri hataları giderilmiş, kaynaklar görünür hâle getirilmiş ve yanlış/eksik verinin sessizce `0` veya boş içerik olarak sunulması engellenmiştir. Yayın öncesinde kalan ana operasyonel adım kod değişikliği değil; PostgreSQL ve worker servisleriyle tam deployment ortamının ayağa kaldırılmasıdır.
+- Piyasa verileri ücretsiz kaynaklardan geldiği için gecikmeli olabilir (arayüzde belirtilir).
+- Haber duygu etiketi için geçerli ve kotası olan bir Gemini veya Anthropic anahtarı gerekir; 22 Eylül’de mevcut Gemini anahtarının kotası doluydu (sınıflandırma kota dolunca 30 dk duraklar, etiketsiz haberleri sonradan tamamlar).
+- Kullanıcı hesabı yoktur; platform herkese açık, salt okunur bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur.
+- Docker imajları bu geliştirme makinesinde (Docker Hub erişimi olmadığından) derlenemedi; CI her değişiklikte iki imajı da derler.

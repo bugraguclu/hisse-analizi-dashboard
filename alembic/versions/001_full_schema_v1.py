@@ -15,6 +15,19 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+_ENUM_TYPES = (
+    "notificationstatus",
+    "notificationprovider",
+    "outboxstatus",
+    "eventcategory",
+    "eventtype",
+    "priceinterval",
+    "severity",
+    "notificationfrequency",
+    "notificationchannel",
+    "sourcekind",
+)
+
 
 def upgrade() -> None:
     # --- Independent tables ---
@@ -274,3 +287,9 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_companies_ticker"), table_name="companies")
     op.drop_table("companies")
     op.drop_table("audit_log")
+
+    # op.drop_table() does not drop the ENUM types created implicitly by
+    # op.create_table(); without this a later `upgrade` fails with
+    # "type ... already exists".
+    for enum_name in _ENUM_TYPES:
+        op.execute(f"DROP TYPE IF EXISTS {enum_name}")

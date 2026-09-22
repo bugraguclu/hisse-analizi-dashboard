@@ -20,18 +20,19 @@ def upgrade() -> None:
         ["normalized_event_id", "email"],
     )
 
-    # Add PROCESSING to outbox status enum if not exists
-    # (OutboxStatus already has PROCESSING in the Python enum,
-    # but we ensure the DB enum type includes it)
+    # Ensure the outboxstatus enum has the PROCESSING label used by outbox claiming.
+    # SQLAlchemy stores Enum *names* (upper case), which 001 already creates, so this
+    # is a guard only. (An earlier version checked the lower-case value and added an
+    # unused 'processing' label to databases migrated before the fix; it is harmless.)
     op.execute("""
         DO $$
         BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM pg_enum
-                WHERE enumlabel = 'processing'
+                WHERE enumlabel = 'PROCESSING'
                 AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'outboxstatus')
             ) THEN
-                ALTER TYPE outboxstatus ADD VALUE 'processing';
+                ALTER TYPE outboxstatus ADD VALUE 'PROCESSING';
             END IF;
         END$$;
     """)

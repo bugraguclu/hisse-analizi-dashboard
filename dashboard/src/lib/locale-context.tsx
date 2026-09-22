@@ -1,32 +1,74 @@
 "use client";
 
-import { createContext, useContext, useSyncExternalStore, useCallback, type ReactNode } from "react";
-import { type Locale, type TranslationKey, t as translate } from "./i18n";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import {
+  LOCALE_COOKIE,
+  parseLocale,
+  t as translate,
+  type Locale,
+  type TranslationKey,
+  type TranslationVars,
+} from "./i18n";
+import { setFormatLocale } from "./format";
 
 interface LocaleContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: TranslationKey, vars?: TranslationVars) => string;
 }
 
+const DEFAULT_LOCALE: Locale = "tr";
+const STORAGE_KEY = "locale";
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
 const LocaleContext = createContext<LocaleContextValue>({
-  locale: "tr",
+  locale: DEFAULT_LOCALE,
   setLocale: () => {},
-  t: (key) => translate(key, "tr"),
+  t: (key, vars) => translate(key, DEFAULT_LOCALE, vars),
 });
 
 const localeListeners = new Set<() => void>();
 
-function readStoredLocale(): Locale {
-  if (typeof window === "undefined") return "tr";
-  const saved = window.localStorage.getItem("locale");
-  return saved === "en" || saved === "fr" || saved === "tr" ? saved : "tr";
+function readCookieLocale(): Locale | null {
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]*)`));
+  return parseLocale(match ? decodeURIComponent(match[1]) : null);
+}
+
+function readStorageLocale(): Locale | null {
+  try {
+    return parseLocale(window.localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+/** The cookie is the source of truth (the server reads it too); localStorage is the legacy fallback. */
+function readClientLocale(): Locale {
+  return readCookieLocale() ?? readStorageLocale() ?? DEFAULT_LOCALE;
+}
+
+function persistLocale(locale: Locale) {
+  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax`;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, locale);
+  } catch {
+    // Storage disabled — the cookie alone is enough.
+  }
 }
 
 function subscribeToLocale(onStoreChange: () => void) {
   localeListeners.add(onStoreChange);
+  // Another tab switched language: it already rewrote the shared cookie.
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === "locale") onStoreChange();
+    if (event.key === STORAGE_KEY) onStoreChange();
   };
   window.addEventListener("storage", handleStorage);
   return () => {
@@ -35,24 +77,37 @@ function subscribeToLocale(onStoreChange: () => void) {
   };
 }
 
-export function LocaleProvider({ children }: { children: ReactNode }) {
-  const locale = useSyncExternalStore(subscribeToLocale, readStoredLocale, (): Locale => "tr");
+export function LocaleProvider({
+  children,
+  initialLocale = DEFAULT_LOCALE,
+}: {
+  children: ReactNode;
+  /** Locale the server rendered with (from the `locale` cookie). */
+  initialLocale?: Locale;
+}) {
+  const locale = useSyncExternalStore(subscribeToLocale, readClientLocale, () => initialLocale);
 
-  const setLocale = useCallback((newLocale: Locale) => {
-    window.localStorage.setItem("locale", newLocale);
+  // lib/format.ts formatters read a module-level locale; update it before the
+  // children render so numbers/dates follow the UI language in the same pass.
+  setFormatLocale(locale);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    // Migrate localStorage-only preferences so the next SSR uses them too.
+    if (readCookieLocale() !== locale) persistLocale(locale);
+  }, [locale]);
+
+  const setLocale = useCallback((next: Locale) => {
+    persistLocale(next);
     localeListeners.forEach((listener) => listener());
   }, []);
 
-  const t = useCallback(
-    (key: TranslationKey) => translate(key, locale),
-    [locale],
+  const value = useMemo<LocaleContextValue>(
+    () => ({ locale, setLocale, t: (key, vars) => translate(key, locale, vars) }),
+    [locale, setLocale],
   );
 
-  return (
-    <LocaleContext.Provider value={{ locale, setLocale, t }}>
-      {children}
-    </LocaleContext.Provider>
-  );
+  return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
 
 export function useLocale() {

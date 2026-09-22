@@ -1,83 +1,47 @@
-"""Canli veri akisi adaptoru — TradingView WebSocket stream."""
+"""Coklu sembol fiyat snapshot'i — tek TradingView scanner istegi.
+
+(Kullanilmayan TradingView websocket ``LivePriceStream`` sarmalayicisi
+kaldirildi; canli akis yerine frontend snapshot'i periyodik yeniler.)
+"""
+
+from typing import Any
 
 import structlog
 
-from src.adapters.utils import TTL_PRICE_SNAPSHOT, cached, df_to_records, run_sync, safe_serialize
+from src.adapters.price import get_quotes
+from src.adapters.utils import TTL_PRICE_SNAPSHOT, cached, error_payload
 
 logger = structlog.get_logger(__name__)
 
-
-class LivePriceStream:
-    """Canli fiyat stream yoneticisi.
-
-    Kullanim:
-        stream = LivePriceStream(["THYAO", "GARAN", "SISE"])
-        stream.start(callback=my_handler)
-        # ...
-        stream.stop()
-    """
-
-    def __init__(self, symbols: list[str]):
-        self.symbols = symbols
-        self._stream = None
-
-    def start(self, callback) -> None:
-        """Stream'i baslat. callback(data) her fiyat guncellemesinde cagirilir."""
-        try:
-            from borsapy import TradingViewStream
-            self._stream = TradingViewStream(
-                symbols=self.symbols,
-                on_data=callback,
-            )
-            self._stream.start()
-            logger.info("stream_started", symbols=self.symbols)
-        except Exception as e:
-            logger.error("stream_start_error", error=str(e))
-            raise
-
-    def stop(self) -> None:
-        """Stream'i durdur."""
-        if self._stream is not None:
-            try:
-                self._stream.stop()
-                logger.info("stream_stopped", symbols=self.symbols)
-            except Exception as e:
-                logger.error("stream_stop_error", error=str(e))
-            finally:
-                self._stream = None
+SOURCE = "TradingView Scanner API (borsapy)"
+MISSING_QUOTE_MESSAGE = "Sembol için güncel fiyat bulunamadı"
 
 
-def _snapshot_from_records(symbols: list[str], records: list[dict]) -> dict[str, dict]:
-    """Map one TradingView Scanner response to the existing snapshot contract."""
-    by_symbol = {str(row.get("symbol", "")).upper(): row for row in records}
+def _snapshot_entry(quote: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "currency": quote.get("currency") or "TRY",
+        "exchange": "BIST",
+        "timezone": "Europe/Istanbul",
+        "name": quote.get("name"),
+        "last_price": quote.get("last"),
+        "open": quote.get("open"),
+        "day_high": quote.get("high"),
+        "day_low": quote.get("low"),
+        "previous_close": quote.get("prev_close"),
+        "change": quote.get("change"),
+        "change_percent": quote.get("change_percent"),
+        "volume": quote.get("volume"),
+        "market_cap": quote.get("market_cap"),
+        "updated_at": quote.get("updated_at"),
+    }
+
+
+def _snapshot_from_quotes(symbols: list[str], quotes: dict[str, dict[str, Any]]) -> dict[str, dict]:
+    """Per-symbol snapshot; symbols without a quote carry an ``error`` entry."""
     snapshot: dict[str, dict] = {}
     for symbol in symbols:
-        row = by_symbol.get(symbol.upper())
-        if row is None:
-            snapshot[symbol] = {"error": "Sembol için güncel fiyat bulunamadı"}
-            continue
-
-        last_price = row.get("close")
-        change_percent = row.get("change")
-        previous_close = None
-        if isinstance(last_price, (int, float)) and isinstance(change_percent, (int, float)):
-            denominator = 1 + float(change_percent) / 100
-            if denominator > 0:
-                previous_close = float(last_price) / denominator
-
-        snapshot[symbol] = safe_serialize({
-            "currency": "TRY",
-            "exchange": "BIST",
-            "timezone": "Europe/Istanbul",
-            "last_price": last_price,
-            "open": row.get("open"),
-            "day_high": row.get("high"),
-            "day_low": row.get("low"),
-            "previous_close": previous_close,
-            "change_percent": change_percent,
-            "volume": row.get("volume"),
-            "market_cap": row.get("market_cap"),
-        })
+        quote = quotes.get(symbol)
+        snapshot[symbol] = _snapshot_entry(quote) if quote else {"error": MISSING_QUOTE_MESSAGE}
     return snapshot
 
 
@@ -85,29 +49,12 @@ def _snapshot_from_records(symbols: list[str], records: list[dict]) -> dict[str,
 async def get_snapshot(symbols: list[str]) -> dict:
     """Birden fazla sembol için tek batch isteğinde fiyat snapshot'ı."""
     try:
-        import borsapy as bp
-
-        def scan_symbols():
-            scanner = bp.TechnicalScanner().set_universe(symbols)
-            scanner.add_condition("close > 0")
-            for column in ("open", "high", "low", "volume"):
-                scanner.add_column(column)
-            return scanner.run(limit=len(symbols))
-
-        result = await run_sync(scan_symbols)
-        records = df_to_records(result) if hasattr(result, "iterrows") else []
-        if not records:
-            return {
-                "symbols": symbols,
-                "snapshot": {},
-                "source": "TradingView Scanner API (borsapy)",
-                "error": "Fiyat sağlayıcısı boş snapshot döndürdü",
-            }
+        quotes = await get_quotes(tuple(symbols))
         return {
             "symbols": symbols,
-            "snapshot": _snapshot_from_records(symbols, records),
-            "source": "TradingView Scanner API (borsapy)",
+            "snapshot": _snapshot_from_quotes(symbols, quotes),
+            "source": SOURCE,
         }
     except Exception as e:
         logger.error("snapshot_error", symbols=symbols, error=str(e))
-        return {"symbols": symbols, "snapshot": {}, "error": str(e)}
+        return {"symbols": symbols, "snapshot": {}, **error_payload(e, "Fiyat snapshot'ı alınamadı")}

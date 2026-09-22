@@ -62,3 +62,28 @@ class EventCategory(str, Enum):
     MANAGEMENT = "yönetim_değişimi"
     FINANCIAL_RESULTS = "finansal_sonuç"
     OTHER = "diğer"
+
+
+# Ordering used to compare severities ("at least WATCH" etc.).
+SEVERITY_RANK: dict[Severity, int] = {Severity.INFO: 0, Severity.WATCH: 1, Severity.HIGH: 2}
+
+
+def _tr_lower(text: str) -> str:
+    """Turkish-aware lower case ("İ" -> "i", "I" -> "ı")."""
+    return text.strip().replace("İ", "i").replace("I", "ı").lower()
+
+
+def parse_event_category(value: str) -> EventCategory | None:
+    """Resolve an EventCategory from its API value ("temettü") or its name
+    ("DIVIDEND"), both case-insensitive."""
+    candidate = value.strip()
+    for category in EventCategory:
+        if candidate.upper() == category.name or _tr_lower(candidate) == category.value:
+            return category
+    return None
+
+
+def parse_severity(value: str) -> Severity | None:
+    """Resolve a Severity from its name/value ("HIGH"), case-insensitive."""
+    candidate = value.strip().upper()
+    return Severity.__members__.get(candidate)

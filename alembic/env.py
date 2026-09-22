@@ -1,41 +1,56 @@
-import sys
+"""Alembic environment.
+
+The database URL comes from the application settings (``DATABASE_URL_SYNC``, read
+from the environment or ``.env``) so migrations always target the same database as
+the app — including a non-default POSTGRES_PASSWORD in docker-compose. Override it
+for a single run with ``alembic -x dburl=postgresql://user:pass@host/db upgrade head``.
+"""
+
 import os
+import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
 from alembic import context
+from sqlalchemy import create_engine, pool
+from sqlalchemy.engine import make_url
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.db.models import Base
+from src.core.config import settings  # noqa: E402
+from src.db.models import Base  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
 
+def _database_url() -> str:
+    url = context.get_x_argument(as_dictionary=True).get("dburl") or settings.database_url_sync
+    parsed = make_url(url)
+    # Migrations run synchronously; accept an async URL by switching to psycopg2.
+    if parsed.drivername in ("postgresql+asyncpg", "postgres"):
+        parsed = parsed.set(drivername="postgresql+psycopg2")
+    return parsed.render_as_string(hide_password=False)
+
+
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=_database_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(_database_url(), poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
         with context.begin_transaction():
             context.run_migrations()
 

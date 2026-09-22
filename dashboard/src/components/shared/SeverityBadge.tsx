@@ -2,32 +2,40 @@
 
 import { Badge } from "@/components/ui/badge";
 import { useLocale } from "@/lib/locale-context";
+import type { TranslationKey } from "@/lib/i18n";
 
-const severityClassNames: Record<string, string> = {
+export type SeverityKey = "HIGH" | "WATCH" | "INFO";
+
+const severityClassNames: Record<SeverityKey, string> = {
   HIGH: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
   WATCH: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
   INFO: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
 };
 
-const severityKeys: Record<string, "severity.high" | "severity.medium" | "severity.info"> = {
+export const severityKeys: Record<SeverityKey, TranslationKey> = {
   HIGH: "severity.high",
   WATCH: "severity.medium",
   INFO: "severity.info",
 };
 
+export function toSeverity(value?: string | null): SeverityKey {
+  const upper = (value ?? "").trim().toUpperCase();
+  return upper === "HIGH" || upper === "WATCH" ? upper : "INFO";
+}
+
 export function SeverityBadge({ severity }: { severity?: string | null }) {
   const { t } = useLocale();
-  const s = (severity || "INFO").toUpperCase();
-  const className = severityClassNames[s] || severityClassNames.INFO;
-  const labelKey = severityKeys[s] || severityKeys.INFO;
+  const key = toSeverity(severity);
   return (
-    <Badge variant="outline" className={`text-[11px] font-semibold ${className}`}>
-      {t(labelKey)}
+    <Badge variant="outline" className={`text-[11px] font-semibold ${severityClassNames[key]}`}>
+      {t(severityKeys[key])}
     </Badge>
   );
 }
 
-const categoryClassNames: Record<string, string> = {
+export type CategoryKey = "DIVIDEND" | "CAPITAL_INCREASE" | "LEGAL" | "MANAGEMENT" | "FINANCIAL_RESULTS" | "NEW_BUSINESS" | "OTHER";
+
+const categoryClassNames: Record<CategoryKey, string> = {
   DIVIDEND: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
   CAPITAL_INCREASE: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
   LEGAL: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
@@ -37,7 +45,7 @@ const categoryClassNames: Record<string, string> = {
   OTHER: "bg-muted text-muted-foreground border-border",
 };
 
-const categoryKeys: Record<string, "category.dividend" | "category.capitalIncrease" | "category.legal" | "category.management" | "category.financial" | "category.newBusiness" | "category.other"> = {
+export const categoryKeys: Record<CategoryKey, TranslationKey> = {
   DIVIDEND: "category.dividend",
   CAPITAL_INCREASE: "category.capitalIncrease",
   LEGAL: "category.legal",
@@ -47,15 +55,36 @@ const categoryKeys: Record<string, "category.dividend" | "category.capitalIncrea
   OTHER: "category.other",
 };
 
+/**
+ * The API serialises EventCategory by *value* (src/core/enums.py:
+ * "temettü", "sermaye_artırımı", …) while the DB/enum names are English.
+ * Accept both so badges never silently collapse to "Other".
+ */
+const categoryAliases: Record<string, CategoryKey> = {
+  "temettü": "DIVIDEND",
+  "sermaye_artırımı": "CAPITAL_INCREASE",
+  "yeni_iş": "NEW_BUSINESS",
+  "dava_ceza": "LEGAL",
+  "yönetim_değişimi": "MANAGEMENT",
+  "finansal_sonuç": "FINANCIAL_RESULTS",
+  "diğer": "OTHER",
+};
+
+export function toCategoryKey(category?: string | null): CategoryKey | null {
+  if (!category) return null;
+  const trimmed = category.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper in categoryKeys) return upper as CategoryKey;
+  return categoryAliases[trimmed.toLocaleLowerCase("tr-TR")] ?? "OTHER";
+}
+
 export function CategoryBadge({ category }: { category?: string | null }) {
   const { t } = useLocale();
-  if (!category) return null;
-  const key = category.toUpperCase();
-  const className = categoryClassNames[key] || categoryClassNames.OTHER;
-  const labelKey = categoryKeys[key] || categoryKeys.OTHER;
+  const key = toCategoryKey(category);
+  if (!key) return null;
   return (
-    <Badge variant="outline" className={`text-[11px] font-semibold ${className}`}>
-      {t(labelKey)}
+    <Badge variant="outline" className={`text-[11px] font-semibold ${categoryClassNames[key]}`}>
+      {t(categoryKeys[key])}
     </Badge>
   );
 }

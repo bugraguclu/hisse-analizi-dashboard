@@ -24,3 +24,12 @@ Thumbs.db
 .idea/
 .vscode/
 coverage.xml
+
+# Claude Code local-only files (machine-specific, not for the team)
+.claude/launch.json
+.claude/settings.local.json
+
+# Frontend build artifacts (dashboard/ also has its own .gitignore)
+dashboard/.next/
+dashboard/node_modules/
+.claude/worktrees/

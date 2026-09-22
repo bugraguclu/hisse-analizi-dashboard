@@ -1,216 +1,280 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useId } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { Search, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
 import { useLocale } from "@/lib/locale-context";
+import { STALE_TIME } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
+import { tickerHref } from "@/components/layout/nav";
 
-interface SearchResult {
-  symbol?: string;
-  ticker?: string;
-  name?: string;
-  title?: string;
-  sector?: string;
+const MIN_QUERY_LENGTH = 2;
+const DEBOUNCE_MS = 250;
+const MAX_RESULTS = 8;
+const TICKER_RE = /^[A-Z0-9]{2,10}$/;
+
+interface SearchOption {
+  ticker: string;
+  name: string;
 }
 
-function normalizeItem(item: unknown): SearchResult {
-  if (typeof item === "string") return { symbol: item, ticker: item, name: "" };
-  if (item && typeof item === "object") return item as SearchResult;
-  return { symbol: String(item), ticker: String(item), name: "" };
-}
-
-function extractResults(data: unknown): SearchResult[] {
-  let raw: unknown[] = [];
-  if (Array.isArray(data)) {
-    raw = data;
-  } else if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
-    if (Array.isArray(obj.results)) raw = obj.results;
-    else if (Array.isArray(obj.data)) raw = obj.data;
-    else if (Array.isArray(obj.companies)) raw = obj.companies;
-  }
-  return raw.map(normalizeItem);
-}
-
-function getTargetPath(pathname: string, ticker: string): string {
-  const t = ticker.toUpperCase();
-  if (pathname.startsWith("/teknik")) return `/teknik/${t}`;
-  if (pathname.startsWith("/temel")) return `/temel/${t}`;
-  return `/hisse/${t}`;
-}
-
-export function TickerSearch({ onSelect }: { onSelect?: (ticker: string) => void }) {
+export function TickerSearch({
+  onSelect,
+  autoFocus = false,
+  hotkey = false,
+  className,
+}: {
+  /** Custom selection handler; defaults to navigating (see tickerHref). */
+  onSelect?: (ticker: string) => void;
+  autoFocus?: boolean;
+  /** Focus this field with "/" from anywhere on the page. */
+  hotkey?: boolean;
+  className?: string;
+}) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchFailed, setSearchFailed] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const requestIdRef = useRef(0);
+  const [debounced, setDebounced] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const listboxId = useId();
+  const baseId = useId();
+  const listboxId = `${baseId}-listbox`;
   const router = useRouter();
   const pathname = usePathname();
-  const { t, locale } = useLocale();
+  const { t } = useLocale();
 
-  const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); setIsSearching(false); return; }
-    const requestId = ++requestIdRef.current;
-    setIsSearching(true);
-    setSearchFailed(false);
-    try {
-      const data = await api.search(q);
-      if (requestId !== requestIdRef.current) return;
-      const extracted = extractResults(data);
-      setResults(extracted.slice(0, 8));
-      setIsOpen(true);
-    } catch {
-      if (requestId !== requestIdRef.current) return;
-      setResults([]);
-      setSearchFailed(true);
-      setIsOpen(true);
-    } finally {
-      if (requestId === requestIdRef.current) setIsSearching(false);
-    }
-  }, []);
+  const trimmed = query.trim();
+  const searchable = trimmed.length >= MIN_QUERY_LENGTH;
 
   useEffect(() => {
-    clearTimeout(timerRef.current);
-    if (query.length >= 2) {
-      setIsSearching(true);
-      timerRef.current = setTimeout(() => search(query), 300);
-    } else {
-      requestIdRef.current += 1;
-      setResults([]);
-      setIsOpen(false);
-      setSearchFailed(false);
-    }
-    return () => clearTimeout(timerRef.current);
-  }, [query, search]);
+    const timer = setTimeout(() => setDebounced(trimmed), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [trimmed]);
 
+  const searchQ = useQuery({
+    queryKey: ["symbol-search", debounced.toLocaleUpperCase("tr-TR")],
+    queryFn: ({ signal }) => api.search(debounced, signal),
+    enabled: debounced.length >= MIN_QUERY_LENGTH,
+    staleTime: STALE_TIME.reference,
+    retry: 1,
+  });
+
+  // Local company names ("Türk Hava Yolları") read better than the upstream ASCII ones.
+  const companiesQ = useQuery({
+    queryKey: ["companies"],
+    queryFn: () => api.companies(),
+    staleTime: STALE_TIME.reference,
+    enabled: open,
+  });
+
+  const options = useMemo<SearchOption[]>(() => {
+    const names = new Map((companiesQ.data ?? []).map((c) => [c.ticker, c.display_name]));
+    const seen = new Set<string>();
+    const list: SearchOption[] = [];
+    for (const r of searchQ.data?.results ?? []) {
+      const ticker = (r.symbol || r.ticker || "").toUpperCase();
+      if (!ticker || seen.has(ticker)) continue;
+      seen.add(ticker);
+      list.push({ ticker, name: names.get(ticker) ?? r.name ?? r.description ?? "" });
+      if (list.length >= MAX_RESULTS) break;
+    }
+    return list;
+  }, [searchQ.data, companiesQ.data]);
+
+  const settled = debounced === trimmed && !searchQ.isFetching;
+  const pending = searchable && !settled;
+  const showPanel = open && searchable;
+  const showList = showPanel && options.length > 0 && !searchQ.isError;
+  const active = activeIndex >= 0 && activeIndex < options.length ? activeIndex : -1;
+
+  // Close when clicking/tapping outside.
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+    if (!open) return;
+    function handlePointer(event: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    document.addEventListener("pointerdown", handlePointer);
+    return () => document.removeEventListener("pointerdown", handlePointer);
+  }, [open]);
 
-  function select(ticker: string) {
+  // "/" focuses the search field unless the user is already typing somewhere.
+  useEffect(() => {
+    if (!hotkey) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [hotkey]);
+
+  function choose(ticker: string) {
     setQuery("");
-    setIsOpen(false);
-    setSelectedIndex(-1);
-    if (onSelect) {
-      onSelect(ticker);
-    } else {
-      router.push(getTargetPath(pathname, ticker));
+    setDebounced("");
+    setOpen(false);
+    setActiveIndex(-1);
+    inputRef.current?.blur();
+    if (onSelect) onSelect(ticker.toUpperCase());
+    else router.push(tickerHref(pathname, ticker));
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setOpen(true);
+        if (options.length > 0) setActiveIndex((i) => (i + 1) % options.length);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setOpen(true);
+        if (options.length > 0) setActiveIndex((i) => (i <= 0 ? options.length - 1 : i - 1));
+        break;
+      case "Home":
+      case "End":
+        if (showList) {
+          event.preventDefault();
+          setActiveIndex(event.key === "Home" ? 0 : options.length - 1);
+        }
+        break;
+      case "Enter": {
+        event.preventDefault();
+        if (active >= 0) {
+          choose(options[active].ticker);
+        } else if (settled && options.length > 0) {
+          choose(options[0].ticker);
+        } else {
+          // Typed a full ticker faster than the search answered — go straight to it.
+          // Tickers are ASCII: a Turkish-locale uppercase would turn "sise" into "SİSE".
+          const candidate = trimmed.toUpperCase();
+          if (TICKER_RE.test(candidate)) choose(candidate);
+        }
+        break;
+      }
+      case "Escape":
+        if (open) {
+          event.preventDefault();
+          setOpen(false);
+          setActiveIndex(-1);
+        } else if (query) {
+          event.preventDefault();
+          setQuery("");
+        }
+        break;
+      case "Tab":
+        setOpen(false);
+        break;
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (!isOpen || results.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % results.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const r = results[selectedIndex >= 0 ? selectedIndex : 0];
-      const ticker = r.symbol || r.ticker || "";
-      if (ticker) select(ticker);
-    } else if (e.key === "Escape") {
-      setIsOpen(false);
-    }
+  let status: string | null = null;
+  if (showPanel && !showList) {
+    if (pending) status = t("common.searching");
+    else if (searchQ.isError) status = t("search.unavailable");
+    else status = t("search.noResults");
   }
 
   return (
-    <div ref={containerRef} className="relative">
-      <div className="relative group">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-        {isSearching && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground animate-spin" />
+    <div ref={containerRef} className={cn("relative", className)}>
+      <Search
+        aria-hidden="true"
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        autoFocus={autoFocus}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setActiveIndex(-1);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+        placeholder={t("common.search")}
+        aria-label={t("search.label")}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={showList}
+        aria-controls={listboxId}
+        aria-activedescendant={showList && active >= 0 ? `${baseId}-option-${active}` : undefined}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        enterKeyHint="search"
+        maxLength={40}
+        className={cn(
+          "h-10 w-full min-w-0 rounded-lg border border-border bg-card pl-9 pr-9 text-sm shadow-sm outline-none transition-colors",
+          "placeholder:text-muted-foreground/70 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20",
         )}
-        <Input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value.toUpperCase());
-            setSelectedIndex(-1);
-          }}
-          onKeyDown={handleKeyDown}
-          onFocus={() => { if (results.length > 0) setIsOpen(true); }}
-          placeholder={t("common.search")}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={isOpen}
-          aria-controls={listboxId}
-          aria-activedescendant={selectedIndex >= 0 ? `${listboxId}-${selectedIndex}` : undefined}
-          className="pl-10 pr-9 h-10 text-sm bg-card border-border shadow-sm focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/60"
+      />
+      {pending ? (
+        <Loader2
+          aria-hidden="true"
+          className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
         />
-      </div>
-      <AnimatePresence>
-        {isOpen && query.length >= 2 && !isSearching && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.15 }}
-            id={listboxId}
-            role="listbox"
-            aria-label={t("common.search")}
-            className="absolute z-50 top-full mt-1.5 w-full bg-popover/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-xl shadow-black/10 overflow-hidden"
-          >
-            {results.length === 0 ? (
-              <div className="px-3.5 py-3 text-xs text-muted-foreground" role="status">
-                {searchFailed
-                  ? locale === "en" ? "Search is temporarily unavailable" : locale === "fr" ? "La recherche est temporairement indisponible" : "Arama geçici olarak kullanılamıyor"
-                  : locale === "en" ? "No matching stock found" : locale === "fr" ? "Aucune action correspondante" : "Eşleşen hisse bulunamadı"}
-              </div>
-            ) : results.map((r, i) => {
-              const ticker = r.symbol || r.ticker || "";
-              const isSelected = i === selectedIndex;
-              return (
-                <button
-                  type="button"
-                  key={`${ticker}-${i}`}
-                  id={`${listboxId}-${i}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => select(ticker)}
-                  onMouseEnter={() => setSelectedIndex(i)}
-                  className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between border-b border-border/30 last:border-0 transition-colors ${
-                    isSelected ? "bg-accent" : "hover:bg-accent/50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-bold text-primary text-xs bg-primary/10 px-1.5 py-0.5 rounded">{ticker}</span>
-                    <span className="text-xs text-foreground truncate">{r.name || r.title || ""}</span>
-                  </div>
-                  {r.sector && (
-                    <span className="text-[10px] text-muted-foreground ml-2 shrink-0">{r.sector}</span>
-                  )}
-                </button>
-              );
-            })}
-            {results.length > 0 && <div className="px-3.5 py-1.5 bg-muted/30 border-t border-border/30">
-              <span className="text-[10px] text-muted-foreground">
-                {locale === "en"
-                  ? `${results.length} results · Enter to select · Esc to close`
-                  : locale === "fr"
-                    ? `${results.length} résultats · Entrée pour choisir · Échap pour fermer`
-                    : `${results.length} sonuç · Enter ile seç · Esc ile kapat`}
-              </span>
-            </div>}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      ) : query ? (
+        <button
+          type="button"
+          onClick={() => {
+            setQuery("");
+            setActiveIndex(-1);
+            inputRef.current?.focus();
+          }}
+          aria-label={t("shell.closeSearch")}
+          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      ) : hotkey ? (
+        <kbd
+          aria-hidden="true"
+          className="pointer-events-none absolute right-2.5 top-1/2 hidden h-5 -translate-y-1/2 items-center rounded border border-border px-1.5 font-mono text-[10px] text-muted-foreground lg:flex"
+        >
+          /
+        </kbd>
+      ) : null}
+
+      {showPanel && (
+        <div className="absolute top-full z-50 mt-1.5 w-full min-w-64 overflow-hidden rounded-xl border border-border/60 bg-popover shadow-xl shadow-black/10">
+          <ul id={listboxId} role="listbox" aria-label={t("search.label")} hidden={!showList} className="max-h-80 overflow-y-auto py-1">
+            {options.map((option, i) => (
+              <li
+                key={option.ticker}
+                id={`${baseId}-option-${i}`}
+                role="option"
+                aria-selected={i === active}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => choose(option.ticker)}
+                onMouseMove={() => i !== active && setActiveIndex(i)}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2.5 px-3.5 py-2 text-sm",
+                  i === active ? "bg-accent" : "hover:bg-accent/50",
+                )}
+              >
+                <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold text-primary">{option.ticker}</span>
+                <span className="truncate text-xs text-foreground">{option.name}</span>
+              </li>
+            ))}
+          </ul>
+          {showList ? (
+            <p className="border-t border-border/30 bg-muted/30 px-3.5 py-1.5 text-[10px] text-muted-foreground" aria-live="polite">
+              {t("search.hint", { count: options.length })}
+            </p>
+          ) : (
+            <p role="status" className="px-3.5 py-3 text-xs text-muted-foreground">
+              {status}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

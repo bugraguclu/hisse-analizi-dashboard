@@ -42,3 +42,7 @@ yarn-error.log*
 next-env.d.ts
 node_modules/
 .next/
+
+# Claude Code local-only files (machine-specific, not for the team)
+.claude/launch.json
+.claude/settings.local.json
