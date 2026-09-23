@@ -1,5 +1,42 @@
 # Değişiklik Günlüğü
 
+## 1.1.0 — 23 Eylül 2026 (data-infra)
+
+Veri altyapısı baştan kuruldu: her veri kümesi kanonik biçimde, köken bilgisiyle PostgreSQL'de saklanır ve
+depo öncelikli servis edilir. Mevcut API alanları korunmuş, yalnızca `meta` bloğu ve yeni alanlar eklenmiştir.
+Mimari sözleşme ve ölçülen kaynak gerçekleri [docs/data-platform.md](./docs/data-platform.md) dosyasındadır.
+
+### Şema (migration 020)
+
+- Yeni tablolar: `market_indices`, `index_memberships`, `quotes`, `price_bars` (eski `price_data` yerine; kaynak anahtarda değil, sembol başına tek seri), `financial_facts`, `dividends`, `capital_increases`, `shareholders`, `analyst_targets`, `expected_disclosures`, `macro_series`, `fx_bulletins`, `data_snapshots`, `ingestion_runs`, `data_quality_checks`.
+- `financial_statements` ve `financial_ratios` v2 biçimine geçti (kaynak, dönem `YYYY/MM`, tablo türü, sıralı `items_json`, yeniden ifade katsayısı; oranlarda `basis: ttm|annual`, `inputs_json` denetim izi). `companies` kimlik/katman kolonları kazandı (`isin`, `sector`, `industry`, `market_segment`, `kap_member_oid`, `free_float_pct`, `tracking_tier`, `listing_status`, `paid_in_capital`, …).
+- İş kaydı: her worker işi `ingestion_runs` satırı yazar; `polling_state` satırları (`price`, `financials`) yeni işler tarafından güncellenmeye devam eder.
+
+### Veri kaynakları ve doğruluk (ölçülenler)
+
+- **Evren:** Borsa İstanbul resmî bileşen dosyası + TradingView tarayıcı + KAP şirket sayfaları; 629 aktif hisse (100 çekirdek/BIST 100 + 529 evren), 86 endeks, 5.749 üyelik. XU100 üyeliği resmî dosya ile TradingView arasında 100/100, tüm endekslerde 592 bileşende sıfır fark. Halka açıklık oranı KAP/MKK'dan alınır (İş Yatırım ile ≤0,03 puan fark; TradingView 5,6 puana kadar sapıyordu). KOZAA/KOZAL borsa kodu değişimi (TRMET/TRALT) tespit edilip pasife alındı.
+- **Kotasyon ve barlar:** TradingView tarayıcı tek istekte tüm evreni verir (15 dk gecikmeli, `delay_seconds: 900`); günlük barlar bölünme düzeltmeli TradingView serisidir. İş Yatırım `HG_KAPANIS` ile 566/566, Yahoo ile 576/576 birebir; tüm evrende 4.923 seansta sıfır uyumsuzluk. Eski `price_data` tablosundaki 6.421 barın 293'ü hatalıydı (seans ortasında yazılıp kapanış sayılan 10–14 Temmuz günleri, +21 eksik seans); yeniden yüklendi. Depo 634 sembol için 374.604 günlük bar taşır (çekirdek 5 yıl, evren 2 yıl). `HGDG_*` alanlarının temettü düzeltmeli olduğu, TradingView hacminin lot (Yahoo ile birebir), İş Yatırım `HG_HACIM`'in TL olduğu doğrulandı; TL ciro ve AOF İş Yatırım'dan alınır.
+- **Finansal tablolar:** KAP finansal özet (ilk açıklanan, resmî) birincil; İş Yatırım MaliTablo çeyrekleri yalnızca KAP ile son iki ortak dönemde eşleştiğinde kullanılır ve IAS 29 yeniden ifade katsayısıyla (2025/12 0,8492, 2024/12 0,7640, 2023/12 0,6926) KAP bazına çevrilir. 24 şirkette toplam varlık/özkaynak/hasılat/net kâr KAP ile %0,000 fark. Banka/sigortacılarda İş Yatırım kapsam farkı nedeniyle yalnızca KAP dönemleri kullanılır. Pay adedi ödenmiş sermayeden alınır (TradingView KCHOL için 1,86 mr yerine doğrusu 2,54 mr).
+- **Makro:** TCMB faiz/koridor sayfaları, TÜFE/ÜFE tabloları ve günlük kur XML'i (24 para birimi, 2 yıl arşiv) tam geçmişle depoda; borsapy ile 0 uyumsuzluk, USD/TRY bülteni ile TradingView kapanışı arasındaki fark ortalama −0,05 TL. EVDS3 isteğe bağlı (`MACRO_EVDS_API_KEY`).
+- **Referans:** temettü, sermaye artırımı, ortaklık yapısı (KAP/MKK ≥%5), hedef fiyat konsensüsü (hedeffiyat.com.tr), KAP beklenen bildirimler. hedeffiyat "kapsam yok" (0,00 ₺) durumu artık hedef olarak saklanmaz; İş Yatırım tarih damgalarının UTC gece yarısı olduğu tespit edilip eski temettü tarihlerindeki 1 günlük kayma düzeltildi.
+
+### API
+
+- Tüm veri yanıtlarında eklemeli `meta` bloğu; liste uçlarında `X-Data-*` başlıkları (CORS ile dışa açık).
+- `GET /companies` çekirdek katmanı döner; `?tier=universe|all`, `?include_inactive=true` eklendi. `CompanyOut`, `PriceOut`, `FinancialStatementOut`, `FinancialRatioOut` yeni alanlar kazandı (hiçbir alan kaldırılmadı).
+- Yeni: `GET /data/status`, `GET /data/quality`, `GET /data/quality/history`, `POST /admin/data/quality/run`, `POST /admin/data/refresh`, `POST /admin/financials/refresh`. `/macro/*` uçları depodan servis edilir (`/macro/calendar` değişmedi).
+- `/recommendations` yanıtına `date` ve `source_code` eklendi.
+
+### Worker
+
+- Yeni döngüler: `reference` (evren senkronu 07:30 + çekirdek şirket referans yenilemesi), `market` (seans içinde 60 sn kotasyon, 18:40 günlük bar, 20:00 İş Yatırım mutabakatı, arka plan geçmiş yükleme), `fundamentals` (çekirdek 72 saat / evren 14 gün, oranlar 19:00 sonrası), `macro` (10:00 ve 14:30 faiz, TÜİK yayın penceresi, 15:35 kur), `quality` (19:30 günlük kontrol + bakım). KAP trafiği tek kapıdan (`kap_get`/`kap_post`, ≥3 sn aralık, WAF sonrası 7 dk bekleme) geçer.
+- Eski `polling_worker` yalnızca KAP'ı tarar; `price` ve `financials` yönetim "run once" uçları için kalır. Haber taraması çekirdek şirketlerle sınırlandı.
+
+### Geliştirme
+
+- `docker-compose.dev.yml` overlay'i kaynakları konteynerlere bind-mount eder (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up`), imaj yeniden derlemeden kod değişikliği çalışır.
+- `tests/conftest.py` `pg_session` fixture'ı (gerçek PostgreSQL, süreç başına ayrı şema); canlı sağlayıcı testleri `tests/integration/`.
+
 ## 1.0.0 — 22 Eylül 2026
 
 İlk üretim sürümü: veri doğruluğu, güvenlik, performans ve işletim tarafı baştan sona gözden geçirildi.

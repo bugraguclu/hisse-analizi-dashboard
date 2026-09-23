@@ -21,24 +21,34 @@ Eksik veri `0` gibi gösterilmez; API hatası, boş veri ve yükleniyor durumlar
 
 ## Veri kaynakları
 
-| Veri | Kaynak |
-|---|---|
-| Bilanço, gelir tablosu, nakit akışı | KAP (çeyreklik ayrıştırma için İş Yatırım) |
-| Fiyat, endeks, teknik analiz ve tarama | `borsapy` üzerinden BIST/İş Yatırım/TradingView |
-| Politika faizi, enflasyon ve döviz | TCMB/TÜİK |
-| Şirket bildirimleri | KAP |
-| Haberler | Google News RSS |
+Veriler PostgreSQL'de köken bilgisiyle (`source`, `fetched_at`, verinin kendi tarihi) saklanır ve
+**depo öncelikli** servis edilir: depo tazeyse oradan, değilse canlı çekilip depoya yazılır,
+sağlayıcı yanıt vermezse son iyi kopya `stale: true` ile döner. Her yanıt bir `meta` bloğu taşır
+(`source`, `source_url`, `as_of`, `fetched_at`, `age_seconds`, `served_from: live|store|stale`,
+`stale`, `delay_seconds`, `notes`); liste uçları aynı bilgiyi `X-Data-*` başlıklarında verir.
+Ayrıntılar: [docs/data-platform.md](./docs/data-platform.md).
+
+| Veri | Birincil kaynak | Doğrulama / yedek |
+|---|---|---|
+| Şirket evreni (~630 hisse), endeks üyelikleri | Borsa İstanbul resmî bileşen dosyası + TradingView tarayıcı + KAP şirket kartı (OID, sektör, pazar, halka açıklık) | İş Yatırım şirket kartı |
+| Kotasyon (15 dk gecikmeli), günlük barlar | TradingView (tek istekte tüm evren; barlar bölünme düzeltmeli) | İş Yatırım `HisseTekil`/`OneEndeks` (resmî kapanış, TL ciro, AOF; kapanış mutabakatı) |
+| Bilanço, gelir tablosu, nakit akışı | KAP finansal özet (ilk açıklanan, resmî) | İş Yatırım MaliTablo (çeyrekler; IAS 29 yeniden ifade katsayısıyla KAP bazına çevrilir) |
+| Oranlar (TTM ve yıllık) | Depodaki kanonik kalemlerden hesaplanır (`inputs_json` ile yeniden üretilebilir) | TradingView oranları (kalite kontrolü) |
+| Temettü, sermaye artırımı, ortaklık yapısı, hedef fiyat, KAP takvimi | İş Yatırım, KAP/MKK, hedeffiyat.com.tr, KAP beklenen bildirimler | — |
+| Politika faizi/koridor, TÜFE/ÜFE, döviz bülteni | TCMB sayfaları ve günlük kur XML'i (isteğe bağlı EVDS3) | borsapy, TradingView (kalite kontrolü) |
+| Şirket bildirimleri | KAP | — |
+| Haberler | Google News RSS | — |
 
 ## Mimari
 
 ```
 Tarayıcı ──> Next.js (dashboard, :3000) ──/api/*──> FastAPI (app, :8000) ──> PostgreSQL (db)
                                                                 ▲
-                                   worker (KAP, fiyat, finansal tablo, haber, bildirim) ─┘
+        worker (KAP, haber, bildirim + veri platformu: evren/referans, piyasa, temel analiz, makro, kalite) ─┘
 ```
 
 - Tarayıcı yalnızca Next.js ile konuşur; `/api/*` istekleri aynı origin üzerinden FastAPI’ye iletilir.
-- Worker ayrı bir süreçtir; her zaman tek replika ile çalıştırılır. Kaynak taraması (advisory lock) ve outbox (`FOR UPDATE SKIP LOCKED`) çoklu replikaya güvenli olsa da haber döngüsü değildir.
+- Worker ayrı bir süreçtir; her zaman tek replika ile çalıştırılır. Veri platformu döngüleri (`reference`, `market`, `fundamentals`, `macro`, `quality`) `ingestion_runs` tablosuna iş kaydı yazar; durum `GET /data/status`, kalite kontrolleri `GET /data/quality` ile izlenir. Kaynak taraması (advisory lock) ve outbox (`FOR UPDATE SKIP LOCKED`) çoklu replikaya güvenli olsa da haber döngüsü değildir.
 - Production’da Caddy önde durur, otomatik HTTPS sağlar ve yalnızca 80/443 dışarı açılır.
 
 ## Hızlı başlangıç (Docker)
@@ -92,6 +102,7 @@ Tüm ayarlar açıklamalarıyla [`.env.example`](./.env.example) dosyasındadır
 | `GEMINI_API_KEY` veya `ANTHROPIC_API_KEY` | İsteğe bağlı haber duygu sınıflandırması |
 | `AI_DAILY_BUDGET_USD` | Günlük LLM harcama sınırı |
 | `SMTP_*`, `ENABLE_REAL_EMAIL` | İsteğe bağlı gerçek e-posta gönderimi (varsayılan: kuru çalıştırma) |
+| `MARKET_*`, `FUNDAMENTALS_*`, `REFERENCE_*`, `MACRO_*`, `QUALITY_*` | Veri platformu: worker zamanlamaları, depo tazelik pencereleri, KAP/İş Yatırım nezaket aralıkları, kalite eşikleri (`MACRO_EVDS_API_KEY` ile EVDS3 açılır) |
 | `API_URL`, `TRUSTED_PROXY_HOPS` | Next.js → FastAPI adresi ve Next önündeki proxy sayısı ([`dashboard/.env.example`](./dashboard/.env.example)) |
 
 AI anahtarı yoksa haberler duygu etiketi olmadan saklanır; sistemin geri kalanı çalışır.
@@ -134,7 +145,7 @@ npm run build
 npm audit --omit=dev --audit-level=high
 ```
 
-CI aynı kontrollere ek olarak migration gidiş-dönüş testini (`upgrade → downgrade base → upgrade`), Compose doğrulamasını ve iki Docker imajının derlenmesini çalıştırır. Canlı sağlayıcı testleri `tests/integration` altındadır (`SKIP_NETWORK_TESTS=1` ile atlanır).
+`pg_session` fixture'ı (tests/conftest.py) gerçek PostgreSQL davranışını (`TEST_DATABASE_URL`, varsayılan `hisse_analizi_test`) ayrı bir şemada test eder; veritabanı yoksa bu testler atlanır. CI aynı kontrollere ek olarak migration gidiş-dönüş testini (`upgrade → downgrade base → upgrade`), Compose doğrulamasını ve iki Docker imajının derlenmesini çalıştırır. Canlı sağlayıcı testleri `tests/integration` altındadır (`SKIP_NETWORK_TESTS=1` ile atlanır).
 
 ## API
 
@@ -143,6 +154,8 @@ OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/r
 - Uç nokta grupları: sistem/arşiv, teknik analiz, temel analiz, piyasa, makro, haber ve `X-Admin-Key` korumalı yönetim işlemleri.
 - Hatalar her zaman `{"detail": "<Türkçe mesaj>"}` biçimindedir; her yanıt `X-Request-ID` taşır.
 - Geçersiz sembol 400, bilinmeyen sembol 404, veri sağlayıcı hatası 502/503 döner. `/events` toplam kayıt sayısını `X-Total-Count` başlığında verir.
+- Veri yanıtları eklemeli `meta` bloğu taşır (`served_from`, `stale`, `as_of`, `delay_seconds`…); `GET /companies` varsayılan olarak çekirdek (BIST 100) katmanı döner (`?tier=universe|all`, `?include_inactive=true`).
+- `GET /data/status` alan bazında tazelik/iş durumu, `GET /data/quality` çapraz kaynak kontrol sonuçları; `POST /admin/data/refresh` ve `POST /admin/data/quality/run` yönetim tetikleyicileridir.
 
 Değişiklik geçmişi [CHANGELOG.md](./CHANGELOG.md), iş özeti [PROJE_OZETI.md](./PROJE_OZETI.md) dosyasındadır.
 
