@@ -8,13 +8,24 @@ import pytest
 
 from src.adapters import price, technical
 from src.adapters.utils import ISTANBUL_TZ, MarketDataError, adapter_cache
+from src.services import market_service
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache():
+def _clear_cache(monkeypatch):
     adapter_cache.clear()
+
+    async def no_store(ticker):  # the market store is exercised in test_technical_store.py
+        return None
+
+    monkeypatch.setattr(technical, "load_stored_daily", no_store)
     yield
     adapter_cache.clear()
+
+
+def _daily(frame, served_from="live"):
+    meta = market_service.build_meta(source="tradingview", fetched_at=None, served_from=served_from, symbol="THYAO")
+    return market_service.DailyBars(frame=frame, meta=meta)
 
 
 def _daily_frame(n=300):
@@ -59,9 +70,9 @@ def bars(monkeypatch):
     async def fake_daily(symbol):
         if symbol != "THYAO":
             raise price.SymbolNotFoundError(symbol)
-        return frame
+        return _daily(frame)
 
-    monkeypatch.setattr(technical, "get_daily_bars", fake_daily)
+    monkeypatch.setattr(technical, "load_daily", fake_daily)
     monkeypatch.setattr(price, "now_istanbul", lambda: datetime(2026, 9, 22, 14, 0, tzinfo=ISTANBUL_TZ))
     return frame
 
@@ -94,6 +105,7 @@ async def test_requested_periods_are_honoured(scanner, bars):
     sma50 = await technical.get_sma("THYAO", period=50)
 
     assert rsi14["value"] == 52.9 and rsi14["source"] == "TradingView"
+    assert rsi14["meta"]["served_from"] == "live" and rsi14["meta"]["delay_seconds"] == 900
     assert rsi7["period"] == 7 and rsi7["source"] != "TradingView"
     assert rsi7["value"] == pytest.approx(technical.rsi_last(bars["Close"], 7), abs=1e-4)
     assert sma21["value"] == pytest.approx(bars["Close"].tail(21).mean(), abs=1e-4)
@@ -138,7 +150,7 @@ async def test_unexpected_errors_do_not_leak_exception_text(monkeypatch):
     async def broken(symbol):
         raise RuntimeError("'FastInfo' has no attribute 'get'")
 
-    monkeypatch.setattr(technical, "get_daily_bars", broken)
+    monkeypatch.setattr(technical, "load_daily", broken)
     result = await technical.get_supertrend("THYAO")
 
     assert result["error_status"] == 502

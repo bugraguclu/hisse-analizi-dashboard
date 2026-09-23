@@ -1,6 +1,9 @@
 """Fiyat verisi — canli grafik barlari, kotasyonlar ve DB'ye yazilan gunluk barlar.
 
-Live primitives shared by the index, technical and snapshot adapters:
+This is the **live** layer (TradingView). Reads go store-first through
+:mod:`src.services.market_service`, which falls back to these functions and
+writes their results through to ``quotes`` / ``price_bars``; the market worker
+(:mod:`src.workers.market_worker`) keeps the store current. Live primitives:
 
 * :func:`get_daily_bars` — one cached ~3-year daily frame per symbol. Chart
   periods up to 1 year, technical indicators (SuperTrend, pivots, custom
@@ -72,7 +75,11 @@ _QUOTE_COLUMNS = (
     "type",
     "currency",
     "update_time",
+    "update_mode",
+    "time",
 )
+
+TRADINGVIEW_SOURCE = "tradingview"
 
 
 # ---------------------------------------------------------------------------
@@ -340,14 +347,38 @@ def build_quote(
     }
 
 
+def delay_from_update_mode(value: Any) -> int | None:
+    """``"delayed_streaming_900"`` → 900, ``"streaming"`` → 0 (seconds of provider delay)."""
+    if not isinstance(value, str) or not value:
+        return None
+    tail = value.rsplit("_", 1)[-1]
+    if tail.isdigit():
+        return int(tail)
+    return 0 if value in ("streaming", "realtime") else None
+
+
+def session_date_from_epoch(value: Any) -> date | None:
+    """Istanbul trading day of a TradingView bar time (``time`` = the daily bar's open)."""
+    seconds = finite_float(value)
+    if seconds is None or seconds <= 0:
+        return None
+    return datetime.fromtimestamp(seconds, ISTANBUL_TZ).date()
+
+
 def quote_from_scan(symbol: str, row: dict[str, Any]) -> dict[str, Any] | None:
-    """Quote from a TradingView scanner row (``change_abs`` is today's move vs previous close)."""
+    """Quote from a TradingView scanner row (``change_abs`` is today's move vs previous close).
+
+    Store fields (additive): ``session_date`` (Istanbul day of the daily bar the
+    quote belongs to), ``delay_seconds`` (feed delay), ``prev_bar_close`` (close
+    of the previous daily bar, ``close[1]``) and ``source``.
+    """
     last = _positive(row.get("close"))
-    prev_close = _positive(row.get("close[1]"))
+    prev_bar_close = _positive(row.get("close[1]"))
+    prev_close = prev_bar_close
     change_abs = finite_float(row.get("change_abs"))
     if last is not None and change_abs is not None and last - change_abs > 0:
         prev_close = last - change_abs
-    return build_quote(
+    quote = build_quote(
         symbol,
         last=last,
         prev_close=prev_close,
@@ -362,6 +393,18 @@ def quote_from_scan(symbol: str, row: dict[str, Any]) -> dict[str, Any] | None:
         currency=row.get("currency"),
         timestamp=row.get("update_time"),
     )
+    if quote is None:
+        return None
+    session_date = session_date_from_epoch(row.get("time"))
+    if session_date is None and quote["timestamp"] is not None:
+        session_date = session_date_from_epoch(quote["timestamp"])
+    quote.update(
+        session_date=session_date,
+        delay_seconds=delay_from_update_mode(row.get("update_mode")),
+        prev_bar_close=prev_bar_close,
+        source=TRADINGVIEW_SOURCE,
+    )
+    return quote
 
 
 def _known_index(symbol: str) -> bool:
@@ -398,6 +441,12 @@ async def _websocket_index_quote(symbol: str, semaphore: asyncio.Semaphore) -> d
                     timestamp=info.get("timestamp"),
                 )
                 if quote is not None:
+                    quote.update(
+                        session_date=session_date_from_epoch(quote["timestamp"]),
+                        delay_seconds=None,
+                        prev_bar_close=None,
+                        source=TRADINGVIEW_SOURCE,
+                    )
                     return quote
             except Exception as e:
                 if attempt == 2:
@@ -465,7 +514,12 @@ def _opt_float(value: Any) -> float | None:
 
 
 class PriceAdapter(BasePriceAdapter):
-    """Fiyat verisi: borsapy birincil, yfinance yedek.
+    """Legacy per-company price poll (``polling_worker`` source ``price``): borsapy birincil, yfinance yedek.
+
+    Superseded by ``market.bars.daily`` (one scanner request for the whole universe);
+    kept until the ``price`` source leaves ``POLL_SOURCES``. Writes go through the
+    market store's precedence rules (``PriceService``), so these rows never override
+    a canonical TradingView bar.
 
     Only completed sessions are emitted, so a stored ``close`` is always a real
     session close. The price repository upserts changed values, so later

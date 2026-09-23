@@ -6,7 +6,6 @@ from decimal import Decimal
 from typing import Any, Literal, Protocol
 
 from sqlalchemy import (
-    Boolean,
     ColumnElement,
     Row,
     Select,
@@ -14,7 +13,6 @@ from sqlalchemy import (
     delete,
     exists,
     func,
-    literal_column,
     or_,
     select,
     update,
@@ -342,7 +340,6 @@ class NormalizedEventRepository:
 
 
 PriceUpsertOutcome = Literal["inserted", "updated", "unchanged"]
-_PRICE_VALUE_COLUMNS = ("open", "high", "low", "close", "volume", "turnover", "vwap", "adjusted", "is_final")
 
 
 def _interval_value(interval: PriceInterval | str) -> str:
@@ -350,7 +347,12 @@ def _interval_value(interval: PriceInterval | str) -> str:
 
 
 class PriceDataRepository:
-    """``price_bars``: one series per symbol — unique on (symbol, interval, bar_date)."""
+    """``price_bars``: one series per symbol — unique on (symbol, interval, bar_date).
+
+    Writes go through :func:`src.db.repositories.market.upsert_bars`, which applies
+    the provider precedence of the market store (TradingView > İş Yatırım > Yahoo;
+    a running-session bar never replaces a final one).
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -368,23 +370,16 @@ class PriceDataRepository:
 
     async def upsert(self, **kwargs: Any) -> PriceUpsertOutcome:
         """Insert a bar or refresh its values when they changed (the running session's
-        bar keeps moving until the close). Unchanged rows are not rewritten."""
+        bar keeps moving until the close). Unchanged rows are not rewritten; columns
+        not passed keep their stored values."""
+        from src.db.repositories.market import upsert_bars
+
         values = {"interval": "1d", **kwargs}
         values["interval"] = _interval_value(values["interval"])
-        insert_stmt = pg_insert(PriceBar).values(**values)
-        excluded = insert_stmt.excluded
-        table = PriceBar.__table__.c
-        changed = [col for col in _PRICE_VALUE_COLUMNS if col in values]
-        stmt = insert_stmt.on_conflict_do_update(
-            constraint="uq_price_bars_symbol_interval_date",
-            set_={**{col: excluded[col] for col in changed}, "source": excluded["source"], "fetched_at": func.now()},
-            # Postgres: xmax = 0 only for a freshly inserted row version.
-            where=or_(*(table[col].is_distinct_from(excluded[col]) for col in changed)),
-        ).returning(literal_column("(xmax = 0)", Boolean).label("inserted"))
-        row = (await self.session.execute(stmt)).first()
-        if row is None:
-            return "unchanged"
-        return "inserted" if row[0] else "updated"
+        stats = await upsert_bars(self.session, [values])
+        if stats.inserted:
+            return "inserted"
+        return "updated" if stats.updated else "unchanged"
 
     def _bars(self, symbol: str, interval: PriceInterval | str) -> Select[tuple[PriceBar]]:
         return (

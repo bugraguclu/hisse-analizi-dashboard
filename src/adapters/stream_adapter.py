@@ -1,4 +1,8 @@
-"""Coklu sembol fiyat snapshot'i — tek TradingView scanner istegi.
+"""Coklu sembol fiyat snapshot'i — piyasa deposu, gerekirse tek TradingView scanner istegi.
+
+Kotasyonlar depo öncelikli okunur (``src.services.market_service.get_quotes``):
+market worker dakikada bir tüm evreni tek istekle yazar; depoda taze olmayan
+semboller için tek canlı istek atılır. Yanıt eklemeli ``meta`` bloğu taşır.
 
 (Kullanilmayan TradingView websocket ``LivePriceStream`` sarmalayicisi
 kaldirildi; canli akis yerine frontend snapshot'i periyodik yeniler.)
@@ -8,8 +12,8 @@ from typing import Any
 
 import structlog
 
-from src.adapters.price import get_quotes
 from src.adapters.utils import TTL_PRICE_SNAPSHOT, cached, error_payload
+from src.services import market_service
 
 logger = structlog.get_logger(__name__)
 
@@ -49,11 +53,12 @@ def _snapshot_from_quotes(symbols: list[str], quotes: dict[str, dict[str, Any]])
 async def get_snapshot(symbols: list[str]) -> dict:
     """Birden fazla sembol için tek batch isteğinde fiyat snapshot'ı."""
     try:
-        quotes = await get_quotes(tuple(symbols))
+        result = await market_service.get_quotes(tuple(symbols))
         return {
             "symbols": symbols,
-            "snapshot": _snapshot_from_quotes(symbols, quotes),
+            "snapshot": _snapshot_from_quotes(symbols, result.quotes),
             "source": SOURCE,
+            **market_service.meta_dict(result.meta),
         }
     except Exception as e:
         logger.error("snapshot_error", symbols=symbols, error=str(e))

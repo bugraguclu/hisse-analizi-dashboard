@@ -5,7 +5,7 @@ from datetime import date, datetime
 import pandas as pd
 import pytest
 
-from src.adapters import index_adapter, price
+from src.adapters import index_adapter, isyatirim_prices, price
 from src.adapters.price import (
     PriceAdapter,
     bars_to_records,
@@ -18,6 +18,7 @@ from src.adapters.price import (
     split_chart_window,
     window_start,
 )
+from src.core.config import settings
 from src.adapters.utils import (
     ISTANBUL_TZ,
     InvalidInputError,
@@ -231,14 +232,22 @@ async def test_history_payloads_carry_the_period_reference(monkeypatch):
     async def no_metrics(symbol):
         return {}
 
+    async def no_isyatirim(symbols):
+        return {}
+
+    # Store unavailable (unit tests run without the market store): the live path is used.
+    monkeypatch.setattr(settings, "market_store_enabled", False)
     monkeypatch.setattr(price, "get_daily_bars", fake_daily)
-    monkeypatch.setattr(index_adapter, "get_daily_bars", fake_daily)
-    monkeypatch.setattr(index_adapter, "get_quotes", no_quotes)
+    monkeypatch.setattr(price, "get_quotes", no_quotes)
+    monkeypatch.setattr(isyatirim_prices, "fetch_isyatirim_quotes", no_isyatirim)
     monkeypatch.setattr(index_adapter, "get_company_metrics", no_metrics)
     monkeypatch.setattr(price, "now_istanbul", lambda: NOW)
 
     stock = await index_adapter.get_ticker_history("THYAO", "3mo")
     index = await index_adapter.get_index_data("XU100", "ytd")
+
+    assert stock["meta"]["served_from"] == "live" and stock["meta"]["delay_seconds"] == 900
+    assert stock["meta"]["as_of"] == "2026-09-22"
 
     before_3mo = daily[daily.index < pd.Timestamp("2026-06-22", tz=ISTANBUL_TZ)]
     assert stock["reference_close"] == float(before_3mo["Close"].iloc[-1])

@@ -1,4 +1,4 @@
-"""Canlı piyasa özeti (TradingView tarayıcısı + İş Yatırım şirket kartı) ve şirket künyesi — bkz. ``src.adapters.fundamentals``."""
+"""Piyasa özeti (depo öncelikli TradingView kotasyonu + İş Yatırım şirket kartı) ve şirket künyesi — bkz. ``src.adapters.fundamentals``."""
 
 import asyncio
 from collections.abc import Mapping
@@ -15,8 +15,9 @@ from src.adapters.utils import (
     cached,
     run_sync,
     sanitize_data,
-    tradingview_scan,
 )
+from src.core.meta import DataMeta
+from src.services import market_service
 
 from src.adapters.fundamentals_common import (  # noqa: F401
 
@@ -194,23 +195,32 @@ async def _company_metrics_or_empty(ticker: str) -> dict[str, Any]:
 
 
 @cached(TTL_SNAPSHOT, "fund_snapshot")
-async def _get_market_snapshot(ticker: str) -> dict[str, Any]:
-    rows, metrics = await asyncio.gather(
-        tradingview_scan([ticker], _SNAPSHOT_COLUMNS),
+async def _market_snapshot(ticker: str) -> tuple[dict[str, Any], DataMeta]:
+    """Store-first scanner row (quote + extras; see ``market_service.get_snapshot_row``) + company card."""
+    (row, meta), metrics = await asyncio.gather(
+        market_service.get_snapshot_row(ticker, _SNAPSHOT_COLUMNS),
         _company_metrics_or_empty(ticker),
     )
-    row = rows.get(ticker)
     if not row or to_number(row.get("close")) is None:
         raise SymbolNotFoundError(ticker)
-    return _snapshot_from_scan(row, metrics)
+    return _snapshot_from_scan(row, metrics), meta
+
+
+async def _get_market_snapshot(ticker: str) -> dict[str, Any]:
+    return (await _market_snapshot(ticker))[0]
 
 
 @cached(TTL_SNAPSHOT, "fund")
 async def get_fast_info(ticker: str) -> dict:
-    """Canlı fiyat özeti: son fiyat, piyasa değeri (fiyat × pay adedi), F/K, PD/DD, 52 hafta."""
+    """Fiyat özeti (depo öncelikli): son fiyat, piyasa değeri (fiyat × pay adedi), F/K, PD/DD, 52 hafta."""
     try:
-        snapshot = await _get_market_snapshot(ticker)
-        return {"ticker": ticker, "source": "TradingView + İş Yatırım", "fast_info": snapshot}
+        snapshot, meta = await _market_snapshot(ticker)
+        return {
+            "ticker": ticker,
+            "source": "TradingView + İş Yatırım",
+            "fast_info": snapshot,
+            **market_service.meta_dict(meta),
+        }
     except Exception as e:
         return _failure(e, _MSG_QUOTE, "fundamentals_fast_info_error", ticker, fast_info={})
 
@@ -262,12 +272,14 @@ async def get_company_info(ticker: str) -> dict:
     """Şirket künyesi (KAP) + canlı fiyat özeti."""
     try:
         entry = await _kap_company(ticker)
-        snapshot_task = asyncio.ensure_future(_get_market_snapshot(ticker))
+        snapshot_task = asyncio.ensure_future(_market_snapshot(ticker))
         profile: dict[str, Any] = await _profile_or_empty(ticker)
         source = "Borsa İstanbul/TradingView/İş Yatırım/KAP"
         snapshot: dict[str, Any] = {}
+        meta: DataMeta | None = None
         try:
-            snapshot = dict(await snapshot_task)
+            market, meta = await snapshot_task
+            snapshot = dict(market)
         except SymbolNotFoundError:
             raise
         except Exception as e:
@@ -300,7 +312,7 @@ async def get_company_info(ticker: str) -> dict:
             value = profile.get(source_key)
             if value:
                 info[target_key] = value
-        return {"ticker": ticker, "source": source, "info": info}
+        return {"ticker": ticker, "source": source, "info": info, **market_service.meta_dict(meta)}
     except Exception as e:
         return _failure(e, _MSG_QUOTE, "fundamentals_info_error", ticker, info={})
 

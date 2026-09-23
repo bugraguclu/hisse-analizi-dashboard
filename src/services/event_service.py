@@ -1,5 +1,3 @@
-import hashlib
-import json
 import math
 import re
 from collections import Counter
@@ -11,20 +9,17 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.base import PriceRecord, RawEventData
-from src.adapters.financial_adapter import normalize_label, parse_period, period_label
 from src.core.enums import EventCategory, EventType, Severity
 from src.core.time import utcnow
 from src.db.models import Company, Source
+from src.db.repositories.market import BarUpsertStats, upsert_bars
 from src.db.repository import (
-    FinancialRatioRepository,
-    FinancialStatementRepository,
     NormalizedEventRepository,
     OutboxRepository,
     PriceDataRepository,
     RawEventRepository,
 )
 from src.parsers.helpers import clean_whitespace, compute_dedup_key, strip_html
-from src.services.analysis_service import AnalysisService
 
 logger = structlog.get_logger(__name__)
 
@@ -302,7 +297,47 @@ _INTERVALS = {"1d", "1h", "15m"}
 _BAR_SOURCES = {"borsapy": "tradingview"}
 
 
+def price_rows(records: Iterable[PriceRecord], company: Company) -> tuple[list[dict[str, Any]], int]:
+    """Legacy ``PriceRecord`` list → ``price_bars`` rows (+ the number of unusable records).
+
+    ``PriceAdapter`` only emits completed sessions, so the rows are final. NaN/Inf
+    never reach the NUMERIC columns.
+    """
+    rows: list[dict[str, Any]] = []
+    invalid = 0
+    for rec in records:
+        trading_date = _trading_date(rec.trading_date)
+        if trading_date is None:
+            invalid += 1
+            continue
+        rows.append(
+            {
+                "company_id": company.id,
+                "symbol": rec.ticker or company.ticker,
+                "source": _BAR_SOURCES.get(rec.source, rec.source),
+                "open": _finite_or_none(rec.open),
+                "high": _finite_or_none(rec.high),
+                "low": _finite_or_none(rec.low),
+                "close": _finite_or_none(rec.close),
+                "volume": _finite_or_none(rec.volume),
+                "bar_date": trading_date,
+                "interval": rec.interval if rec.interval in _INTERVALS else "1d",
+                "adjusted": True,
+                "is_final": True,
+            }
+        )
+    return rows, invalid
+
+
 class PriceService:
+    """Legacy per-company price poll (``polling_worker`` source ``price``).
+
+    A thin wrapper over the market store's bar upsert
+    (:func:`src.db.repositories.market.upsert_bars`): same provider precedence as
+    the market worker, so the legacy TradingView/Yahoo rows can never override a
+    newer canonical bar.
+    """
+
     def __init__(self, session: AsyncSession):
         self.session = session
         self.price_repo = PriceDataRepository(session)
@@ -312,135 +347,72 @@ class PriceService:
         records: list[PriceRecord],
         company: Company,
     ) -> dict[str, int]:
-        """Upsert OHLCV rows. The current (still open) session's bar is refreshed on
-        every poll instead of keeping the first intraday snapshot forever."""
-        stats = {"new_prices": 0, "updated_prices": 0, "duplicates": 0, "invalid": 0}
-
-        for rec in records:
-            trading_date = _trading_date(rec.trading_date)
-            if trading_date is None:
-                stats["invalid"] += 1
-                continue
-            outcome = await self.price_repo.upsert(
-                company_id=company.id,
-                symbol=rec.ticker or company.ticker,
-                source=_BAR_SOURCES.get(rec.source, rec.source),
-                open=_finite_or_none(rec.open),
-                high=_finite_or_none(rec.high),
-                low=_finite_or_none(rec.low),
-                close=_finite_or_none(rec.close),
-                volume=_finite_or_none(rec.volume),
-                bar_date=trading_date,
-                interval=rec.interval if rec.interval in _INTERVALS else "1d",
-            )
-            if outcome == "inserted":
-                stats["new_prices"] += 1
-            elif outcome == "updated":
-                stats["updated_prices"] += 1
-            else:
-                stats["duplicates"] += 1
-
+        """Upsert OHLCV rows in one statement and commit."""
+        rows, invalid = price_rows(records, company)
+        stats = await upsert_bars(self.session, rows) if rows else BarUpsertStats()
         await self.session.commit()
-        return stats
-
-
-def _json_safe(value: Any) -> Any:
-    """JSONB cannot store NaN/Inf; numpy scalars become plain floats."""
-    if value is None or isinstance(value, (str, bool)):
-        return value
-    if isinstance(value, (int, float)):
-        return value if not isinstance(value, float) or math.isfinite(value) else None
-    number = _finite_or_none(value)
-    return number if number is not None else str(value)
+        return {
+            "new_prices": stats.inserted,
+            "updated_prices": stats.updated,
+            "duplicates": stats.unchanged,
+            "invalid": invalid,
+        }
 
 
 class FinancialService:
+    """Legacy polling source ``financials`` → the fundamentals store.
+
+    A thin wrapper over :func:`src.services.fundamentals_service.refresh_company_statements`
+    (KAP summary + İş Yatırım quarterly tables → ``financial_statements``,
+    ``financial_facts`` and ``financial_ratios``) — the same code path as the
+    fundamentals worker, gated by the refresh cadence so the hourly legacy poll
+    does not re-fetch fresh companies. It opens its own short sessions (no
+    connection is held while the providers answer); ``session`` is used by
+    :meth:`recompute_ratios` only.
+    """
+
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.repo = FinancialStatementRepository(session)
-        self.ratio_repo = FinancialRatioRepository(session)
-        self.analysis_service = AnalysisService(session)
 
     async def process_financials(self, raw_data: Iterable[RawEventData], company: Company) -> dict[str, int]:
-        """Upsert statements per period, then (re)compute ratios once per touched period.
+        """Refresh ``company`` when due (``raw_data`` is the adapter's refresh marker)."""
+        from datetime import timedelta
 
-        The caller commits.
-        """
-        count = 0
-        periods: set[str] = set()
+        from src.core.config import settings
+        from src.services.fundamentals_service import refresh_company_statements
 
-        for raw in raw_data:
-            payload = raw.raw_payload_json or {}
-            statement_type = payload.get("statement_type")
-            data = payload.get("data")
-            if not statement_type or not isinstance(data, dict):
-                continue
-
-            for period, period_data in data.items():
-                if not isinstance(period_data, dict):
-                    continue
-                parsed = parse_period(period)
-                period_key = period_label(*parsed) if parsed else str(period).strip()[:20]
-                items = [
-                    {"code": None, "label": str(k), "key": normalize_label(k), "value": _json_safe(v)}
-                    for k, v in period_data.items()
-                ]
-                await self.repo.upsert(
-                    company_id=company.id,
-                    source="isyatirim",
-                    period=period_key,
-                    statement_type=str(statement_type)[:50],
-                    fiscal_year_end_month=12,
-                    months=12,
-                    period_type="annual",
-                    currency="TRY",
-                    items_json=items,
-                    content_hash=hashlib.sha256(
-                        json.dumps(items, sort_keys=True, default=str).encode("utf-8")
-                    ).hexdigest(),
-                )
-                count += 1
-                periods.add(period_key)
-
-        ratios_calculated = await self.recompute_ratios(company, periods) if periods else 0
+        hours = (
+            settings.fundamentals_refresh_core_hours
+            if company.tracking_tier == "core"
+            else settings.fundamentals_refresh_universe_hours
+        )
+        result = await refresh_company_statements(company.ticker, max_age=timedelta(hours=hours))
+        if not result.ok:
+            raise RuntimeError(result.kap_error or result.isy_error or "fundamentals refresh failed")
         return {
-            "financial_records_processed": count,
-            "financial_ratios_calculated": ratios_calculated,
+            "financial_records_processed": result.statements.changed if result.statements else 0,
+            "financial_ratios_calculated": result.ratios,
         }
 
     async def recompute_ratios(self, company: Company, periods: Iterable[str] | None = None) -> int:
-        """(Re)compute financial_ratios from the stored statements (no network).
+        """(Re)compute ``financial_ratios`` from the stored facts (no statement fetch).
 
-        ``periods=None`` recomputes every stored period. The caller commits.
+        ``periods`` is accepted for compatibility; every period is recomputed. The
+        caller commits.
         """
-        statements = await self.repo.get_for_company(company.id)
-        targets = sorted(set(periods) if periods is not None else {s.period for s in statements})
-        written = 0
-        for period in targets:
-            ratios = self.analysis_service.ratios_from_statements(statements, period, ticker=company.ticker)
-            if ratios:
-                await self.ratio_repo.upsert(company_id=company.id, period=period, **ratios)
-                written += 1
-        return written
+        from src.services.fundamentals_service import compute_company_ratios, load_market_inputs
+
+        market = (await load_market_inputs([company.ticker], session=self.session)).get(company.ticker)
+        return await compute_company_ratios(self.session, company, market)
 
 
 async def recompute_financial_ratios(session: AsyncSession, ticker: str | None = None) -> dict[str, int]:
-    """Recompute stored ratios for one company (``ticker``) or all active companies.
+    """Recompute stored ratios for one company (``ticker``) or every company with facts.
 
-    Idempotent; reads only the statements already in the database.
+    Idempotent; reads the stored facts (no statement fetch) and today's prices.
     """
-    from src.db.repository import CompanyRepository
+    from src.services.fundamentals_service import recompute_ratios
 
-    repo = CompanyRepository(session)
-    if ticker:
-        company = await repo.get_by_ticker(ticker)
-        companies = [company] if company is not None else []
-    else:
-        companies = list(await repo.get_all())
-    service = FinancialService(session)
-    written = 0
-    for company in companies:
-        written += await service.recompute_ratios(company)
-        await session.commit()
-    logger.info("financial_ratios_recomputed", companies=len(companies), ratios_written=written)
-    return {"companies": len(companies), "ratios_written": written}
+    summary = await recompute_ratios([ticker] if ticker else None)
+    logger.info("financial_ratios_recomputed", companies=summary["companies"], ratios_written=summary["ratios_written"])
+    return {"companies": int(summary["companies"]), "ratios_written": int(summary["ratios_written"])}
