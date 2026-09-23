@@ -1,7 +1,9 @@
-"""Seed script: companies (BIST 100), sources, polling_state, notification_rules.
+"""Seed script: companies (BIST universe), sources, polling_state, notification_rules.
 
-BIST 100 uyeleri borsapy uzerinden canli cekilir (Index("XU100").components);
-erisim yoksa asagidaki statik BIST 30 listesine geri duser.
+Sirketler once ``universe.sync`` ile yazilir (TradingView + Borsa Istanbul endeks dosyasi +
+KAP; ~630 hisse, XU100 uyeleri ``tracking_tier=core``, bkz. src/services/universe_service.py).
+Evren kaynaklarina ulasilamazsa eski yol: BIST 100 uyeleri borsapy uzerinden
+(Index("XU100").components), o da yoksa asagidaki statik BIST 30 listesi.
 
 Idempotent: every row is upserted by its natural key (ticker / source code /
 source_id), so running the script again refreshes names and company data but keeps
@@ -15,6 +17,8 @@ import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import structlog  # noqa: E402
 
 from src.core.config import settings  # noqa: E402
 from src.core.enums import NotificationChannel, NotificationFrequency, Severity, SourceKind  # noqa: E402
@@ -139,9 +143,31 @@ async def apply_official_names(company_list: list[dict[str, Any]]) -> None:
     print(f"KAP resmi unvanlari uygulandi: {updated} sirket")
 
 
+logger = structlog.get_logger("seed")
+
+
+async def seed_universe() -> bool:
+    """Write the whole BIST universe with ``universe.sync``; False when its sources are unreachable."""
+    from src.adapters.utils import close_http_client
+    from src.services.universe_service import sync_universe
+
+    try:
+        summary = await sync_universe(with_checks=False)
+    except Exception as e:
+        logger.warning("seed_universe_failed", error=f"{type(e).__name__}: {e}")
+        return False
+    finally:
+        await close_http_client()
+    logger.info("seed_universe_synced", companies=summary["universe"], inserted=summary["inserted"],
+                core=len(summary["core"] or []), source_errors=summary["source_errors"])
+    return summary["universe"] >= 100
+
+
 async def seed() -> None:
-    company_list = fetch_bist100_companies()
-    await apply_official_names(company_list)
+    universe_seeded = await seed_universe()
+    company_list = [] if universe_seeded else fetch_bist100_companies()
+    if company_list:
+        await apply_official_names(company_list)
     try:
         async with async_session_factory() as session:
             company_repo = CompanyRepository(session)
@@ -171,9 +197,10 @@ async def seed() -> None:
             rule_repo = NotificationRuleRepository(session)
             existing_rules = await rule_repo.get_all()
             created_demo_rule = False
-            if not existing_rules and companies and not settings.is_production:
+            demo_company = companies[0] if companies else next(iter(await company_repo.get_all()), None)
+            if not existing_rules and demo_company is not None and not settings.is_production:
                 await rule_repo.create(
-                    company_id=companies[0].id,
+                    company_id=demo_company.id,
                     email="test@example.com",
                     channel=NotificationChannel.EMAIL,
                     frequency=NotificationFrequency.INSTANT,
@@ -186,7 +213,10 @@ async def seed() -> None:
             await session.commit()
 
             print("Seed completed successfully!")
-            print(f"  Companies: {len(companies)}")
+            if universe_seeded:
+                print(f"  Companies: {len(await company_repo.get_all())} active (universe.sync)")
+            else:
+                print(f"  Companies: {len(companies)}")
             for c in companies:
                 print(f"    - {c.ticker}: {c.display_name}")
             print(f"  Sources: {len(SOURCES_DATA)}")
