@@ -268,3 +268,37 @@ tanımlıdır (varsayılanlar §7.2-§7.4'te anıldı); tam liste: `QUALITY_WORK
 `QUALITY_STALE_ACTIVE_COMPANY_DAYS`, `QUALITY_PRICE_CROSSCHECK_SYMBOLS`,
 `QUALITY_PRICE_CROSSCHECK_BARS`, `QUALITY_PRICE_CROSSCHECK_WARN_PCT`,
 `QUALITY_PRICE_CROSSCHECK_FAIL_PCT`, `QUALITY_PRICE_CROSSCHECK_TIMEOUT_SECONDS`.
+
+## 8. Birleştirme notları (data-infra → master)
+
+Branch, 22.09.2026 gecesi master'ın **commitlenmemiş** çalışma ağacının anlık görüntüsünden (`2080f8b`)
+dallandı; master'daki çalışma o tarihten beri commitlenmeden sürdü. Sıra:
+
+1. Master'daki çalışma ağacı commitlenir (dashboard, KAP akışı, migration `010_event_kap_feed` vb.).
+2. `alembic/versions/020_data_platform.py` içinde `down_revision = "009"` → `"010"` yapılır
+   (010 KAP olay akışı migration'ıdır; 020 ondan bağımsızdır, yalnızca zincir doğrusal kalmalı).
+   Ardından `alembic check` ve `upgrade → downgrade base → upgrade` gidiş-dönüşü yeniden koşulur.
+3. `git merge master` (data-infra üzerinde). Beklenen çakışmalar ve kural:
+   - `src/adapters/fundamentals.py`: branch'te yalnızca facade (yeniden dışa aktarım); master'daki
+     düzeltmeler ilgili `fundamentals_*.py` modülüne taşınır (ör. PD/DD `price_book_fq` düzeltmesi
+     `fundamentals_snapshot.py`'de zaten var) → **branch sürümü alınır**.
+   - `src/db/models.py`: KAP oturumunun `NormalizedEvent`/`RawEvent` kolonları master'dan, diğer tüm
+     modeller branch'ten; `src/db/repository.py`: olay sorguları master'dan, `CompanyRepository.get_all(tier=...)`,
+     `PriceDataRepository`, finansal repository'ler branch'ten; `src/api/routers.py`: `/events*` master'dan,
+     `/companies`, `/prices*`, `/financials*` branch'ten; `src/adapters/price.py`, `index_adapter.py`: branch.
+   - `src/adapters/macro.py`: master sürümü (ekonomik takvim); depo öncelikli okuma `routers_macro.py` üzerinden
+     `macro_service`'e delege edildiği için `macro.py`'de değişiklik gerekmez.
+   - Master'da silinen test dosyaları (`test_analysis_ratios.py`, `test_fundamentals_ratios.py`,
+     `test_market_periods.py`, `test_price_service.py`, `test_technical_endpoints.py`): branch'te yeniden
+     yazıldılar ve v2 şemayı test ederler → branch sürümü tutulur.
+   - `src/workers/polling_worker.py`: master'daki KAP değişiklikleri + branch'teki `POLL_SOURCES = ("kap",)`.
+4. Dashboard: branch `dashboard/` klasörüne dokunmaz. Birleştirme sonrası frontend için gerekli küçük
+   eklemeler (başka oturumca master'da hazırlanıyor): `meta` bloğunu gösteren tolerant `DataMeta` bileşeni,
+   `parsers.ts` `mergeRatios` için `ttm: basis === "ttm"` işareti, hedef fiyat kartında kaynak etiketi
+   (`meta.source` = `hedeffiyat`), `GET /companies` çağrılarının varsayılan çekirdek katmanla uyumlu olması.
+5. Veritabanı: production'da `alembic upgrade head` (020 `price_data`'yı `price_bars`'a taşır, v1 finansal
+   tablo/oran satırlarını **atar**; `fundamentals_worker` ilk turda çekirdek şirketleri KAP'tan yeniden
+   doldurur). Worker'ı başlatınca evren senkronu ve geçmiş bar yüklemesi kendiliğinden başlar
+   (tam evren ~35 dk, KAP tabloları çekirdek için ~1 saat, evren için birkaç gün).
+6. Geliştirme ortamı: `docker-compose.dev.yml` overlay'i ile kaynaklar bind-mount edilir; Temmuz tarihli
+   eski imajla çalışan konteynerler yerine bu overlay veya yerel uvicorn/worker kullanılmalı.
