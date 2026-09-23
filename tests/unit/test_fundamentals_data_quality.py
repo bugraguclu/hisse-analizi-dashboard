@@ -353,3 +353,41 @@ def test_ratio_shares_use_paid_in_capital_unless_capital_changed():
     # A bonus issue after the balance-sheet date shows up as a large gap.
     assert f._ratio_shares(1_000e6, 2_000e6) == (2_000e6, "market_data")
     assert f._ratio_shares(None, None) == (None, None)
+
+
+# Recently listed company (BALSU, 2026-09): placeholder columns without a period
+# label for the years before the listing — skipped, not a parse error.
+NEW_LISTING_SUMMARY_HTML = """
+<html><body><table>
+  <tr><th>FİNANSAL DURUM TABLOSU</th><th></th><th></th><th>2024/12</th><th>2025/12</th></tr>
+  <tr><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>Sunum Para Birimi</td><td></td><td></td><td>TL</td><td>TL</td></tr>
+  <tr><td>Finansal Tablo Niteliği</td><td></td><td></td><td>Konsolide</td><td>Konsolide</td></tr>
+  <tr><td>Toplam Varlıklar</td><td></td><td></td><td>14.480.595.127</td><td>31.085.747.735</td></tr>
+  <tr><td>Toplam Özkaynaklar</td><td></td><td></td><td>4.272.000.000</td><td>6.019.000.000</td></tr>
+  <tr><td>KAR VEYA ZARAR VE DİĞER KAPSAMLI GELİR TABLOSU</td><td></td><td></td><td>2024/12</td><td>2025/12</td></tr>
+  <tr><td>Sunum Para Birimi</td><td></td><td></td><td>TL</td><td>TL</td></tr>
+  <tr><td></td><td></td><td></td><td></td></tr>
+  <tr><td>Hasılat</td><td></td><td></td><td>17.393.000.000</td><td>22.616.000.000</td></tr>
+  <tr><td>Net Dönem Kârı (Zararı)</td><td></td><td></td><td>475.000.000</td><td>254.000.000</td></tr>
+</table></body></html>
+"""
+
+
+def test_kap_parser_skips_blank_period_columns_of_new_listings():
+    parsed = _parse_kap_financial_summary(NEW_LISTING_SUMMARY_HTML)
+
+    assert parsed["periods"] == ["2025/12", "2024/12"]
+    assets = parsed["balance_sheet"][0]
+    assert assets == {"Item": "Toplam Varlıklar", "2025/12": 31_085_747_735.0, "2024/12": 14_480_595_127.0}
+    assert parsed["period_info"]["balance"]["2025/12"] == {
+        "presentation_unit": "TL", "multiplier": 1.0, "currency": "TRY", "consolidation": "Konsolide"
+    }
+    assert parsed["income_statement"][1]["2025/12"] == 254_000_000.0
+
+
+def test_kap_parser_still_rejects_non_period_headers():
+    html = NEW_LISTING_SUMMARY_HTML.replace("<th></th><th></th><th>2024/12</th>", "<th></th><th>x</th><th>2024/12</th>", 1)
+
+    with pytest.raises(ValueError):
+        _parse_kap_financial_summary(html)

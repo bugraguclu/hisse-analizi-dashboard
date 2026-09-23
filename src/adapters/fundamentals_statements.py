@@ -8,25 +8,43 @@ Kaynaklar:
   nakit ve finansal borç. IAS 29 uygulayan şirketlerde yıl sonu kolonlarını
   güncel satın alma gücüne göre yeniden ifade eder; KAP ile örtüşen dönemlerde
   katsayıyla ilk açıklanan değere çevrilir (bkz. ``restatement_factor``).
+
+Bu modül fundamentals deposunun (``src.services.fundamentals_service``) saf
+parçalarını da sağlar:
+
+- :func:`kap_statement_rows` / :func:`isyatirim_statement_rows` — kaynak başına,
+  dönem × tablo ``financial_statements`` satırları (sıralı kalemler, tam TL);
+- :func:`kap_summary_from_rows` / :func:`isyatirim_table_from_rows` — depodaki
+  satırlardan canlı adaptör çıktısının aynısını kurar (görünümler depodan ve
+  canlıdan birebir aynı üretilir);
+- :func:`build_canonical_facts` — KAP (ilk açıklanan) öncelikli kanonik kalemler
+  (``financial_facts``): İş Yatırım yalnızca kapsamı ve tanımı KAP ile doğrulanan
+  kalem/dönemleri, IAS 29 katsayısı geri alınarak tamamlar;
+- :func:`build_statement_view` / :func:`build_cashflow_view` /
+  :func:`build_live_ratios_view` — API yanıtları.
 """
 
 import asyncio
+import hashlib
+import json
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 
 from src.adapters.financial_adapter import (
     FLOW_KEYS,
+    ISYATIRIM_COMPANY_CARD_URL,
+    ISYATIRIM_GROUP_FINANCIAL,
     ISYATIRIM_GROUP_INDUSTRIAL,
+    SECTION_BY_STATEMENT_TYPE,
+    STATEMENT_TYPE_BY_SECTION,
     STOCK_KEYS,
     IsYatirimError,
-    build_ratio_inputs,
     canonical_financial_items,
-    compute_financial_ratios,
-    derive_financial_amounts,
     discrete_quarter_values,
     fetch_isyatirim_financials,
     isyatirim_statement_maps,
@@ -38,6 +56,7 @@ from src.adapters.financial_adapter import (
     restatement_factor,
     shift_months,
     sort_periods_desc,
+    statement_template,
     to_number,
     ttm_components,
 )
@@ -45,8 +64,14 @@ from src.adapters.utils import (
     MarketDataError,
     SymbolNotFoundError,
     cached,
-    get_http_client,
     run_sync,
+)
+from src.services.analysis_service import (
+    FINANCIAL_TEMPLATES,
+    build_ratio_inputs,
+    compute_financial_ratios,
+    derive_financial_amounts,
+    trailing_quarters,
 )
 
 from src.adapters.fundamentals_common import (  # noqa: F401
@@ -82,12 +107,11 @@ from src.adapters.fundamentals_common import (  # noqa: F401
     _get_kap_directory,
     _kap_company,
     _require_listed,
+    kap_get,
 )
 from src.adapters.fundamentals_snapshot import _get_market_snapshot
 
 logger = structlog.get_logger(__name__)
-
-
 
 # ---------------------------------------------------------------------------
 # KAP financial summary
@@ -150,11 +174,16 @@ def _parse_kap_section(
 
     ``inherited_units`` (period → unit text) applies when the block has no
     unit row of its own (the statements share the presentation unit).
+    Blank header cells are empty columns (recently listed companies show
+    placeholders for years before their listing) and are skipped.
     """
     header = rows[0]
-    periods = [cell.strip() for cell in header[1:]]
+    header_cells = [str(cell).strip() for cell in header[1:]]
+    columns = [j + 1 for j, cell in enumerate(header_cells) if cell]  # cell index of every period column
+    periods = [header[c].strip() for c in columns]
     if not periods or not all(_PERIOD_LABEL_RE.match(p) for p in periods):
-        raise ValueError(f"KAP dönem başlıkları okunamadı: {periods}")
+        raise ValueError(f"KAP dönem başlıkları okunamadı: {header_cells}")
+    width = len(header)
     count = len(periods)
     multipliers = [1.0] * count
     currencies = ["TRY"] * count
@@ -166,7 +195,7 @@ def _parse_kap_section(
         key = normalize_label(cells[0])
         if key == _KAP_UNIT_ROW:
             for j in range(count):
-                text = cells[j + 1].strip() if j + 1 < len(cells) else ""
+                text = cells[columns[j]].strip() if columns[j] < len(cells) else ""
                 if text:
                     units[j] = text
                     multipliers[j], currencies[j] = _kap_unit(text)
@@ -179,7 +208,7 @@ def _parse_kap_section(
                         multipliers[j], currencies[j] = _kap_unit(filled[0])
         elif key == _KAP_NATURE_ROW:
             for j in range(count):
-                text = cells[j + 1].strip() if j + 1 < len(cells) else ""
+                text = cells[columns[j]].strip() if columns[j] < len(cells) else ""
                 natures[j] = text or None
 
     for j in range(count):
@@ -193,9 +222,9 @@ def _parse_kap_section(
     for cells in body:
         label = cells[0].strip()
         key = normalize_label(label)
-        if not label or key in (_KAP_UNIT_ROW, _KAP_NATURE_ROW) or len(cells) != count + 1:
+        if not label or key in (_KAP_UNIT_ROW, _KAP_NATURE_ROW) or len(cells) != width:
             continue
-        values = [_parse_kap_number(cells[j + 1], multipliers[j]) for j in range(count)]
+        values = [_parse_kap_number(cells[columns[j]], multipliers[j]) for j in range(count)]
         if all(v is None for v in values):
             continue
         record: dict[str, Any] = {"Item": label}
@@ -258,10 +287,7 @@ def _parse_kap_financial_summary(html: str) -> dict[str, Any]:
         raise ValueError("KAP finansal özetinde veri bulunamadı")
 
     periods = sort_periods_desc([*balance["periods"], *income["periods"]])
-    labels = {normalize_label(r["Item"]) for r in balance["records"]} | {
-        normalize_label(r["Item"]) for r in income["records"]
-    }
-    template = "bank" if ("mevduat" in labels or "net faiz geliri veya gideri" in labels) else "industrial"
+    template = statement_template(r["Item"] for r in (*balance["records"], *income["records"]))
     currencies = {info["currency"] for info in balance["info"].values()}
     return {
         "periods": periods,
@@ -279,7 +305,7 @@ async def _get_kap_financial_summary(ticker: str) -> dict[str, Any]:
     entry = await _kap_company(ticker)
     if entry is None:
         raise MarketDataError("KAP şirket listesine şu anda ulaşılamıyor", status_code=503)
-    response = await get_http_client().get(entry["url"])
+    response = await kap_get(entry["url"])
     response.raise_for_status()
     parsed = await run_sync(_parse_kap_financial_summary, response.text)
     return {**parsed, "source_url": entry["url"]}
@@ -447,43 +473,571 @@ def _scaled_items(
     return result
 
 
+def combined_template(kap: Mapping[str, Any] | None, isy: Mapping[str, Any] | None) -> str:
+    """Statement template of a company from both sources (İş Yatırım's financial layouts win)."""
+    template = str((kap or {}).get("template") or (isy or {}).get("template") or "industrial")
+    isy_template = (isy or {}).get("template")
+    if isy_template in ("bank", "insurance"):
+        template = str(isy_template)
+    return template
+
+
+def kap_statement_maps(kap: Mapping[str, Any] | None) -> dict[str, dict[str, dict[str, Any]]]:
+    """``{period: {"balance": {label: value}, "income": {label: value}}}`` of a KAP summary."""
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    for period in (kap or {}).get("periods", []):
+        result[period] = {
+            "balance": {r["Item"]: r.get(period) for r in (kap or {}).get("balance_sheet", [])},
+            "income": {r["Item"]: r.get(period) for r in (kap or {}).get("income_statement", [])},
+        }
+    return result
+
+
+def kap_period_units(kap: Mapping[str, Any] | None) -> dict[str, float]:
+    """Presentation-unit multiplier per KAP period (balance sheet), e.g. ``1e6``."""
+    return {period: _period_unit(kap, period) for period in (kap or {}).get("periods", [])}
+
+
 def _merged_canonical_by_period(
     kap: Mapping[str, Any] | None,
     isy: Mapping[str, Any] | None,
 ) -> tuple[dict[str, dict[str, float | None]], str]:
     """Canonical items per period for ratio/TTM work, plus the statement template.
 
-    İş Yatırım supplies the consistent multi-period series (flows need the
-    prior-year interim period that KAP's summary lacks); its IAS 29-restated
-    year-end columns are converted back to reported values with the KAP factor.
-    KAP fills periods/items İş Yatırım does not have.
+    KAP (first published) first; İş Yatırım completes items and periods only
+    where its scope and definitions are verified against KAP (see
+    :func:`build_canonical_facts`).
     """
-    kap_items = _kap_canonical_by_period(kap) if kap else {}
-    isy_items = _isy_canonical_by_period(isy) if isy else {}
-    template = (kap or {}).get("template") or (isy or {}).get("template") or "industrial"
-    if isy and isy.get("template") == "bank":
-        template = "bank"
-    both_industrial = template == "industrial" and (isy or {}).get("group") == ISYATIRIM_GROUP_INDUSTRIAL
-    factors = _restatement_factors(kap_items, isy_items, "industrial" if both_industrial else None)
+    facts = facts_from_sources(kap, isy)
+    return facts.items, facts.template
 
-    merged: dict[str, dict[str, float | None]] = {}
-    for period in sort_periods_desc([*kap_items, *isy_items]):
-        base = (
-            _scaled_items(isy_items[period], factors.get(period), _period_unit(kap, period))
-            if period in isy_items
-            else {}
+
+# ---------------------------------------------------------------------------
+# Canonical facts (financial_facts): KAP first, İş Yatırım verified
+# ---------------------------------------------------------------------------
+
+_FACT_TOLERANCE = 0.005  # relative deviation accepted between KAP and de-restated İş Yatırım values
+_FACTOR_CONSISTENCY = 0.01  # balance vs flow restatement factor of one period
+_RESTATED_THRESHOLD = 0.002  # |factor − 1| above this = column re-expressed (IAS 29)
+_SCOPE_ANCHORS = ("total_equity", "net_income")
+CASH_FLOW_KEYS: frozenset[str] = frozenset(
+    {"depreciation_amortization", "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
+     "capex", "free_cash_flow"}
+)
+
+
+def fact_statement(key: str) -> str:
+    """``balance`` / ``income`` / ``cashflow`` — the statement a canonical key comes from."""
+    if key in CASH_FLOW_KEYS:
+        return "cashflow"
+    return "income" if key in FLOW_KEYS else "balance"
+
+
+@dataclass
+class CanonicalFacts:
+    """Result of :func:`build_canonical_facts` (all plain data, JSON-serialisable)."""
+
+    template: str
+    fiscal_year_end_month: int = 12
+    items: dict[str, dict[str, float | None]] = field(default_factory=dict)
+    sources: dict[str, dict[str, Any]] = field(default_factory=dict)
+    factors: dict[str, dict[str, float | None]] = field(default_factory=dict)
+    isyatirim_scope: str = "absent"  # match | mismatch | unknown | absent
+    key_checks: dict[str, dict[str, int]] = field(default_factory=dict)
+    rejected_keys: list[str] = field(default_factory=list)
+    skipped_periods: dict[str, str] = field(default_factory=dict)
+    restated_periods: dict[str, float] = field(default_factory=dict)
+
+
+def _is_year_end(period: str, fiscal_year_end_month: int) -> bool:
+    parsed = parse_period(period)
+    return parsed is not None and months_into_fiscal_year(parsed[1], fiscal_year_end_month) == 12
+
+
+def _factor_for(key: str, factors: Mapping[str, float | None]) -> float:
+    if key == "paid_in_capital":  # nominal capital is never re-expressed
+        return 1.0
+    value = factors.get("flow") if key in FLOW_KEYS else factors.get("balance")
+    return float(value) if value is not None else 1.0
+
+
+_STATEMENT_GROUPS: tuple[tuple[str, ...], ...] = (
+    tuple(STOCK_KEYS),
+    tuple(k for k in FLOW_KEYS if k not in CASH_FLOW_KEYS),
+    tuple(k for k in FLOW_KEYS if k in CASH_FLOW_KEYS),
+)
+
+
+def _without_placeholder_zeros(items: dict[str, float | None]) -> dict[str, float | None]:
+    """İş Yatırım fills periods a company did not report (before its listing) with zeros.
+
+    A statement whose every canonical item is 0 / missing — or a balance sheet
+    without total assets — was not reported: its items become ``None`` (missing
+    data is never ``0``).
+    """
+    for group in _STATEMENT_GROUPS:
+        values = [items.get(k) for k in group]
+        empty = all(not v for v in values)
+        if group is _STATEMENT_GROUPS[0] and not items.get("total_assets"):
+            empty = True
+        if empty:
+            for key in group:
+                items[key] = None
+    return items
+
+
+def _canonical_maps(statements: Mapping[str, Mapping[str, Mapping[str, Any]]]) -> dict[str, dict[str, float | None]]:
+    return {
+        period: _without_placeholder_zeros(
+            canonical_financial_items(balance=maps.get("balance"), income=maps.get("income"), cashflow=maps.get("cashflow"))
         )
-        reported = kap_items.get(period, {})
-        combined: dict[str, float | None] = {}
-        for key in (*FLOW_KEYS, *STOCK_KEYS):
-            value = base.get(key)
-            if value is None:
-                value = reported.get(key)
-            elif key == "paid_in_capital" and reported.get(key) is not None:
-                value = reported.get(key)
-            combined[key] = value
-        merged[period] = combined
-    return merged, template
+        for period, maps in statements.items()
+        if parse_period(period) is not None
+    }
+
+
+def build_canonical_facts(
+    kap_statements: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    isy_statements: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    *,
+    template: str = "industrial",
+    fiscal_year_end_month: int = 12,
+    kap_units: Mapping[str, float] | None = None,
+) -> CanonicalFacts:
+    """Canonical items per period on the first-published (KAP) basis.
+
+    ``*_statements`` are ``{period: {"balance"|"income"|"cashflow": {label: value}}}``
+    (KAP: every stored summary period; İş Yatırım: its values as served, i.e.
+    IAS 29 year-end columns re-expressed in the latest measuring unit).
+
+    1. For every period both sources cover, the restatement factor KAP ÷ İş
+       Yatırım is measured on total assets (balance) and revenue / net income
+       (flows); factors that disagree by more than 1 % mean a different scope
+       (banks and insurers: İş Yatırım serves solo figures) → no factor.
+    2. Every canonical key is compared on the two most recent periods with a
+       factor; a key whose İş Yatırım definition differs (holding "esas
+       faaliyet kârı" with equity-method income) is never taken from İş Yatırım.
+       Total equity and net income decide whether the scope matches at all.
+    3. KAP periods keep KAP values; missing keys (cash flow, D&A, cash, debt)
+       come from İş Yatırım × factor. Periods only İş Yatırım has (interim
+       quarters) are used as served — İş Yatırım re-expresses fiscal year-end
+       columns only — when the scope matches; its year-end columns of an IAS 29
+       reporter are skipped without a KAP counterpart (first-published value
+       unknown).
+    """
+    fy = int(fiscal_year_end_month or 12)
+    kap_items = _canonical_maps(kap_statements)
+    isy_items = _canonical_maps(isy_statements)
+    units = kap_units or {}
+    result = CanonicalFacts(template=template, fiscal_year_end_month=fy)
+
+    overlap = sort_periods_desc(set(kap_items) & set(isy_items))
+    for period in overlap:
+        k, i = kap_items[period], isy_items[period]
+        balance = restatement_factor(k.get("total_assets"), i.get("total_assets"))
+        flow = restatement_factor(k.get("revenue"), i.get("revenue")) or restatement_factor(
+            k.get("net_income"), i.get("net_income")
+        )
+        if balance is not None and flow is not None and abs(balance / flow - 1) > _FACTOR_CONSISTENCY:
+            balance = flow = None
+        result.factors[period] = {"balance": balance or flow, "flow": flow or balance}
+
+    checked = [p for p in overlap if result.factors[p]["balance"] is not None][:2]
+    for key in (*FLOW_KEYS, *STOCK_KEYS):
+        compared = mismatched = 0
+        for period in checked:
+            kap_value, isy_value = to_number(kap_items[period].get(key)), to_number(isy_items[period].get(key))
+            if kap_value is None or isy_value is None:
+                continue
+            compared += 1
+            expected = isy_value * _factor_for(key, result.factors[period])
+            unit = float(units.get(period) or 1.0)
+            if abs(kap_value - expected) > max(abs(kap_value) * _FACT_TOLERANCE, 1.5 * unit):
+                mismatched += 1
+        result.key_checks[key] = {"compared": compared, "mismatched": mismatched}
+
+    if not isy_items:
+        scope = "absent"
+    elif not overlap:
+        scope = "unknown"
+    elif not checked:
+        scope = "mismatch"
+    else:
+        anchors = [result.key_checks[k] for k in _SCOPE_ANCHORS if result.key_checks[k]["compared"]]
+        scope = "match" if anchors and all(a["mismatched"] == 0 for a in anchors) else "mismatch"
+    if scope == "unknown" and template in FINANCIAL_TEMPLATES:
+        scope = "mismatch"  # İş Yatırım's financial-sector tables are solo; KAP is consolidated
+    result.isyatirim_scope = scope
+
+    rejected = {k for k, check in result.key_checks.items() if check["mismatched"]}
+    if scope == "mismatch":
+        rejected = {*FLOW_KEYS, *STOCK_KEYS}
+    result.rejected_keys = sorted(rejected)
+    restating = False
+    for period, factor in result.factors.items():
+        value = factor["balance"]
+        if value is not None and _is_year_end(period, fy) and abs(value - 1) > _RESTATED_THRESHOLD:
+            restating = True
+            if scope == "match":
+                result.restated_periods[period] = value
+
+    for period in sort_periods_desc([*kap_items, *isy_items]):
+        row: dict[str, float | None]
+        keys: dict[str, str]
+        if period in kap_items:
+            row = dict(kap_items[period])
+            keys = {k: "kap" for k, v in row.items() if v is not None}
+            period_factor = result.factors.get(period)
+            if scope == "match" and period in isy_items and period_factor and period_factor["balance"] is not None:
+                unit = float(units.get(period) or 1.0)
+                for key in (*FLOW_KEYS, *STOCK_KEYS):
+                    isy_value = to_number(isy_items[period].get(key))
+                    if row.get(key) is not None or key in rejected or isy_value is None:
+                        continue
+                    f = _factor_for(key, period_factor)
+                    if abs(f - 1) > 1e-9:
+                        row[key] = _rescale(isy_value, f, unit)
+                        keys[key] = f"isyatirim*{f:.6f}"
+                    else:
+                        row[key] = isy_value
+                        keys[key] = "isyatirim"
+        elif scope == "mismatch":
+            result.skipped_periods[period] = "isyatirim_scope_mismatch"
+            continue
+        elif _is_year_end(period, fy) and (restating or scope != "match"):
+            result.skipped_periods[period] = (
+                "isyatirim_year_end_restated" if restating else "isyatirim_restatement_unknown"
+            )
+            continue
+        else:
+            row = {k: (None if k in rejected else to_number(v)) for k, v in isy_items[period].items()}
+            keys = {k: "isyatirim" for k, v in row.items() if v is not None}
+        if not any(v is not None for v in row.values()):
+            continue
+        result.items[period] = row
+        result.sources[period] = _fact_sources(keys, result.factors.get(period), scope)
+    return result
+
+
+def _fact_sources(
+    keys: Mapping[str, str], factor: Mapping[str, float | None] | None, scope: str
+) -> dict[str, Any]:
+    """``sources_json``: statement-level summary + the source of every key."""
+    by_statement: dict[str, set[str]] = {}
+    for key, source in keys.items():
+        by_statement.setdefault(fact_statement(key), set()).add(source.split("*", 1)[0])
+    summary: dict[str, Any] = {statement: "+".join(sorted(s)) for statement, s in sorted(by_statement.items())}
+    summary["keys"] = dict(sorted(keys.items()))
+    if factor and factor.get("balance") is not None:
+        summary["restatement_factor"] = {k: round(v, 6) for k, v in factor.items() if v is not None}
+    summary["isyatirim_scope"] = scope
+    return summary
+
+
+def facts_from_sources(kap: Mapping[str, Any] | None, isy: Mapping[str, Any] | None) -> CanonicalFacts:
+    """:func:`build_canonical_facts` for freshly fetched (or reconstructed) adapter payloads."""
+    return build_canonical_facts(
+        kap_statement_maps(kap),
+        isyatirim_statement_maps(isy) if isy else {},
+        template=combined_template(kap, isy),
+        fiscal_year_end_month=int((kap or {}).get("fiscal_year_end_month") or 12),
+        kap_units=kap_period_units(kap),
+    )
+
+
+# ---------------------------------------------------------------------------
+# financial_statements rows (store) ⇄ adapter payloads
+# ---------------------------------------------------------------------------
+
+SOURCE_KAP = "kap"
+SOURCE_ISYATIRIM = "isyatirim"
+_HASHED_FIELDS = (
+    "source", "period", "statement_type", "fiscal_year_end_month", "template", "consolidation",
+    "presentation_unit", "currency", "restated", "restatement_factor", "items_json", "source_url", "published_at",
+)
+
+
+def statement_content_hash(row: Mapping[str, Any]) -> str:
+    """Stable SHA-256 of a statement row's content (skips unchanged rows on upsert)."""
+    payload = {key: row.get(key) for key in _HASHED_FIELDS}
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _finish_row(row: dict[str, Any]) -> dict[str, Any]:
+    row["content_hash"] = statement_content_hash(row)
+    return row
+
+
+def _period_fields(period: str, fiscal_year_end_month: int) -> dict[str, Any] | None:
+    parsed = parse_period(period)
+    if parsed is None:
+        return None
+    months = months_into_fiscal_year(parsed[1], fiscal_year_end_month)
+    return {
+        "period": period_label(*parsed),
+        "fiscal_year_end_month": fiscal_year_end_month,
+        "months": months,
+        "period_type": "annual" if months == 12 else "interim",
+    }
+
+
+def kap_statement_rows(kap: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """``financial_statements`` rows (``source="kap"``) of a parsed KAP summary.
+
+    One row per period × {balance_sheet, income_stmt}; ``items_json`` keeps the
+    page's line order (values in full TL, ``None`` for "-"). The presentation
+    unit and consolidation are per column, as KAP shows them.
+    """
+    fy = int(kap.get("fiscal_year_end_month") or 12)
+    template = str(kap.get("template") or "industrial")
+    rows: list[dict[str, Any]] = []
+    for section, records_key in (("balance", "balance_sheet"), ("income", "income_statement")):
+        info_by_period = (kap.get("period_info") or {}).get(section) or {}
+        records = kap.get(records_key) or []
+        for period in kap.get("periods") or []:
+            fields = _period_fields(period, fy)
+            if fields is None:
+                continue
+            items = [
+                {"code": None, "label": str(r["Item"]), "key": normalize_label(r["Item"]), "value": to_number(r.get(period))}
+                for r in records
+            ]
+            if not any(item["value"] is not None for item in items):
+                continue
+            info = info_by_period.get(period) or {}
+            rows.append(
+                _finish_row(
+                    {
+                        "source": SOURCE_KAP,
+                        "statement_type": STATEMENT_TYPE_BY_SECTION[section],
+                        **fields,
+                        "template": template,
+                        "consolidation": info.get("consolidation"),
+                        "presentation_unit": info.get("presentation_unit"),
+                        "currency": info.get("currency") or "TRY",
+                        "restated": False,
+                        "restatement_factor": None,
+                        "items_json": items,
+                        "source_url": kap.get("source_url"),
+                        "published_at": None,
+                    }
+                )
+            )
+    return rows
+
+
+def isyatirim_statement_rows(
+    isy: Mapping[str, Any],
+    *,
+    ticker: str,
+    fiscal_year_end_month: int = 12,
+    restated: Mapping[str, float] | None = None,
+    consolidation: str | None = None,
+) -> list[dict[str, Any]]:
+    """``financial_statements`` rows (``source="isyatirim"``) of a MaliTablo table.
+
+    Values are stored as İş Yatırım serves them; ``restated`` maps the fiscal
+    year-end periods İş Yatırım re-expressed (IAS 29) to their factor
+    (KAP ÷ İş Yatırım), stored as ``restatement_factor``.
+    """
+    template = str(isy.get("template") or ("industrial" if isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL else "financial"))
+    url = ISYATIRIM_COMPANY_CARD_URL.format(ticker=ticker.upper())
+    by_section: dict[str, list[Mapping[str, Any]]] = {}
+    for item in isy.get("items") or []:
+        section = item.get("statement")
+        if section in STATEMENT_TYPE_BY_SECTION and item.get("code"):
+            by_section.setdefault(str(section), []).append(item)
+    rows: list[dict[str, Any]] = []
+    for period in isy.get("periods") or []:
+        fields = _period_fields(period, fiscal_year_end_month)
+        if fields is None:
+            continue
+        factor = (restated or {}).get(period)
+        for section in ("balance", "income", "cashflow"):
+            section_items = by_section.get(section)
+            if not section_items:
+                continue
+            items = [
+                {
+                    "code": str(item["code"]),
+                    "label": str(item.get("label") or ""),
+                    "key": normalize_label(item.get("label")),
+                    "value": to_number((item.get("values") or {}).get(period)),
+                }
+                for item in section_items
+            ]
+            rows.append(
+                _finish_row(
+                    {
+                        "source": SOURCE_ISYATIRIM,
+                        "statement_type": STATEMENT_TYPE_BY_SECTION[section],
+                        **fields,
+                        "template": template,
+                        "consolidation": consolidation,
+                        "presentation_unit": "TL",
+                        "currency": "TRY",
+                        "restated": factor is not None,
+                        "restatement_factor": round(factor, 6) if factor is not None else None,
+                        "items_json": items,
+                        "source_url": url,
+                        "published_at": None,
+                    }
+                )
+            )
+    return rows
+
+
+def _row_value(row: Any, name: str) -> Any:
+    return row.get(name) if isinstance(row, Mapping) else getattr(row, name, None)
+
+
+def _ordered_union(sequences: Iterable[Sequence[Any]]) -> list[Any]:
+    """Merge item sequences keeping the first sequence's order; new items go after their predecessor."""
+    merged: list[Any] = []
+    seen: set[Any] = set()
+    for sequence in sequences:
+        previous: Any = None
+        for item in sequence:
+            if item not in seen:
+                merged.insert(merged.index(previous) + 1 if previous is not None else 0, item)
+                seen.add(item)
+            previous = item
+    return merged
+
+
+def _labelled_items(items: Sequence[Mapping[str, Any]]) -> list[tuple[tuple[str, int], Any]]:
+    """``((label, occurrence), value)`` — duplicate labels stay separate lines."""
+    counts: dict[str, int] = {}
+    result = []
+    for item in items:
+        label = str(item.get("label") or "")
+        counts[label] = counts.get(label, 0) + 1
+        result.append(((label, counts[label]), item.get("value")))
+    return result
+
+
+def kap_summary_from_rows(rows: Iterable[Any], periods: Collection[str] | None = None) -> dict[str, Any] | None:
+    """Rebuild the :func:`_get_kap_financial_summary` payload from stored ``kap`` rows.
+
+    ``periods`` limits the columns (the latest fetch's periods, so a store-served
+    view equals the live one); ``None`` uses every stored period.
+    """
+    selected = [
+        r for r in rows
+        if _row_value(r, "source") == SOURCE_KAP and (periods is None or _row_value(r, "period") in periods)
+    ]
+    if not selected:
+        return None
+    newest = max(selected, key=lambda r: parse_period(_row_value(r, "period")) or (0, 0))
+    sections: dict[str, dict[str, Any]] = {}
+    for section, records_key in (("balance", "balance_sheet"), ("income", "income_statement")):
+        section_rows = sorted(
+            (r for r in selected if SECTION_BY_STATEMENT_TYPE.get(_row_value(r, "statement_type")) == section),
+            key=lambda r: parse_period(_row_value(r, "period")) or (0, 0),
+            reverse=True,
+        )
+        values: dict[str, dict[tuple[str, int], Any]] = {}
+        orders: list[list[tuple[str, int]]] = []
+        info: dict[str, dict[str, Any]] = {}
+        for r in section_rows:
+            pairs = _labelled_items(_row_value(r, "items_json") or [])
+            period = str(_row_value(r, "period"))
+            values[period] = dict(pairs)
+            orders.append([identity for identity, _ in pairs])
+            unit_text = _row_value(r, "presentation_unit")
+            multiplier, currency = _kap_unit(unit_text) if unit_text else (1.0, "TRY")
+            info[period] = {
+                "presentation_unit": unit_text,
+                "multiplier": multiplier,
+                "currency": _row_value(r, "currency") or currency,
+                "consolidation": _row_value(r, "consolidation"),
+            }
+        section_periods = [str(_row_value(r, "period")) for r in section_rows]
+        records = []
+        for identity in _ordered_union(orders):
+            record: dict[str, Any] = {"Item": identity[0]}
+            for period in section_periods:
+                record[period] = values[period].get(identity)
+            if any(record[p] is not None for p in section_periods):
+                records.append(record)
+        sections[section] = {
+            "records_key": records_key,
+            "records": records,
+            "periods": section_periods,
+            "info": {p: info[p] for p in reversed(section_periods)},  # KAP page order (oldest first)
+        }
+    all_periods = sort_periods_desc([p for s in sections.values() for p in s["periods"]])
+    currencies = {i["currency"] for i in sections["balance"]["info"].values()} or {"TRY"}
+    return {
+        "periods": all_periods,
+        "fiscal_year_end_month": int(_row_value(newest, "fiscal_year_end_month") or 12),
+        "template": _row_value(newest, "template") or "industrial",
+        "unit": currencies.pop() if len(currencies) == 1 else "MIXED",
+        "balance_sheet": sections["balance"]["records"],
+        "income_statement": sections["income"]["records"],
+        "period_info": {"balance": sections["balance"]["info"], "income": sections["income"]["info"]},
+        "source_url": _row_value(newest, "source_url"),
+    }
+
+
+def isyatirim_table_from_rows(rows: Iterable[Any], periods: Collection[str] | None = None) -> dict[str, Any] | None:
+    """Rebuild the :func:`fetch_isyatirim_financials` payload from stored ``isyatirim`` rows."""
+    selected = [
+        r for r in rows
+        if _row_value(r, "source") == SOURCE_ISYATIRIM and (periods is None or _row_value(r, "period") in periods)
+    ]
+    if not selected:
+        return None
+    selected.sort(key=lambda r: parse_period(_row_value(r, "period")) or (0, 0), reverse=True)
+    period_list = sort_periods_desc(str(_row_value(r, "period")) for r in selected)
+    items: dict[str, dict[str, Any]] = {}
+    order: dict[str, list[list[str]]] = {"balance": [], "income": [], "cashflow": []}
+    for r in selected:
+        section = SECTION_BY_STATEMENT_TYPE.get(_row_value(r, "statement_type"))
+        if section is None:
+            continue
+        period = str(_row_value(r, "period"))
+        codes = []
+        for entry in _row_value(r, "items_json") or []:
+            code = str(entry.get("code") or "")
+            if not code:
+                continue
+            codes.append(code)
+            item = items.setdefault(code, {"code": code, "label": entry.get("label"), "statement": section, "values": {}})
+            item["values"][period] = to_number(entry.get("value"))
+        order[section].append(codes)
+    ordered: list[dict[str, Any]] = []
+    for section in ("balance", "income", "cashflow"):
+        for code in _ordered_union(order[section]):
+            item = items[code]
+            item["values"] = {p: item["values"].get(p) for p in period_list}
+            ordered.append(item)
+    template = str(_row_value(selected[0], "template") or "industrial")
+    return {
+        "group": ISYATIRIM_GROUP_INDUSTRIAL if template == "industrial" else ISYATIRIM_GROUP_FINANCIAL,
+        "template": template,
+        "periods": period_list,
+        "items": ordered,
+    }
+
+
+def statement_maps_from_rows(rows: Iterable[Any], source: str) -> dict[str, dict[str, dict[str, Any]]]:
+    """``{period: {section: {label: value}}}`` of every stored row of ``source`` (facts input)."""
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    for r in rows:
+        if _row_value(r, "source") != source:
+            continue
+        section = SECTION_BY_STATEMENT_TYPE.get(_row_value(r, "statement_type"))
+        if section is None:
+            continue
+        values: dict[str, Any] = {}
+        for entry in _row_value(r, "items_json") or []:
+            label = str(entry.get("label") or "")
+            if label and label not in values:
+                values[label] = entry.get("value")
+        result.setdefault(str(_row_value(r, "period")), {})[section] = values
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -734,8 +1288,21 @@ def _isy_rows(
     return rows
 
 
-async def _statement_view(ticker: str, quarterly: bool, section: str) -> dict[str, Any]:
-    kap, isy = await _load_statement_sources(ticker, isy_wait=_ISY_WAIT_STATEMENTS if quarterly else 0.0)
+def build_statement_view(
+    ticker: str,
+    kap: Mapping[str, Any] | None,
+    isy: Mapping[str, Any] | None,
+    *,
+    quarterly: bool,
+    section: str,
+) -> dict[str, Any]:
+    """Balance sheet (``section="balance"``) / income statement (``"income"``) payload.
+
+    Pure: the same payload whether ``kap``/``isy`` were just fetched or rebuilt
+    from the store (:func:`kap_summary_from_rows`, :func:`isyatirim_table_from_rows`).
+    """
+    if kap is None and isy is None:
+        raise MarketDataError(_MSG_STATEMENTS, status_code=503)
     fy_month = int((kap or {}).get("fiscal_year_end_month") or 12)
     flows = section == "income"
     kap_key = "balance_sheet" if section == "balance" else "income_statement"
@@ -787,6 +1354,11 @@ async def _statement_view(ticker: str, quarterly: bool, section: str) -> dict[st
     return payload
 
 
+async def _statement_view(ticker: str, quarterly: bool, section: str) -> dict[str, Any]:
+    kap, isy = await _load_statement_sources(ticker, isy_wait=_ISY_WAIT_STATEMENTS if quarterly else 0.0)
+    return build_statement_view(ticker, kap, isy, quarterly=quarterly, section=section)
+
+
 async def get_balance_sheet(ticker: str, quarterly: bool = False) -> dict:
     """Bilanço (TL, dönem sonu değerleri). ``quarterly=True`` ara dönemleri de içerir."""
     try:
@@ -803,53 +1375,64 @@ async def get_income_statement(ticker: str, quarterly: bool = False) -> dict:
         return _failure(e, _MSG_STATEMENTS, "fundamentals_income_stmt_error", ticker, data=[])
 
 
+def build_cashflow_view(
+    ticker: str,
+    kap: Mapping[str, Any] | None,
+    isy: Mapping[str, Any] | None,
+    *,
+    quarterly: bool,
+) -> dict[str, Any]:
+    """Cash-flow payload (İş Yatırım rows; year-end columns converted to KAP's first-published basis)."""
+    fy_month = int((kap or {}).get("fiscal_year_end_month") or 12)
+    base: dict[str, Any] = {
+        "ticker": ticker,
+        "quarterly": quarterly,
+        "source": f"{_SOURCE_ISY} (borsapy)",
+        "unit": "TRY",
+        "value_basis": "cumulative_ytd",
+        "fiscal_year_end_month": fy_month,
+    }
+    has_cashflow = isy is not None and any(i.get("statement") == "cashflow" for i in isy.get("items", []))
+    if isy is None or not has_cashflow:
+        return {**base, "as_of": None, "data": [], "available": False, "periods": [], "period_info": [],
+                "notes": ["Bu şirket için nakit akış tablosu yayınlanmıyor (ör. bankalar)."]}
+
+    periods = [p for p in isy["periods"] if quarterly or (parse_period(p) or (0, 0))[1] == fy_month]
+    if quarterly:
+        periods = periods[:8]
+    factors: dict[str, dict[str, float | None]] = {}
+    if kap is not None and kap.get("template") == "industrial" and isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL:
+        factors = _restatement_factors(
+            _kap_canonical_by_period(kap), _isy_canonical_by_period(isy), "industrial"
+        )
+    units = {p: _period_unit(kap, p, "income") for p in isy["periods"]} if kap else {}
+    rows = _isy_rows(isy, "cashflow", periods, factors, "flow", units)
+    periods = _periods_of(rows)
+    payload = {
+        **base,
+        "as_of": periods[0] if periods else None,
+        "data": rows,
+        "available": bool(rows),
+        "periods": periods,
+        "period_info": _period_info(periods, fy_month, {p: _SOURCE_ISY for p in periods}, None, factors, "flow"),
+        "notes": (
+            ["Yıl sonu kolonları KAP'ta ilk açıklanan tutarlara çevrildi (enflasyon düzeltmesi katsayısı)."]
+            if any((factors.get(p) or {}).get("flow") not in (None, 1.0) for p in periods)
+            else []
+        ),
+    }
+    if quarterly:
+        all_rows = _isy_rows(isy, "cashflow", isy["periods"], factors, "flow", units)
+        discrete = _discrete_rows(all_rows, fy_month)
+        payload["discrete"] = [{"Item": r["Item"], **{p: r.get(p) for p in periods}} for r in discrete]
+    return payload
+
+
 async def get_cashflow(ticker: str, quarterly: bool = False) -> dict:
     """Nakit akış tablosu (İş Yatırım; TL, kümülatif; bankalar için mevcut değil)."""
     try:
         kap, isy = await _load_statement_sources(ticker, isy_wait=_ISY_WAIT_RATIOS)
-        fy_month = int((kap or {}).get("fiscal_year_end_month") or 12)
-        base: dict[str, Any] = {
-            "ticker": ticker,
-            "quarterly": quarterly,
-            "source": f"{_SOURCE_ISY} (borsapy)",
-            "unit": "TRY",
-            "value_basis": "cumulative_ytd",
-            "fiscal_year_end_month": fy_month,
-        }
-        has_cashflow = isy is not None and any(i.get("statement") == "cashflow" for i in isy.get("items", []))
-        if isy is None or not has_cashflow:
-            return {**base, "as_of": None, "data": [], "available": False, "periods": [], "period_info": [],
-                    "notes": ["Bu şirket için nakit akış tablosu yayınlanmıyor (ör. bankalar)."]}
-
-        periods = [p for p in isy["periods"] if quarterly or (parse_period(p) or (0, 0))[1] == fy_month]
-        if quarterly:
-            periods = periods[:8]
-        factors: dict[str, dict[str, float | None]] = {}
-        if kap is not None and kap.get("template") == "industrial" and isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL:
-            factors = _restatement_factors(
-                _kap_canonical_by_period(kap), _isy_canonical_by_period(isy), "industrial"
-            )
-        units = {p: _period_unit(kap, p, "income") for p in isy["periods"]} if kap else {}
-        rows = _isy_rows(isy, "cashflow", periods, factors, "flow", units)
-        periods = _periods_of(rows)
-        payload = {
-            **base,
-            "as_of": periods[0] if periods else None,
-            "data": rows,
-            "available": bool(rows),
-            "periods": periods,
-            "period_info": _period_info(periods, fy_month, {p: _SOURCE_ISY for p in periods}, None, factors, "flow"),
-            "notes": (
-                ["Yıl sonu kolonları KAP'ta ilk açıklanan tutarlara çevrildi (enflasyon düzeltmesi katsayısı)."]
-                if any((factors.get(p) or {}).get("flow") not in (None, 1.0) for p in periods)
-                else []
-            ),
-        }
-        if quarterly:
-            all_rows = _isy_rows(isy, "cashflow", isy["periods"], factors, "flow", units)
-            discrete = _discrete_rows(all_rows, fy_month)
-            payload["discrete"] = [{"Item": r["Item"], **{p: r.get(p) for p in periods}} for r in discrete]
-        return payload
+        return build_cashflow_view(ticker, kap, isy, quarterly=quarterly)
     except Exception as e:
         return _failure(e, _MSG_CASHFLOW, "fundamentals_cashflow_error", ticker, data=[])
 
@@ -917,14 +1500,10 @@ def compute_live_ratios(
     shares, shares_source = _ratio_shares(current.get("paid_in_capital"), snapshot_shares)
     last = to_number(price)
     market_cap = last * shares if last is not None and last > 0 and shares is not None else None
-    bank = template == "bank"
-    ratios = compute_financial_ratios(current, previous=previous, market_cap=market_cap, is_bank=bank)
-    amounts = derive_financial_amounts(current, market_cap, is_bank=bank)
-
-    parsed = parse_period(period)
-    ttm_quarters: list[str] = []
-    if parsed is not None:
-        ttm_quarters = [period_label(*shift_months(parsed[0], parsed[1], -3 * i)) for i in range(3, -1, -1)]
+    financial = template in FINANCIAL_TEMPLATES
+    ratios = compute_financial_ratios(current, previous=previous, market_cap=market_cap, is_bank=financial)
+    amounts = derive_financial_amounts(current, market_cap, is_bank=financial)
+    ttm_quarters = trailing_quarters(period)
     return {
         "as_of": period,
         "basis": basis,
@@ -947,40 +1526,71 @@ def compute_live_ratios(
     }
 
 
+_TEMPLATE_NOTES = {
+    "bank": "Banka: brüt/FAVÖK marjı, cari oran ve borç çarpanları anlamlı değildir.",
+    "insurance": "Sigorta: brüt/FAVÖK marjı, cari oran ve borç çarpanları anlamlı değildir.",
+    "financial": "Finansal kuruluş: brüt/FAVÖK marjı, cari oran ve borç çarpanları anlamlı değildir.",
+}
+
+
+def build_live_ratios_view(
+    ticker: str,
+    items_by_period: Mapping[str, Mapping[str, Any]],
+    *,
+    template: str,
+    fiscal_year_end_month: int,
+    snapshot: Mapping[str, Any],
+    sources: Sequence[str],
+) -> dict[str, Any]:
+    """``/live-ratios`` payload from canonical facts + a market snapshot (``last_price``, ``shares``)."""
+    result = compute_live_ratios(
+        items_by_period,
+        fiscal_year_end_month=fiscal_year_end_month,
+        template=template,
+        price=snapshot.get("last_price"),
+        snapshot_shares=snapshot.get("shares"),
+    )
+    if result is None or not any(v is not None for v in result["ratios"].values()):
+        return {"ticker": ticker, "ratios": None, "available": False}
+    template_note = _TEMPLATE_NOTES.get(template)
+    return {
+        "ticker": ticker,
+        "source": " + ".join(sources) + " finansal tabloları; TradingView fiyatı",
+        **result,
+        "available": True,
+        "notes": [
+            "Akım kalemleri son 12 ay (TTM = son ara dönem + önceki yıl − önceki yılın aynı ara dönemi); "
+            "stok kalemleri son bilanço; büyüme bir önceki yılın aynı TTM dönemine göre.",
+            "FAVÖK = esas faaliyet kârı + amortisman ve itfa payları (nakit akış tablosundan).",
+        ]
+        + ([template_note] if template_note else []),
+    }
+
+
+async def live_market_snapshot(ticker: str) -> dict[str, Any]:
+    """Live price snapshot for ratios (``{}`` when unavailable — multiples are then ``None``)."""
+    try:
+        return await _get_market_snapshot(ticker)
+    except Exception as e:
+        logger.warning("live_ratios_snapshot_failed", ticker=ticker, error=f"{type(e).__name__}: {e}")
+        return {}
+
+
 async def get_live_financial_ratios(ticker: str) -> dict:
     """Oranlar: akım kalemleri TTM (son 4 çeyrek), stok kalemleri son bilanço, piyasa değeri canlı fiyat × pay adedi."""
     try:
         kap, isy = await _load_statement_sources(ticker, isy_wait=_ISY_WAIT_RATIOS)
-        items_by_period, template = _merged_canonical_by_period(kap, isy)
-        fy_month = int((kap or {}).get("fiscal_year_end_month") or 12)
-        snapshot: dict[str, Any] = {}
-        try:
-            snapshot = await _get_market_snapshot(ticker)
-        except Exception as e:
-            logger.warning("live_ratios_snapshot_failed", ticker=ticker, error=f"{type(e).__name__}: {e}")
-
-        result = compute_live_ratios(
-            items_by_period,
-            fiscal_year_end_month=fy_month,
-            template=template,
-            price=snapshot.get("last_price"),
-            snapshot_shares=snapshot.get("shares"),
-        )
-        if result is None or not any(v is not None for v in result["ratios"].values()):
-            return {"ticker": ticker, "ratios": None, "available": False}
+        facts = facts_from_sources(kap, isy)
+        snapshot = await live_market_snapshot(ticker)
         sources = [s for s, present in ((_SOURCE_KAP, kap), (_SOURCE_ISY, isy)) if present]
-        return {
-            "ticker": ticker,
-            "source": " + ".join(sources) + " finansal tabloları; TradingView fiyatı",
-            **result,
-            "available": True,
-            "notes": [
-                "Akım kalemleri son 12 ay (TTM = son ara dönem + önceki yıl − önceki yılın aynı ara dönemi); "
-                "stok kalemleri son bilanço; büyüme bir önceki yılın aynı TTM dönemine göre.",
-                "FAVÖK = esas faaliyet kârı + amortisman ve itfa payları (nakit akış tablosundan).",
-            ]
-            + (["Banka: brüt/FAVÖK marjı, cari oran ve borç çarpanları anlamlı değildir."] if template == "bank" else []),
-        }
+        return build_live_ratios_view(
+            ticker,
+            facts.items,
+            template=facts.template,
+            fiscal_year_end_month=facts.fiscal_year_end_month,
+            snapshot=snapshot,
+            sources=sources,
+        )
     except Exception as e:
         return _failure(e, _MSG_RATIOS, "live_ratios_error", ticker, ratios=None)
 

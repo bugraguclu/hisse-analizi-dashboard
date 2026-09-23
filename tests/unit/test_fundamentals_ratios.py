@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from src.adapters import financial_adapter as fa
+from src.services import analysis_service as ratios_math
 
 
 def test_period_helpers_parse_and_order_kap_and_isyatirim_labels():
@@ -157,9 +158,9 @@ def test_ratios_use_ebitda_from_operating_profit_plus_d_and_a():
     }
     previous = {"revenue": 800.0, "net_income_parent": 60.0, "parent_equity": 650.0, "total_assets": 1800.0}
 
-    ratios = fa.compute_financial_ratios(current, previous=previous, market_cap=1500.0)
+    ratios = ratios_math.compute_financial_ratios(current, previous=previous, market_cap=1500.0)
 
-    assert set(ratios) == set(fa.RATIO_KEYS)
+    assert set(ratios) == set(ratios_math.RATIO_KEYS)
     assert ratios["ebitda_margin"] == 15.0
     assert ratios["operating_margin"] == 10.0
     assert ratios["gross_margin"] == 20.0
@@ -183,7 +184,7 @@ def test_ratios_for_banks_leave_non_meaningful_metrics_null():
         "total_assets": 4000.0, "total_equity": 320.0, "operating_profit": 46.0, "depreciation_amortization": 5.0,
     }
 
-    ratios = fa.compute_financial_ratios(current, market_cap=340.0)
+    ratios = ratios_math.compute_financial_ratios(current, market_cap=340.0)
 
     assert ratios["pe_ratio"] == 10.0
     assert ratios["pb_ratio"] == 1.06
@@ -191,11 +192,11 @@ def test_ratios_for_banks_leave_non_meaningful_metrics_null():
     for key in ("gross_margin", "ebitda_margin", "net_margin", "current_ratio", "net_debt_ebitda",
                 "debt_to_equity", "ps_ratio", "ev_ebitda", "revenue_growth_yoy"):
         assert ratios[key] is None, key
-    assert fa.derive_financial_amounts(current)["ebitda"] is None
+    assert ratios_math.derive_financial_amounts(current)["ebitda"] is None
 
 
 def test_ratios_never_turn_missing_or_loss_into_zero():
-    ratios = fa.compute_financial_ratios({"net_income": -10.0, "net_income_parent": -10.0, "total_equity": -5.0},
+    ratios = ratios_math.compute_financial_ratios({"net_income": -10.0, "net_income_parent": -10.0, "total_equity": -5.0},
                                          market_cap=100.0)
 
     assert ratios["pe_ratio"] is None  # loss-making → P/E not meaningful
@@ -211,14 +212,14 @@ def test_build_ratio_inputs_pairs_ttm_with_year_ago_balance():
         "2025/06": {"revenue": 4.0, "total_assets": 80.0},
     }
 
-    current, previous = fa.build_ratio_inputs(items, "2026/06")
+    current, previous = ratios_math.build_ratio_inputs(items, "2026/06")
 
     assert current["revenue"] == 12.0
     assert current["total_assets"] == 100.0
     assert previous is not None and previous["total_assets"] == 80.0
     assert previous["revenue"] is None  # 2024 comparatives unavailable → no growth, not 0
     with pytest.raises(ValueError):
-        fa.build_ratio_inputs(items, "2025/06")
+        ratios_math.build_ratio_inputs(items, "2025/06")
 
 
 def test_restatement_factor_rejects_implausible_ratios():

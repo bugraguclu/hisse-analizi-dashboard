@@ -25,10 +25,9 @@ from src.adapters.utils import (
     get_http_client,
     run_sync,
 )
+from src.core.config import settings
 
 logger = structlog.get_logger(__name__)
-
-
 
 
 ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
@@ -82,6 +81,95 @@ def _failure(exc: BaseException, message: str, event: str, ticker: str, **payloa
         logger.error(event, ticker=ticker, error=f"{type(exc).__name__}: {exc}")
         result["error_status"] = 503 if isinstance(exc, _UNREACHABLE_ERRORS) else 502
     return {"ticker": ticker, **payload, **result}
+
+
+# ---------------------------------------------------------------------------
+# kap.org.tr request gate
+# ---------------------------------------------------------------------------
+# kap.org.tr's WAF drops every request from an IP for ~6 minutes after ~100
+# requests in ~2 minutes, and retrying extends the block. All KAP *page* fetches
+# of this module family therefore go through one gate per process: one request
+# at a time, at least FUNDAMENTALS_KAP_MIN_INTERVAL_SECONDS apart, and after a
+# transport failure ("Server disconnected") / 403 / 429 KAP is not contacted for
+# FUNDAMENTALS_KAP_BLOCK_SECONDS (callers fall back to İş Yatırım or the store).
+
+_KAP_BLOCK_STATUSES = frozenset({403, 429})
+_MSG_KAP_BLOCKED = "KAP'a şu anda ulaşılamıyor"
+
+
+class _KapGate:
+    def __init__(self) -> None:
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.lock: asyncio.Lock | None = None
+        self.last_request = float("-inf")
+        self.blocked_until = float("-inf")
+        self.requests = 0
+
+    def _bind(self) -> tuple[asyncio.AbstractEventLoop, asyncio.Lock]:
+        loop = asyncio.get_running_loop()
+        if self.loop is not loop or self.lock is None:
+            # asyncio primitives belong to one event loop (tests run several).
+            self.loop, self.lock = loop, asyncio.Lock()
+            self.last_request = self.blocked_until = float("-inf")
+        return loop, self.lock
+
+    def blocked_for(self) -> float:
+        """Seconds until KAP may be contacted again (0 when not blocked)."""
+        if self.loop is None:
+            return 0.0
+        try:
+            now = asyncio.get_running_loop().time()
+        except RuntimeError:
+            return 0.0
+        return max(0.0, self.blocked_until - now)
+
+    def block(self, reason: str) -> None:
+        loop, _ = self._bind()
+        self.blocked_until = loop.time() + settings.fundamentals_kap_block_seconds
+        logger.warning("kap_gate_blocked", reason=reason, seconds=settings.fundamentals_kap_block_seconds)
+
+    async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """One kap.org.tr request through the gate (``kwargs`` go to ``httpx.AsyncClient.request``)."""
+        loop, lock = self._bind()
+        if self.blocked_until > loop.time():
+            raise MarketDataError(_MSG_KAP_BLOCKED, status_code=503)
+        async with lock:
+            wait = self.last_request + max(settings.fundamentals_kap_min_interval_seconds, 0.0) - loop.time()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            if self.blocked_until > loop.time():
+                raise MarketDataError(_MSG_KAP_BLOCKED, status_code=503)
+            self.requests += 1
+            try:
+                response = await get_http_client().request(method, url, **kwargs)
+            except httpx.TransportError as e:
+                self.block(f"{type(e).__name__}: {e}")
+                raise
+            finally:
+                self.last_request = loop.time()
+        if response.status_code in _KAP_BLOCK_STATUSES:
+            self.block(f"HTTP {response.status_code}")
+        return response
+
+    async def get(self, url: str) -> httpx.Response:
+        return await self.request("GET", url)
+
+
+kap_gate = _KapGate()
+
+
+async def kap_get(url: str) -> httpx.Response:
+    """GET a kap.org.tr page through the process-wide gate (see above)."""
+    return await kap_gate.request("GET", url)
+
+
+async def kap_post(url: str, json: Any, headers: dict[str, str] | None = None) -> httpx.Response:
+    """POST JSON to kap.org.tr (e.g. the disclosure API) through the same gate as :func:`kap_get`.
+
+    Shares the one-at-a-time spacing and the WAF-block cool-down; raises
+    :class:`MarketDataError` (503) while KAP is blocked, ``httpx`` errors otherwise.
+    """
+    return await kap_gate.request("POST", url, json=json, headers=headers)
 
 
 def _discard(task: "asyncio.Future[Any]") -> None:
@@ -143,7 +231,7 @@ async def get_kap_company_titles() -> dict[str, str]:
 
 @cached(TTL_DIRECTORY, "kap_directory")
 async def _get_kap_directory() -> dict[str, dict[str, str]]:
-    response = await get_http_client().get(KAP_BIST_COMPANIES_URL)
+    response = await kap_get(KAP_BIST_COMPANIES_URL)
     response.raise_for_status()
     directory: dict[str, dict[str, str]] = await run_sync(_parse_kap_directory, response.text)
     if len(directory) < 100:

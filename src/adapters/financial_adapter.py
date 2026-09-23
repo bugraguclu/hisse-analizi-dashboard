@@ -9,11 +9,11 @@ Bu modül üç şey sağlar:
    uzun vadeli "Finansal Borçlar") birleştirirken kartezyen çoğaltma yapıyor;
    bu yüzden doğrudan istemci kullanılıyor.
 2. Saf (I/O'suz) yardımcılar: kalem adlarını kanonik anahtarlara eşleme,
-   dönem etiketleri, kümülatif (YTD) → çeyreklik / TTM dönüşümleri ve **tek**
-   oran hesabı :func:`compute_financial_ratios` (hem
-   ``/fundamentals/{t}/live-ratios`` hem de DB tabanlı ``/financials/ratios``).
-3. :class:`FinancialAdapter`: polling worker'ın yıllık tabloları DB'ye yazması
-   için ``RawEventData`` üretir.
+   dönem etiketleri, kümülatif (YTD) → çeyreklik / TTM dönüşümleri. Oran
+   hesabının **tek** uygulaması :mod:`src.services.analysis_service`'tedir
+   (hem ``/fundamentals/{t}/live-ratios`` hem de ``financial_ratios``).
+3. :class:`FinancialAdapter`: eski polling kaynağı ``financials`` için yenileme
+   işareti üretir; asıl iş ``src.services.fundamentals_service`` deposundadır.
 
 Birim sözleşmesi: tüm tutarlar TL (tam birim); marj/getiri/büyüme oranları
 yüzde (``14.85`` = %14,85); çarpanlar (F/K, PD/DD, FD/FAVÖK) düz oran.
@@ -136,8 +136,8 @@ _TR_FOLD = str.maketrans(
         "â": "a", "Â": "a", "î": "i", "Î": "i", "û": "u", "Û": "u",
     }
 )
-# "III. ", "16.1 ", "2.2.1 ", "A- " style numbering used by the bank/insurance templates.
-_NUMBERING_RE = re.compile(r"^(?:(?:[ivxlc]+|[a-z])[.\-)]|\d+(?:\.\d+)*[.)]?)\s+")
+# "III. ", "III - ", "16.1 ", "2.2.1 ", "A- " style numbering used by the bank/insurance templates.
+_NUMBERING_RE = re.compile(r"^(?:[ivxlc]+\s?[.\-)]|[a-z][.\-)]|\d+(?:\.\d+)*[.)]?)\s+")
 # Trailing formula such as "(XVII+XXII)", "(I - II)", "(XV±XVI)".
 _FORMULA_RE = re.compile(r"\s*\((?:[ivxlc]+\s*[-+±]\s*)+[ivxlc]+\)\s*$")
 
@@ -153,12 +153,15 @@ def normalize_label(label: Any) -> str:
 
 _BALANCE_ALIASES: dict[str, tuple[str, ...]] = {
     "total_assets": ("toplam varliklar", "varliklar", "varliklar toplami", "aktif toplami", "toplam aktifler"),
-    "current_assets": ("donen varliklar",),
-    "current_liabilities": ("kisa vadeli yukumlulukler",),
-    "non_current_liabilities": ("uzun vadeli yukumlulukler",),
+    # insurance template: "Cari Varlıklar" / İş Yatırım "I- Cari Varlıklar Toplamı"
+    "current_assets": ("donen varliklar", "cari varliklar", "cari varliklar toplami"),
+    "current_liabilities": ("kisa vadeli yukumlulukler", "kisa vadeli yukumlulukler toplami"),
+    "non_current_liabilities": ("uzun vadeli yukumlulukler", "uzun vadeli yukumlulukler toplami"),
     # NB: the bank summary's "Yükümlülükler Toplamı" is liabilities + equity, so it is not an alias.
     "total_liabilities": ("toplam yukumlulukler", "yukumlulukler"),
-    "total_equity": ("toplam ozkaynaklar", "ozkaynaklar", "ozsermaye", "toplam ozsermaye"),
+    "total_equity": (
+        "toplam ozkaynaklar", "ozkaynaklar", "ozsermaye", "toplam ozsermaye", "ozsermaye toplami", "ozkaynaklar toplami",
+    ),
     "parent_equity": ("ana ortakliga ait ozkaynaklar",),
     "minority_interest": ("kontrol gucu olmayan paylar", "azinlik paylari"),
     "paid_in_capital": ("odenmis sermaye",),
@@ -179,7 +182,11 @@ _INCOME_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "gross_profit": ("brut kar (zarar)", "brut kar"),
     "operating_profit": ("esas faaliyet kari (zarari)", "faaliyet kari (zarari)"),
-    "net_income": ("net donem kari (zarari)", "donem kari (zarari)", "net donem kari/zarari", "donem net kari (zarari)"),
+    # NB: the insurance summary's "Dönem Kârı veya Zararı" is PRE-tax; only the "net" line maps.
+    "net_income": (
+        "net donem kari (zarari)", "donem kari (zarari)", "net donem kari/zarari", "donem net kari (zarari)",
+        "donem net kari veya zarari", "net donem kari veya zarari",
+    ),
     "net_income_parent": (
         "donem karinin (zararinin) dagilimi, ana ortaklik paylari",
         "ana ortaklik paylari",
@@ -187,7 +194,15 @@ _INCOME_ALIASES: dict[str, tuple[str, ...]] = {
         "grubun kari/zarari",
     ),
     "net_interest_income": ("net faiz geliri veya gideri", "net faiz geliri/gideri"),
+    # insurance: technical income of the non-life / life / pension sections (summed)
+    "_insurance_revenue": ("hayat disi teknik gelir", "hayat teknik gelir", "emeklilik teknik gelir"),
 }
+
+#: Labels that identify a statement template (matched on ``normalize_label``).
+BANK_TEMPLATE_MARKERS = frozenset({"mevduat", "net faiz geliri veya gideri", "net faiz geliri/gideri"})
+INSURANCE_TEMPLATE_MARKERS = frozenset(
+    {"hayat disi teknik gelir", "hayat teknik gelir", "emeklilik teknik gelir", "genel teknik bolum dengesi"}
+)
 
 _CASHFLOW_ALIASES: dict[str, tuple[str, ...]] = {
     "depreciation_amortization": (
@@ -300,10 +315,13 @@ def canonical_financial_items(
     total_revenue = _pick(i, _INCOME_ALIASES["_total_revenue"])
     sales = _pick(i, _INCOME_ALIASES["_sales_revenue"])
     finance_revenue = _pick(i, _INCOME_ALIASES["_finance_sector_revenue"])
+    technical = [to_number(i.get(alias)) for alias in _INCOME_ALIASES["_insurance_revenue"]]
     if total_revenue is not None:
         items["revenue"] = total_revenue
     elif sales is not None:
         items["revenue"] = sales + (finance_revenue or 0.0)
+    elif any(v is not None for v in technical):
+        items["revenue"] = sum(v for v in technical if v is not None)
 
     short_debt = items.pop("short_term_financial_debt", None)
     long_debt = items.pop("long_term_financial_debt", None)
@@ -322,6 +340,16 @@ def canonical_financial_items(
         # Cash-flow add-back; some sources sign it as an expense.
         items["depreciation_amortization"] = abs(items["depreciation_amortization"])
     return items
+
+
+def statement_template(labels: Iterable[Any], default: str = "industrial") -> str:
+    """``bank`` / ``insurance`` / ``default`` from statement line labels."""
+    keys = {normalize_label(label) for label in labels}
+    if keys & INSURANCE_TEMPLATE_MARKERS:
+        return "insurance"
+    if keys & BANK_TEMPLATE_MARKERS:
+        return "bank"
+    return default
 
 
 def is_bank_items(items: Mapping[str, Any]) -> bool:
@@ -406,199 +434,6 @@ def ttm_flows(
     return result
 
 
-def build_ratio_inputs(
-    items_by_period: Mapping[str, Mapping[str, Any]],
-    period: str,
-    fiscal_year_end_month: int = 12,
-) -> tuple[dict[str, float | None], dict[str, float | None] | None]:
-    """``(current, previous)`` inputs for :func:`compute_financial_ratios`.
-
-    ``current`` = TTM flows ending at ``period`` + balance sheet at ``period``;
-    ``previous`` = the same one year earlier (for growth and averages), or
-    ``None`` when unavailable. Raises ``ValueError`` if ``period`` has no TTM.
-    """
-    ttm = ttm_flows(items_by_period, period, fiscal_year_end_month)
-    if ttm is None:
-        raise ValueError(f"TTM hesaplanamadı: {period}")
-    stocks = items_by_period[period]
-    current = {**{k: to_number(stocks.get(k)) for k in STOCK_KEYS}, **ttm}
-
-    parsed = parse_period(period)
-    previous: dict[str, float | None] | None = None
-    if parsed is not None:
-        prev_label = period_label(parsed[0] - 1, parsed[1])
-        prev_stocks = items_by_period.get(prev_label)
-        if prev_stocks is not None:
-            prev_ttm = ttm_flows(items_by_period, prev_label, fiscal_year_end_month)
-            previous = {
-                **{k: to_number(prev_stocks.get(k)) for k in STOCK_KEYS},
-                **(prev_ttm or {k: None for k in FLOW_KEYS}),
-            }
-    return current, previous
-
-
-# ---------------------------------------------------------------------------
-# Ratios — the ONE implementation shared by live-ratios and /financials/ratios
-# ---------------------------------------------------------------------------
-
-#: Ratio keys returned by :func:`compute_financial_ratios` (all ``float | None``).
-RATIO_KEYS: tuple[str, ...] = (
-    "gross_margin",
-    "operating_margin",
-    "ebitda_margin",
-    "net_margin",
-    "roe",
-    "roa",
-    "current_ratio",
-    "net_debt_ebitda",
-    "debt_to_equity",
-    "pe_ratio",
-    "pb_ratio",
-    "ps_ratio",
-    "ev_ebitda",
-    "revenue_growth_yoy",
-    "net_income_growth_yoy",
-)
-
-
-def _pct(numerator: float | None, denominator: float | None, *, positive_denominator: bool = True) -> float | None:
-    if numerator is None or denominator is None or denominator == 0:
-        return None
-    if positive_denominator and denominator < 0:
-        return None
-    return round(numerator / denominator * 100, 2)
-
-
-def _ratio(numerator: float | None, denominator: float | None, *, positive_denominator: bool = True) -> float | None:
-    if numerator is None or denominator is None or denominator == 0:
-        return None
-    if positive_denominator and denominator < 0:
-        return None
-    return round(numerator / denominator, 2)
-
-
-def _growth(current: float | None, previous: float | None) -> float | None:
-    if current is None or previous is None or previous == 0:
-        return None
-    return round((current - previous) / abs(previous) * 100, 2)
-
-
-def _average(current: float | None, previous: float | None) -> float | None:
-    if current is None:
-        return None
-    if previous is None:
-        return current
-    return (current + previous) / 2
-
-
-def derive_financial_amounts(
-    items: Mapping[str, Any],
-    market_cap: float | None = None,
-    *,
-    is_bank: bool | None = None,
-) -> dict[str, float | None]:
-    """EBITDA, net debt and enterprise value derived from canonical items.
-
-    EBITDA = operating profit (esas faaliyet kârı) + depreciation & amortisation
-    (from the cash-flow statement). Net debt = financial debt − cash − short-term
-    financial investments. EV = market cap + net debt + non-controlling
-    interests. All ``None`` for banks, where these concepts do not apply.
-    """
-    bank = is_bank_items(items) if is_bank is None else is_bank
-    if bank:
-        return {"ebitda": None, "net_debt": None, "enterprise_value": None}
-    operating = to_number(items.get("operating_profit"))
-    d_and_a = to_number(items.get("depreciation_amortization"))
-    ebitda = to_number(items.get("ebitda"))
-    if ebitda is None and operating is not None and d_and_a is not None:
-        ebitda = operating + d_and_a
-    debt = to_number(items.get("financial_debt"))
-    net_debt = None
-    if debt is not None:
-        net_debt = debt - (to_number(items.get("cash")) or 0.0) - (to_number(items.get("short_term_investments")) or 0.0)
-    cap = to_number(market_cap)
-    enterprise_value = None
-    if cap is not None and cap > 0 and net_debt is not None:
-        enterprise_value = cap + net_debt + (to_number(items.get("minority_interest")) or 0.0)
-    return {"ebitda": ebitda, "net_debt": net_debt, "enterprise_value": enterprise_value}
-
-
-def compute_financial_ratios(
-    current: Mapping[str, Any],
-    *,
-    previous: Mapping[str, Any] | None = None,
-    market_cap: float | None = None,
-    is_bank: bool | None = None,
-) -> dict[str, float | None]:
-    """Financial ratios from canonical items (see :func:`canonical_financial_items`).
-
-    Args:
-        current: flows for a twelve-month period (a fiscal year or TTM) plus the
-            balance sheet at its end, keyed by :data:`FLOW_KEYS` / :data:`STOCK_KEYS`.
-        previous: the same for the period one year earlier — used for YoY growth
-            and for average equity/assets. Optional.
-        market_cap: price × shares outstanding in TL; valuation multiples are
-            ``None`` without it.
-        is_bank: bank template (margins, liquidity, leverage and EV multiples are
-            not meaningful and return ``None``). Auto-detected when ``None``.
-
-    Returns every key of :data:`RATIO_KEYS`. Margins, ROE/ROA and growth are
-    percentages rounded to 2 decimals; multiples are plain ratios. Missing
-    inputs, zero/negative denominators and loss-making P/E give ``None`` —
-    never ``0``.
-    """
-    prev = previous or {}
-    bank = is_bank_items(current) if is_bank is None else is_bank
-
-    def num(mapping: Mapping[str, Any], key: str) -> float | None:
-        return to_number(mapping.get(key))
-
-    revenue = None if bank else num(current, "revenue")
-    net_income = num(current, "net_income")
-    parent_income = num(current, "net_income_parent")
-    if parent_income is None:
-        parent_income = net_income
-    equity = num(current, "total_equity")
-    parent_equity = num(current, "parent_equity")
-    if parent_equity is None:
-        parent_equity = equity
-    prev_parent_equity = num(prev, "parent_equity")
-    if prev_parent_equity is None:
-        prev_parent_equity = num(prev, "total_equity")
-
-    amounts = derive_financial_amounts(current, market_cap, is_bank=bank)
-    ebitda = amounts["ebitda"]
-    cap = to_number(market_cap)
-    if cap is not None and cap <= 0:
-        cap = None
-
-    prev_parent_income = num(prev, "net_income_parent")
-    if prev_parent_income is None:
-        prev_parent_income = num(prev, "net_income")
-
-    avg_equity = _average(parent_equity, prev_parent_equity)
-    avg_assets = _average(num(current, "total_assets"), num(prev, "total_assets"))
-
-    ratios: dict[str, float | None] = {key: None for key in RATIO_KEYS}
-    ratios["roe"] = _pct(parent_income, avg_equity)
-    ratios["roa"] = _pct(net_income, avg_assets)
-    ratios["pe_ratio"] = _ratio(cap, parent_income)
-    ratios["pb_ratio"] = _ratio(cap, parent_equity)
-    ratios["net_income_growth_yoy"] = _growth(parent_income, prev_parent_income)
-    if not bank:
-        ratios["gross_margin"] = _pct(num(current, "gross_profit"), revenue)
-        ratios["operating_margin"] = _pct(num(current, "operating_profit"), revenue)
-        ratios["ebitda_margin"] = _pct(ebitda, revenue)
-        ratios["net_margin"] = _pct(net_income, revenue)
-        ratios["current_ratio"] = _ratio(num(current, "current_assets"), num(current, "current_liabilities"))
-        ratios["net_debt_ebitda"] = _ratio(amounts["net_debt"], ebitda)
-        ratios["debt_to_equity"] = _ratio(num(current, "total_liabilities"), equity)
-        ratios["ps_ratio"] = _ratio(cap, revenue)
-        ratios["ev_ebitda"] = _ratio(amounts["enterprise_value"], ebitda)
-        ratios["revenue_growth_yoy"] = _growth(revenue, num(prev, "revenue"))
-    return ratios
-
-
 # ---------------------------------------------------------------------------
 # İş Yatırım MaliTablo client
 # ---------------------------------------------------------------------------
@@ -608,6 +443,8 @@ ISYATIRIM_MALITABLO_URL = (
 )
 ISYATIRIM_GROUP_INDUSTRIAL = "XI_29"
 ISYATIRIM_GROUP_FINANCIAL = "UFRS"
+#: Human-facing İş Yatırım page with the same statements (``source_url`` of stored rows).
+ISYATIRIM_COMPANY_CARD_URL = "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse={ticker}"
 _ISYATIRIM_PERIODS_PER_CALL = 4
 _ISYATIRIM_TIMEOUT = httpx.Timeout(12.0, connect=6.0)
 # İş Yatırım's WAF stalls requests from non-browser user agents (the shared
@@ -669,12 +506,14 @@ async def _fetch_malitablo_batch(
 
 
 def _template_for(group: str, items: Sequence[Mapping[str, Any]]) -> str:
+    """``industrial`` (XI_29) or, for the UFRS group, ``insurance`` / ``bank`` / ``financial``.
+
+    UFRS is İş Yatırım's financial-sector layout: banks, insurers, leasing and
+    factoring companies (bank-only / solo figures).
+    """
     if group == ISYATIRIM_GROUP_INDUSTRIAL:
         return "industrial"
-    labels = {normalize_label(item.get("itemDescTr")) for item in items}
-    if "mevduat" in labels or "aktif toplami" in labels:
-        return "bank"
-    return "financial"
+    return statement_template((item.get("itemDescTr") for item in items), default="financial")
 
 
 def _disambiguated_labels(items: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -832,11 +671,25 @@ def restatement_factor(reported: float | None, restated: float | None) -> float 
 # Polling adapter (annual statements → DB)
 # ---------------------------------------------------------------------------
 
-_DB_STATEMENT_TYPES = (("balance_sheet", "balance"), ("income_stmt", "income"), ("cash_flow", "cashflow"))
+#: ``financial_statements.statement_type`` per statement section (API values kept from v1).
+STATEMENT_TYPE_BY_SECTION: dict[str, str] = {"balance": "balance_sheet", "income": "income_stmt", "cashflow": "cash_flow"}
+SECTION_BY_STATEMENT_TYPE: dict[str, str] = {v: k for k, v in STATEMENT_TYPE_BY_SECTION.items()}
+
+
+#: ``source_event_type`` of the refresh marker returned by :meth:`FinancialAdapter.fetch`.
+FUNDAMENTALS_REFRESH_EVENT = "FUNDAMENTALS_REFRESH"
 
 
 class FinancialAdapter(BaseTickerAdapter):
-    """Yıllık finansal tabloları (bilanço, gelir tablosu, nakit akışı) İş Yatırım'dan çeker."""
+    """Legacy polling source ``financials`` (until it is removed from ``POLL_SOURCES``).
+
+    The statements are fetched and stored by the fundamentals store
+    (``src.services.fundamentals_service``: KAP summary + İş Yatırım quarterly
+    tables, first-published facts, ratios). This adapter therefore does no
+    network I/O: it returns one refresh marker per company, and
+    ``FinancialService.process_financials`` runs the (freshness-gated) store
+    refresh for it — the same code path as the fundamentals worker.
+    """
 
     annual_periods = 4
 
@@ -844,30 +697,16 @@ class FinancialAdapter(BaseTickerAdapter):
         return "financials"
 
     async def fetch(self, ticker: str, polling_state: PollingState | None = None) -> list[RawEventData]:
-        periods = fiscal_year_ends_before(utcnow().date(), self.annual_periods)
-        try:
-            table = await fetch_isyatirim_financials(ticker, periods)
-        except IsYatirimError as e:
-            logger.error("financial_adapter_error", ticker=ticker, error=str(e))
-            return []
-        if table is None:
-            logger.info("financial_adapter_no_data", ticker=ticker)
-            return []
-
-        by_period = isyatirim_statement_maps(table)
-        results: list[RawEventData] = []
-        for statement_type, key in _DB_STATEMENT_TYPES:
-            data: dict[str, dict[str, Any]] = {}
-            for period, statements in by_period.items():
-                values = statements[key]
-                if any(v not in (None, 0) for v in values.values()):
-                    parsed = parse_period(period)
-                    # DB keeps the historical annual label format ("2025").
-                    data[str(parsed[0]) if parsed else period] = values
-            if data:
-                results.append(self._create_raw_data(ticker, statement_type, data))
-        logger.info("financial_adapter_fetched", ticker=ticker, count=len(results), group=table.get("group"))
-        return results
+        ticker = ticker.strip().upper()
+        return [
+            RawEventData(
+                external_id=f"{ticker}_fundamentals_refresh",
+                source_event_type=FUNDAMENTALS_REFRESH_EVENT,
+                title=f"{ticker} fundamentals refresh",
+                published_at=utcnow(),
+                raw_payload_json={"ticker": ticker, "refresh": True},
+            )
+        ]
 
     def _create_raw_data(self, ticker: str, statement_type: str, df: Any) -> RawEventData:
         """Build a ``RawEventData`` from ``{period: {item: value}}`` (or a period-column DataFrame)."""
