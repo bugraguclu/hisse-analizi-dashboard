@@ -124,7 +124,18 @@ _LEGAL_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 # Words kept upper-case in generated display names.
-_ACRONYMS = frozenset({"GYO", "GMYO", "YO", "BYF", "TAV", "BİM", "ŞOK", "QNB", "ICBC", "TR", "A1", "HSY", "DO", "CO"})
+_ACRONYMS = frozenset(
+    {"GYO", "GMYO", "YO", "BYF", "TAV", "BİM", "ŞOK", "QNB", "ICBC", "TR", "A1", "HSY", "DO", "CO", "ATP", "MLP", "BMS", "DCT", "MKS"}
+)
+# Foreign words written in ASCII inside otherwise Turkish KAP titles: their "I" is a dotted i
+# (GRAINTURK -> Grainturk, not Graınturk). Turkish casing would produce a dotless ı.
+_FOREIGN_WORDS = frozenset({
+    "CARRIER", "GRAINTURK", "GRANITE", "TRADING", "LOGISTICS", "INTERNATIONAL", "INDUSTRIES", "INVESTMENT",
+    "MARINE", "PRIME", "FINANCE", "CAPITAL", "ENERGY", "MINING", "TECHNOLOGIES", "TECHNOLOGY", "DIGITAL",
+    "MEDICAL", "RETAIL", "LIFE", "BIOTECH", "TOURISM", "INVESTMENTS", "HOLDINGS", "PARTNERS", "MOTORS",
+    "INSURANCE", "AIRLINES", "SERVICES", "SYSTEMS", "SOLUTIONS", "INDUSTRY", "SHIPPING", "TEXTILE", "PLASTIC",
+})
+_VOWELS = set("AEIİOÖUÜ")
 _LOWER_WORDS = frozenset({"VE", "İLE"})
 
 
@@ -868,7 +879,10 @@ def _title_word(word: str, official: set[str]) -> str:
         core = part.strip("()&'")
         if not core:
             return part
-        if _fold(core) in official and not re.search(r"[QWX]", core):
+        folded = _fold(core)
+        if len(core) <= 3 and not (_VOWELS & set(core)):  # BMS, DCT, MLP: an abbreviation, not a word
+            return part
+        if folded in official and folded not in _FOREIGN_WORDS and not re.search(r"[QWX]", core):
             return turkish_title(part)
         return part[:1] + part[1:].replace("İ", "i").lower()  # str.lower("İ") adds a combining dot
 

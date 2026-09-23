@@ -175,6 +175,11 @@ def test_parse_tr_number(text, expected):
         (("ALVES", None, "ALVES KABLO SANAYİ VE TİCARET A.Ş.", None), "Alves Kablo Sanayi ve Ticaret"),
         (("QNBTR", None, None, "QNB Bank AS"), "QNB Bank"),
         (("PEGAS", None, None, "PEGAS"), "Pegas"),  # a trailing "AS" inside a word is not a legal form
+        (("GRTHO", "GRAINTURK HOLDING", "GRAINTURK HOLDİNG A.Ş.", None), "Grainturk Holding"),  # foreign word: dotted i
+        (("QUAGR", "QUA GRANITE HAYAL YAPI", "QUA GRANİTE HAYAL YAPI A.Ş.", None), "Qua Granite Hayal Yapı"),
+        (("ALCAR", "ALARKO CARRIER", "ALARKO CARRIER SANAYİ VE TİCARET A.Ş.", None), "Alarko Carrier"),
+        (("MLP", "MLP SAGLIK", "MLP SAĞLIK HİZMETLERİ A.Ş.", None), "MLP Sağlık"),  # vowel-less abbreviation
+        (("DNISI", "DINAMIK ISI", "DİNAMİK ISI MAKİNA A.Ş.", None), "Dinamik Isı"),  # short Turkish word keeps ı
     ],
 )
 def test_display_name_for(args, expected):
