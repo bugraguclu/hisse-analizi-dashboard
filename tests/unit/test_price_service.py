@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.adapters.base import PriceRecord
-from src.core.enums import PriceInterval
 from src.db.models import Company
 from src.services.event_service import PriceService, _json_safe
 
@@ -39,9 +38,10 @@ async def test_prices_are_sanitised_and_counted():
     assert stats == {"new_prices": 1, "updated_prices": 1, "duplicates": 1, "invalid": 1}
     assert calls[0]["open"] is None and calls[0]["volume"] is None  # NaN/Inf never stored
     assert calls[0]["close"] == 330.25
-    assert calls[0]["trading_date"] == date(2026, 7, 14)
-    assert calls[1]["interval"] == PriceInterval.ONE_HOUR
-    assert calls[2]["ticker"] == "THYAO"
+    assert calls[0]["bar_date"] == date(2026, 7, 14)
+    assert calls[0]["source"] == "tradingview"  # borsapy bars are TradingView bars
+    assert calls[1]["interval"] == "1h"
+    assert calls[2]["symbol"] == "THYAO"
     session.commit.assert_awaited_once()
 
 

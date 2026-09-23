@@ -1,3 +1,5 @@
+import hashlib
+import json
 import math
 import re
 from collections import Counter
@@ -9,7 +11,8 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.base import PriceRecord, RawEventData
-from src.core.enums import EventCategory, EventType, PriceInterval, Severity
+from src.adapters.financial_adapter import normalize_label, parse_period, period_label
+from src.core.enums import EventCategory, EventType, Severity
 from src.core.time import utcnow
 from src.db.models import Company, Source
 from src.db.repository import (
@@ -294,7 +297,9 @@ def _trading_date(value: date | datetime | None) -> date | None:
     return value.date() if isinstance(value, datetime) else value
 
 
-_INTERVALS = {"1d": PriceInterval.ONE_DAY, "1h": PriceInterval.ONE_HOUR, "15m": PriceInterval.FIFTEEN_MIN}
+_INTERVALS = {"1d", "1h", "15m"}
+# Historical adapter source codes → provider codes stored in price_bars.
+_BAR_SOURCES = {"borsapy": "tradingview"}
 
 
 class PriceService:
@@ -318,16 +323,15 @@ class PriceService:
                 continue
             outcome = await self.price_repo.upsert(
                 company_id=company.id,
-                ticker=rec.ticker or company.ticker,
-                source=rec.source,
+                symbol=rec.ticker or company.ticker,
+                source=_BAR_SOURCES.get(rec.source, rec.source),
                 open=_finite_or_none(rec.open),
                 high=_finite_or_none(rec.high),
                 low=_finite_or_none(rec.low),
                 close=_finite_or_none(rec.close),
-                adjusted_close=_finite_or_none(rec.adjusted_close),
                 volume=_finite_or_none(rec.volume),
-                trading_date=trading_date,
-                interval=_INTERVALS.get(rec.interval, PriceInterval.ONE_DAY),
+                bar_date=trading_date,
+                interval=rec.interval if rec.interval in _INTERVALS else "1d",
             )
             if outcome == "inserted":
                 stats["new_prices"] += 1
@@ -375,13 +379,25 @@ class FinancialService:
             for period, period_data in data.items():
                 if not isinstance(period_data, dict):
                     continue
-                period_key = str(period).strip()[:20]
+                parsed = parse_period(period)
+                period_key = period_label(*parsed) if parsed else str(period).strip()[:20]
+                items = [
+                    {"code": None, "label": str(k), "key": normalize_label(k), "value": _json_safe(v)}
+                    for k, v in period_data.items()
+                ]
                 await self.repo.upsert(
                     company_id=company.id,
+                    source="isyatirim",
                     period=period_key,
                     statement_type=str(statement_type)[:50],
-                    data_json={str(k): _json_safe(v) for k, v in period_data.items()},
+                    fiscal_year_end_month=12,
+                    months=12,
+                    period_type="annual",
                     currency="TRY",
+                    items_json=items,
+                    content_hash=hashlib.sha256(
+                        json.dumps(items, sort_keys=True, default=str).encode("utf-8")
+                    ).hexdigest(),
                 )
                 count += 1
                 periods.add(period_key)

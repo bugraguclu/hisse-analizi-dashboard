@@ -37,7 +37,8 @@ CF_2025 = {"Amortisman Giderleri": 104188232264.0}
 
 
 def _stmt(period: str, statement_type: str, data: dict) -> FinancialStatement:
-    return FinancialStatement(period=period, statement_type=statement_type, data_json=data)
+    items = [{"code": None, "label": label, "key": label.strip().lower(), "value": value} for label, value in data.items()]
+    return FinancialStatement(period=period, statement_type=statement_type, source="isyatirim", items_json=items)
 
 
 STATEMENTS = [

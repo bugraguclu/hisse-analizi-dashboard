@@ -242,6 +242,8 @@ class HealthOut(BaseModel):
 
 
 class FinancialStatementOut(BaseModel):
+    """One stored statement; ``data_json`` is the ``{label: value}`` view of ``items_json``."""
+
     id: UUID
     period: str
     statement_type: str
@@ -249,6 +251,11 @@ class FinancialStatementOut(BaseModel):
     currency: str
     data_json: dict
     fetched_at: datetime
+    # add-only (data platform)
+    source: str | None = None
+    months: int | None = None
+    template: str | None = None
+    restated: bool | None = None
     model_config = {"from_attributes": True}
 
     @field_validator("currency", mode="before")
@@ -260,6 +267,13 @@ class FinancialStatementOut(BaseModel):
 class FinancialRatioOut(BaseModel):
     id: UUID
     period: str
+    # add-only (data platform): "ttm" (flows = last four quarters) or "annual"
+    basis: str | None = None
+    operating_margin: float | None = None
+    ev_ebitda: float | None = None
+    revenue_growth_yoy: float | None = None
+    net_income_growth_yoy: float | None = None
+    market_cap: float | None = None
     roe: float | None = None
     roa: float | None = None
     net_margin: float | None = None
