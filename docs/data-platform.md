@@ -166,3 +166,105 @@ Dondurulmuş (bu branch'te kimse dokunmaz): `dashboard/**`, `src/adapters/kap.py
 5. Rapor: ne değişti, hangi kaynak neden seçildi, ölçülen sapmalar, açık riskler,
    "İSTEK:" satırları (başka dosyalarda gereken değişiklikler), WS0'ın kablolaması gereken
    worker döngüsü adı ve önerilen zamanlama.
+
+## 7. Operasyon (WS6 platform-quality)
+
+Bu bölüm `src/services/quality_service.py`, `src/services/snapshots.py`,
+`src/workers/quality_worker.py`, `src/api/routers_data.py` ve `src/schemas/data.py`
+tarafından uygulanır (dosya sahipliği: §5 tablosu). Kaynak: ilgili worker modülleri,
+2026-09-23 itibarıyla.
+
+### 7.1 İş (job) takvimi
+
+| Döngü | Modül | İş adı | Zamanlama (Europe/Istanbul) |
+|---|---|---|---|
+| `reference_loop` | `src/workers/reference_worker.py` | `universe.sync` | Günde bir, `REFERENCE_UNIVERSE_SYNC_TIME` (vars. 07:30); worker başlarken son başarılı çalışma `REFERENCE_UNIVERSE_STALE_HOURS` (vars. 20 sa) içinde değilse hemen. |
+| | | `reference.company` | `REFERENCE_TICK_SECONDS` (vars. 900 sn) her tikte `REFERENCE_BATCH_SIZE` (vars. 2) çekirdek şirket; her şirket en çok `REFERENCE_COMPANY_REFRESH_DAYS` (vars. 7) günde bir. |
+| `market_loop` | `src/workers/market_worker.py` | `market.quotes` | Seans penceresinde (`MARKET_SESSION_OPEN`–`MARKET_SESSION_CLOSE`, vars. 09:55–18:20) `MARKET_QUOTE_INTERVAL_SECONDS` (vars. 60 sn) aralıkla; seans dışında beklemede. |
+| | | `market.bars.daily` | Günde bir, `MARKET_DAILY_BARS_AFTER`'dan (vars. 18:40) sonra ilk uygun tik (≤5 dk gecikme). |
+| | | `market.bars.backfill` | `MARKET_RECONCILE_AFTER`'dan (vars. 20:00) sonra; İşY ile mutabakat + eksik geçmiş barlar. |
+| | | (arka plan) | `market.bars.backfill` döngüsü ayrıca boşta kaldıkça `MARKET_BACKFILL_IDLE_SECONDS` (vars. 3600 sn) aralıkla eksik geçmişi tarar. |
+| `fundamentals_loop` | `src/workers/fundamentals_worker.py` | `fundamentals.statements` | `FUNDAMENTALS_LOOP_INTERVAL_SECONDS` (vars. 600 sn) her tikte `FUNDAMENTALS_BATCH_SIZE` (vars. 12) şirket (KAP WAF nedeniyle şirket başına ≥3 sn). |
+| | | `fundamentals.ratios` | Günde bir, `FUNDAMENTALS_RATIOS_HOUR`'dan (vars. 19) sonra ilk tik, o gün için tekrar edilmez. |
+| `macro_loop` | `src/workers/macro_worker.py` | `macro.rates` | Günde iki kez, 10:00 ve 14:30 (MPC kararları ~14:00 açıklanır). |
+| | | `macro.inflation` | TÜİK yayın penceresinde (ayın 3-5. günü) saatte bir (xx:05, 10:00-18:00); diğer günler yalnızca 10:05. |
+| | | `macro.fx` | 15:35; günün bülteni depoda yoksa saatte bir yeniden dener, 23:00'te o gün için vazgeçer. |
+| `quality_loop` | `src/workers/quality_worker.py` | `quality.daily` | Günde bir, `QUALITY_DAILY_RUN_TIME` (vars. 19:30 — günlük barlar/oranlar/FX bülteni oturduktan sonra); worker başlarken son başarılı çalışma `QUALITY_STALE_RUN_HOURS`'tan (vars. 24 sa) eskiyse hemen. Kontrollerin ardından bakım (aşağıda §7.4) çalışır. |
+
+`quality.daily` dışındaki tüm işler ilgili WS'nin kendi raporunda daha ayrıntılı
+belgelenir; burada yalnızca `/data/status`'un okuduğu zamanlamalar özetlenmiştir.
+
+### 7.2 Kalite kontrol kataloğu (`quality_service.CHECK_NAMES`)
+
+`run_quality_checks(session, names=None)` — `names` boşsa hepsi çalışır. Her kontrol
+`{check_name, subject, status, expected, actual, deviation, details}` döndürür ve
+(çapraz kaynak/`macro` hariç — o kendi satırını zaten yazar) bir `data_quality_checks`
+satırı olarak saklanır.
+
+| `check_name` | `subject` | Eşik / kural | `status` |
+|---|---|---|---|
+| `freshness.quotes` | `quotes` | Seans içi: `QUALITY_QUOTES_SESSION_WARN_MINUTES`/`_FAIL_MINUTES` (vars. 20/60 dk); seans dışı: `..._OFFSESSION_WARN_HOURS`/`_FAIL_HOURS` (vars. 48/120 sa) | fail (veri yok) / warn / fail / pass |
+| `freshness.price_bars` | `price_bars` | Son bar tarihi vs beklenen işlem günü (`now_istanbul`+`is_session_final`, hafta sonu/tatil farkındalı); bir önceki hafta içi güne kadar tolerans | pass / warn (1 gün geride) / fail |
+| `freshness.financial_statements` | `financial_statements` | `tracking_tier=core` şirketlerin son 400 gün içinde ≥1 tablosu olma oranı; `QUALITY_FUNDAMENTALS_COVERAGE_WARN_PCT`/`_FAIL_PCT` (vars. 80/50) | pass / warn / fail |
+| `freshness.macro_series` | her `series_code` (`tcmb.policy_rate`, `tcmb.overnight.*`, `tcmb.late_liquidity.*`, `tuik.cpi.*`, `tuik.ppi.*`, + görülen diğerleri) | Politika faizi/koridor ≤60 gün, TÜFE/ÜFE ≤45 gün (bilinmeyen seri: `QUALITY_MACRO_CADENCE_DEFAULT_DAYS`, vars. 45); 2×'de fail | pass / warn / fail |
+| `freshness.fx_bulletins` | `fx_bulletins` | Son bülten tarihi vs son TCMB iş günü; bir iş günü toleranslı | pass / warn / fail |
+| `ingestion.health` | her bilinen iş adı (`quality_service.KNOWN_JOBS`) | Son 24 sa içinde `status='failed'` → warn; son çalışma `QUALITY_INGESTION_DEFAULT_INTERVAL_HOURS`'un (vars. 24 sa) 2 katından eski → fail; hiç çalışmamış → warn | pass / warn / fail |
+| `integrity.price_bars` | `price_bars` | `high<low`, `close∉[low,high]`, `close≤0` satır sayısı; `QUALITY_INTEGRITY_FAIL_THRESHOLD`'u (vars. 5) aşarsa fail | pass / warn / fail |
+| `integrity.quotes` | `quotes` | `last≤0` satır sayısı; aynı eşik | pass / warn / fail |
+| `integrity.stale_active_companies` | `companies` | `is_active` hisse şirketlerden `QUALITY_STALE_ACTIVE_COMPANY_DAYS` (vars. 3) gündür kotasyonu olmayanların sayısı | pass / warn |
+| `cross_source.macro` | (WS4'ün kendi `subject`'i) | `src.services.macro_service.run_accuracy_checks` içe aktarılabiliyorsa çalıştırılır (kendi satırlarını kendi yazar); değilse/hata verirse warn | WS4'e bağlı / warn |
+| `cross_source.price_tv_vs_isyatirim` | rastgele `QUALITY_PRICE_CROSSCHECK_SYMBOLS` (vars. 5) çekirdek sembol | TradingView kapanışı (`price_bars`) vs İşY `HGDG_KAPANIS`, son `QUALITY_PRICE_CROSSCHECK_BARS` (vars. 10) bar; `QUALITY_PRICE_CROSSCHECK_WARN_PCT`/`_FAIL_PCT` (vars. 2/5); `_TIMEOUT_SECONDS` (vars. 20 sn), ağ hatası → warn | pass / warn / fail |
+
+Not: `HGDG_KAPANIS` temettü + sermaye artışına göre düzeltilir, `price_bars.close`
+(TradingView) yalnızca bölünme/bedelsize göre — son kurumsal aksiyon çevresinde fark
+*beklenir*; bu yüzden eşikler gevşek tutulmuştur (bkz. §2).
+
+### 7.3 Uçlar
+
+* `GET /data/status` — alan başına (`universe`, `market`, `fundamentals`, `macro`,
+  `quality`) son `ingestion_runs` (iş listesi), tablo satır sayıları + en güncel veri
+  tarihleri, `freshness` (`fresh|stale|empty`) ve genel `status` (`ok|degraded|down`);
+  ayrıca eski `polling_state` satırları. Tamamen toplu SQL (tablo başına tek
+  `COUNT`/`MAX`, tek sorguda birleşik) — boş veritabanında bile hata vermez, <1 sn.
+  `status`/`freshness` eşikleri buradaki kontrol kataloğundan **bağımsız**, daha geniş
+  ve sabit tutulmuştur (§7.2 asıl uyarı kaynağıdır; `/data/status` hızlı özet
+  amaçlıdır — ağ gerektiren kontrolleri hiç çalıştırmaz).
+* `GET /data/quality?status=&check=&limit=` — her `(check_name, subject)` çifti için
+  en son sonuç (`DISTINCT ON`), en yeni önce; `status` (`pass|warn|fail`) ve `check`
+  (tam `check_name`) ile filtrelenebilir.
+* `GET /data/quality/history?check=&subject=&days=&limit=` — zaman serisi (vars. son
+  30 gün).
+* `POST /admin/data/quality/run` (`X-Admin-Key` + yönetici hız sınırı) — gövde
+  `{"names": [...]}` (boşsa hepsi); kontrolleri hemen çalıştırır, `{"summary", "results"}`
+  döner. Bilinmeyen `names` → 400.
+* `POST /admin/data/refresh` (aynı koruma) — gövde
+  `{"domain": "market|fundamentals|reference|macro", "tickers": [...], "jobs": [...]}`;
+  ilgili `run_<domain>_once`'u `QUALITY_REFRESH_TIMEOUT_SECONDS` (vars. 120 sn) içinde
+  çalıştırır. `tickers`/`jobs` yalnızca hedef fonksiyonun kabul ettiği parametreler
+  eşleniyorsa gönderilir (`tickers`→`symbols` eşlemesi `market` için otomatik).
+  Bilinmeyen `domain` → 404 (Türkçe mesaj); modül içe aktarılamıyorsa → 503.
+
+### 7.4 Saklama (retention) ve bakım
+
+Her `quality.daily` çalışmasının sonunda (en iyi çaba, kontrolleri başarısız kılmaz):
+
+* `data_snapshots`: `expires_at`'i `QUALITY_SNAPSHOT_PURGE_GRACE_DAYS`'ten (vars. 14
+  gün) daha eski satırlar silinir (`expires_at`'i geçmiş ama bu süre içindeki kopyalar
+  `stale=true` ile servis edilmeye devam eder — bkz. §4.1).
+* `data_quality_checks`: `QUALITY_RETENTION_DAYS`'ten (vars. 90 gün) eski satırlar silinir.
+* `ingestion_runs`: `QUALITY_INGESTION_RETENTION_DAYS`'ten (vars. 30 gün) eski satırlar silinir.
+
+### 7.5 Eklenen ayarlar
+
+Tüm `QUALITY_*` ayarları `src/core/config.py` + `.env.example`'da eklemeli olarak
+tanımlıdır (varsayılanlar §7.2-§7.4'te anıldı); tam liste: `QUALITY_WORKER_ENABLED`,
+`QUALITY_DAILY_RUN_TIME`, `QUALITY_STALE_RUN_HOURS`, `QUALITY_RETENTION_DAYS`,
+`QUALITY_INGESTION_RETENTION_DAYS`, `QUALITY_SNAPSHOT_PURGE_GRACE_DAYS`,
+`QUALITY_REFRESH_TIMEOUT_SECONDS`, `QUALITY_QUOTES_SESSION_WARN_MINUTES`,
+`QUALITY_QUOTES_SESSION_FAIL_MINUTES`, `QUALITY_QUOTES_OFFSESSION_WARN_HOURS`,
+`QUALITY_QUOTES_OFFSESSION_FAIL_HOURS`, `QUALITY_FUNDAMENTALS_COVERAGE_WARN_PCT`,
+`QUALITY_FUNDAMENTALS_COVERAGE_FAIL_PCT`, `QUALITY_MACRO_CADENCE_DEFAULT_DAYS`,
+`QUALITY_INGESTION_DEFAULT_INTERVAL_HOURS`, `QUALITY_INTEGRITY_FAIL_THRESHOLD`,
+`QUALITY_STALE_ACTIVE_COMPANY_DAYS`, `QUALITY_PRICE_CROSSCHECK_SYMBOLS`,
+`QUALITY_PRICE_CROSSCHECK_BARS`, `QUALITY_PRICE_CROSSCHECK_WARN_PCT`,
+`QUALITY_PRICE_CROSSCHECK_FAIL_PCT`, `QUALITY_PRICE_CROSSCHECK_TIMEOUT_SECONDS`.
