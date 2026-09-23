@@ -281,7 +281,9 @@ dallandı; master'daki çalışma o tarihten beri commitlenmeden sürdü. Sıra:
 3. `git merge master` (data-infra üzerinde). Beklenen çakışmalar ve kural:
    - `src/adapters/fundamentals.py`: branch'te yalnızca facade (yeniden dışa aktarım); master'daki
      düzeltmeler ilgili `fundamentals_*.py` modülüne taşınır (ör. PD/DD `price_book_fq` düzeltmesi
-     `fundamentals_snapshot.py`'de zaten var) → **branch sürümü alınır**.
+     `fundamentals_snapshot.py`'de zaten var) → **branch sürümü alınır**. Aynı şekilde
+     `src/adapters/financial_adapter.py`: master'daki `_growth` koruması (`previous <= 0 → None`)
+     branch'te oran matematiğiyle birlikte `analysis_service.py`'ye taşındı → branch sürümü alınır.
    - `src/db/models.py`: KAP oturumunun `NormalizedEvent`/`RawEvent` kolonları master'dan, diğer tüm
      modeller branch'ten; `src/db/repository.py`: olay sorguları master'dan, `CompanyRepository.get_all(tier=...)`,
      `PriceDataRepository`, finansal repository'ler branch'ten; `src/api/routers.py`: `/events*` master'dan,
