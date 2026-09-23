@@ -130,8 +130,14 @@ async def get_stats(db: DB) -> StatsOut:
 # --- Public Endpoints ---
 
 @router.get("/companies", response_model=list[CompanyOut])
-async def list_companies(db: DB):
-    return await CompanyRepository(db).get_all()
+async def list_companies(
+    db: DB,
+    tier: Annotated[
+        str, Query(pattern="^(core|universe|all)$", description="core (BIST 100, varsayılan), universe veya all")
+    ] = "core",
+    include_inactive: Annotated[bool, Query(description="Borsadan çıkarılmış/askıya alınmış şirketleri de listele")] = False,
+):
+    return await CompanyRepository(db).get_all(None if tier == "all" else tier, include_inactive=include_inactive)
 
 
 @router.get("/companies/{ticker}", response_model=CompanyOut)

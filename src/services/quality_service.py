@@ -56,6 +56,7 @@ KNOWN_JOBS: tuple[str, ...] = (
     "market.quotes",
     "market.bars.daily",
     "market.bars.backfill",
+    "market.bars.reconcile",
     "fundamentals.statements",
     "fundamentals.ratios",
     "macro.rates",
@@ -627,7 +628,7 @@ async def _check_cross_source_macro(session: AsyncSession) -> list[dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# Cross-source: TradingView (price_bars) vs İş Yatırım HGDG_KAPANIS
+# Cross-source: TradingView (price_bars) vs İş Yatırım HG_KAPANIS (as traded)
 # ---------------------------------------------------------------------------
 
 _ISY_HISTORY_URL = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/HisseTekil"
@@ -665,8 +666,8 @@ def _price_crosscheck_status(deviations_pct: list[float]) -> dict[str, Any]:
             "avg_deviation_pct": round(avg_dev, 4),
             "max_deviation_pct": round(max_dev, 4),
             "note": (
-                "HGDG_KAPANIS temettü ve sermaye artışına göre düzeltilir; TradingView barları "
-                "yalnızca bölünme/bedelsize göre düzeltilir — son kurumsal aksiyon çevresinde fark beklenir."
+                "İşY HG_KAPANIS (işlem gördüğü fiyat) ile karşılaştırılır; TradingView barları bölünme/bedelsize "
+                "göre düzeltildiği için yalnızca son bedelsizden önceki günlerde fark beklenir."
             ),
         },
     }
@@ -713,7 +714,9 @@ async def _fetch_isy_close_by_date(symbol: str, start: date, end: date) -> dict[
             bar_date = datetime.strptime(raw_date.strip()[:10], "%d-%m-%Y").date()
         except ValueError:
             continue
-        close = finite_float(row.get("HGDG_KAPANIS"))
+        # HG_KAPANIS is the price as traded; HGDG_* is dividend-adjusted as well and
+        # drifts from TradingView's split-only basis after every dividend.
+        close = finite_float(row.get("HG_KAPANIS"))
         if close is not None and close > 0:
             result[bar_date] = close
     return result

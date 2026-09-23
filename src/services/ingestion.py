@@ -28,7 +28,7 @@ from datetime import datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.time import utcnow
@@ -133,15 +133,19 @@ async def run_job(job: str, scope: str | None = None) -> AsyncIterator[JobRun]:
 
 async def latest_runs(session: AsyncSession, jobs: Sequence[str] | None = None, per_job: int = 1) -> list[IngestionRun]:
     """Most recent run(s) of every job (or of ``jobs``), newest first."""
-    q = select(IngestionRun).order_by(IngestionRun.job, desc(IngestionRun.started_at))
+    rank = (
+        func.row_number()
+        .over(partition_by=IngestionRun.job, order_by=(desc(IngestionRun.started_at), desc(IngestionRun.id)))
+        .label("rank")
+    )
+    ranked = select(IngestionRun.id, rank)
     if jobs:
-        q = q.where(IngestionRun.job.in_(list(jobs)))
-    rows = (await session.execute(q)).scalars().all()
-    result: list[IngestionRun] = []
-    seen: dict[str, int] = {}
-    for row in rows:
-        count = seen.get(row.job, 0)
-        if count < per_job:
-            result.append(row)
-            seen[row.job] = count + 1
-    return result
+        ranked = ranked.where(IngestionRun.job.in_(list(jobs)))
+    ranked_sq = ranked.subquery()
+    q = (
+        select(IngestionRun)
+        .join(ranked_sq, ranked_sq.c.id == IngestionRun.id)
+        .where(ranked_sq.c.rank <= max(1, per_job))
+        .order_by(IngestionRun.job, desc(IngestionRun.started_at))
+    )
+    return list((await session.execute(q)).scalars().all())

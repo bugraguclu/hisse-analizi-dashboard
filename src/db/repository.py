@@ -72,8 +72,14 @@ class CompanyRepository:
         result = await self.session.execute(select(Company).where(Company.ticker == ticker))
         return result.scalar_one_or_none()
 
-    async def get_all(self) -> Sequence[Company]:
-        result = await self.session.execute(select(Company).where(Company.is_active.is_(True)).order_by(Company.ticker))
+    async def get_all(self, tier: str | None = "core", *, include_inactive: bool = False) -> Sequence[Company]:
+        """Companies ordered by ticker; ``tier`` ``core`` (default, BIST 100) / ``universe`` / ``None`` = all tiers."""
+        q = select(Company).order_by(Company.ticker)
+        if not include_inactive:
+            q = q.where(Company.is_active.is_(True))
+        if tier:
+            q = q.where(Company.tracking_tier == tier)
+        result = await self.session.execute(q)
         return result.scalars().all()
 
     async def upsert(self, **kwargs: Any) -> Company:
