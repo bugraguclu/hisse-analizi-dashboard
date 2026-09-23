@@ -1,0 +1,35 @@
+# Development overlay: run the API and the worker from the checked-out sources.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# The production Dockerfile copies the sources into the image at build time, so a
+# container started from an old image keeps serving old code even though the
+# host tree changed. This overlay bind-mounts the source directories into the
+# running containers (the image's own copies are shadowed) and starts uvicorn
+# with --reload, so code changes are picked up without rebuilding. Migrations
+# are still applied by the one-shot ``migrate`` service on start-up.
+services:
+  migrate:
+    volumes:
+      - ./src:/app/src:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+
+  app:
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir src
+    volumes:
+      - ./src:/app/src:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./scripts:/app/scripts:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./docs:/app/docs:ro
+
+  worker:
+    volumes:
+      - ./src:/app/src:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./scripts:/app/scripts:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
