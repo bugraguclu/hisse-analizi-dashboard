@@ -796,21 +796,17 @@ async def fetch_expected_disclosures(member_oid: str, today: date) -> list[Expec
         "Origin": KAP_BASE_URL,
         "Referer": KAP_EXPECTED_DISCLOSURES_PAGE,
     }
-    from src.adapters.fundamentals_common import kap_gate
+    from src.adapters.fundamentals_common import kap_post
 
-    if kap_gate.blocked_for() > 0:  # the WAF is blocking us: do not extend the block
-        raise _fail("KAP beklenen bildirim takvimine ulaşılamadı")
+    # Tüm KAP trafiği tek kapıdan geçer (istek aralığı + WAF engeli sonrası bekleme).
     try:
-        response = await get_http_client().post(
-            KAP_EXPECTED_DISCLOSURES_URL, json=payload, headers=headers, timeout=_TIMEOUT
-        )
-        if response.status_code in (403, 429):
-            kap_gate.block(f"HTTP {response.status_code}")
+        response = await kap_post(KAP_EXPECTED_DISCLOSURES_URL, payload, headers)
         response.raise_for_status()
         body = response.json()
+    except MarketDataError as e:  # kapı kapalı: engeli uzatmadan vazgeç
+        logger.warning("kap_expected_blocked", oid=member_oid, error=str(e))
+        raise _fail("KAP beklenen bildirim takvimine ulaşılamadı") from e
     except httpx.HTTPError as e:
-        if isinstance(e, httpx.TransportError):
-            kap_gate.block(f"{type(e).__name__}: {e}")
         logger.warning("kap_expected_unreachable", oid=member_oid, error=f"{type(e).__name__}: {e}")
         raise _fail("KAP beklenen bildirim takvimine ulaşılamadı") from e
     except ValueError as e:
