@@ -180,6 +180,11 @@ def plan_universe(
         )
         if successor and successor != ticker:
             plan.renamed[ticker] = successor
+    unkeyed = [t for t in plan.missing if not existing[t].isin and not existing[t].kap_member_oid]
+    if unkeyed:
+        plan.notes.append(
+            "Yeniden adlandırma denetimi yapılamadı (ISIN/KAP OID yok): " + ", ".join(unkeyed)
+        )
     limit = max(DELIST_MIN_CAP, int(len(active) * DELIST_MAX_FRACTION))
     if not plan.missing:
         return plan

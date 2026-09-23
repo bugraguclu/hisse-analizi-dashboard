@@ -175,14 +175,42 @@ def test_fundamentals_coverage_thresholds():
 
 
 def test_macro_cadence_missing_series_is_fail():
+    assert qs._macro_cadence_status("tuik.cpi.yoy", None, _ist(2026, 9, 23))["status"] == "fail"
     assert qs._macro_cadence_status("tcmb.policy_rate", None, _ist(2026, 9, 23))["status"] == "fail"
 
 
-def test_macro_cadence_known_series_thresholds():
+def test_macro_cadence_tuik_allows_the_publication_lag():
     now = _ist(2026, 9, 23)
-    assert qs._macro_cadence_status("tcmb.policy_rate", now.date() - timedelta(days=10), now)["status"] == "pass"
-    assert qs._macro_cadence_status("tcmb.policy_rate", now.date() - timedelta(days=70), now)["status"] == "warn"
-    assert qs._macro_cadence_status("tcmb.policy_rate", now.date() - timedelta(days=130), now)["status"] == "fail"
+    # dated the 1st of the reference month, published ~5 weeks later: 53 days is normal
+    assert qs._macro_cadence_status("tuik.cpi.yoy", now.date() - timedelta(days=53), now)["status"] == "pass"
+    assert qs._macro_cadence_status("tuik.cpi.yoy", now.date() - timedelta(days=80), now)["status"] == "warn"
+    assert qs._macro_cadence_status("tuik.cpi.yoy", now.date() - timedelta(days=150), now)["status"] == "fail"
+
+
+def test_macro_cadence_tcmb_series_judged_by_the_last_successful_fetch():
+    now = _ist(2026, 9, 23)
+    unchanged_since_january = now.date() - timedelta(days=243)  # the MPC simply left the rate alone
+    fresh = qs._macro_cadence_status("tcmb.policy_rate", unchanged_since_january, now, last_fetch=now - timedelta(hours=5))
+    assert fresh["status"] == "pass"
+    assert fresh["actual"] == 0.0
+    stale = qs._macro_cadence_status("tcmb.policy_rate", unchanged_since_january, now, last_fetch=now - timedelta(days=4))
+    assert stale["status"] == "warn"
+    dead = qs._macro_cadence_status("tcmb.policy_rate", unchanged_since_january, now, last_fetch=now - timedelta(days=9))
+    assert dead["status"] == "fail"
+    never = qs._macro_cadence_status("tcmb.policy_rate", unchanged_since_january, now)
+    assert never["status"] == "warn"
+    assert "macro.rates" in never["details"]["note"]
+
+
+def test_macro_cadence_structurally_inactive_series_never_fails_on_age():
+    now = _ist(2026, 9, 23)
+    result = qs._macro_cadence_status(
+        "tcmb.late_liquidity.borrowing", date(2010, 5, 20), now, last_fetch=now - timedelta(hours=1)
+    )
+    assert result["status"] == "pass"
+    assert "2010" in result["details"]["note"]
+    missing = qs._macro_cadence_status("tcmb.late_liquidity.borrowing", None, now, last_fetch=now)
+    assert missing["status"] == "pass"
 
 
 def test_macro_cadence_unknown_series_uses_default_days():

@@ -39,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.repositories.macro import MacroRepository
 from src.db.session import async_session_factory
+from src.adapters import evds_adapter
 from src.services import macro_service
 from src.services.ingestion import run_job
 from src.workers.polling_worker import sleep_or_stop, source_lock
@@ -116,6 +117,9 @@ async def _execute_job(job: str) -> dict[str, Any]:
     if ingest is None:
         logger.warning("macro_unknown_job", job=job)
         return {"skipped": "unknown_job"}
+    if job == "macro.evds" and not evds_adapter.evds_enabled():
+        # No key configured: a deliberate no-op, not an "ok" run with zero items.
+        return {"skipped": "evds_disabled"}
 
     async with source_lock(job) as acquired:
         if not acquired:

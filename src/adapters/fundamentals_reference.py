@@ -397,7 +397,8 @@ class PriceTargetRecord:
 
     @property
     def has_targets(self) -> bool:
-        return any(v is not None for v in (self.low, self.high, self.mean))
+        # hedeffiyat.com.tr kapsam dışı hisselerde "0,00 ₺ (%-100)" basar: sıfırlar hedef değildir.
+        return any(v is not None and v != 0 for v in (self.low, self.high, self.mean))
 
 
 @dataclass(frozen=True)

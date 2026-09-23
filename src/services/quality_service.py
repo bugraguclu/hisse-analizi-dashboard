@@ -21,7 +21,7 @@ import asyncio
 import importlib
 import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as dtime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -68,6 +68,7 @@ KNOWN_JOBS: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 # Small shared helpers (pure)
 # ---------------------------------------------------------------------------
+
 
 def _is_weekday(day: date) -> bool:
     return day.weekday() < 5
@@ -120,6 +121,7 @@ def _age(reference: datetime | None, now: datetime) -> timedelta | None:
 # Freshness: quotes
 # ---------------------------------------------------------------------------
 
+
 def _quotes_freshness_status(age: timedelta | None, now: datetime) -> dict[str, Any]:
     if age is None:
         return {
@@ -158,6 +160,7 @@ async def _check_quotes_freshness(session: AsyncSession) -> list[dict[str, Any]]
 # ---------------------------------------------------------------------------
 # Freshness: price_bars
 # ---------------------------------------------------------------------------
+
 
 def _price_bars_freshness_status(latest_bar_date: date | None, now: datetime) -> dict[str, Any]:
     expected = _expected_trading_day(now)
@@ -199,6 +202,7 @@ async def _check_price_bars_freshness(session: AsyncSession) -> list[dict[str, A
 # ---------------------------------------------------------------------------
 # Freshness: financial_statements coverage (tracking_tier=core)
 # ---------------------------------------------------------------------------
+
 
 def _fundamentals_coverage_status(core_total: int, core_covered: int) -> dict[str, Any]:
     if core_total == 0:
@@ -254,20 +258,67 @@ async def _check_financial_statements_coverage(session: AsyncSession) -> list[di
 # Freshness: macro_series cadence
 # ---------------------------------------------------------------------------
 
+# TÜİK series are dated the 1st of the reference month and published around the
+# 3rd of the following month, so a healthy series is routinely 35-65 days old.
 _MACRO_CADENCE_DAYS: dict[str, int] = {
-    "tcmb.policy_rate": 60,
-    "tcmb.overnight.borrowing": 60,
-    "tcmb.overnight.lending": 60,
-    "tcmb.late_liquidity.borrowing": 60,
-    "tcmb.late_liquidity.lending": 60,
-    "tuik.cpi.yoy": 45,
-    "tuik.cpi.mom": 45,
-    "tuik.ppi.yoy": 45,
-    "tuik.ppi.mom": 45,
+    "tuik.cpi.yoy": 70,
+    "tuik.cpi.mom": 70,
+    "tuik.ppi.yoy": 70,
+    "tuik.ppi.mom": 70,
+}
+# TCMB rate series only get a new observation when the MPC changes a rate (the
+# policy rate stayed at 38 % from 2026-01-23 through the 2026-09-10 meeting), so
+# their freshness is the age of the last successful ``macro.rates`` fetch.
+_DECISION_SERIES_PREFIX = "tcmb."
+_DECISION_FETCH_WARN_DAYS = 2
+_DECISION_FETCH_FAIL_DAYS = 7
+_STRUCTURALLY_INACTIVE_SERIES: dict[str, str] = {
+    "tcmb.late_liquidity.borrowing": "TCMB 2010'dan beri bu faizi uygulamıyor (0 / '-' yayınlanır); gözlem beklenmez",
 }
 
 
-def _macro_cadence_status(series_code: str, latest: date | None, now: datetime) -> dict[str, Any]:
+def _decision_series_status(
+    series_code: str, latest: date | None, now: datetime, last_fetch: datetime | None
+) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "latest_observation_date": latest.isoformat() if latest else None,
+        "basis": "son başarılı macro.rates çekimi",
+    }
+    note = _STRUCTURALLY_INACTIVE_SERIES.get(series_code)
+    if note:
+        details["note"] = note
+    if latest is None and not note:
+        return {
+            "status": "fail",
+            "expected": float(_DECISION_FETCH_FAIL_DAYS),
+            "actual": None,
+            "details": {**details, "note": "seri hiç gözlenmemiş"},
+        }
+    if last_fetch is None:
+        return {
+            "status": "warn",
+            "expected": float(_DECISION_FETCH_FAIL_DAYS),
+            "actual": None,
+            "details": {**details, "note": "macro.rates işi hiç başarıyla çalışmamış"},
+        }
+    fetch_age = (_istanbul(now).date() - last_fetch.astimezone(ISTANBUL_TZ).date()).days
+    status: CheckStatus = (
+        "fail" if fetch_age > _DECISION_FETCH_FAIL_DAYS else "warn" if fetch_age > _DECISION_FETCH_WARN_DAYS else "pass"
+    )
+    details["last_fetch_at"] = last_fetch.isoformat()
+    return {
+        "status": status,
+        "expected": float(_DECISION_FETCH_FAIL_DAYS),
+        "actual": float(fetch_age),
+        "details": details,
+    }
+
+
+def _macro_cadence_status(
+    series_code: str, latest: date | None, now: datetime, *, last_fetch: datetime | None = None
+) -> dict[str, Any]:
+    if series_code.startswith(_DECISION_SERIES_PREFIX):
+        return _decision_series_status(series_code, latest, now, last_fetch)
     cadence_days = _MACRO_CADENCE_DAYS.get(series_code, settings.quality_macro_cadence_default_days)
     if latest is None:
         return {
@@ -282,19 +333,41 @@ def _macro_cadence_status(series_code: str, latest: date | None, now: datetime) 
         "status": status,
         "expected": float(cadence_days),
         "actual": float(age_days),
-        "details": {"latest_observation_date": latest.isoformat()},
+        "details": {"latest_observation_date": latest.isoformat(), "basis": "gözlem tarihi + yayın gecikmesi"},
     }
+
+
+async def _last_successful_run(session: AsyncSession, job: str) -> datetime | None:
+    value = (
+        await session.execute(
+            select(func.max(IngestionRun.finished_at)).where(
+                IngestionRun.job == job, IngestionRun.status.in_(("ok", "partial"))
+            )
+        )
+    ).scalar_one_or_none()
+    if value is not None and value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value
 
 
 async def _check_macro_cadence(session: AsyncSession) -> list[dict[str, Any]]:
     now = now_istanbul()
     rows = (
-        await session.execute(select(MacroObservation.series_code, func.max(MacroObservation.observation_date)).group_by(MacroObservation.series_code))
+        await session.execute(
+            select(MacroObservation.series_code, func.max(MacroObservation.observation_date)).group_by(
+                MacroObservation.series_code
+            )
+        )
     ).all()
     latest_by_series: dict[str, date] = {code: latest for code, latest in rows if latest is not None}
-    series_codes = sorted(set(_MACRO_CADENCE_DAYS) | set(latest_by_series))
+    last_rates_fetch = await _last_successful_run(session, "macro.rates")
+    series_codes = sorted(set(_MACRO_CADENCE_DAYS) | set(_STRUCTURALLY_INACTIVE_SERIES) | set(latest_by_series))
     return [
-        {"check_name": "freshness.macro_series", "subject": code, **_macro_cadence_status(code, latest_by_series.get(code), now)}
+        {
+            "check_name": "freshness.macro_series",
+            "subject": code,
+            **_macro_cadence_status(code, latest_by_series.get(code), now, last_fetch=last_rates_fetch),
+        }
         for code in series_codes
     ]
 
@@ -302,6 +375,7 @@ async def _check_macro_cadence(session: AsyncSession) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Freshness: fx_bulletins
 # ---------------------------------------------------------------------------
+
 
 def _fx_freshness_status(latest: date | None, now: datetime) -> dict[str, Any]:
     expected = _last_tcmb_working_day(now)
@@ -336,6 +410,7 @@ async def _check_fx_freshness(session: AsyncSession) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Ingestion runs health
 # ---------------------------------------------------------------------------
+
 
 def _ingestion_health_status(
     had_recent_failure: bool,
@@ -372,18 +447,25 @@ async def _check_ingestion_health(session: AsyncSession) -> list[dict[str, Any]]
     failed_jobs = set(
         (
             await session.execute(
-                select(IngestionRun.job).where(IngestionRun.started_at >= cutoff, IngestionRun.status == "failed").distinct()
+                select(IngestionRun.job)
+                .where(IngestionRun.started_at >= cutoff, IngestionRun.status == "failed")
+                .distinct()
             )
         ).scalars()
     )
-    job_rows = (await session.execute(select(IngestionRun.job, func.max(IngestionRun.started_at)).group_by(IngestionRun.job))).all()
+    job_rows = (
+        await session.execute(select(IngestionRun.job, func.max(IngestionRun.started_at)).group_by(IngestionRun.job))
+    ).all()
     latest_by_job: dict[str, datetime] = {job: started for job, started in job_rows if started is not None}
     return [
         {
             "check_name": "ingestion.health",
             "subject": job,
             **_ingestion_health_status(
-                job in failed_jobs, latest_by_job.get(job), now, expected_interval_hours=settings.quality_ingestion_default_interval_hours
+                job in failed_jobs,
+                latest_by_job.get(job),
+                now,
+                expected_interval_hours=settings.quality_ingestion_default_interval_hours,
             ),
         }
         for job in KNOWN_JOBS
@@ -394,6 +476,7 @@ async def _check_ingestion_health(session: AsyncSession) -> list[dict[str, Any]]
 # Integrity
 # ---------------------------------------------------------------------------
 
+
 def _integrity_status(violations: int, total: int) -> dict[str, Any]:
     if violations == 0:
         status: CheckStatus = "pass"
@@ -401,14 +484,21 @@ def _integrity_status(violations: int, total: int) -> dict[str, Any]:
         status = "fail"
     else:
         status = "warn"
-    return {"status": status, "expected": 0.0, "actual": float(violations), "details": {"violations": violations, "total": total}}
+    return {
+        "status": status,
+        "expected": 0.0,
+        "actual": float(violations),
+        "details": {"violations": violations, "total": total},
+    }
 
 
 async def _check_price_bars_integrity(session: AsyncSession) -> list[dict[str, Any]]:
     total = await session.scalar(select(func.count()).select_from(PriceBar)) or 0
     bad = (
         await session.scalar(
-            select(func.count()).select_from(PriceBar).where(
+            select(func.count())
+            .select_from(PriceBar)
+            .where(
                 or_(
                     and_(PriceBar.high.is_not(None), PriceBar.low.is_not(None), PriceBar.high < PriceBar.low),
                     and_(PriceBar.close.is_not(None), PriceBar.low.is_not(None), PriceBar.close < PriceBar.low),
@@ -425,7 +515,10 @@ async def _check_price_bars_integrity(session: AsyncSession) -> list[dict[str, A
 
 async def _check_quotes_integrity(session: AsyncSession) -> list[dict[str, Any]]:
     total = await session.scalar(select(func.count()).select_from(Quote)) or 0
-    bad = await session.scalar(select(func.count()).select_from(Quote).where(Quote.last.is_not(None), Quote.last <= 0)) or 0
+    bad = (
+        await session.scalar(select(func.count()).select_from(Quote).where(Quote.last.is_not(None), Quote.last <= 0))
+        or 0
+    )
     evaluated = _integrity_status(bad, total)
     return [{"check_name": "integrity.quotes", "subject": "quotes", **evaluated}]
 
@@ -434,7 +527,9 @@ async def _check_stale_active_companies(session: AsyncSession) -> list[dict[str,
     cutoff = utcnow() - timedelta(days=settings.quality_stale_active_company_days)
     total_active = (
         await session.scalar(
-            select(func.count()).select_from(Company).where(Company.is_active.is_(True), Company.security_type == "stock")
+            select(func.count())
+            .select_from(Company)
+            .where(Company.is_active.is_(True), Company.security_type == "stock")
         )
         or 0
     )
@@ -455,7 +550,11 @@ async def _check_stale_active_companies(session: AsyncSession) -> list[dict[str,
             "status": status,
             "expected": 0.0,
             "actual": float(stale),
-            "details": {"stale": stale, "active_total": total_active, "window_days": settings.quality_stale_active_company_days},
+            "details": {
+                "stale": stale,
+                "active_total": total_active,
+                "window_days": settings.quality_stale_active_company_days,
+            },
         }
     ]
 
@@ -463,6 +562,7 @@ async def _check_stale_active_companies(session: AsyncSession) -> list[dict[str,
 # ---------------------------------------------------------------------------
 # Cross-source: delegate to the macro workstream's own accuracy checks
 # ---------------------------------------------------------------------------
+
 
 def _normalize_external_result(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Another workstream's check-result dict -> our canonical shape.
@@ -497,7 +597,10 @@ async def _check_cross_source_macro(session: AsyncSession) -> list[dict[str, Any
                 "status": "warn",
                 "expected": None,
                 "actual": None,
-                "details": {"note": "macro_service.run_accuracy_checks içe aktarılamadı (WS4 henüz hazır olmayabilir)", "error": str(exc)},
+                "details": {
+                    "note": "macro_service.run_accuracy_checks içe aktarılamadı (WS4 henüz hazır olmayabilir)",
+                    "error": str(exc),
+                },
             }
         ]
     try:
@@ -511,7 +614,10 @@ async def _check_cross_source_macro(session: AsyncSession) -> list[dict[str, Any
                 "status": "warn",
                 "expected": None,
                 "actual": None,
-                "details": {"note": "macro doğruluk kontrolleri çalıştırılamadı", "error": f"{type(exc).__name__}: {exc}"},
+                "details": {
+                    "note": "macro doğruluk kontrolleri çalıştırılamadı",
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
             }
         ]
     normalized = [_normalize_external_result(r) for r in raw_results]
@@ -754,14 +860,19 @@ def summarize_results(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     for r in results:
         status = str(r.get("status", "warn"))
         counts[status] = counts.get(status, 0) + 1
-    failing = [{"check_name": r["check_name"], "subject": r.get("subject")} for r in results if r.get("status") == "fail"]
-    warning = [{"check_name": r["check_name"], "subject": r.get("subject")} for r in results if r.get("status") == "warn"]
+    failing = [
+        {"check_name": r["check_name"], "subject": r.get("subject")} for r in results if r.get("status") == "fail"
+    ]
+    warning = [
+        {"check_name": r["check_name"], "subject": r.get("subject")} for r in results if r.get("status") == "warn"
+    ]
     return {"total": len(results), **counts, "failing": failing, "warning": warning}
 
 
 # ---------------------------------------------------------------------------
 # /admin/data/refresh dispatch (lazy import of the other workstreams' run_*_once)
 # ---------------------------------------------------------------------------
+
 
 class UnknownDomainError(ValueError):
     def __init__(self, domain: str):
@@ -784,7 +895,9 @@ _REFRESH_TARGETS: dict[str, tuple[str, str]] = {
 }
 
 
-async def run_domain_refresh(domain: str, *, tickers: list[str] | None = None, jobs: list[str] | None = None) -> dict[str, Any]:
+async def run_domain_refresh(
+    domain: str, *, tickers: list[str] | None = None, jobs: list[str] | None = None
+) -> dict[str, Any]:
     """Lazily import ``run_<domain>_once`` and run it now, bounded by
     ``QUALITY_REFRESH_TIMEOUT_SECONDS``.
 
@@ -820,6 +933,7 @@ async def run_domain_refresh(domain: str, *, tickers: list[str] | None = None, j
 # ---------------------------------------------------------------------------
 # /data/status — fast, DB-aggregate-only domain status
 # ---------------------------------------------------------------------------
+
 
 def _freshness_flag(row_count: int, age: timedelta | None, max_fresh_age: timedelta) -> Freshness:
     if row_count == 0:
@@ -922,7 +1036,11 @@ async def get_data_status(session: AsyncSession) -> dict[str, Any]:
             jobs=jobs_for("universe.sync", "reference.company"),
             tables=[
                 {"table": "companies", "row_count": counts["companies_total"], "latest": None},
-                {"table": "index_memberships", "row_count": counts["index_memberships_total"], "latest": _iso(counts["index_memberships_latest"])},
+                {
+                    "table": "index_memberships",
+                    "row_count": counts["index_memberships_total"],
+                    "latest": _iso(counts["index_memberships_latest"]),
+                },
             ],
         ),
         _build_domain(
@@ -932,8 +1050,16 @@ async def get_data_status(session: AsyncSession) -> dict[str, Any]:
             now=now,
             jobs=jobs_for("market.quotes", "market.bars.daily", "market.bars.backfill"),
             tables=[
-                {"table": "quotes", "row_count": counts["quotes_total"], "latest": _iso(counts["quotes_latest_fetched_at"])},
-                {"table": "price_bars", "row_count": counts["price_bars_total"], "latest": _iso(counts["price_bars_latest_date"])},
+                {
+                    "table": "quotes",
+                    "row_count": counts["quotes_total"],
+                    "latest": _iso(counts["quotes_latest_fetched_at"]),
+                },
+                {
+                    "table": "price_bars",
+                    "row_count": counts["price_bars_total"],
+                    "latest": _iso(counts["price_bars_latest_date"]),
+                },
             ],
         ),
         _build_domain(
@@ -955,14 +1081,26 @@ async def get_data_status(session: AsyncSession) -> dict[str, Any]:
             "macro",
             row_count=counts["macro_observations_total"] + counts["fx_bulletins_total"],
             latest=max(
-                (d for d in (counts["macro_observations_latest_date"], counts["fx_bulletins_latest_date"]) if d is not None),
+                (
+                    d
+                    for d in (counts["macro_observations_latest_date"], counts["fx_bulletins_latest_date"])
+                    if d is not None
+                ),
                 default=None,
             ),
             now=now,
             jobs=jobs_for("macro.rates", "macro.inflation", "macro.fx"),
             tables=[
-                {"table": "macro_series", "row_count": counts["macro_observations_total"], "latest": _iso(counts["macro_observations_latest_date"])},
-                {"table": "fx_bulletins", "row_count": counts["fx_bulletins_total"], "latest": _iso(counts["fx_bulletins_latest_date"])},
+                {
+                    "table": "macro_series",
+                    "row_count": counts["macro_observations_total"],
+                    "latest": _iso(counts["macro_observations_latest_date"]),
+                },
+                {
+                    "table": "fx_bulletins",
+                    "row_count": counts["fx_bulletins_total"],
+                    "latest": _iso(counts["fx_bulletins_latest_date"]),
+                },
             ],
         ),
         _build_domain(
@@ -972,7 +1110,11 @@ async def get_data_status(session: AsyncSession) -> dict[str, Any]:
             now=now,
             jobs=jobs_for("quality.daily"),
             tables=[
-                {"table": "data_quality_checks", "row_count": counts["quality_checks_total"], "latest": _iso(counts["quality_checks_latest"])},
+                {
+                    "table": "data_quality_checks",
+                    "row_count": counts["quality_checks_total"],
+                    "latest": _iso(counts["quality_checks_latest"]),
+                },
                 {"table": "data_snapshots", "row_count": counts["data_snapshots_total"], "latest": None},
             ],
         ),
