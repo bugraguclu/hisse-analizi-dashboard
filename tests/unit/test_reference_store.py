@@ -128,8 +128,9 @@ async def test_recommendations_from_store(pg_session, providers, monkeypatch):
     body, meta = await svc.get_recommendations(pg_session, "THYAO")
 
     assert meta.served_from == "store" and meta.as_of == "2026-04-24"
-    assert body == {"ticker": "THYAO", "source": "İş Yatırım (borsapy)",
-                    "recommendations": {"recommendation": "AL", "target_price": 455.0, "upside_potential": 52.68},
+    assert body == {"ticker": "THYAO", "source": "İş Yatırım (borsapy)", "source_code": "isyatirim",
+                    "recommendations": {"recommendation": "AL", "target_price": 455.0, "upside_potential": 52.68,
+                                        "date": "2026-04-24"},
                     "available": True}
     target = (await pg_session.execute(select(AnalystTarget))).scalar_one()
     assert (target.source, target.target_mean, target.recommendation) == ("isyatirim", Decimal("455.0009"), "AL")

@@ -1,6 +1,6 @@
 """Reference record normalisers and legacy payload builders (no network)."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -12,7 +12,8 @@ IST = ZoneInfo("Europe/Istanbul")
 
 
 def ms(day: date) -> float:
-    return datetime(day.year, day.month, day.day, tzinfo=IST).timestamp() * 1000
+    # İş Yatırım stamps are UTC midnight of the day (pre-2007 rows sit at 23:00 UTC of the same day)
+    return datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000
 
 
 RECOMMENDATION = {"ONERI": "AL", "HEDEF_FIYAT": 455.0009347826087, "GETIRI_POT": 0.5268487744382842,
@@ -70,7 +71,8 @@ def test_recommendation_record_and_payload():
     assert record == fr.RecommendationRecord("AL", Decimal("455.0009"), Decimal("52.6849"), date(2026, 4, 24))
     assert fr.recommendations_payload(record) == {
         "source": "İş Yatırım (borsapy)",
-        "recommendations": {"recommendation": "AL", "target_price": 455.0, "upside_potential": 52.68},
+        "source_code": "isyatirim",
+        "recommendations": {"recommendation": "AL", "target_price": 455.0, "upside_potential": 52.68, "date": "2026-04-24"},
         "available": True,
     }
 
@@ -81,7 +83,8 @@ def test_uncovered_company_has_no_fabricated_upside():
     assert fr.recommendation_record(uncovered) is None
     assert fr.recommendations_payload(None) == {
         "source": "İş Yatırım (borsapy)",
-        "recommendations": {"recommendation": None, "target_price": None, "upside_potential": None},
+        "source_code": "isyatirim",
+        "recommendations": {"recommendation": None, "target_price": None, "upside_potential": None, "date": None},
         "available": False,
     }
 

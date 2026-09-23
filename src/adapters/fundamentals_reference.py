@@ -3,7 +3,7 @@
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -101,7 +101,7 @@ def _dividend_records(items: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]
         stamp = to_number(item.get("SHHE_TARIH"))
         if not stamp:
             continue
-        day = datetime.fromtimestamp(stamp / 1000, tz=ISTANBUL_TZ).date()
+        day = datetime.fromtimestamp(stamp / 1000, tz=UTC).date()  # see _epoch_day
         gross_rate = to_number(item.get("SHHE_NAKIT_TM_ORAN")) or 0.0
         net_rate = to_number(item.get("SHHE_NAKIT_TM_ORAN_NET")) or 0.0
         total = to_number(item.get("SHHE_NAKIT_TM_TUTAR"))
@@ -334,12 +334,17 @@ def _as_float(value: Decimal | float | None) -> float | None:
 
 
 def _epoch_day(value: Any) -> date | None:
-    """İş Yatırım epoch milliseconds (Istanbul midnight) → Istanbul calendar day."""
+    """İş Yatırım epoch milliseconds → calendar day.
+
+    Recent stamps are UTC midnight of the day; stamps before ~2007 sit at 23:00 UTC
+    of the same day (BIMAS 2006-04-19, AKBNK 1997-03-27), so converting to Istanbul
+    time pushed those one day forward. The UTC date is right for both kinds.
+    """
     stamp = to_number(value)
     if not stamp:
         return None
     try:
-        day = datetime.fromtimestamp(stamp / 1000, tz=ISTANBUL_TZ).date()
+        day = datetime.fromtimestamp(stamp / 1000, tz=UTC).date()
     except (OverflowError, OSError, ValueError):
         return None
     return day if day >= _MIN_CORPORATE_ACTION_DATE else None
@@ -516,7 +521,8 @@ def recommendations_payload(record: RecommendationRecord | None) -> dict[str, An
         if record.upside_pct is not None:
             result["upside_potential"] = round(float(record.upside_pct), 2)
     available = any(v is not None for v in result.values())
-    return {"source": LABEL_ISYATIRIM, "recommendations": result, "available": available}
+    result["date"] = record.as_of.isoformat() if record is not None and record.as_of else None
+    return {"source": LABEL_ISYATIRIM, "source_code": SOURCE_ISYATIRIM, "recommendations": result, "available": available}
 
 
 def holders_payload_rows(records: Iterable[HolderRecord]) -> list[dict[str, Any]]:
