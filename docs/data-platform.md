@@ -290,6 +290,11 @@ dallandı; master'daki çalışma o tarihten beri commitlenmeden sürdü. Sıra:
      `/companies`, `/prices*`, `/financials*` branch'ten; `src/adapters/price.py`, `index_adapter.py`: branch.
    - `src/adapters/macro.py`: master sürümü (ekonomik takvim); depo öncelikli okuma `routers_macro.py` üzerinden
      `macro_service`'e delege edildiği için `macro.py`'de değişiklik gerekmez.
+   - `src/api/routers_market.py`: master sürümü (grafik `warmup` parametresi: `MAX_CHART_WARMUP_BARS`,
+     `get_index_data(..., warmup=)`, `get_ticker_history(..., warmup=)`); branch bu API'yi depo öncelikli
+     yolda destekler (`price.py`, `index_adapter.py`, `market_service.py`). Birleştirme sonrası smoke testine
+     `/market/ticker/THYAO/history?period=1y&warmup=250` ve `/market/index/XU100?period=1y&warmup=250` eklenir
+     (yanıtta 250 elemanlı `warmup` dizisi beklenir).
    - Master'da silinen test dosyaları (`test_analysis_ratios.py`, `test_fundamentals_ratios.py`,
      `test_market_periods.py`, `test_price_service.py`, `test_technical_endpoints.py`): branch'te yeniden
      yazıldılar ve v2 şemayı test ederler → branch sürümü tutulur.
