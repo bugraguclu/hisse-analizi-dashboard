@@ -148,3 +148,88 @@ def test_shares_fall_back_to_tradingview():
     assert choose_shares(None, MarketInputs(implied_shares=5e6))[:2] == (5e6, "tradingview_mcap")
     assert choose_shares(None, MarketInputs(total_shares=7e6))[:2] == (7e6, "tradingview")
     assert choose_shares(None, None) == (None, None, [])
+
+
+def test_growth_needs_a_positive_base():
+    # KCHOL before the fix: previous TTM −3.2 bn, current 34.1 bn → "+1,159.72 %".
+    ratios = compute_financial_ratios({"net_income_parent": 34.07, "revenue": 10.0},
+                                      previous={"net_income_parent": -3.215, "revenue": 0.0})
+    assert ratios["net_income_growth_yoy"] is None
+    assert ratios["revenue_growth_yoy"] is None
+    assert compute_financial_ratios({"net_income_parent": -1.0}, previous={"net_income_parent": 2.0})[
+        "net_income_growth_yoy"] == -150.0
+    assert compute_financial_ratios({"net_income_parent": 12.0}, previous={"net_income_parent": 10.0})[
+        "net_income_growth_yoy"] == 20.0
+
+
+def test_annual_row_is_valued_with_the_latest_balance_sheet():
+    # GARAN-like bank: no TTM (KAP shows year-ends + the latest interim only). The annual row
+    # must use today's book value (TradingView price_book_fq 1.15), not the fiscal year's (1.26).
+    bank = {
+        "2026/06": facts(net_income=64.4e9, net_income_parent=64.4e9, total_assets=5_216e9, total_equity=489.4e9,
+                         deposits=3_466e9, paid_in_capital=4.2e9),
+        "2025/12": facts(net_income=109.8e9, net_income_parent=109.8e9, total_assets=4_547e9, total_equity=446.6e9,
+                         deposits=3_150e9, paid_in_capital=4.2e9),
+        "2024/12": facts(net_income=91.2e9, net_income_parent=91.2e9, total_assets=3_300e9, total_equity=331e9,
+                         paid_in_capital=4.2e9),
+    }
+    market = MarketInputs(price=133.8, implied_shares=4.2e9, total_shares=4.2e9)
+
+    rows = by_key(ratio_rows(bank, template="bank", market=market))
+
+    annual = rows[("2025/12", "annual")]
+    assert float(annual["pb_ratio"]) == pytest.approx(round(133.8 * 4.2e9 / 489.4e9, 2))  # 1.15
+    assert float(annual["pe_ratio"]) == pytest.approx(round(133.8 * 4.2e9 / 109.8e9, 2))  # fiscal-year earnings
+    assert float(annual["roe"]) == pytest.approx(round(109.8 / ((446.6 + 331) / 2) * 100, 2))  # FY balance sheets
+    assert annual["inputs_json"]["market"]["balance_sheet_period"] == "2026/06"
+    assert annual["inputs_json"]["valuation_stocks"]["total_equity"] == 489.4e9
+    assert rows[("2024/12", "annual")]["pb_ratio"] is None  # historical rows are never valued
+
+
+def test_annual_row_takes_the_current_share_count():
+    # ALARK: 435 mn shares at 2025/12, 417 mn after the 2026 capital reduction.
+    items = {
+        "2026/06": facts(revenue=5.58e9, net_income_parent=4.36e9, total_assets=167.5e9, total_equity=97.8e9,
+                         parent_equity=91.5e9, paid_in_capital=417e6),
+        "2025/12": facts(revenue=8.67e9, net_income_parent=-1.22e9, total_assets=125.6e9, total_equity=80.4e9,
+                         parent_equity=74.4e9, paid_in_capital=435e6),
+    }
+    market = MarketInputs(price=109.2, implied_shares=408e6, total_shares=409.5e6)
+
+    rows = by_key(ratio_rows(items, template="industrial", market=market))
+
+    annual = rows[("2025/12", "annual")]
+    assert annual["shares_outstanding"] == Decimal(417_000_000) and annual["shares_source"] == "paid_in_capital"
+    assert annual["market_cap"] == Decimal(str(round(109.2 * 417e6, 2)))
+    assert float(annual["pb_ratio"]) == pytest.approx(round(109.2 * 417e6 / 91.5e9, 2))
+
+
+def test_ttm_ebitda_ratios_fall_back_to_the_fiscal_year_with_a_label():
+    # KCHOL: İş Yatırım's operating profit is rejected (holding definition), so the prior-year
+    # interim has none and the TTM EBITDA cannot be built.
+    items = {
+        "2026/06": facts(revenue=1_694e9, operating_profit=96e9, depreciation_amortization=41.5e9,
+                         net_income_parent=20.3e9, total_assets=6_233e9, total_equity=1_292e9, parent_equity=793e9,
+                         financial_debt=900e9, cash=300e9, paid_in_capital=2.536e9),
+        "2025/12": facts(revenue=2_757e9, operating_profit=117.6e9, depreciation_amortization=74.4e9,
+                         net_income_parent=22.0e9, total_assets=5_318e9, total_equity=1_092e9, parent_equity=677e9,
+                         paid_in_capital=2.536e9),
+        "2025/06": facts(revenue=1_177e9, operating_profit=None, depreciation_amortization=32.8e9,
+                         net_income_parent=6.2e9, total_assets=4_660e9, total_equity=950e9, parent_equity=595e9,
+                         paid_in_capital=2.536e9),
+    }
+    market = MarketInputs(price=221.1, implied_shares=2.536e9)
+
+    row = by_key(ratio_rows(items, template="industrial", market=market))[("2026/06", "ttm")]
+
+    fy_ebitda = 117.6e9 + 74.4e9
+    assert float(row["ebitda_margin"]) == pytest.approx(round(fy_ebitda / 2_757e9 * 100, 2))
+    assert float(row["net_debt_ebitda"]) == pytest.approx(round((900e9 - 300e9) / fy_ebitda, 2))
+    enterprise_value = 221.1 * 2.536e9 + 600e9 + (1_292e9 - 793e9) * 0  # no minority item given
+    assert float(row["ev_ebitda"]) == pytest.approx(round(enterprise_value / fy_ebitda, 2))
+    inputs = row["inputs_json"]
+    assert inputs["ratio_bases"] == {k: "annual:2025/12" for k in ("ebitda_margin", "net_debt_ebitda", "ev_ebitda")}
+    assert "esas faaliyet kârı" in inputs["ratios_basis_note"] and "2025/12" in inputs["ratios_basis_note"]
+    assert inputs["derived"]["ebitda_annual_fallback"]["ebitda"] == pytest.approx(fy_ebitda)
+    assert inputs["derived"]["ebitda"] is None  # the TTM EBITDA itself stays unknown
+    assert row["pe_ratio"] is not None  # TTM flows otherwise available

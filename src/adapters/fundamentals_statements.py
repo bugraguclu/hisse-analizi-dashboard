@@ -5,9 +5,11 @@ Kaynaklar:
 - **KAP "Şirket Finansal Bilgileri" özeti** — resmi, ilk açıklandığı haliyle
   bilanço ve gelir tablosu (son 3 yıl sonu + en son ara dönem). Birincil kaynak.
 - **İş Yatırım MaliTablo** — ara çeyrekler, nakit akışı, amortisman (FAVÖK),
-  nakit ve finansal borç. IAS 29 uygulayan şirketlerde yıl sonu kolonlarını
-  güncel satın alma gücüne göre yeniden ifade eder; KAP ile örtüşen dönemlerde
-  katsayıyla ilk açıklanan değere çevrilir (bkz. ``restatement_factor``).
+  nakit ve finansal borç. IAS 29 uygulayan şirketlerde yıl sonu kolonlarını ve
+  önceki yılın ara dönem kolonlarının gelir tablosu/nakit akışını (sonraki yılın
+  karşılaştırmalı tutarları) güncel satın alma gücüne göre yeniden ifade eder;
+  bunlar kolon başına katsayıyla ilk açıklanan değere çevrilir (bkz.
+  :class:`ColumnRestatement`, ``restatement_factor``).
 
 Bu modül fundamentals deposunun (``src.services.fundamentals_service``) saf
 parçalarını da sağlar:
@@ -19,7 +21,8 @@ parçalarını da sağlar:
   canlıdan birebir aynı üretilir);
 - :func:`build_canonical_facts` — KAP (ilk açıklanan) öncelikli kanonik kalemler
   (``financial_facts``): İş Yatırım yalnızca kapsamı ve tanımı KAP ile doğrulanan
-  kalem/dönemleri, IAS 29 katsayısı geri alınarak tamamlar;
+  kalem/dönemleri, kolonun IAS 29 katsayısı geri alınarak tamamlar
+  (:func:`classify_isyatirim_columns`, :func:`restatement_reference`);
 - :func:`build_statement_view` / :func:`build_cashflow_view` /
   :func:`build_live_ratios_view` — API yanıtları.
 """
@@ -28,6 +31,7 @@ import asyncio
 import hashlib
 import json
 import re
+import statistics
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -501,6 +505,7 @@ def kap_period_units(kap: Mapping[str, Any] | None) -> dict[str, float]:
 def _merged_canonical_by_period(
     kap: Mapping[str, Any] | None,
     isy: Mapping[str, Any] | None,
+    reference: Mapping[str, float] | None = None,
 ) -> tuple[dict[str, dict[str, float | None]], str]:
     """Canonical items per period for ratio/TTM work, plus the statement template.
 
@@ -508,17 +513,68 @@ def _merged_canonical_by_period(
     where its scope and definitions are verified against KAP (see
     :func:`build_canonical_facts`).
     """
-    facts = facts_from_sources(kap, isy)
+    facts = facts_from_sources(kap, isy, reference=reference)
     return facts.items, facts.template
 
 
 # ---------------------------------------------------------------------------
-# Canonical facts (financial_facts): KAP first, İş Yatırım verified
+# IAS 29: which İş Yatırım columns are re-expressed, and by which factor
 # ---------------------------------------------------------------------------
+#
+# İş Yatırım overwrites a period's column with the comparative figures of every later
+# report that contains the period:
+#
+# * a fiscal year-end column is re-expressed as a whole (balance sheet, income statement,
+#   cash flow) in the measuring unit of the report it was last compared in (the next
+#   annual report; before that is out, the latest interim report);
+# * an interim column P takes the income statement and cash flow of the report for
+#   P + 12 months (its comparative period) once that report is published. Its balance
+#   sheet is NOT re-expressed — that report compares with the previous fiscal year-end
+#   balance sheet — so the column is mixed.
+#
+# IAS 29 re-expresses a comparative period with one general price index ratio
+# (CPI(period) ÷ CPI(report)), the same for every line and every company. The balance
+# sheet's "Dönem Net Kar/Zararı" (İş Yatırım 2OCF: the parent's result of the period) of an
+# interim column therefore stays first published while the income statement's "Ana
+# Ortaklık Payları" (3Z) is re-expressed: 2OCF ÷ 3Z is the column's de-restatement factor.
+# Verified against the first-published KAP reports of 2025/06 (BIMAS, AEFES, FROTO, TUPRS,
+# ASELS, KCHOL): revenue, gross/operating profit, net income, D&A and operating cash flow
+# × 0.75695 (BIMAS 0.75698) equal KAP; the balance-sheet lines are equal as served.
+#
+# When a company's own ratio is unusable (small, zero or sign-changing results) the
+# cross-company factor of the period is used (:func:`restatement_reference`). A comparative
+# can also be *re-presented* beyond the index ratio: its own ratio then disagrees with the
+# period's factor. Verified on KAP (ALARK 2025/06, KCHOL 2024/06, ARCLK 2024/09): revenue,
+# gross profit and D&A still follow the index ratio, while operating profit (ARCLK: 1.46 bn
+# first published vs 17.5 bn), net income and operating cash flow were re-presented. So the
+# index ratio converts only those lines, the parent's result is the balance sheet's
+# first-published 2OCF, and every other flow of the column is unknown.
 
 _FACT_TOLERANCE = 0.005  # relative deviation accepted between KAP and de-restated İş Yatırım values
 _FACTOR_CONSISTENCY = 0.01  # balance vs flow restatement factor of one period
 _RESTATED_THRESHOLD = 0.002  # |factor − 1| above this = column re-expressed (IAS 29)
+_OWN_RATIO_TOLERANCE = 0.005  # a column's own 2OCF ÷ 3Z vs the period's cross-company factor
+_REFERENCE_AGREEMENT = 0.002  # companies whose ratios form a period's cross-company factor
+_REFERENCE_MIN_COMPANIES = 3
+# Twelve-month CPI ratios since IAS 29 was adopted stay above 0.55; ≤ 0.998 = re-expressed.
+_PLAUSIBLE_OWN_RATIO = (0.3, 1 - _RESTATED_THRESHOLD)
+#: First period reported under IAS 29 in Turkey (KGK: periods ending on/after 31 December 2023).
+#: Interim reports before it were published at historical cost, so their re-expressed
+#: comparatives cannot be converted back with an index ratio.
+IAS29_FIRST_PERIOD: tuple[int, int] = (2023, 12)
+_BALANCE_PERIOD_PROFIT_LABELS = frozenset({"donem net kar/zarari"})  # İş Yatırım 2OCF
+#: Canonical flows a re-presented comparative still converts with the index ratio.
+REPRESENTED_SAFE_FLOWS: frozenset[str] = frozenset(
+    {"revenue", "gross_profit", "depreciation_amortization", "net_interest_income"}
+)
+#: İş Yatırım income-statement codes of those lines (sales, cost of sales, gross profits).
+_REPRESENTED_SAFE_INCOME_CODES = frozenset({"3C", "3CA", "3CAA", "3CAB", "3CAC", "3CAD", "3CAE", "3CAF", "3CB", "3D"})
+_REPRESENTED_SAFE_CASHFLOW_CODES = frozenset({"4B", "4CAB"})  # depreciation & amortisation
+_PARENT_INCOME_CODE = "3Z"
+_PAID_IN_CAPITAL_CODE = "2OA"
+# Cash-flow memo lines that are foreign-currency positions at the period end: an interim
+# column takes them from its own report (the next year's report compares with the year end).
+_FX_POSITION_LINE_RE = re.compile(r"\bpozisyon|\bypp\b")
 _SCOPE_ANCHORS = ("total_equity", "net_income")
 CASH_FLOW_KEYS: frozenset[str] = frozenset(
     {"depreciation_amortization", "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
@@ -533,9 +589,263 @@ def fact_statement(key: str) -> str:
     return "income" if key in FLOW_KEYS else "balance"
 
 
+def _apply_factor(value: float, factor: float | None, unit: float = 1.0) -> float | None:
+    if factor is None:
+        return None
+    return value if abs(factor - 1) <= 1e-9 else _rescale(value, factor, unit)
+
+
+@dataclass(frozen=True)
+class ColumnRestatement:
+    """How one İş Yatırım column relates to the first-published figures (see the notes above).
+
+    ``balance`` / ``flow`` multiply the column's balance-sheet / income-statement and
+    cash-flow values back to the first-published basis: ``1.0`` = served as first
+    published, ``None`` = re-expressed by an unknown factor. ``method``:
+    ``not_restated`` · ``kap`` (fiscal year-end, KAP ÷ İş Yatırım) · ``own_ratio``
+    (2OCF ÷ 3Z confirmed by the period's cross-company factor) · ``period_reference``
+    (the cross-company factor; the own ratio is unusable or the comparative was
+    re-presented) · ``own_ratio_unconfirmed`` (no cross-company factor for the period) ·
+    ``unknown`` (re-expressed, factor unknown) · ``inconsistent`` (KAP and İş Yatırım
+    differ in scope, not by a restatement).
+    """
+
+    period: str
+    balance: float | None = 1.0
+    flow: float | None = 1.0
+    method: str = "not_restated"
+    own_ratio: float | None = None
+    reference: float | None = None
+    represented: bool = False
+    parent_income: float | None = None  # first-published parent share (2OCF) of a re-presented column
+
+    @property
+    def balance_restated(self) -> bool:
+        return self.balance is None or abs(self.balance - 1) > _RESTATED_THRESHOLD
+
+    @property
+    def flows_restated(self) -> bool:
+        return self.represented or self.flow is None or abs(self.flow - 1) > _RESTATED_THRESHOLD
+
+    def stock_value(self, key: str, value: Any, unit: float = 1.0) -> float | None:
+        number = to_number(value)
+        if number is None or key == "paid_in_capital":  # nominal share capital is never re-expressed
+            return number
+        return _apply_factor(number, self.balance, unit)
+
+    def flow_value(self, key: str, value: Any, unit: float = 1.0) -> float | None:
+        if self.represented and key == "net_income_parent":
+            return self.parent_income
+        number = to_number(value)
+        if number is None or (self.represented and key not in REPRESENTED_SAFE_FLOWS):
+            return None
+        return _apply_factor(number, self.flow, unit)
+
+    def value(self, key: str, value: Any, unit: float = 1.0) -> float | None:
+        """First-published value of canonical ``key`` (``None`` when it cannot be recovered)."""
+        return self.flow_value(key, value, unit) if key in FLOW_KEYS else self.stock_value(key, value, unit)
+
+    def source_tag(self, key: str) -> str:
+        """``sources_json.keys`` entry of a value taken from this column."""
+        if key in FLOW_KEYS and self.represented and key == "net_income_parent":
+            return "isyatirim:2OCF"
+        factor = self.flow if key in FLOW_KEYS else (1.0 if key == "paid_in_capital" else self.balance)
+        return f"isyatirim*{factor:.6f}" if factor is not None and abs(factor - 1) > 1e-9 else "isyatirim"
+
+    def line_value(self, statement: str, code: str, label_key: str, value: Any, unit: float = 1.0,
+                   *, year_end: bool = False) -> float | None:
+        """First-published value of an İş Yatırım statement line (views)."""
+        number = to_number(value)
+        if statement == "balance":
+            if number is None or code == _PAID_IN_CAPITAL_CODE:
+                return number
+            return _apply_factor(number, self.balance, unit)
+        if self.flow is None:
+            return None  # the column cannot be converted: shown as a whole or not at all
+        if statement == "cashflow" and not year_end and _FX_POSITION_LINE_RE.search(label_key):
+            return number  # period-end position from the period's own report
+        if self.represented:
+            if statement == "income" and code == _PARENT_INCOME_CODE:
+                return self.parent_income
+            safe = _REPRESENTED_SAFE_INCOME_CODES if statement == "income" else _REPRESENTED_SAFE_CASHFLOW_CODES
+            if code not in safe:
+                return None
+        if number is None:
+            return None
+        return _apply_factor(number, self.flow, unit)
+
+    def as_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "balance": round(self.balance, 6) if self.balance is not None else None,
+            "flow": round(self.flow, 6) if self.flow is not None else None,
+            "method": self.method,
+        }
+        if self.own_ratio is not None:
+            data["own_ratio"] = round(self.own_ratio, 6)
+        if self.reference is not None:
+            data["reference"] = round(self.reference, 6)
+        if self.represented:
+            data["represented"] = True
+            data["parent_income"] = self.parent_income
+        return data
+
+
+def balance_sheet_period_profit(balance: Mapping[str, Any] | None) -> float | None:
+    """İş Yatırım balance-sheet "Dönem Net Kar/Zararı" (2OCF) of one column."""
+    for label, value in (balance or {}).items():
+        if normalize_label(label) in _BALANCE_PERIOD_PROFIT_LABELS:
+            return to_number(value)
+    return None
+
+
+def profit_ratio(balance_profit: Any, income_parent_profit: Any) -> float | None:
+    """2OCF ÷ 3Z of one column (negative when the signs differ); ``None`` when either is missing or zero."""
+    a, b = to_number(balance_profit), to_number(income_parent_profit)
+    if a is None or b is None or a == 0 or b == 0:
+        return None
+    return a / b
+
+
+def _before_ias29(period: str) -> bool:
+    parsed = parse_period(period)
+    return parsed is None or parsed < IAS29_FIRST_PERIOD
+
+
+def restatement_reference(ratios_by_period: Mapping[str, Iterable[float | None]]) -> dict[str, float]:
+    """Cross-company de-restatement factor per interim period (``{period: factor}``).
+
+    ``ratios_by_period`` holds every company's 2OCF ÷ 3Z of the period. IAS 29
+    re-expresses a comparative with the CPI ratio of its period, so the re-expressed
+    companies agree to four decimals (2025/06: 17 of 18 at 0.7570; ALARK's re-presented
+    comparative is the outlier). A factor is kept when at least three companies — and
+    at least half of the re-expressed ones — agree within 0.2 %; it is their median.
+    Periods before IAS 29 (historical-cost first publications) have no factor.
+    """
+    reference: dict[str, float] = {}
+    for period, values in ratios_by_period.items():
+        if _before_ias29(period):
+            continue
+        candidates = sorted(
+            v for v in (to_number(x) for x in values)
+            if v is not None and 0.2 <= v <= 5.0 and abs(v - 1) > _RESTATED_THRESHOLD
+        )
+        if len(candidates) < _REFERENCE_MIN_COMPANIES:
+            continue
+        middle = statistics.median(candidates)
+        agreeing = [v for v in candidates if abs(v / middle - 1) <= _REFERENCE_AGREEMENT]
+        if len(agreeing) >= _REFERENCE_MIN_COMPANIES and 2 * len(agreeing) >= len(candidates):
+            reference[period] = statistics.median(agreeing)
+    return reference
+
+
+def restatement_reference_from_evidence(rows: Iterable[Sequence[Any]]) -> dict[str, float]:
+    """:func:`restatement_reference` of stored ``(company, period, 2OCF, 3Z)`` rows (one per İş Yatırım column)."""
+    by_period: dict[str, list[float | None]] = {}
+    for _company, period, balance_profit, parent_profit in rows:
+        by_period.setdefault(str(period), []).append(profit_ratio(balance_profit, parent_profit))
+    return restatement_reference(by_period)
+
+
+def _agrees(own: float | None, reference: float | None) -> bool:
+    return own is not None and reference is not None and abs(own / reference - 1) <= _OWN_RATIO_TOLERANCE
+
+
+def _plausible_own_ratio(period: str, own: float | None) -> bool:
+    low, high = _PLAUSIBLE_OWN_RATIO
+    return own is not None and low <= own <= high and not _before_ias29(period)
+
+
+def classify_isyatirim_columns(
+    periods: Iterable[str],
+    *,
+    evidence: Mapping[str, tuple[float | None, float | None]],
+    year_end_factors: Mapping[str, Mapping[str, float | None]] | None = None,
+    fiscal_year_end_month: int = 12,
+    reference: Mapping[str, float] | None = None,
+) -> dict[str, ColumnRestatement]:
+    """:class:`ColumnRestatement` of every İş Yatırım period of one company.
+
+    ``evidence``: ``{period: (2OCF, 3Z)}``; ``year_end_factors``: KAP ÷ İş Yatırım of the
+    fiscal year-ends both sources cover (``{"balance", "flow"}``, ``None`` = inconsistent);
+    ``reference``: :func:`restatement_reference`.
+
+    Fiscal year-ends follow the KAP factor; without one they are unknown when any
+    KAP-measured year-end was re-expressed (İş Yatırım re-expresses year-end columns even
+    for companies that do not apply IAS 29 in their interim comparatives, e.g. THYAO).
+    Interim comparatives are re-expressed only for companies whose interim evidence says
+    so: among the columns whose next-year report is already in the table (and that were
+    published under IAS 29), more own ratios confirmed by the reference (or, without one,
+    plausible) than ratios of 1. An interim column P of such a company is expected to be
+    re-expressed once the report for P + 12 months is in the table.
+    """
+    fy = int(fiscal_year_end_month or 12)
+    ordered = sort_periods_desc(p for p in periods if parse_period(p) is not None)
+    if not ordered:
+        return {}
+    latest = parse_period(ordered[0])
+    assert latest is not None
+    ref = dict(reference or {})
+    ratios = {p: profit_ratio(*evidence.get(p, (None, None))) for p in ordered}
+    year_ends = dict(year_end_factors or {})
+    measured = [float(b) for f in year_ends.values() if (b := f.get("balance")) is not None]
+    year_end_restating = any(abs(f - 1) > _RESTATED_THRESHOLD for f in measured)
+
+    def compared_next_year(period: str) -> bool:
+        parsed = parse_period(period)
+        return parsed is not None and shift_months(parsed[0], parsed[1], 12) <= latest
+
+    eligible = [p for p in ordered if not _is_year_end(p, fy) and compared_next_year(p) and not _before_ias29(p)]
+    restated_votes = sum(
+        1 for p in eligible
+        if (_agrees(ratios[p], ref.get(p)) if p in ref else _plausible_own_ratio(p, ratios[p]))
+        and abs((ratios[p] or 1.0) - 1) > _RESTATED_THRESHOLD
+    )
+    plain_votes = sum(1 for p in eligible if (r := ratios[p]) is not None and abs(r - 1) <= _RESTATED_THRESHOLD)
+    restating = restated_votes > plain_votes if (restated_votes or plain_votes) else year_end_restating
+
+    result: dict[str, ColumnRestatement] = {}
+    for period in ordered:
+        own, ref_factor = ratios[period], ref.get(period)
+        if _is_year_end(period, fy):
+            factors = year_ends.get(period)
+            if factors is not None and factors.get("balance") is not None:
+                balance = float(factors["balance"])  # type: ignore[arg-type]
+                flow = float(factors.get("flow") or balance)
+                restated = abs(balance - 1) > _RESTATED_THRESHOLD
+                result[period] = ColumnRestatement(
+                    period, balance=balance, flow=flow, method="kap" if restated else "not_restated", own_ratio=own
+                )
+            elif factors is not None:
+                result[period] = ColumnRestatement(period, balance=None, flow=None, method="inconsistent", own_ratio=own)
+            elif year_end_restating or restating:
+                result[period] = ColumnRestatement(period, balance=None, flow=None, method="unknown", own_ratio=own)
+            else:
+                result[period] = ColumnRestatement(period, own_ratio=own)
+            continue
+        expected = restating and compared_next_year(period)
+        if own is not None and abs(own - 1) <= _RESTATED_THRESHOLD:
+            column = ColumnRestatement(period, own_ratio=own, reference=ref_factor)
+        elif _agrees(own, ref_factor):
+            column = ColumnRestatement(period, flow=own, method="own_ratio", own_ratio=own, reference=ref_factor)
+        elif not expected:
+            column = ColumnRestatement(period, own_ratio=own, reference=ref_factor)
+        elif ref_factor is not None:
+            represented = own is not None  # net income moved beyond the index ratio
+            column = ColumnRestatement(
+                period, flow=ref_factor, method="period_reference", own_ratio=own, reference=ref_factor,
+                represented=represented, parent_income=evidence[period][0] if represented else None,
+            )
+        elif _plausible_own_ratio(period, own):
+            column = ColumnRestatement(period, flow=own, method="own_ratio_unconfirmed", own_ratio=own)
+        else:
+            column = ColumnRestatement(period, flow=None, method="unknown", own_ratio=own)
+        result[period] = column
+    return result
+
+
 @dataclass
 class CanonicalFacts:
-    """Result of :func:`build_canonical_facts` (all plain data, JSON-serialisable)."""
+    """Result of :func:`build_canonical_facts` (plain data; ``columns`` via :meth:`ColumnRestatement.as_dict`)."""
 
     template: str
     fiscal_year_end_month: int = 12
@@ -546,7 +856,36 @@ class CanonicalFacts:
     key_checks: dict[str, dict[str, int]] = field(default_factory=dict)
     rejected_keys: list[str] = field(default_factory=list)
     skipped_periods: dict[str, str] = field(default_factory=dict)
+    #: period → factor of its re-expressed statements (year-end: all; interim: income + cash flow)
     restated_periods: dict[str, float] = field(default_factory=dict)
+    columns: dict[str, ColumnRestatement] = field(default_factory=dict)
+    #: period → why some of its İş Yatırım flows could not be converted (kept as missing)
+    partial_periods: dict[str, str] = field(default_factory=dict)
+
+    def statement_restatements(self) -> dict[str, dict[str, tuple[bool, float | None]]]:
+        """``{period: {statement_type: (restated, restatement_factor)}}`` for the İş Yatırım rows.
+
+        Only statements that are re-expressed are listed; the factor is ``None`` when unknown.
+        """
+        if self.isyatirim_scope == "mismatch":
+            return {}
+        result: dict[str, dict[str, tuple[bool, float | None]]] = {}
+        for period, column in self.columns.items():
+            if column.method in ("not_restated", "inconsistent"):
+                continue
+            flows = (True, column.flow)
+            if _is_year_end(period, self.fiscal_year_end_month):
+                if column.method == "kap" and self.isyatirim_scope != "match":
+                    continue
+                result[period] = {"balance_sheet": (True, column.balance), "income_stmt": flows, "cash_flow": flows}
+            else:
+                result[period] = {"income_stmt": flows, "cash_flow": flows}
+        return result
+
+    def column_summary(self) -> dict[str, dict[str, Any]]:
+        """Re-expressed (or unknown) İş Yatırım columns, newest first — manifests and audit trails."""
+        return {p: self.columns[p].as_dict() for p in sort_periods_desc(self.columns)
+                if self.columns[p].method != "not_restated"}
 
 
 def _is_year_end(period: str, fiscal_year_end_month: int) -> bool:
@@ -603,27 +942,32 @@ def build_canonical_facts(
     template: str = "industrial",
     fiscal_year_end_month: int = 12,
     kap_units: Mapping[str, float] | None = None,
+    reference: Mapping[str, float] | None = None,
 ) -> CanonicalFacts:
     """Canonical items per period on the first-published (KAP) basis.
 
     ``*_statements`` are ``{period: {"balance"|"income"|"cashflow": {label: value}}}``
-    (KAP: every stored summary period; İş Yatırım: its values as served, i.e.
-    IAS 29 year-end columns re-expressed in the latest measuring unit).
+    (KAP: every stored summary period; İş Yatırım: its values as served, IAS 29 columns
+    re-expressed — see :class:`ColumnRestatement`). ``reference`` is the cross-company
+    de-restatement factor per interim period (:func:`restatement_reference`).
 
-    1. For every period both sources cover, the restatement factor KAP ÷ İş
-       Yatırım is measured on total assets (balance) and revenue / net income
-       (flows); factors that disagree by more than 1 % mean a different scope
-       (banks and insurers: İş Yatırım serves solo figures) → no factor.
-    2. Every canonical key is compared on the two most recent periods with a
-       factor; a key whose İş Yatırım definition differs (holding "esas
-       faaliyet kârı" with equity-method income) is never taken from İş Yatırım.
-       Total equity and net income decide whether the scope matches at all.
-    3. KAP periods keep KAP values; missing keys (cash flow, D&A, cash, debt)
-       come from İş Yatırım × factor. Periods only İş Yatırım has (interim
-       quarters) are used as served — İş Yatırım re-expresses fiscal year-end
-       columns only — when the scope matches; its year-end columns of an IAS 29
-       reporter are skipped without a KAP counterpart (first-published value
-       unknown).
+    1. For every period both sources cover, KAP ÷ İş Yatırım is measured on total assets
+       (balance) and revenue / net income (flows). Year-end factors that disagree by more
+       than 1 % mean a different scope (banks and insurers: İş Yatırım serves solo
+       figures) → no factor; so does an interim balance factor away from 1 (an interim
+       balance sheet is never re-expressed).
+    2. Every İş Yatırım column is classified (:func:`classify_isyatirim_columns`):
+       year-ends by the KAP factor, interims by 2OCF ÷ 3Z and the cross-company factor.
+    3. Every canonical key is compared on the two most recent periods with a factor; a
+       key whose İş Yatırım definition differs (holding "esas faaliyet kârı" with
+       equity-method income) is never taken from İş Yatırım. Total equity and net income
+       decide whether the scope matches at all.
+    4. KAP periods keep KAP values; missing keys (cash flow, D&A, cash, debt) come from
+       İş Yatırım converted to the first-published basis. Periods only İş Yatırım has
+       (interim quarters) are converted the same way when the scope matches (or is
+       unknown): flows of a column re-expressed by an unknown factor stay missing
+       (``partial_periods``) and re-expressed fiscal year-ends without a KAP counterpart
+       are skipped (first-published value unknown).
     """
     fy = int(fiscal_year_end_month or 12)
     kap_items = _canonical_maps(kap_statements)
@@ -632,25 +976,53 @@ def build_canonical_facts(
     result = CanonicalFacts(template=template, fiscal_year_end_month=fy)
 
     overlap = sort_periods_desc(set(kap_items) & set(isy_items))
+    measured: dict[str, dict[str, float | None]] = {}
     for period in overlap:
         k, i = kap_items[period], isy_items[period]
-        balance = restatement_factor(k.get("total_assets"), i.get("total_assets"))
-        flow = restatement_factor(k.get("revenue"), i.get("revenue")) or restatement_factor(
-            k.get("net_income"), i.get("net_income")
-        )
+        measured[period] = {
+            "balance": restatement_factor(k.get("total_assets"), i.get("total_assets")),
+            "flow": restatement_factor(k.get("revenue"), i.get("revenue"))
+            or restatement_factor(k.get("net_income"), i.get("net_income")),
+        }
+    year_end_factors: dict[str, dict[str, float | None]] = {}
+    for period in overlap:
+        if not _is_year_end(period, fy):
+            continue
+        balance, flow = measured[period]["balance"], measured[period]["flow"]
         if balance is not None and flow is not None and abs(balance / flow - 1) > _FACTOR_CONSISTENCY:
-            balance = flow = None
-        result.factors[period] = {"balance": balance or flow, "flow": flow or balance}
+            balance = flow = None  # inconsistent → different scope/definitions; do not rescale
+        year_end_factors[period] = {"balance": balance or flow, "flow": flow or balance}
+
+    evidence = {
+        period: (
+            balance_sheet_period_profit((isy_statements.get(period) or {}).get("balance")),
+            to_number(items.get("net_income_parent")),
+        )
+        for period, items in isy_items.items()
+    }
+    columns = classify_isyatirim_columns(
+        isy_items, evidence=evidence, year_end_factors=year_end_factors, fiscal_year_end_month=fy, reference=reference
+    )
+    result.columns = columns
+
+    for period in overlap:
+        if _is_year_end(period, fy):
+            result.factors[period] = year_end_factors[period]
+            continue
+        balance = measured[period]["balance"]
+        if balance is not None and abs(balance - 1) > _FACTOR_CONSISTENCY:
+            balance = None  # an interim balance sheet is never re-expressed → different scope
+        result.factors[period] = {"balance": balance, "flow": columns[period].flow if balance is not None else None}
 
     checked = [p for p in overlap if result.factors[p]["balance"] is not None][:2]
     for key in (*FLOW_KEYS, *STOCK_KEYS):
         compared = mismatched = 0
         for period in checked:
-            kap_value, isy_value = to_number(kap_items[period].get(key)), to_number(isy_items[period].get(key))
-            if kap_value is None or isy_value is None:
+            kap_value = to_number(kap_items[period].get(key))
+            expected = columns[period].value(key, isy_items[period].get(key))
+            if kap_value is None or expected is None:
                 continue
             compared += 1
-            expected = isy_value * _factor_for(key, result.factors[period])
             unit = float(units.get(period) or 1.0)
             if abs(kap_value - expected) > max(abs(kap_value) * _FACT_TOLERANCE, 1.5 * unit):
                 mismatched += 1
@@ -673,68 +1045,86 @@ def build_canonical_facts(
     if scope == "mismatch":
         rejected = {*FLOW_KEYS, *STOCK_KEYS}
     result.rejected_keys = sorted(rejected)
-    restating = False
-    for period, factor in result.factors.items():
-        value = factor["balance"]
-        if value is not None and _is_year_end(period, fy) and abs(value - 1) > _RESTATED_THRESHOLD:
-            restating = True
-            if scope == "match":
-                result.restated_periods[period] = value
+    if scope != "mismatch":
+        for period, column in columns.items():
+            if _is_year_end(period, fy):
+                if scope == "match" and column.method == "kap" and column.balance is not None:
+                    result.restated_periods[period] = column.balance
+            elif column.flows_restated and column.flow is not None:
+                result.restated_periods[period] = column.flow
 
     for period in sort_periods_desc([*kap_items, *isy_items]):
+        period_column = columns.get(period)
         row: dict[str, float | None]
         keys: dict[str, str]
         if period in kap_items:
             row = dict(kap_items[period])
             keys = {k: "kap" for k, v in row.items() if v is not None}
             period_factor = result.factors.get(period)
-            if scope == "match" and period in isy_items and period_factor and period_factor["balance"] is not None:
+            if scope == "match" and period_column is not None and period_factor and period_factor["balance"] is not None:
                 unit = float(units.get(period) or 1.0)
                 for key in (*FLOW_KEYS, *STOCK_KEYS):
                     isy_value = to_number(isy_items[period].get(key))
                     if row.get(key) is not None or key in rejected or isy_value is None:
                         continue
-                    f = _factor_for(key, period_factor)
-                    if abs(f - 1) > 1e-9:
-                        row[key] = _rescale(isy_value, f, unit)
-                        keys[key] = f"isyatirim*{f:.6f}"
-                    else:
-                        row[key] = isy_value
-                        keys[key] = "isyatirim"
+                    value = period_column.value(key, isy_value, unit)
+                    if value is not None:
+                        row[key] = value
+                        keys[key] = period_column.source_tag(key)
         elif scope == "mismatch":
             result.skipped_periods[period] = "isyatirim_scope_mismatch"
             continue
-        elif _is_year_end(period, fy) and (restating or scope != "match"):
+        elif period_column is None or (_is_year_end(period, fy) and (period_column.method != "not_restated" or scope != "match")):
             result.skipped_periods[period] = (
-                "isyatirim_year_end_restated" if restating else "isyatirim_restatement_unknown"
+                "isyatirim_year_end_restated"
+                if period_column is not None and period_column.method == "unknown"
+                else "isyatirim_restatement_unknown"
             )
             continue
         else:
-            row = {k: (None if k in rejected else to_number(v)) for k, v in isy_items[period].items()}
-            keys = {k: "isyatirim" for k, v in row.items() if v is not None}
+            row, keys = {}, {}
+            for key, raw in isy_items[period].items():
+                value = None if key in rejected else period_column.value(key, raw)
+                row[key] = value
+                if value is not None:
+                    keys[key] = period_column.source_tag(key)
+            if period_column.flow is None:
+                result.partial_periods[period] = "isyatirim_flows_restated_factor_unknown"
+            elif period_column.represented:
+                result.partial_periods[period] = "isyatirim_comparative_represented"
         if not any(v is not None for v in row.values()):
             continue
         result.items[period] = row
-        result.sources[period] = _fact_sources(keys, result.factors.get(period), scope)
+        result.sources[period] = _fact_sources(keys, result.factors.get(period), scope, period_column)
     return result
 
 
 def _fact_sources(
-    keys: Mapping[str, str], factor: Mapping[str, float | None] | None, scope: str
+    keys: Mapping[str, str],
+    factor: Mapping[str, float | None] | None,
+    scope: str,
+    column: ColumnRestatement | None = None,
 ) -> dict[str, Any]:
     """``sources_json``: statement-level summary + the source of every key."""
     by_statement: dict[str, set[str]] = {}
     for key, source in keys.items():
-        by_statement.setdefault(fact_statement(key), set()).add(source.split("*", 1)[0])
+        by_statement.setdefault(fact_statement(key), set()).add(source.split("*", 1)[0].split(":", 1)[0])
     summary: dict[str, Any] = {statement: "+".join(sorted(s)) for statement, s in sorted(by_statement.items())}
     summary["keys"] = dict(sorted(keys.items()))
     if factor and factor.get("balance") is not None:
         summary["restatement_factor"] = {k: round(v, 6) for k, v in factor.items() if v is not None}
+    if column is not None and column.method != "not_restated" and any(s.startswith("isyatirim") for s in keys.values()):
+        summary["isyatirim_column"] = column.as_dict()
     summary["isyatirim_scope"] = scope
     return summary
 
 
-def facts_from_sources(kap: Mapping[str, Any] | None, isy: Mapping[str, Any] | None) -> CanonicalFacts:
+def facts_from_sources(
+    kap: Mapping[str, Any] | None,
+    isy: Mapping[str, Any] | None,
+    *,
+    reference: Mapping[str, float] | None = None,
+) -> CanonicalFacts:
     """:func:`build_canonical_facts` for freshly fetched (or reconstructed) adapter payloads."""
     return build_canonical_facts(
         kap_statement_maps(kap),
@@ -742,6 +1132,7 @@ def facts_from_sources(kap: Mapping[str, Any] | None, isy: Mapping[str, Any] | N
         template=combined_template(kap, isy),
         fiscal_year_end_month=int((kap or {}).get("fiscal_year_end_month") or 12),
         kap_units=kap_period_units(kap),
+        reference=reference,
     )
 
 
@@ -827,19 +1218,32 @@ def kap_statement_rows(kap: Mapping[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _row_restatement(spec: Any, statement_type: str) -> tuple[bool, float | None]:
+    if isinstance(spec, Mapping):
+        flag, factor = spec.get(statement_type) or (False, None)
+        return bool(flag), (float(factor) if factor is not None else None)
+    if spec is not None:
+        return True, float(spec)
+    return False, None
+
+
 def isyatirim_statement_rows(
     isy: Mapping[str, Any],
     *,
     ticker: str,
     fiscal_year_end_month: int = 12,
-    restated: Mapping[str, float] | None = None,
+    restated: Mapping[str, Any] | None = None,
     consolidation: str | None = None,
 ) -> list[dict[str, Any]]:
     """``financial_statements`` rows (``source="isyatirim"``) of a MaliTablo table.
 
-    Values are stored as İş Yatırım serves them; ``restated`` maps the fiscal
-    year-end periods İş Yatırım re-expressed (IAS 29) to their factor
-    (KAP ÷ İş Yatırım), stored as ``restatement_factor``.
+    Values are stored as İş Yatırım serves them. ``restated`` marks the periods İş
+    Yatırım re-expressed (IAS 29): a factor applies to every statement of the column
+    (a fiscal year-end); ``{statement_type: (restated, factor)}``
+    (:meth:`CanonicalFacts.statement_restatements`) lists the re-expressed statements
+    only — an interim comparative re-expresses its income statement and cash flow, not
+    its balance sheet. The factor (KAP basis ÷ İş Yatırım, ``None`` when unknown) is
+    stored as ``restatement_factor``.
     """
     template = str(isy.get("template") or ("industrial" if isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL else "financial"))
     url = ISYATIRIM_COMPANY_CARD_URL.format(ticker=ticker.upper())
@@ -853,11 +1257,12 @@ def isyatirim_statement_rows(
         fields = _period_fields(period, fiscal_year_end_month)
         if fields is None:
             continue
-        factor = (restated or {}).get(period)
+        spec = (restated or {}).get(period)
         for section in ("balance", "income", "cashflow"):
             section_items = by_section.get(section)
             if not section_items:
                 continue
+            flag, factor = _row_restatement(spec, STATEMENT_TYPE_BY_SECTION[section])
             items = [
                 {
                     "code": str(item["code"]),
@@ -877,7 +1282,7 @@ def isyatirim_statement_rows(
                         "consolidation": consolidation,
                         "presentation_unit": "TL",
                         "currency": "TRY",
-                        "restated": factor is not None,
+                        "restated": flag,
                         "restatement_factor": round(factor, 6) if factor is not None else None,
                         "items_json": items,
                         "source_url": url,
@@ -1092,19 +1497,44 @@ def _sum_codes(values_by_code: Mapping[str, Mapping[str, float | None]], codes: 
     return total
 
 
+def _column_line(
+    values_by_code: Mapping[str, Mapping[str, float | None]],
+    codes: Sequence[str],
+    period: str,
+    column: ColumnRestatement | None,
+    section: str,
+) -> float | None:
+    """A KAP summary line rebuilt from İş Yatırım codes, on the first-published basis."""
+    if column is None:
+        return _sum_codes(values_by_code, codes, period)
+    statement = "balance" if section == "balance" else "income"
+    if column.represented and statement == "income" and tuple(codes) == (_PARENT_INCOME_CODE,):
+        return column.parent_income
+    total = 0.0
+    for code in codes:
+        value = column.line_value(statement, code, "", (values_by_code.get(code) or {}).get(period))
+        if value is None:
+            return None
+        total += value
+    return total
+
+
 def _supplement_rows(
     records: Sequence[Mapping[str, Any]],
     kap: Mapping[str, Any],
     isy: Mapping[str, Any],
     factors: Mapping[str, Mapping[str, float | None]],
     section: str,
+    columns: Mapping[str, ColumnRestatement] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """KAP rows extended with İş Yatırım interim periods KAP's summary omits.
 
     A row is extended only if its İş Yatırım mapping reproduces the KAP figure
     on every overlapping period (within rounding) — companies such as holdings
     define some subtotals differently, and mixing definitions across columns
-    would be misleading. Returns ``(rows, added_periods)``.
+    would be misleading. ``columns`` (:func:`classify_isyatirim_columns`) converts
+    re-expressed (IAS 29) columns to the first-published basis; a column whose
+    lines cannot be converted is left out. Returns ``(rows, added_periods)``.
     """
     kap_periods = set(kap.get("periods", []))
     extra = [p for p in isy.get("periods", []) if p not in kap_periods]
@@ -1141,12 +1571,19 @@ def _supplement_rows(
             verified = verified and compared > 0
         row: dict[str, Any] = dict(record)
         for period in extra:
-            row[period] = _sum_codes(values_by_code, codes, period) if verified and codes else None
+            row[period] = (
+                _column_line(values_by_code, codes, period, (columns or {}).get(period), section)
+                if verified and codes else None
+            )
+        rows.append(row)
+    added = [p for p in extra if any(row.get(p) is not None for row in rows)]
+    ordered_rows = []
+    for row in rows:
         ordered = {"Item": row["Item"]}
-        for period in sort_periods_desc([k for k in row if k != "Item"]):
+        for period in sort_periods_desc([k for k in row if k != "Item" and (k in added or k not in extra)]):
             ordered[period] = row[period]
-        rows.append(ordered)
-    return rows, extra
+        ordered_rows.append(ordered)
+    return ordered_rows, added
 
 
 def _period_info(
@@ -1267,25 +1704,82 @@ def _isy_rows(
     factors: Mapping[str, Mapping[str, float | None]],
     factor_kind: str,
     units: Mapping[str, float] | None = None,
+    columns: Mapping[str, ColumnRestatement] | None = None,
+    fiscal_year_end_month: int = 12,
 ) -> list[dict[str, Any]]:
+    """İş Yatırım lines of one statement for ``periods``.
+
+    A period in ``columns`` is converted line by line to the first-published basis
+    (:meth:`ColumnRestatement.line_value`); otherwise ``factors[period][factor_kind]``
+    (when given) scales every line.
+    """
     bad_memo = _implausible_sales_memo_periods(isy) if statement == "cashflow" else set()
+    year_ends = {p for p in periods if _is_year_end(p, fiscal_year_end_month)}
     rows = []
     for item in isy.get("items", []):
         if item.get("statement") != statement:
             continue
         values = item.get("values") or {}
+        code = str(item.get("code") or "")
+        label_key = normalize_label(item.get("label"))
         row: dict[str, Any] = {"Item": item["label"]}
         for period in periods:
             value = to_number(values.get(period))
-            if item.get("code") in _SALES_MEMO_CODES and period in bad_memo:
+            if code in _SALES_MEMO_CODES and period in bad_memo:
                 value = None
-            factor = (factors.get(period) or {}).get(factor_kind)
-            if value is not None and factor is not None:
-                value = _rescale(value, factor, (units or {}).get(period, 1.0))
+            unit = (units or {}).get(period, 1.0)
+            column = (columns or {}).get(period)
+            if column is not None:
+                value = column.line_value(statement, code, label_key, value, unit, year_end=period in year_ends)
+            else:
+                factor = (factors.get(period) or {}).get(factor_kind)
+                if value is not None and factor is not None:
+                    value = _rescale(value, factor, unit)
             row[period] = value
         if any(v not in (None, 0) for k, v in row.items() if k != "Item"):
             rows.append(row)
     return rows
+
+
+def _column_factors(columns: Mapping[str, ColumnRestatement]) -> dict[str, dict[str, float | None]]:
+    """``period_info`` factors of converted İş Yatırım columns."""
+    return {p: {"balance": c.balance, "flow": c.flow} for p, c in columns.items()}
+
+
+_NOTE_INTERIM_RESTATED = (
+    "İş Yatırım'ın enflasyon muhasebesiyle (TMS 29) yeniden ifade ettiği önceki yıl ara dönem "
+    "kolonları ilk açıklanan tutarlara çevrildi (bilançodaki dönem kârı ÷ gelir tablosundaki ana ortaklık payı)."
+)
+_NOTE_UNKNOWN_RESTATED = (
+    "İlk açıklanan tutarı bilinmeyen yeniden ifade edilmiş İş Yatırım dönemleri gösterilmiyor: {periods}."
+)
+_NOTE_REPRESENTED = (
+    "{periods}: şirket karşılaştırmalı dönemin net kârını yeniden sunmuş; ana ortaklık payı ilk açıklanan "
+    "bilançodan, diğer net kâr kalemleri boş."
+)
+
+
+def _conversion_notes(
+    columns: Mapping[str, ColumnRestatement],
+    shown: Collection[str],
+    candidates: Collection[str],
+    fiscal_year_end_month: int,
+    *,
+    flows: bool,
+) -> list[str]:
+    """Notes about converted / omitted re-expressed İş Yatırım columns of a view."""
+    notes: list[str] = []
+    interim = [p for p in shown if p in columns and not _is_year_end(p, fiscal_year_end_month)]
+    if flows and any(columns[p].flows_restated for p in interim):
+        notes.append(_NOTE_INTERIM_RESTATED)
+    represented = sort_periods_desc(p for p in interim if columns[p].represented)
+    if flows and represented:
+        notes.append(_NOTE_REPRESENTED.format(periods=", ".join(represented)))
+    omitted = sort_periods_desc(p for p in candidates if p not in shown and p in columns
+                                and (columns[p].flow is None or columns[p].balance is None))
+    if omitted:
+        notes.append(_NOTE_UNKNOWN_RESTATED.format(periods=", ".join(omitted)))
+    return notes
 
 
 def build_statement_view(
@@ -1295,11 +1789,15 @@ def build_statement_view(
     *,
     quarterly: bool,
     section: str,
+    reference: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Balance sheet (``section="balance"``) / income statement (``"income"``) payload.
 
     Pure: the same payload whether ``kap``/``isy`` were just fetched or rebuilt
     from the store (:func:`kap_summary_from_rows`, :func:`isyatirim_table_from_rows`).
+    İş Yatırım interim columns are shown on the first-published basis (IAS 29
+    re-expressed comparatives converted per column; ``reference`` =
+    :func:`restatement_reference`).
     """
     if kap is None and isy is None:
         raise MarketDataError(_MSG_STATEMENTS, status_code=503)
@@ -1307,19 +1805,20 @@ def build_statement_view(
     flows = section == "income"
     kap_key = "balance_sheet" if section == "balance" else "income_statement"
     notes: list[str] = []
+    columns: dict[str, ColumnRestatement] = {}
 
     if kap is not None:
         records = _filter_kap_periods(kap[kap_key], quarterly, fy_month)
         sources = {p: _SOURCE_KAP for p in _periods_of(records)}
-        factors: dict[str, dict[str, float | None]] = {}
         if quarterly and isy is not None and kap.get("template") == "industrial" and isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL:
-            kap_items = _kap_canonical_by_period(kap)
-            isy_items = _isy_canonical_by_period(isy)
-            factors = _restatement_factors(kap_items, isy_items, "industrial")
-            records, added = _supplement_rows(records, kap, isy, factors, section)
+            facts = facts_from_sources(kap, isy, reference=reference)
+            columns = facts.columns
+            records, added = _supplement_rows(records, kap, isy, facts.factors, section, columns)
             sources.update({p: _SOURCE_ISY for p in added})
             if added:
                 notes.append("KAP özetinde bulunmayan ara dönemler İş Yatırım'dan (ilk açıklanan değerler) eklendi.")
+            candidates = [p for p in isy.get("periods", []) if p not in kap.get("periods", [])]
+            notes.extend(_conversion_notes(columns, added, candidates, fy_month, flows=flows))
         source = _SOURCE_KAP if all(s == _SOURCE_KAP for s in sources.values()) else f"{_SOURCE_KAP} + {_SOURCE_ISY}"
         source_url = kap.get("source_url")
         unit = kap.get("unit", "TRY")
@@ -1327,10 +1826,19 @@ def build_statement_view(
     else:
         assert isy is not None
         periods = [p for p in isy["periods"] if quarterly or (parse_period(p) or (0, 0))[1] == fy_month]
-        records = _isy_rows(isy, "balance" if section == "balance" else "income", periods, {}, "balance")
-        sources = {p: _SOURCE_ISY for p in periods}
+        if isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL:
+            # Interim comparatives are converted from İş Yatırım's own columns; fiscal
+            # year-ends need KAP's factor and stay as served (see the note).
+            columns = {p: c for p, c in facts_from_sources(None, isy, reference=reference).columns.items()
+                       if not _is_year_end(p, fy_month)}
+        statement = "balance" if section == "balance" else "income"
+        records = _isy_rows(isy, statement, periods, {}, "balance", None, columns, fy_month)
+        shown = [p for p in periods if any(r.get(p) is not None for r in records)]
+        records = [{"Item": r["Item"], **{p: r.get(p) for p in shown}} for r in records]
+        sources = {p: _SOURCE_ISY for p in shown}
         source, source_url, unit, kap_info = _SOURCE_ISY, None, "TRY", None
         notes.append("KAP özeti alınamadı; İş Yatırım verisi gösteriliyor (yıl sonu kolonları enflasyona göre yeniden ifade edilmiş olabilir).")
+        notes.extend(_conversion_notes(columns, shown, periods, fy_month, flows=flows))
 
     periods = _periods_of(records)
     payload: dict[str, Any] = {
@@ -1344,7 +1852,9 @@ def build_statement_view(
         # add-only metadata
         "available": bool(records),
         "periods": periods,
-        "period_info": _period_info(periods, fy_month, sources, kap_info, {}, "balance"),
+        "period_info": _period_info(
+            periods, fy_month, sources, kap_info, _column_factors(columns), "flow" if flows else "balance"
+        ),
         "value_basis": "cumulative_ytd" if flows else "point_in_time",
         "fiscal_year_end_month": fy_month,
         "notes": notes,
@@ -1381,8 +1891,15 @@ def build_cashflow_view(
     isy: Mapping[str, Any] | None,
     *,
     quarterly: bool,
+    reference: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
-    """Cash-flow payload (İş Yatırım rows; year-end columns converted to KAP's first-published basis)."""
+    """Cash-flow payload: İş Yatırım rows on KAP's first-published basis.
+
+    Re-expressed (IAS 29) columns are converted per column — fiscal year-ends with
+    KAP's factor, earlier-year interim comparatives with 2OCF ÷ 3Z / the period's
+    cross-company factor (``reference``); columns re-expressed by an unknown factor
+    are left out. Without KAP only the interim columns can be converted.
+    """
     fy_month = int((kap or {}).get("fiscal_year_end_month") or 12)
     base: dict[str, Any] = {
         "ticker": ticker,
@@ -1397,32 +1914,35 @@ def build_cashflow_view(
         return {**base, "as_of": None, "data": [], "available": False, "periods": [], "period_info": [],
                 "notes": ["Bu şirket için nakit akış tablosu yayınlanmıyor (ör. bankalar)."]}
 
-    periods = [p for p in isy["periods"] if quarterly or (parse_period(p) or (0, 0))[1] == fy_month]
-    if quarterly:
-        periods = periods[:8]
-    factors: dict[str, dict[str, float | None]] = {}
-    if kap is not None and kap.get("template") == "industrial" and isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL:
-        factors = _restatement_factors(
-            _kap_canonical_by_period(kap), _isy_canonical_by_period(isy), "industrial"
-        )
+    candidates = [p for p in isy["periods"] if quarterly or (parse_period(p) or (0, 0))[1] == fy_month]
+    columns: dict[str, ColumnRestatement] = {}
+    if isy.get("group") == ISYATIRIM_GROUP_INDUSTRIAL and (kap is None or kap.get("template") == "industrial"):
+        columns = facts_from_sources(kap, isy, reference=reference).columns
+        if kap is None:  # fiscal year-ends need KAP's factor: shown as served (see the notes)
+            columns = {p: c for p, c in columns.items() if not _is_year_end(p, fy_month)}
     units = {p: _period_unit(kap, p, "income") for p in isy["periods"]} if kap else {}
-    rows = _isy_rows(isy, "cashflow", periods, factors, "flow", units)
+    all_rows = _isy_rows(isy, "cashflow", isy["periods"], {}, "flow", units, columns, fy_month)
+    convertible = [p for p in candidates if any(r.get(p) is not None for r in all_rows)]
+    periods = convertible[:8] if quarterly else convertible
+    rows = [{"Item": r["Item"], **{p: r.get(p) for p in periods}} for r in all_rows
+            if any(r.get(p) not in (None, 0) for p in periods)]
     periods = _periods_of(rows)
+    notes: list[str] = []
+    if any(_is_year_end(p, fy_month) and p in columns and columns[p].flows_restated for p in periods):
+        notes.append("Yıl sonu kolonları KAP'ta ilk açıklanan tutarlara çevrildi (enflasyon düzeltmesi katsayısı).")
+    notes.extend(_conversion_notes(columns, periods, candidates[:8] if quarterly else candidates, fy_month, flows=True))
     payload = {
         **base,
         "as_of": periods[0] if periods else None,
         "data": rows,
         "available": bool(rows),
         "periods": periods,
-        "period_info": _period_info(periods, fy_month, {p: _SOURCE_ISY for p in periods}, None, factors, "flow"),
-        "notes": (
-            ["Yıl sonu kolonları KAP'ta ilk açıklanan tutarlara çevrildi (enflasyon düzeltmesi katsayısı)."]
-            if any((factors.get(p) or {}).get("flow") not in (None, 1.0) for p in periods)
-            else []
+        "period_info": _period_info(
+            periods, fy_month, {p: _SOURCE_ISY for p in periods}, None, _column_factors(columns), "flow"
         ),
+        "notes": notes,
     }
     if quarterly:
-        all_rows = _isy_rows(isy, "cashflow", isy["periods"], factors, "flow", units)
         discrete = _discrete_rows(all_rows, fy_month)
         payload["discrete"] = [{"Item": r["Item"], **{p: r.get(p) for p in periods}} for r in discrete]
     return payload
@@ -1497,16 +2017,22 @@ def compute_live_ratios(
     if ttm_components(period, fiscal_year_end_month) is None:
         basis = "annual"
 
-    shares, shares_source = _ratio_shares(current.get("paid_in_capital"), snapshot_shares)
+    # Valuation always uses the latest balance sheet (equity, net debt, share capital),
+    # also when the flows fall back to the last fiscal year.
+    latest_stocks = {key: to_number(items_by_period[latest].get(key)) for key in STOCK_KEYS}
+    shares, shares_source = _ratio_shares(latest_stocks.get("paid_in_capital"), snapshot_shares)
     last = to_number(price)
     market_cap = last * shares if last is not None and last > 0 and shares is not None else None
     financial = template in FINANCIAL_TEMPLATES
-    ratios = compute_financial_ratios(current, previous=previous, market_cap=market_cap, is_bank=financial)
-    amounts = derive_financial_amounts(current, market_cap, is_bank=financial)
+    ratios = compute_financial_ratios(
+        current, previous=previous, market_cap=market_cap, is_bank=financial, valuation_stocks=latest_stocks
+    )
+    amounts = derive_financial_amounts({**current, **latest_stocks}, market_cap, is_bank=financial)
     ttm_quarters = trailing_quarters(period)
     return {
         "as_of": period,
         "basis": basis,
+        "balance_sheet_as_of": latest,
         "ttm_quarters": ttm_quarters,
         "template": template,
         "ratios": ratios,

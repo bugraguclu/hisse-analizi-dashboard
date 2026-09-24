@@ -15,7 +15,13 @@ Jobs (``ingestion_runs.job``), Europe/Istanbul:
   ``polling_state`` row ``financials`` current.
 * ``fundamentals.ratios`` — once a day after ``FUNDAMENTALS_RATIOS_HOUR`` (19:00,
   after the session's final quotes): every company with facts, valuation from the
-  day's quotes (market store) or one TradingView scanner request.
+  day's quotes (market store) or one TradingView scanner request. Writes the accuracy
+  checks (``fundamentals_service.accuracy_checks``: P/E, P/B and TTM revenue / net income
+  vs TradingView, paid-in capital vs share count, impossible derived quarters) — one
+  ``data_quality_checks`` row per check, subject and Istanbul day, however often it runs.
+
+After a change to the statement mapping, ``fundamentals_service.rebuild_all_from_store()``
+re-derives rows, facts and ratios offline (no provider request).
 
 Wire ``fundamentals_loop`` into the worker (``run_workers.DATA_PLATFORM_LOOPS``);
 ``run_fundamentals_once`` is the manual / admin entry point.

@@ -168,17 +168,18 @@ def test_snapshot_recovers_share_count_from_previous_close_market_cap():
     assert snap["amount"] is None  # missing stays missing, never 0
 
 
-def test_dividend_dates_use_istanbul_calendar_day():
-    istanbul_midnight = datetime(2025, 9, 2, tzinfo=ZoneInfo("Europe/Istanbul"))
+def test_dividend_dates_use_the_utc_day_of_the_stamp():
+    # İş Yatırım stamps are UTC midnight of the day (older ones 23:00 UTC of the same day).
+    utc_midnight = datetime(2025, 9, 2, tzinfo=ZoneInfo("UTC"))
     items = [
         {
             "SHT_KODU": "04",
-            "SHHE_TARIH": istanbul_midnight.timestamp() * 1000,
+            "SHHE_TARIH": utc_midnight.timestamp() * 1000,
             "SHHE_NAKIT_TM_ORAN": 344.2,
             "SHHE_NAKIT_TM_ORAN_NET": 292.57,
             "SHHE_NAKIT_TM_TUTAR": 4_750_000_000,
         },
-        {"SHT_KODU": "01", "SHHE_TARIH": istanbul_midnight.timestamp() * 1000},  # capital increase
+        {"SHT_KODU": "01", "SHHE_TARIH": utc_midnight.timestamp() * 1000},  # capital increase
     ]
 
     records = f._dividend_records(items * 2)  # duplicates collapse

@@ -71,6 +71,10 @@ ISY = {
          "values": _isy_values(1_018_517e6, 911_222e6 / F25, 752_073e6, 679_887e6 / F24)},
         {"code": "2OA", "label": "Ödenmiş Sermaye", "statement": "balance",
          "values": _isy_values(1_380e6, 1_380e6, 1_380e6, 1_380e6)},
+        # Balance-sheet period result (2OCF) = income-statement parent share: THYAO's interim
+        # comparatives are not re-expressed (USD functional currency), its year-ends are.
+        {"code": "2OCF", "label": "Dönem Net Kar/Zararı", "statement": "balance",
+         "values": _isy_values(18_864e6, 118_208e6 / F25, 25_013e6, 113_378e6 / F24)},
         {"code": "3C", "label": "Satış Gelirleri", "statement": "income",
          "values": _isy_values(585_069e6, 955_472e6 / F25, 408_036e6, 745_430e6 / F24)},
         {"code": "3D", "label": "BRÜT KAR (ZARAR)", "statement": "income",
@@ -129,6 +133,7 @@ async def test_restated_rows_facts_company_columns_and_manifest(pg_session, comp
     assert restated.restated is True
     assert restated.restatement_factor == Decimal("0.849196")
     assert rows[("isyatirim", "2026/06", "balance_sheet")].restated is False
+    assert rows[("isyatirim", "2025/06", "income_stmt")].restated is False  # not re-expressed (own ratio 1)
     assert rows[("isyatirim", "2026/06", "balance_sheet")].consolidation == "Konsolide"
     assert rows[("kap", "2025/12", "balance_sheet")].presentation_unit == "1000000TL"
     assert rows[("kap", "2025/12", "income_stmt")].data_json["Hasılat"] == 955_472e6  # legacy {label: value} view
@@ -253,3 +258,77 @@ async def test_offline_rebuild_rederives_without_touching_fetch_times(pg_session
     assert after == before
     manifest = svc.Manifest.from_row("THYAO", (await repo.manifests(["THYAO"]))["THYAO"])
     assert manifest.payload.get("rebuilt_at") and manifest.periods("kap") == KAP["periods"]
+
+
+INDEX_2506 = 0.75695  # CPI(2025/06) ÷ CPI(2026/06): the 2026/06 report's comparative → first published
+
+
+def _reexpressed_isy(own_ratio: float) -> dict:
+    """ISY whose 2025/06 income statement / cash flow are the 2026/06 report's re-expressed
+    comparative (balance sheet as published); ``own_ratio`` = 2OCF ÷ 3Z of that column."""
+    isy = copy.deepcopy(ISY)
+    for item in isy["items"]:
+        if item["statement"] in ("income", "cashflow"):
+            item["values"]["2025/06"] = item["values"]["2025/06"] / INDEX_2506
+    parent = next(i for i in isy["items"] if i["code"] == "3Z")["values"]["2025/06"]
+    next(i for i in isy["items"] if i["code"] == "2OCF")["values"]["2025/06"] = parent * own_ratio
+    return isy
+
+
+async def test_store_rebuild_derestates_interim_comparatives_with_the_cross_company_factor(pg_session):
+    companies = {}
+    # KKKK (KCHOL-like, 2OCF ÷ 3Z = 0.128) is stored first, before any peer defines the period's factor.
+    for ticker, own_ratio in (("KKKK", 0.12792), ("AAAA", INDEX_2506), ("BBBB", INDEX_2506), ("CCCC", 0.756981)):
+        company = Company(id=uuid.uuid4(), ticker=ticker, legal_name=ticker, display_name=ticker, tracking_tier="core")
+        pg_session.add(company)
+        await pg_session.commit()
+        await svc.persist_refresh(pg_session, company, kap=KAP, isy=_reexpressed_isy(own_ratio))
+        await pg_session.commit()
+        companies[ticker] = company.id
+    repo = FundamentalsRepository(pg_session)
+    pg_session.expire_all()
+    before = {f.period: f for f in await repo.facts(companies["KKKK"])}
+    assert before["2025/06"].revenue is None  # 0.128 alone is implausible: unknown, never the re-expressed figure
+
+    summary = await svc.rebuild_all_from_store(compute_ratios=False, session_factory=lambda: _same_session(pg_session))
+
+    assert summary["companies"] == 4 and summary["failed"] == 0
+    assert summary["reference"]["2025/06"] == pytest.approx(INDEX_2506, abs=1e-5)
+    assert summary["statements_updated"] >= 2  # KKKK's 2025/06 income + cash flow rows now carry the factor
+    pg_session.expire_all()
+    first_published_revenue = Decimal("408036000000.00")
+    for ticker in ("AAAA", "KKKK"):
+        facts = {f.period: f for f in await repo.facts(companies[ticker])}
+        assert abs(facts["2025/06"].revenue - first_published_revenue) <= Decimal("1000"), ticker
+        assert facts["2025/06"].total_assets == Decimal("1652589000000.00")
+    kchol = {f.period: f for f in await repo.facts(companies["KKKK"])}["2025/06"]
+    assert kchol.net_income is None  # re-presented comparative: first-published total unknown
+    assert float(kchol.net_income_parent) == pytest.approx(25_013e6 / INDEX_2506 * 0.12792, rel=1e-6)  # 2OCF
+    assert kchol.sources_json["isyatirim_column"]["method"] == "period_reference"
+    rows = {(r.period, r.statement_type): r for r in await repo.statement_rows(companies["KKKK"], sources=["isyatirim"])}
+    assert rows[("2025/06", "income_stmt")].restated is True
+    assert float(rows[("2025/06", "income_stmt")].restatement_factor) == pytest.approx(INDEX_2506, abs=1e-5)
+    assert rows[("2025/06", "balance_sheet")].restated is False
+    manifest = svc.Manifest.from_row("KKKK", (await repo.manifests(["KKKK"]))["KKKK"])
+    assert manifest.payload["restated_columns"]["2025/06"]["represented"] is True
+    assert manifest.payload["partial_periods"] == {"2025/06": "isyatirim_comparative_represented"}
+
+
+async def test_quality_checks_are_kept_once_per_check_subject_and_day(pg_session, company):
+    repo = FundamentalsRepository(pg_session)
+    check = {"check_name": "fundamentals.ratios.pb_vs_tradingview", "subject": "THYAO", "status": "pass",
+             "expected": 0.40, "actual": 0.40, "deviation": 0.0, "details": {"ticker": "THYAO"}}
+
+    for status in ("pass", "warn", "pass"):  # the ratio job ran three times one evening
+        await repo.add_quality_checks([{**check, "status": status}])
+        await pg_session.commit()
+    await repo.add_quality_checks([{**check, "subject": "BIMAS"}, {**check, "check_name": "x.no_subject", "subject": None}])
+    await repo.add_quality_checks([{**check, "check_name": "x.no_subject", "subject": None}])
+    await pg_session.commit()
+
+    name = DataQualityCheck.check_name
+    assert await _count(pg_session, DataQualityCheck, name == "fundamentals.ratios.pb_vs_tradingview") == 2
+    assert await _count(pg_session, DataQualityCheck, name == "x.no_subject") == 1
+    await repo.add_quality_checks([check], replace_same_day=False)
+    await pg_session.commit()
+    assert await _count(pg_session, DataQualityCheck, DataQualityCheck.subject == "THYAO") == 2

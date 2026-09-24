@@ -147,19 +147,77 @@ async def test_fresh_quote_price_wins_over_the_scanner(monkeypatch):
     assert inputs["THYAO"].price == 299.5 and inputs["THYAO"].price_source == "quotes"
 
 
-def test_ratio_checks_compare_ttm_pe_and_annual_pb_with_tradingview():
+def test_ratio_checks_compare_ttm_pe_and_latest_book_value_with_tradingview():
     rows = [
         {"period": "2026/06", "basis": "ttm", "pe_ratio": 3.68, "pb_ratio": 0.40},
-        {"period": "2025/12", "basis": "annual", "pe_ratio": 3.48, "pb_ratio": 0.45},
+        {"period": "2025/12", "basis": "annual", "pe_ratio": 3.48, "pb_ratio": 0.40},
     ]
-    market = svc.MarketInputs(price=300.0, provider_pe=3.66, provider_pb=0.45)
+    market = svc.MarketInputs(price=300.0, provider_pe=3.66, provider_pb=0.402)  # price_book_fq
 
     checks = {c["check_name"]: c for c in svc.ratio_checks("THYAO", rows, market)}
 
     assert checks["fundamentals.ratios.pe_vs_tradingview"]["status"] == "pass"
     assert checks["fundamentals.ratios.pe_vs_tradingview"]["actual"] == 3.68
-    assert checks["fundamentals.ratios.pb_vs_tradingview"]["actual"] == 0.45  # the annual row, like TradingView
+    assert checks["fundamentals.ratios.pb_vs_tradingview"]["actual"] == 0.40  # latest balance sheet, like price_book_fq
+    assert checks["fundamentals.ratios.pb_vs_tradingview"]["status"] == "pass"
     assert svc.ratio_checks("THYAO", rows, None) == []
+
+
+@pytest.mark.parametrize(("ours", "status"), [(11.5, "pass"), (12.3, "warn"), (13.19, "fail"), (10.14 * 1.0, "pass")])
+def test_pe_more_than_ten_percent_away_from_tradingview_fails(ours, status):
+    # AEFES before the IAS 29 interim fix: 13.19 vs TradingView 11.42 (+15.5 %) was only a warning.
+    rows = [{"period": "2026/06", "basis": "ttm", "pe_ratio": ours, "pb_ratio": None}]
+    market = svc.MarketInputs(price=18.8, provider_pe=11.42 if ours != 10.14 else 10.14)
+
+    (check,) = svc.ratio_checks("AEFES", rows, market)
+
+    assert check["status"] == status
+
+
+def test_ttm_checks_compare_revenue_and_parent_income_with_tradingview():
+    rows = [{"period": "2026/06", "basis": "ttm", "ttm_quarters": ["2025/09", "2025/12", "2026/03", "2026/06"],
+             "inputs_json": {"flows": {"revenue": 860.9e9, "net_income": 28.3e9, "net_income_parent": 28.0e9},
+                             "flow_periods": {"latest": "2026/06"}}}]
+    market = svc.MarketInputs(provider_revenue_ttm=823.0e9, provider_net_income_ttm=27.1e9, provider_period="2026-Q2")
+
+    checks = {c["subject"]: c for c in svc.ttm_checks("BIMAS", rows, market)}
+
+    assert set(checks) == {"BIMAS revenue", "BIMAS net_income"}
+    assert all(c["check_name"] == "fundamentals.ttm_vs_tradingview" for c in checks.values())
+    assert checks["BIMAS revenue"]["deviation"] == pytest.approx(860.9 / 823.0 - 1)
+    assert checks["BIMAS revenue"]["status"] == "warn"  # 4.6 %
+    assert checks["BIMAS net_income"]["actual"] == 28.0e9  # parent share, like TradingView
+    assert checks["BIMAS net_income"]["status"] == "warn"
+    stale = svc.MarketInputs(provider_revenue_ttm=500e9, provider_period="2026-Q1")
+    assert svc.ttm_checks("BIMAS", rows, stale)[0]["status"] == "warn"  # TradingView not updated yet
+    worse = svc.MarketInputs(provider_revenue_ttm=761.5e9, provider_period="2026-Q2")
+    assert svc.ttm_checks("BIMAS", rows, worse)[0]["status"] == "fail"
+
+
+def test_derived_quarter_check_fails_on_impossible_quarters():
+    # AEFES before the fix: 9M 2023 re-expressed next to a first-published FY 2023.
+    items = {
+        "2023/12": {"revenue": 100.0, "operating_profit": 10.0, "depreciation_amortization": 5.0},
+        "2023/09": {"revenue": 119.1, "operating_profit": 9.0, "depreciation_amortization": 4.0},
+        "2024/03": {"revenue": 30.0, "operating_profit": 3.0, "depreciation_amortization": 1.0},
+    }
+
+    check = svc.derived_quarter_check("AEFES", items)
+
+    assert check is not None and check["status"] == "fail"
+    assert check["details"]["negative"][0] == {"period": "2023/12", "item": "revenue", "value": pytest.approx(-19.1)}
+    assert check["actual"] == pytest.approx(-19.1)
+    items["2023/09"] = {"revenue": 75.0, "operating_profit": 7.5, "depreciation_amortization": 3.5}
+    assert svc.derived_quarter_check("AEFES", items)["status"] == "pass"
+    items["2023/09"] = {"revenue": 97.0, "operating_profit": 7.5, "depreciation_amortization": 3.5}
+    assert svc.derived_quarter_check("AEFES", items)["status"] == "warn"  # a 3-unit quarter next to ~30-unit ones
+    items["2023/09"] = {"revenue": 75.0, "operating_profit": 20.0, "depreciation_amortization": 3.5}
+    loss = svc.derived_quarter_check("ALARK", items)
+    assert loss["status"] == "warn"  # a genuine operating loss quarter (EBITDA −8.5) is not impossible data
+    assert loss["details"]["negative"] == [{"period": "2023/12", "item": "ebitda", "value": pytest.approx(-8.5)}]
+    items["2023/09"] = {"revenue": 100.1, "operating_profit": 7.5, "depreciation_amortization": 3.5}
+    assert svc.derived_quarter_check("BRYAT", items)["status"] == "pass"  # −0.1 revenue is rounding noise
+    assert svc.derived_quarter_check("AEFES", {}) is None
 
 
 def test_shares_check_flags_tradingview_share_count_errors():

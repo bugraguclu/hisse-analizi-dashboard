@@ -17,9 +17,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, literal_column, select, tuple_, update
+from sqlalchemy import and_, cast, delete, func, literal, literal_column, select, tuple_, update
+from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from src.db.models import (
     Company,
@@ -34,6 +36,11 @@ from src.db.models import (
 
 MANIFEST_KIND = "fundamentals.refresh"
 MANIFEST_PREFIX = "fundamentals.statements:"
+#: data_quality_checks rows are kept once per (check_name, subject) and Istanbul day.
+QUALITY_DAY_TIMEZONE = "Europe/Istanbul"
+# İş Yatırım balance-sheet "Dönem Net Kar/Zararı" and income-statement "Ana Ortaklık Payları".
+_BALANCE_PROFIT_PATH = '$[*] ? (@.code == "2OCF").value'
+_PARENT_PROFIT_PATH = '$[*] ? (@.code == "3Z").value'
 
 #: financial_facts value columns (canonical keys).
 FACT_COLUMNS: tuple[str, ...] = (
@@ -218,6 +225,34 @@ class FundamentalsRepository:
             changed += int(getattr(result, "rowcount", 0) or 0)
         return changed
 
+    async def isyatirim_profit_evidence(self) -> list[tuple[uuid.UUID, str, Any, Any]]:
+        """``(company_id, period, 2OCF, 3Z)`` of every stored İş Yatırım column (all companies).
+
+        The input of the cross-company IAS 29 factor per period
+        (:func:`src.adapters.fundamentals_statements.restatement_reference_from_evidence`).
+        """
+        balance = aliased(FinancialStatement)
+        income = aliased(FinancialStatement)
+        q = (
+            select(
+                balance.company_id,
+                balance.period,
+                func.jsonb_path_query_first(balance.items_json, cast(literal(_BALANCE_PROFIT_PATH), JSONPATH), type_=JSONB),
+                func.jsonb_path_query_first(income.items_json, cast(literal(_PARENT_PROFIT_PATH), JSONPATH), type_=JSONB),
+            )
+            .join(
+                income,
+                and_(
+                    income.company_id == balance.company_id,
+                    income.period == balance.period,
+                    income.source == balance.source,
+                    income.statement_type == "income_stmt",
+                ),
+            )
+            .where(balance.source == "isyatirim", balance.statement_type == "balance_sheet")
+        )
+        return [(row[0], row[1], row[2], row[3]) for row in (await self.session.execute(q)).all()]
+
     async def financial_report_times(self, company_id: uuid.UUID) -> list[datetime]:
         """Publication times of the company's KAP "Finansal Rapor" disclosures (oldest first)."""
         q = (
@@ -277,6 +312,10 @@ class FundamentalsRepository:
             )
         )
         return len(values)
+
+    async def companies_with_statements(self) -> list[uuid.UUID]:
+        result = await self.session.execute(select(FinancialStatement.company_id).distinct())
+        return [row[0] for row in result.all()]
 
     async def companies_with_facts(self) -> list[uuid.UUID]:
         result = await self.session.execute(select(FinancialFact.company_id).distinct())
@@ -363,7 +402,33 @@ class FundamentalsRepository:
 
     # -- data quality ------------------------------------------------------------------
 
-    async def add_quality_checks(self, checks: Sequence[Mapping[str, Any]]) -> int:
+    async def add_quality_checks(self, checks: Sequence[Mapping[str, Any]], *, replace_same_day: bool = True) -> int:
+        """Write check results; by default a (check_name, subject) keeps one row per Istanbul day.
+
+        Re-running a job (the daily ratio job ran three times one evening) replaces
+        that day's rows instead of multiplying them.
+        """
+        if replace_same_day and checks:
+            keys = {(str(c["check_name"])[:80], str(c["subject"])[:60] if c.get("subject") else None) for c in checks}
+            today = func.date(func.timezone(QUALITY_DAY_TIMEZONE, func.now()))
+            checked_day = func.date(func.timezone(QUALITY_DAY_TIMEZONE, DataQualityCheck.checked_at))
+            with_subject = [k for k in keys if k[1] is not None]
+            if with_subject:
+                await self.session.execute(
+                    delete(DataQualityCheck).where(
+                        tuple_(DataQualityCheck.check_name, DataQualityCheck.subject).in_(with_subject),
+                        checked_day == today,
+                    )
+                )
+            without_subject = sorted({k[0] for k in keys if k[1] is None})
+            if without_subject:
+                await self.session.execute(
+                    delete(DataQualityCheck).where(
+                        DataQualityCheck.check_name.in_(without_subject),
+                        DataQualityCheck.subject.is_(None),
+                        checked_day == today,
+                    )
+                )
         for check in checks:
             self.session.add(
                 DataQualityCheck(

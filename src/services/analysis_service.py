@@ -127,9 +127,14 @@ def _ratio(
 
 
 def _growth(current: float | None, previous: float | None, *, digits: int | None = 2) -> float | None:
-    if current is None or previous is None or previous == 0:
+    """Year-over-year change in percent; ``None`` unless the base is positive.
+
+    Growth from a loss (or zero) is not meaningful: −3.2 bn → 34.1 bn would read as
+    +1,160 % (the KCHOL case), and a smaller loss would read as growth.
+    """
+    if current is None or previous is None or previous <= 0:
         return None
-    return _rounded((current - previous) / abs(previous) * 100, digits)
+    return _rounded((current - previous) / previous * 100, digits)
 
 
 def _average(current: float | None, previous: float | None) -> float | None:
@@ -192,6 +197,7 @@ def compute_financial_ratios(
     is_bank: bool | None = None,
     template: str | None = None,
     digits: int | None = 2,
+    valuation_stocks: Mapping[str, Any] | None = None,
 ) -> dict[str, float | None]:
     """Financial ratios from canonical items (see ``canonical_financial_items``).
 
@@ -206,6 +212,9 @@ def compute_financial_ratios(
             margins, liquidity, leverage and EV multiples (not meaningful).
             Auto-detected from the items when neither is given.
         digits: rounding of every value (``None`` = unrounded, for audit trails).
+        valuation_stocks: balance-sheet items for the valuation multiples (P/B, EV/EBITDA's
+            enterprise value) when they differ from ``current``'s — the latest balance sheet
+            for a fiscal-year row valued at today's price. Defaults to ``current``.
 
     Returns every key of :data:`RATIO_KEYS`.
     """
@@ -241,11 +250,20 @@ def compute_financial_ratios(
     avg_equity = _average(parent_equity, prev_parent_equity)
     avg_assets = _average(num(current, "total_assets"), num(prev, "total_assets"))
 
+    valuation_amounts = amounts
+    book_equity = parent_equity
+    if valuation_stocks is not None:
+        valued = {**current, **{key: valuation_stocks.get(key) for key in STOCK_KEYS}}
+        valuation_amounts = derive_financial_amounts(valued, market_cap, is_bank=financial)
+        book_equity = num(valued, "parent_equity")
+        if book_equity is None:
+            book_equity = num(valued, "total_equity")
+
     ratios: dict[str, float | None] = {key: None for key in RATIO_KEYS}
     ratios["roe"] = _pct(parent_income, avg_equity, digits=digits)
     ratios["roa"] = _pct(net_income, avg_assets, digits=digits)
     ratios["pe_ratio"] = _ratio(cap, parent_income, digits=digits)
-    ratios["pb_ratio"] = _ratio(cap, parent_equity, digits=digits)
+    ratios["pb_ratio"] = _ratio(cap, book_equity, digits=digits)
     ratios["net_income_growth_yoy"] = _growth(parent_income, prev_parent_income, digits=digits)
     if not financial:
         ratios["gross_margin"] = _pct(num(current, "gross_profit"), revenue, digits=digits)
@@ -258,7 +276,7 @@ def compute_financial_ratios(
         ratios["net_debt_ebitda"] = _ratio(amounts["net_debt"], ebitda, digits=digits)
         ratios["debt_to_equity"] = _ratio(num(current, "total_liabilities"), equity, digits=digits)
         ratios["ps_ratio"] = _ratio(cap, revenue, digits=digits)
-        ratios["ev_ebitda"] = _ratio(amounts["enterprise_value"], ebitda, digits=digits)
+        ratios["ev_ebitda"] = _ratio(valuation_amounts["enterprise_value"], ebitda, digits=digits)
         ratios["revenue_growth_yoy"] = _growth(revenue, num(prev, "revenue"), digits=digits)
     return ratios
 
@@ -323,7 +341,10 @@ class MarketInputs:
     implied_shares: float | None = None
     provider_market_cap: float | None = None
     provider_pe: float | None = None  # TradingView price_earnings_ttm (cross-check only)
-    provider_pb: float | None = None  # TradingView price_book_ratio (fiscal-year equity; cross-check only)
+    provider_pb: float | None = None  # TradingView price_book_fq — latest quarter's equity (cross-check only)
+    provider_revenue_ttm: float | None = None  # TradingView total_revenue_ttm (cross-check only)
+    provider_net_income_ttm: float | None = None  # TradingView net_income_ttm (cross-check only)
+    provider_period: str | None = None  # TradingView fiscal_period_current, e.g. "2026-Q2"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -418,6 +439,10 @@ def _window_flows(
     return ttm_flows(facts_by_period, period, fiscal_year_end_month), used, []
 
 
+def _has_balance_sheet(items: Mapping[str, Any]) -> bool:
+    return _finite(items.get("total_assets")) is not None or _finite(items.get("total_equity")) is not None
+
+
 def _period_inputs(
     facts_by_period: Mapping[str, Mapping[str, Any]],
     period: str,
@@ -425,6 +450,13 @@ def _period_inputs(
 ) -> dict[str, Any]:
     stocks = {k: _finite(facts_by_period[period].get(k)) for k in STOCK_KEYS}
     flows, flow_periods, missing = _window_flows(facts_by_period, period, fiscal_year_end_month)
+    fiscal_year: dict[str, Any] | None = None
+    components = ttm_components(period, fiscal_year_end_month)
+    if components is not None and components[1] in facts_by_period:
+        fiscal_year = {
+            "period": components[1],
+            "flows": ttm_flows(facts_by_period, components[1], fiscal_year_end_month),
+        }
     parsed = parse_period(period)
     previous: dict[str, Any] | None = None
     if parsed is not None:
@@ -446,6 +478,7 @@ def _period_inputs(
         "flow_periods": flow_periods,
         "missing": missing,
         "previous": previous,
+        "fiscal_year": fiscal_year,
     }
 
 
@@ -467,11 +500,24 @@ def ratio_rows(
 
     Valuation (``market_cap``, ``price``, ``shares_*``, P/E, P/B, P/S, EV/EBITDA)
     is attached to the latest row of each basis only — a historical period
-    priced at today's quote would be misleading. ``inputs_json`` carries every
-    input so each ratio can be recomputed; ``raw_ratios_json`` the unrounded
-    values. Rows without a single computable ratio are omitted.
+    priced at today's quote would be misleading — and always uses the latest
+    balance sheet (book equity, net debt, paid-in capital → share count): the
+    annual row is today's price against the last fiscal year's flows and today's
+    book value (TradingView's ``price_book_fq`` convention). A TTM row whose
+    EBITDA cannot be built (TTM operating profit or D&A missing — e.g. a holding's
+    "esas faaliyet kârı" rejected for İş Yatırım) takes its EBITDA-based ratios
+    from the last fiscal year, labelled in ``inputs_json.ratio_bases`` /
+    ``ratios_basis_note``. ``inputs_json`` carries every input so each ratio can
+    be recomputed; ``raw_ratios_json`` the unrounded values. Rows without a
+    single computable ratio are omitted.
     """
     periods = [p for p in sort_periods_desc(facts_by_period) if parse_period(p) is not None]
+    valuation_period = next((p for p in periods if _has_balance_sheet(facts_by_period[p])), None)
+    valuation = (
+        (valuation_period, {k: _finite(facts_by_period[valuation_period].get(k)) for k in STOCK_KEYS})
+        if valuation_period is not None
+        else None
+    )
     rows: list[dict[str, Any]] = []
     valued: set[str] = set()
     for period in periods:
@@ -490,12 +536,17 @@ def ratio_rows(
                 fiscal_year_end_month=fiscal_year_end_month,
                 market=market if basis not in valued else None,
                 sources=(sources_by_period or {}).get(period),
+                valuation=valuation,
             )
             if row is None:
                 continue
             valued.add(basis)
             rows.append(row)
     return rows
+
+
+_EBITDA_INPUT_LABELS = {"operating_profit": "esas faaliyet kârı", "depreciation_amortization": "amortisman"}
+_EBITDA_RATIOS = ("ebitda_margin", "net_debt_ebitda", "ev_ebitda")
 
 
 def _ratio_row(
@@ -507,6 +558,7 @@ def _ratio_row(
     fiscal_year_end_month: int,
     market: MarketInputs | None,
     sources: Mapping[str, Any] | None,
+    valuation: tuple[str, Mapping[str, float | None]] | None = None,
 ) -> dict[str, Any] | None:
     stocks: dict[str, float | None] = inputs["stocks"]
     flows: dict[str, float | None] | None = inputs["flows"]
@@ -515,26 +567,70 @@ def _ratio_row(
     previous: dict[str, float | None] | None = None
     if previous_info is not None:
         previous = {**previous_info["stocks"], **(previous_info["flows"] or {k: None for k in FLOW_KEYS})}
+    financial = template in FINANCIAL_TEMPLATES
+
+    # Valuation uses the latest balance sheet (book equity, net debt, share capital).
+    valuation_period, valuation_stocks = valuation if valuation is not None else (period, stocks)
+    later_balance_sheet = market is not None and valuation_period != period
 
     notes: list[str] = []
     market_block: dict[str, Any] | None = None
     shares = shares_source = market_cap = price = None
     if market is not None:
-        shares, shares_source, share_notes = choose_shares(stocks.get("paid_in_capital"), market)
+        shares, shares_source, share_notes = choose_shares(valuation_stocks.get("paid_in_capital"), market)
         notes.extend(share_notes)
         price = _positive(market.price)
         if price is not None and shares is not None:
             market_cap = price * shares
         market_block = {
             **market.as_dict(),
-            "paid_in_capital": stocks.get("paid_in_capital"),
+            "paid_in_capital": valuation_stocks.get("paid_in_capital"),
             "shares": shares,
             "shares_source": shares_source,
             "market_cap": market_cap,
+            "balance_sheet_period": valuation_period,
         }
+        if later_balance_sheet:
+            notes.append(
+                f"Değerleme çarpanları (PD/DD, FD) en son bilançoya ({valuation_period}) göre; "
+                f"akım kalemleri {period} dönemine ait."
+            )
 
-    raw = compute_financial_ratios(current, previous=previous, market_cap=market_cap, template=template, digits=None)
+    raw = compute_financial_ratios(
+        current, previous=previous, market_cap=market_cap, template=template, digits=None,
+        valuation_stocks=valuation_stocks if later_balance_sheet else None,
+    )
     amounts = derive_financial_amounts(current, market_cap, template=template)
+    valuation_amounts = (
+        derive_financial_amounts({**current, **valuation_stocks}, market_cap, template=template)
+        if later_balance_sheet else amounts
+    )
+
+    # TTM EBITDA impossible (a TTM operating profit / D&A is missing) → the last fiscal year's.
+    ratio_bases: dict[str, str] = {}
+    basis_note: str | None = None
+    fallback: dict[str, Any] | None = None
+    fiscal_year = inputs.get("fiscal_year")
+    if basis == "ttm" and flows is not None and not financial and amounts["ebitda"] is None and fiscal_year:
+        fy_flows = fiscal_year.get("flows") or {}
+        fy_ebitda = derive_financial_amounts({**stocks, **fy_flows}, None, template=template)["ebitda"]
+        if fy_ebitda is not None:
+            fy_revenue = _finite(fy_flows.get("revenue"))
+            raw["ebitda_margin"] = _pct(fy_ebitda, fy_revenue, digits=None)
+            raw["net_debt_ebitda"] = _ratio(amounts["net_debt"], fy_ebitda, digits=None)
+            raw["ev_ebitda"] = _ratio(valuation_amounts["enterprise_value"], fy_ebitda, digits=None)
+            fy_period = str(fiscal_year["period"])
+            ratio_bases = {k: f"annual:{fy_period}" for k in _EBITDA_RATIOS if raw.get(k) is not None}
+            missing_inputs = [k for k in ("operating_profit", "depreciation_amortization") if flows.get(k) is None]
+            basis_note = (
+                "Son 12 ay FAVÖK hesaplanamadı (eksik: "
+                + ", ".join(_EBITDA_INPUT_LABELS[k] for k in missing_inputs)
+                + f"); FAVÖK bazlı oranlar son mali yılın ({fy_period}) FAVÖK'üyle hesaplandı."
+            )
+            fallback = {"period": fy_period, "ebitda": fy_ebitda, "revenue": fy_revenue,
+                        "missing_ttm_inputs": missing_inputs}
+            notes.append(basis_note)
+
     raw = {k: _storable(v) for k, v in raw.items()}
     if all(v is None for v in raw.values()):
         return None
@@ -542,7 +638,6 @@ def _ratio_row(
 
     if flows is None:
         notes.append("Son 12 ay akım kalemleri hesaplanamadı (eksik dönem: " + ", ".join(inputs["missing"]) + ").")
-    financial = template in FINANCIAL_TEMPLATES
     parent_equity = stocks.get("parent_equity") if stocks.get("parent_equity") is not None else stocks.get("total_equity")
     prev_parent_equity = None
     if previous is not None:
@@ -550,7 +645,7 @@ def _ratio_row(
             previous.get("parent_equity") if previous.get("parent_equity") is not None else previous.get("total_equity")
         )
     inputs_json: dict[str, Any] = {
-        "version": 1,
+        "version": 2,
         "period": period,
         "basis": basis,
         "template": template,
@@ -562,7 +657,9 @@ def _ratio_row(
         "derived": {
             "ebitda": amounts["ebitda"],
             "net_debt": amounts["net_debt"],
-            "enterprise_value": amounts["enterprise_value"],
+            "enterprise_value": valuation_amounts["enterprise_value"],
+            "valuation_net_debt": valuation_amounts["net_debt"],
+            "ebitda_annual_fallback": fallback,
             "average_parent_equity": _average(parent_equity, prev_parent_equity),
             "average_total_assets": _average(
                 stocks.get("total_assets"), previous.get("total_assets") if previous else None
@@ -570,6 +667,9 @@ def _ratio_row(
         },
         "market": market_block,
         "valuation_scope": "latest_period" if market_block is not None else None,
+        "valuation_stocks": dict(valuation_stocks) if later_balance_sheet else None,
+        "ratio_bases": ratio_bases or None,
+        "ratios_basis_note": basis_note,
         "financial_template": financial,
         "sources": dict(sources) if sources else None,
         "notes": notes,

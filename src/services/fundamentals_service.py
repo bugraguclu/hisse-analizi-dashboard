@@ -5,8 +5,10 @@ Datasets (``docs/data-platform.md`` §3):
 * ``financial_statements`` — one row per (company, source, period, statement type):
   the **KAP** financial summary (official, first published; balance sheet + income
   statement; presentation unit and consolidation per column) and **İş Yatırım**
-  MaliTablo (12 quarters; balance sheet, income statement, cash flow; IAS 29 fiscal
-  year-end columns re-expressed → ``restated`` + ``restatement_factor`` = KAP ÷ İşY).
+  MaliTablo (12 quarters; balance sheet, income statement, cash flow). IAS 29 columns
+  İş Yatırım re-expressed — fiscal year-ends as a whole, earlier-year interims in their
+  income statement and cash flow — carry ``restated`` + ``restatement_factor`` (first
+  published ÷ İşY; see :class:`src.adapters.fundamentals_statements.ColumnRestatement`).
 * ``financial_facts`` — canonical items per period on the first-published basis
   (:func:`src.adapters.fundamentals_statements.build_canonical_facts`).
 * ``financial_ratios`` — ``ttm`` / ``annual`` ratios (:func:`src.services.analysis_service.ratio_rows`).
@@ -33,6 +35,7 @@ import asyncio
 import calendar
 import functools
 import json
+import statistics
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -45,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.adapters import fundamentals_statements as fs
 from src.adapters.financial_adapter import (
     ISYATIRIM_COMPANY_CARD_URL,
+    discrete_quarter_values,
     months_into_fiscal_year,
     parse_period,
     period_label,
@@ -80,7 +84,10 @@ _API_RETRY_COOLDOWN = timedelta(minutes=30)  # a failed refresh is not retried b
 _KAP_VS_ISY_ITEMS = ("total_assets", "total_equity", "revenue", "net_income")
 _TV_MARKET_COLUMNS = (
     "close", "change_abs", "market_cap_basic", "total_shares_outstanding", "price_earnings_ttm", "price_book_ratio",
+    "price_book_fq", "total_revenue_ttm", "net_income_ttm", "fiscal_period_current",
 )
+_REFERENCE_CACHE_SECONDS = 900.0
+_reference_cache: dict[str, Any] = {"at": None, "value": {}}
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +387,27 @@ def kap_vs_isy_checks(
     return checks
 
 
+async def restatement_reference(session: AsyncSession) -> dict[str, float]:
+    """Cross-company IAS 29 factor per interim period from every stored İş Yatırım column."""
+    rows = await FundamentalsRepository(session).isyatirim_profit_evidence()
+    return fs.restatement_reference_from_evidence(rows)
+
+
+async def _cached_reference(session: AsyncSession) -> dict[str, float]:
+    """:func:`restatement_reference` for read paths (15 min in-process cache; ``{}`` on errors)."""
+    now = time.monotonic()
+    at = _reference_cache.get("at")
+    if at is not None and now - at < _REFERENCE_CACHE_SECONDS:
+        return dict(_reference_cache["value"])
+    try:
+        value = await restatement_reference(session)
+    except Exception as e:  # never fails a read; views then convert with own ratios only
+        logger.warning("fundamentals_restatement_reference_failed", error=_error_text(e))
+        return {}
+    _reference_cache.update(at=now, value=value)
+    return dict(value)
+
+
 async def persist_refresh(
     session: AsyncSession,
     company: Company,
@@ -391,11 +419,14 @@ async def persist_refresh(
     now: datetime | None = None,
     write_checks: bool = True,
     record_fetch: bool = True,
+    reference: Mapping[str, float] | None = None,
 ) -> RefreshResult:
     """Write one refresh (either source may be missing) and rebuild the company's facts.
 
     Pure database work (no network); the caller commits. ``record_fetch=False``
     (offline rebuild from stored rows) leaves the manifest's fetch bookkeeping alone.
+    ``reference`` (the cross-company IAS 29 factor per period) is read from the store
+    when not given.
     """
     now = now or utcnow()
     ticker = company.ticker
@@ -427,12 +458,16 @@ async def persist_refresh(
         or company.fiscal_year_end_month
         or next((r.fiscal_year_end_month for r in stored), 12)
     )
-    facts = fs.build_canonical_facts(kap_maps, isy_maps, template=template, fiscal_year_end_month=fy, kap_units=kap_units)
+    if reference is None:
+        reference = await restatement_reference(session)
+    facts = fs.build_canonical_facts(
+        kap_maps, isy_maps, template=template, fiscal_year_end_month=fy, kap_units=kap_units, reference=reference
+    )
     result.template, result.isyatirim_scope = template, facts.isyatirim_scope
 
     fresh_rows: list[dict[str, Any]] = list(fresh_kap_rows)
     if isy is not None:
-        restated = {p: f for p, f in facts.restated_periods.items() if p in fresh_isy_maps}
+        restated = {p: spec for p, spec in facts.statement_restatements().items() if p in fresh_isy_maps}
         fresh_rows.extend(
             fs.isyatirim_statement_rows(
                 isy,
@@ -474,8 +509,9 @@ async def persist_refresh(
     if not record_fetch:
         payload.update(rebuilt_at=_iso(now), template=template, fiscal_year_end_month=fy,
                        isyatirim_scope=facts.isyatirim_scope, rejected_keys=facts.rejected_keys,
-                       skipped_periods=facts.skipped_periods,
-                       restated_periods={p: round(f, 6) for p, f in facts.restated_periods.items()})
+                       skipped_periods=facts.skipped_periods, partial_periods=facts.partial_periods,
+                       restated_periods={p: round(f, 6) for p, f in facts.restated_periods.items()},
+                       restated_columns=facts.column_summary())
         rebuilt = Manifest(ticker=ticker, payload=payload)
         await repo.save_manifest(
             ticker, payload, fetched_at=rebuilt.last_success_at or now,
@@ -494,7 +530,9 @@ async def persist_refresh(
         isyatirim_scope=facts.isyatirim_scope,
         rejected_keys=facts.rejected_keys,
         skipped_periods=facts.skipped_periods,
+        partial_periods=facts.partial_periods,
         restated_periods={p: round(f, 6) for p, f in facts.restated_periods.items()},
+        restated_columns=facts.column_summary(),
         statements={
             "inserted": result.statements.inserted,
             "updated": result.statements.updated,
@@ -564,6 +602,7 @@ async def rebuild_from_store(
     compute_ratios: bool = True,
     market: MarketInputs | None = None,
     session_factory: SessionFactory = async_session_factory,
+    reference: Mapping[str, float] | None = None,
 ) -> RefreshResult:
     """Re-derive rows (restatement flags, published dates), facts, company columns and ratios
     from the stored statements — no provider request. Use after mapping changes."""
@@ -579,13 +618,57 @@ async def rebuild_from_store(
         isy = fs.isyatirim_table_from_rows(rows)
         if kap is None and isy is None:
             return RefreshResult(ticker=ticker, skipped="empty")
-        result = await persist_refresh(session, company, kap=kap, isy=isy, record_fetch=False, write_checks=False)
+        result = await persist_refresh(
+            session, company, kap=kap, isy=isy, record_fetch=False, write_checks=False, reference=reference
+        )
         if compute_ratios and result.facts:
             inputs = market if market is not None else (await load_market_inputs([ticker], session=session)).get(ticker)
             result.ratios = await compute_company_ratios(session, company, inputs)
         await session.commit()
     result.duration_seconds = time.monotonic() - started
     return result
+
+
+async def rebuild_all_from_store(
+    tickers: Sequence[str] | None = None,
+    *,
+    compute_ratios: bool = True,
+    session_factory: SessionFactory = async_session_factory,
+) -> dict[str, Any]:
+    """:func:`rebuild_from_store` for every company with stored statements (or ``tickers``).
+
+    One cross-company IAS 29 reference and one market scan for the batch; one commit
+    per company. Returns per-company summaries plus totals.
+    """
+    async with session_factory() as session:
+        repo = FundamentalsRepository(session)
+        reference = await restatement_reference(session)
+        with_rows = set(await repo.companies_with_statements())
+        companies = [
+            c for c in await repo.companies(tickers=tickers, active_only=False, stocks_only=False) if c.id in with_rows
+        ]
+    market = await load_market_inputs([c.ticker for c in companies]) if compute_ratios and companies else {}
+    summaries: dict[str, Any] = {}
+    totals = {"statements_updated": 0, "statements_inserted": 0, "facts": 0, "ratios": 0, "failed": 0}
+    for company in companies:
+        try:
+            result = await rebuild_from_store(
+                company.ticker, compute_ratios=compute_ratios, market=market.get(company.ticker),
+                session_factory=session_factory, reference=reference,
+            )
+        except Exception as e:
+            totals["failed"] += 1
+            summaries[company.ticker] = {"ok": False, "error": _error_text(e)}
+            logger.warning("fundamentals_rebuild_failed", ticker=company.ticker, error=_error_text(e))
+            continue
+        summaries[company.ticker] = result.summary()
+        if result.statements is not None:
+            totals["statements_updated"] += result.statements.updated
+            totals["statements_inserted"] += result.statements.inserted
+        totals["facts"] += result.facts
+        totals["ratios"] += result.ratios
+    return {"companies": len(companies), **totals, "reference": {p: round(f, 6) for p, f in sorted(reference.items())},
+            "results": summaries}
 
 
 async def _refresh(
@@ -742,6 +825,8 @@ async def load_market_inputs(
             price, price_source, price_time = close, "tradingview", _iso(now)
         if price is None and implied is None and to_number(row.get("total_shares_outstanding")) is None:
             continue
+        book_fq = to_number(row.get("price_book_fq"))
+        period = row.get("fiscal_period_current")
         result[ticker] = MarketInputs(
             price=price,
             price_source=price_source,
@@ -750,7 +835,10 @@ async def load_market_inputs(
             implied_shares=implied,
             provider_market_cap=tv_cap,
             provider_pe=to_number(row.get("price_earnings_ttm")),
-            provider_pb=to_number(row.get("price_book_ratio")),
+            provider_pb=book_fq if book_fq is not None else to_number(row.get("price_book_ratio")),
+            provider_revenue_ttm=to_number(row.get("total_revenue_ttm")),
+            provider_net_income_ttm=to_number(row.get("net_income_ttm")),
+            provider_period=str(period) if period else None,
         )
     return result
 
@@ -793,29 +881,48 @@ def shares_check(ticker: str, paid_in_capital: float | None, market: MarketInput
     }
 
 
-def ratio_checks(ticker: str, rows: Sequence[Mapping[str, Any]], market: MarketInputs | None) -> list[dict[str, Any]]:
-    """Our newest P/E (TTM) and P/B (fiscal year) against TradingView's own ratios.
+_PE_LIMITS = (0.05, 0.10)  # pass ≤ 5 %, warn ≤ 10 %, fail above (the IAS 29 interim bug read +10…16 %)
+_PB_LIMITS = (0.02, 0.10)
+_TTM_LIMITS = (0.02, 0.05)
+_IMPLAUSIBLE_QUARTER_SHARE = 0.2  # a derived quarter below 20 % of the median quarter → warn
+_NEGATIVE_QUARTER_NOISE = 0.005  # negative revenue quarters smaller than this share of the median → noise
 
-    TradingView's P/E is price / TTM EPS and its P/B uses the last fiscal-year
-    equity, so the TTM P/E and the *annual* P/B are the comparable figures. The
-    P/E can legitimately differ for IAS 29 reporters: our TTM is on the
-    first-published basis (each cumulative period in its own measuring unit).
+
+def _check_status(deviation: float, limits: tuple[float, float]) -> str:
+    pass_limit, warn_limit = limits
+    return "pass" if abs(deviation) <= pass_limit else "warn" if abs(deviation) <= warn_limit else "fail"
+
+
+def _tradingview_period(value: str | None) -> str | None:
+    """TradingView ``fiscal_period_current`` (``"2026-Q2"``) → ``"2026/06"`` (calendar quarters)."""
+    parsed = parse_period(str(value or "").replace("-", ""))
+    return period_label(*parsed) if parsed is not None else None
+
+
+def ratio_checks(ticker: str, rows: Sequence[Mapping[str, Any]], market: MarketInputs | None) -> list[dict[str, Any]]:
+    """Our newest P/E (TTM) and P/B against TradingView's own ratios.
+
+    TradingView's P/E is price / TTM EPS and ``price_book_fq`` uses the latest quarter's
+    equity — like our valuation, which always takes the latest balance sheet. Our TTM
+    is on the first-published basis (each cumulative period in its own measuring unit);
+    a P/E more than 10 % away fails.
     """
     if market is None:
         return []
     checks: list[dict[str, Any]] = []
     latest = {basis: next((r for r in rows if r["basis"] == basis), None) for basis in ("ttm", "annual")}
+    pb_row = latest["ttm"] if latest["ttm"] and latest["ttm"].get("pb_ratio") is not None else latest["annual"]
     pairs = (
-        ("pe_vs_tradingview", latest["ttm"], "pe_ratio", market.provider_pe, (0.05, 0.25)),
-        ("pb_vs_tradingview", latest["annual"], "pb_ratio", market.provider_pb, (0.02, 0.10)),
+        ("pe_vs_tradingview", latest["ttm"], "pe_ratio", market.provider_pe, _PE_LIMITS),
+        ("pb_vs_tradingview", pb_row, "pb_ratio", market.provider_pb, _PB_LIMITS),
     )
-    for name, row, column, provider, (pass_limit, warn_limit) in pairs:
+    for name, row, column, provider, limits in pairs:
         ours = to_number(row.get(column)) if row else None
         theirs = to_number(provider)
         if ours is None or theirs is None or theirs <= 0:
             continue
         deviation = ours / theirs - 1
-        status = "pass" if abs(deviation) <= pass_limit else "warn" if abs(deviation) <= warn_limit else "fail"
+        status = _check_status(deviation, limits)
         checks.append(
             {
                 "check_name": f"fundamentals.ratios.{name}",
@@ -825,9 +932,131 @@ def ratio_checks(ticker: str, rows: Sequence[Mapping[str, Any]], market: MarketI
                 "actual": ours,
                 "deviation": deviation,
                 "details": {"ticker": ticker, "period": row["period"] if row else None,
-                            "basis": row["basis"] if row else None, "price": market.price},
+                            "basis": row["basis"] if row else None, "price": market.price,
+                            "limits": {"pass": limits[0], "warn": limits[1]}},
             }
         )
+    return checks
+
+
+def ttm_checks(ticker: str, rows: Sequence[Mapping[str, Any]], market: MarketInputs | None) -> list[dict[str, Any]]:
+    """``fundamentals.ttm_vs_tradingview``: our newest TTM revenue / parent net income vs TradingView's.
+
+    TradingView's ``total_revenue_ttm`` / ``net_income_ttm`` (parent share). A different
+    latest fiscal period (TradingView not updated yet) only warns.
+    """
+    if market is None:
+        return []
+    row = next((r for r in rows if r["basis"] == "ttm" and (r.get("inputs_json") or {}).get("flows")), None)
+    if row is None:
+        return []
+    flows = row["inputs_json"]["flows"]
+    parent = flows.get("net_income_parent")
+    tv_period = _tradingview_period(market.provider_period)
+    same_period = tv_period is None or tv_period == row["period"]
+    checks: list[dict[str, Any]] = []
+    for item, ours_raw, theirs_raw in (
+        ("revenue", flows.get("revenue"), market.provider_revenue_ttm),
+        ("net_income", parent if parent is not None else flows.get("net_income"), market.provider_net_income_ttm),
+    ):
+        ours, theirs = to_number(ours_raw), to_number(theirs_raw)
+        if ours is None or theirs is None or theirs == 0:
+            continue
+        deviation = ours / theirs - 1
+        checks.append(
+            {
+                "check_name": "fundamentals.ttm_vs_tradingview",
+                "subject": f"{ticker} {item}",
+                "status": _check_status(deviation, _TTM_LIMITS) if same_period else "warn",
+                "expected": theirs,
+                "actual": ours,
+                "deviation": deviation,
+                "details": {"ticker": ticker, "item": item, "period": row["period"], "tradingview_period": tv_period,
+                            "same_period": same_period, "ttm_quarters": row.get("ttm_quarters"),
+                            "flow_periods": row["inputs_json"].get("flow_periods"),
+                            "limits": {"pass": _TTM_LIMITS[0], "warn": _TTM_LIMITS[1]}},
+            }
+        )
+    return checks
+
+
+def derived_quarter_check(
+    ticker: str, items_by_period: Mapping[str, Mapping[str, Any]], fiscal_year_end_month: int = 12
+) -> dict[str, Any] | None:
+    """``fundamentals.derived_quarter_negative``: single quarters derived from the cumulative facts.
+
+    A quarter (YTD − previous YTD of the same fiscal year) with negative revenue means the
+    two cumulative figures are on different bases (e.g. an IAS 29 re-expressed comparative
+    next to a first-published figure: AEFES 2023/Q4 −19.1 bn) → ``fail`` (amounts below
+    0.5 % of the median quarter are rounding noise). Negative EBITDA quarters are listed
+    too but only ``warn`` — genuine operating losses exist (holdings, airlines' first
+    quarters) — as does a revenue quarter below 20 % of the median quarter (TUPRS 2024/Q4
+    11.5 bn before the fix).
+    """
+    periods = sort_periods_desc(p for p in items_by_period if parse_period(p) is not None)
+    if not periods:
+        return None
+    revenue = {p: to_number(items_by_period[p].get("revenue")) for p in periods}
+    ebitda: dict[str, float | None] = {}
+    for p in periods:
+        operating = to_number(items_by_period[p].get("operating_profit"))
+        d_and_a = to_number(items_by_period[p].get("depreciation_amortization"))
+        ebitda[p] = operating + d_and_a if operating is not None and d_and_a is not None else None
+    quarters = {"revenue": discrete_quarter_values(revenue, fiscal_year_end_month),
+                "ebitda": discrete_quarter_values(ebitda, fiscal_year_end_month)}
+    positive_revenue = sorted(v for v in quarters["revenue"].values() if v is not None and v > 0)
+    typical = statistics.median(positive_revenue) if positive_revenue else None
+    noise = _NEGATIVE_QUARTER_NOISE * typical if typical else 0.0
+    negatives: list[dict[str, Any]] = [
+        {"period": p, "item": item, "value": v}
+        for item, values in quarters.items() for p, v in values.items()
+        if v is not None and v < 0 and (item != "revenue" or -v > noise)
+    ]
+    implausible = [
+        {"period": p, "item": "revenue", "value": v, "median_quarter": typical}
+        for p, v in quarters["revenue"].items()
+        if v is not None and typical and 0 <= v < _IMPLAUSIBLE_QUARTER_SHARE * typical
+    ]
+    derived = sum(1 for values in quarters.values() for v in values.values() if v is not None)
+    if not derived:
+        return None
+    negative_revenue = [n for n in negatives if n["item"] == "revenue"]
+    status = "fail" if negative_revenue else "warn" if negatives or implausible else "pass"
+    worst = min((float(n["value"]) for n in negative_revenue), default=None)
+    return {
+        "check_name": "fundamentals.derived_quarter_negative",
+        "subject": ticker,
+        "status": status,
+        "expected": 0,
+        "actual": worst,
+        "deviation": None,
+        "details": {"ticker": ticker, "quarters_checked": derived, "negative": sorted(negatives, key=lambda n: n["period"]),
+                    "implausible": sorted(implausible, key=lambda n: n["period"])},
+    }
+
+
+def accuracy_checks(
+    ticker: str,
+    items_by_period: Mapping[str, Mapping[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
+    market: MarketInputs | None,
+    *,
+    fiscal_year_end_month: int = 12,
+) -> list[dict[str, Any]]:
+    """Every fundamentals accuracy check of one company (``data_quality_checks`` rows).
+
+    TradingView P/E and P/B, TTM revenue / net income vs TradingView, paid-in capital
+    vs TradingView's share count, and derived quarters that cannot be real.
+    """
+    checks = [*ratio_checks(ticker, rows, market), *ttm_checks(ticker, rows, market)]
+    quarter = derived_quarter_check(ticker, items_by_period, fiscal_year_end_month)
+    if quarter is not None:
+        checks.append(quarter)
+    if items_by_period and market is not None:
+        latest = sort_periods_desc(items_by_period)[0]
+        shares = shares_check(ticker, items_by_period[latest].get("paid_in_capital"), market)
+        if shares is not None:
+            checks.append(shares)
     return checks
 
 
@@ -836,8 +1065,8 @@ async def compute_company_ratios(
 ) -> int:
     """Recompute every ``financial_ratios`` row of ``company`` from its stored facts (caller commits).
 
-    ``write_checks``: also record the TradingView cross-checks (the daily ratio job does,
-    once per company and day; ad-hoc recomputes do not).
+    ``write_checks``: also record the accuracy checks (:func:`accuracy_checks`; the daily
+    ratio job does — one row per check, subject and Istanbul day — ad-hoc recomputes do not).
     """
     repo = FundamentalsRepository(session)
     fact_rows = await repo.facts(company.id)
@@ -848,14 +1077,10 @@ async def compute_company_ratios(
     template = fact_rows[0].template or company.statement_template or "industrial"
     rows = ratio_rows(items, fiscal_year_end_month=fy, template=template, market=market, sources_by_period=sources)
     written = await repo.replace_ratios(company.id, rows)
-    if write_checks and market is not None:
-        latest = sort_periods_desc(items)[0]
-        checks = ratio_checks(company.ticker, rows, market)
-        shares = shares_check(company.ticker, items[latest].get("paid_in_capital"), market)
-        if shares is not None:
-            checks.append(shares)
+    if write_checks:
+        checks = accuracy_checks(company.ticker, items, rows, market, fiscal_year_end_month=fy)
         if checks:
-            await repo.add_quality_checks(checks)
+            await repo.add_quality_checks(checks)  # one row per check, subject and day
     return written
 
 
@@ -911,6 +1136,8 @@ class StoreState:
     manifest: Manifest | None = None
     rows: list[FinancialStatement] = field(default_factory=list)
     facts: list[FinancialFact] = field(default_factory=list)
+    #: cross-company IAS 29 factor per interim period (:func:`restatement_reference`)
+    reference: dict[str, float] = field(default_factory=dict)
 
     @property
     def tracked(self) -> bool:
@@ -965,6 +1192,7 @@ async def load_store(
     state = StoreState(ticker=ticker)
     async with session_factory() as session:
         repo = FundamentalsRepository(session)
+        state.reference = await _cached_reference(session)  # also converts live payloads of untracked tickers
         company = await repo.company_by_ticker(ticker)
         if company is None:
             return state
@@ -1001,7 +1229,7 @@ async def _live_sources(ticker: str, isy_wait: float) -> tuple[dict[str, Any] | 
 async def _store_first_view(
     ticker: str,
     *,
-    build: Callable[[dict[str, Any] | None, dict[str, Any] | None], dict[str, Any]],
+    build: Callable[[dict[str, Any] | None, dict[str, Any] | None, Mapping[str, float]], dict[str, Any]],
     isy_wait: float,
     message: str,
     event: str,
@@ -1017,7 +1245,7 @@ async def _store_first_view(
 
     def from_store(served_from: ServedFrom, stale: bool, notes: Sequence[str] = ()) -> dict[str, Any]:
         kap, isy = store.sources()
-        payload = build(kap, isy)
+        payload = build(kap, isy, store.reference)
         return with_meta(payload, store.meta(served_from, stale=stale, notes=notes, as_of=payload.get("as_of")))
 
     if store.rows and store.is_fresh(max_age, now):
@@ -1028,7 +1256,7 @@ async def _store_first_view(
         if store.tracked:
             start_background_refresh(ticker, session_factory)
         kap, isy = await _live_sources(ticker, isy_wait)
-        payload = build(kap, isy)
+        payload = build(kap, isy, store.reference)
         return with_meta(payload, _live_meta(ticker, kap, isy, payload.get("as_of")))
     except SymbolNotFoundError as e:
         if store.rows:
@@ -1051,8 +1279,8 @@ async def get_statement_view(
     """``/fundamentals/{t}/balance-sheet`` (``section="balance"``) and ``/income-statement`` (``"income"``)."""
     ticker = ticker.strip().upper()
 
-    def build(kap: dict[str, Any] | None, isy: dict[str, Any] | None) -> dict[str, Any]:
-        return fs.build_statement_view(ticker, kap, isy, quarterly=quarterly, section=section)
+    def build(kap: dict[str, Any] | None, isy: dict[str, Any] | None, reference: Mapping[str, float]) -> dict[str, Any]:
+        return fs.build_statement_view(ticker, kap, isy, quarterly=quarterly, section=section, reference=reference)
 
     return await _store_first_view(
         ticker,
@@ -1070,8 +1298,8 @@ async def get_cashflow_view(
     """``/fundamentals/{t}/cashflow``."""
     ticker = ticker.strip().upper()
 
-    def build(kap: dict[str, Any] | None, isy: dict[str, Any] | None) -> dict[str, Any]:
-        return fs.build_cashflow_view(ticker, kap, isy, quarterly=quarterly)
+    def build(kap: dict[str, Any] | None, isy: dict[str, Any] | None, reference: Mapping[str, float]) -> dict[str, Any]:
+        return fs.build_cashflow_view(ticker, kap, isy, quarterly=quarterly, reference=reference)
 
     return await _store_first_view(
         ticker,
@@ -1139,7 +1367,7 @@ async def get_live_ratios_view(
         if store.tracked:
             start_background_refresh(ticker, session_factory)
         kap, isy = await _live_sources(ticker, fs._ISY_WAIT_RATIOS)
-        facts = fs.facts_from_sources(kap, isy)
+        facts = fs.facts_from_sources(kap, isy, reference=store.reference)
         snapshot = await fs.live_market_snapshot(ticker)
         payload = fs.build_live_ratios_view(
             ticker, facts.items, template=facts.template, fiscal_year_end_month=facts.fiscal_year_end_month,
@@ -1358,8 +1586,14 @@ __all__ = [
     "meta_header",
     "persist_refresh",
     "published_dates",
+    "accuracy_checks",
+    "derived_quarter_check",
+    "ratio_checks",
     "ratios_for_api",
+    "rebuild_all_from_store",
     "rebuild_from_store",
+    "restatement_reference",
+    "ttm_checks",
     "recompute_ratios",
     "refresh_company_statements",
     "refresh_due",
