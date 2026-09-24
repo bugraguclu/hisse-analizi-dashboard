@@ -13,12 +13,19 @@ not part of the key. Precedence when two providers write the same bar
 4. ``turnover``/``vwap`` enrichment (İş Yatırım) never touches OHLCV: an incoming
    row without them keeps the stored values; ``vwap`` is dropped when the close
    changes (a re-adjusted series needs a re-scaled VWAP).
+5. The volume of a completed session never decreases while its close is
+   unchanged (stored and incoming bar final, same close, incoming provider not
+   ranked above the stored one): the day's final bar carries İş Yatırım's official
+   lot count (OneEndeks ``quantity``, which includes the trades at the closing
+   price), and TradingView's same-day volume, which misses them, must not undo it.
+   A re-adjusted close (split/bonus issue) replaces the volume with the incoming one.
 
 Unchanged rows are not rewritten (``fetched_at`` then reflects the last change).
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -36,6 +43,7 @@ from sqlalchemy import (
     literal_column,
     or_,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -134,11 +142,24 @@ async def upsert_bars(session: AsyncSession, rows: Iterable[dict[str, Any]]) -> 
                 _rank(excluded.source) >= _rank(existing.source),
             ),
         )
+        new_values: dict[str, Any] = {col: excluded[col] for col in value_columns}
+        if "volume" in new_values:
+            same_session_same_close = and_(
+                existing.is_final.is_(True),
+                excluded.is_final.is_(True),
+                _rank(existing.source) >= _rank(excluded.source),
+                existing.volume.is_not(None),
+                *((existing.close.is_not_distinct_from(excluded.close),) if "close" in provided else ()),
+            )
+            # GREATEST ignores NULL: a same-close row without a volume keeps the stored one.
+            new_values["volume"] = case(
+                (same_session_same_close, func.greatest(existing.volume, excluded.volume)), else_=excluded.volume
+            )
         changed = or_(
-            *(existing[col].is_distinct_from(excluded[col]) for col in value_columns),
+            *(existing[col].is_distinct_from(new_values[col]) for col in value_columns),
             *(and_(excluded[col].is_not(None), existing[col].is_distinct_from(excluded[col])) for col in enrichment),
         )
-        set_: dict[str, Any] = {col: excluded[col] for col in value_columns}
+        set_: dict[str, Any] = dict(new_values)
         set_["company_id"] = func.coalesce(excluded.company_id, existing.company_id)
         set_["turnover"] = func.coalesce(excluded.turnover, existing.turnover)
         vwap_cases: list[tuple[Any, Any]] = [(excluded.vwap.is_not(None), excluded.vwap)]
@@ -159,10 +180,12 @@ async def upsert_bars(session: AsyncSession, rows: Iterable[dict[str, Any]]) -> 
 
 
 async def enrich_bars(session: AsyncSession, rows: Sequence[dict[str, Any]]) -> int:
-    """Set ``turnover`` and ``vwap`` of existing bars (keys: symbol, interval, bar_date, turnover, vwap).
+    """Set ``turnover``, ``vwap`` and (official lot counts only) ``volume`` of existing bars.
 
-    OHLCV is never touched; a ``None`` value keeps the stored one. Callers pass the
-    rows that actually differ (the reconciliation compares first), so the whole
+    Keys: symbol, interval, bar_date, turnover, vwap, volume. OHLC is never touched;
+    a ``None`` value keeps the stored one. ``volume`` is passed only with İş Yatırım's
+    official lot count of a finished session (OneEndeks ``quantity``). Callers pass
+    the rows that actually differ (the reconciliation compares first), so the whole
     batch is one ``executemany``. Returns the number of rows submitted. The caller commits.
     """
     params = [
@@ -172,9 +195,10 @@ async def enrich_bars(session: AsyncSession, rows: Sequence[dict[str, Any]]) -> 
             "b_bar_date": row["bar_date"],
             "b_turnover": row.get("turnover"),
             "b_vwap": row.get("vwap"),
+            "b_volume": row.get("volume"),
         }
         for row in rows
-        if row.get("turnover") is not None or row.get("vwap") is not None
+        if row.get("turnover") is not None or row.get("vwap") is not None or row.get("volume") is not None
     ]
     if not params:
         return 0
@@ -189,6 +213,7 @@ async def enrich_bars(session: AsyncSession, rows: Sequence[dict[str, Any]]) -> 
         .values(
             turnover=func.coalesce(bindparam("b_turnover", type_=table.c.turnover.type), table.c.turnover),
             vwap=func.coalesce(bindparam("b_vwap", type_=table.c.vwap.type), table.c.vwap),
+            volume=func.coalesce(bindparam("b_volume", type_=table.c.volume.type), table.c.volume),
         )
     )
     await session.execute(stmt, params)
@@ -355,6 +380,16 @@ async def company_ids(session: AsyncSession, symbols: Sequence[str]) -> dict[str
     return {ticker: cid for ticker, cid in (await session.execute(q)).all()}
 
 
+async def paid_in_capitals(session: AsyncSession, symbols: Sequence[str] | None = None) -> dict[str, float]:
+    """``companies.paid_in_capital`` (TL; read-only here — the column is the fundamentals store's)."""
+    q = select(Company.ticker, Company.paid_in_capital).where(
+        Company.paid_in_capital.is_not(None), Company.paid_in_capital > 0
+    )
+    if symbols is not None:
+        q = q.where(Company.ticker.in_(list(symbols)))
+    return {ticker: float(value) for ticker, value in (await session.execute(q)).all()}
+
+
 # ---------------------------------------------------------------------------
 # History markers (data_snapshots) — what the provider's history covers
 # ---------------------------------------------------------------------------
@@ -462,6 +497,28 @@ class HistoryMarkerRepository:
         current.refresh = True
         current.reason = reason
         await self.save(current)
+
+    async def merge_extra(self, symbol: str, patch: dict[str, Any], source: str = "tradingview") -> None:
+        """Merge ``patch`` into the marker's ``extra`` in one statement (other fields untouched;
+        creates the marker when missing). Used for progress bookkeeping that must not race with
+        :meth:`request_refresh` / the history backfill."""
+        payload = HistoryMarker(symbol=symbol, extra=dict(patch)).to_payload()
+        stmt = text(
+            "INSERT INTO data_snapshots (key, kind, payload, source, fetched_at) "
+            "VALUES (:key, :kind, CAST(:payload AS jsonb), :source, now()) "
+            "ON CONFLICT (key) DO UPDATE SET payload = jsonb_set(data_snapshots.payload, '{extra}', "
+            "COALESCE(data_snapshots.payload -> 'extra', '{}'::jsonb) || CAST(:patch AS jsonb))"
+        )
+        await self.session.execute(
+            stmt,
+            {
+                "key": f"{HISTORY_MARKER_PREFIX}{symbol}",
+                "kind": HISTORY_MARKER_KIND,
+                "payload": json.dumps(payload),
+                "source": source,
+                "patch": json.dumps(patch),
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

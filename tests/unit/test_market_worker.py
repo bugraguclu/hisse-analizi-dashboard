@@ -312,3 +312,134 @@ async def test_scheduled_job_runs_only_when_due(monkeypatch):
     monkeypatch.setattr(mw.price, "now_istanbul", lambda: datetime(2026, 9, 24, 18, 45, tzinfo=ISTANBUL_TZ))
     await mw._scheduled_loop(stop, mw.JOB_BARS_DAILY, "18:40", "18:40")
     assert ran == ["daily"]
+
+
+# --- official lots / TL turnover (İş Yatırım OneEndeks) ---------------------------------------
+
+def _official(symbol, lots, turnover, *, session=TODAY, traded=True):
+    return parse_quote(symbol, {
+        "updateDate": f"{session.isoformat()}T18:09:56.000+03", "last": 2.26, "dayClose": 2.29,
+        "high": 2.3 if traded else 0, "low": 2.24 if traded else 0, "quantity": lots if traded else 0,
+        "volume": turnover if traded else 0, "capital": 52_501_931_146.27, "equity": 192_675_743_000,
+    })
+
+
+def _final_row(symbol, volume, *, day=TODAY, final=True):
+    return {"symbol": symbol, "bar_date": day, "close": 2.26, "volume": volume, "is_final": final,
+            "source": "tradingview"}
+
+
+def test_official_lots_and_turnover_replace_tradingview_on_final_bars_of_the_same_session():
+    rows = [_final_row("SASA", 2_453_505_160.0), _final_row("BIMAS", 6_580_903.0),
+            _final_row("KONTR", 1_000.0, final=False), _final_row("EKGYO", 132_769_300.0)]
+    official = {
+        "SASA": _official("SASA", 2_473_505_158, 5_665_266_988.47),
+        "BIMAS": _official("BIMAS", 6_580_903, 2_854_686_306.5),
+        "KONTR": _official("KONTR", 2_000, 50_000.0),  # running bar: untouched
+        "EKGYO": _official("EKGYO", 0, 0, traded=False),  # overnight reset: no session figures
+    }
+    differences = mw.apply_official_volumes(rows, official)
+
+    assert [d["symbol"] for d in differences] == ["SASA"]
+    assert rows[0]["volume"] == 2_473_505_158 and rows[0]["turnover"] == 5_665_266_988.47
+    assert rows[1]["volume"] == 6_580_903 and rows[1]["turnover"] == 2_854_686_306.5
+    assert rows[2]["volume"] == 1_000.0 and "turnover" not in rows[2]
+    assert rows[3]["volume"] == 132_769_300.0 and "turnover" not in rows[3]
+    other_day = [_final_row("SASA", 2_453_505_160.0, day=date(2026, 9, 22))]
+    assert mw.apply_official_volumes(other_day, official) == [] and other_day[0]["volume"] == 2_453_505_160.0
+
+
+def test_oneendeks_overnight_reset_carries_no_session():
+    reset = _official("BIMAS", 0, 0, traded=False)
+    assert reset["session_date"] is None and reset["volume"] is None and reset["turnover"] is None
+    assert reset["capital"] == 52_501_931_146.27  # capital/equity stay usable between sessions
+
+
+def test_reconcile_retries_official_lots_only_where_the_stored_count_is_short():
+    sasa = _isy(TODAY, 2.26, vwap=2.29, turnover=5_665_266_988.0)  # implies 2,473,915,715 lots
+    stored = {TODAY: _stored(TODAY, 2.26, volume=2_453_505_160.0)}
+    candidate = mw.official_volume_candidate("SASA", [sasa], stored, WED_1900)
+    assert candidate == {"symbol": "SASA", "bar_date": TODAY, "stored": 2_453_505_160.0, "implied": 2_473_915_715}
+
+    bimas = _isy(TODAY, 433.75, vwap=433.783, turnover=2_854_686_307.0)  # 6,580,908.7 implied vs 6,580,903
+    assert mw.official_volume_candidate("BIMAS", [bimas], {TODAY: _stored(TODAY, 433.75, volume=6_580_903.0)},
+                                        WED_1900) is None
+    split = {TODAY: _stored(TODAY, 1.13, volume=2_453_505_160.0)}  # another price basis
+    assert mw.official_volume_candidate("SASA", [sasa], split, WED_1900) is None
+    early = datetime(2026, 9, 23, 17, 0, tzinfo=ISTANBUL_TZ)  # the session is not final yet
+    assert mw.official_volume_candidate("SASA", [sasa], stored, early) is None
+
+
+# --- accuracy checks (market.pb_field / market.shares_vs_paid_in / market.volume_vs_oneendeks) ---
+
+BIMAS_TV = {"close": 433.75, "change_abs": 3.5, "volume": 6580903, "Value.Traded": 2854466676.25,
+            "market_cap_basic": 510181857605, "total_shares_outstanding": 1185780000,
+            "price_book_fq": 2.5543749125108186, "price_book_ratio": 3.106159175279112, "time": 1790143200}
+BIMAS_OFFICIAL = parse_quote("BIMAS", {
+    "updateDate": "2026-09-23T18:09:54.000+03", "last": 433.75, "dayClose": 430.25, "high": 437.5, "low": 429.75,
+    "quantity": 6580903, "volume": 2854686306.5, "capital": 1_200_000_000, "equity": 201_353_398_000,
+})
+BIMAS_CARD = {"market_cap": 520_500_000_000, "pb_ratio": 2.6}
+
+
+def _inputs(served, *, official=BIMAS_OFFICIAL, bar=None):
+    return mw.AccuracyInputs(symbol="BIMAS", served=served, tradingview=BIMAS_TV, official=official,
+                             card=BIMAS_CARD, stored_capital=1.2e9, stored_bar=bar)
+
+
+def test_accuracy_checks_fail_the_audited_values_and_pass_the_fixed_ones():
+    legacy = {"last_price": 433.75, "pb_ratio": 3.11, "shares": 1_209_761_766.0, "market_cap": 524_734_166_002.5,
+              "volume": 6580903.0, "amount": 2854466676.25}
+    fixed = {**legacy, "pb_ratio": 2.59, "pb_source": "isyatirim_equity", "shares": 1_200_000_000.0,
+             "market_cap": 520_500_000_000.0, "amount": 2854686306.5, "volume_source": "isyatirim"}
+
+    pb_old, pb_new = mw.pb_field_check(_inputs(legacy)), mw.pb_field_check(_inputs(fixed))
+    assert (pb_old.status, pb_new.status) == ("fail", "pass") and pb_new.expected == 2.59
+    assert pb_new.details_json["tradingview_price_book_fq"] == 2.5544
+    assert pb_new.details_json["legacy_tradingview_price_book_ratio"] == pytest.approx(3.106159)
+
+    shares_old, shares_new = mw.shares_vs_paid_in_check(_inputs(legacy)), mw.shares_vs_paid_in_check(_inputs(fixed))
+    assert (shares_old.status, shares_new.status) == ("fail", "pass")
+    assert shares_new.details_json["expected_market_cap"] == 520_500_000_000.0
+    assert shares_new.details_json["legacy_shares"] == 1_209_761_766.0  # the old algorithm, for the record
+
+    final_bar = SimpleNamespace(bar_date=TODAY, volume=6580903.0, turnover=2854686307.0, is_final=True)
+    volume_new = mw.volume_vs_oneendeks_check(_inputs(fixed, bar=final_bar), now=WED_1900)
+    assert volume_new.status == "pass" and volume_new.expected == 6580903
+    short = {**fixed, "volume": 6_500_000.0}
+    assert mw.volume_vs_oneendeks_check(_inputs(short, bar=final_bar), now=WED_1900).status == "fail"
+    tv_amount = mw.volume_vs_oneendeks_check(_inputs(legacy, bar=final_bar), now=WED_1900)
+    assert tv_amount.status == "warn"  # lots equal, TL turnover = close × lots (219,630 TL short)
+    reset = parse_quote("BIMAS", {"updateDate": "2026-09-23T18:09:54.000+03", "last": 433.75, "dayClose": 433.75,
+                                  "high": 0, "low": 0, "quantity": 0, "volume": 0})
+    assert mw.volume_vs_oneendeks_check(_inputs(fixed, official=reset), now=WED_1900) is None
+
+
+# --- historical turnover/VWAP backfill (market.bars.reconcile.backfill) -------------------------
+
+def test_turnover_backfill_walks_back_newest_window_first_and_resumes_from_the_marker():
+    targets = [_target("THYAO"), _target("KONTR", tier="universe"), _target("XU100", tier="index")]
+    coverage = {
+        "THYAO": Coverage("THYAO", date(2021, 9, 1), TODAY, 1260, TODAY),
+        "KONTR": Coverage("KONTR", date(2024, 9, 2), TODAY, 510, TODAY),
+        "XU100": Coverage("XU100", date(2021, 9, 1), TODAY, 1260, TODAY),
+    }
+    plan = mw.plan_turnover_backfill(targets, coverage, {}, TODAY)
+    assert [(i.target.symbol, i.start, i.end) for i in plan] == [
+        ("THYAO", TODAY - timedelta(days=mw.TURNOVER_CHUNK_DAYS), TODAY),  # core first, newest window first
+        ("KONTR", date(2024, 9, 2), TODAY),  # a 2-year history fits in one window
+    ]
+    assert plan[1].completes and not plan[0].completes
+
+    markers = {
+        "THYAO": HistoryMarker("THYAO", extra={"turnover_from": plan[0].start.isoformat()}),
+        "KONTR": HistoryMarker("KONTR", extra={"turnover_from": "2024-09-02", "turnover_done": True}),
+    }
+    resumed = mw.plan_turnover_backfill(targets, coverage, markers, TODAY)
+    assert [(i.target.symbol, i.start, i.end) for i in resumed] == [
+        ("THYAO", date(2021, 9, 1), plan[0].start - timedelta(days=1))]
+    assert resumed[0].completes
+    markers["THYAO"].extra["turnover_from"] = "2021-09-03"  # İş Yatırım starts two sessions later: done
+    assert mw.plan_turnover_backfill(targets, coverage, markers, TODAY) == []
+    failed = {"THYAO": HistoryMarker("THYAO", extra={"turnover_failed_on": TODAY.isoformat()})}
+    assert [i.target.symbol for i in mw.plan_turnover_backfill(targets, coverage, failed, TODAY)] == ["KONTR"]

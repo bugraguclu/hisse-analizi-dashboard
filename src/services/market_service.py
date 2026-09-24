@@ -23,6 +23,21 @@ Freshness policy (weekdays, Europe/Istanbul):
   trading day. A missing/old running bar is rebuilt from the (stored) quote when
   the stored previous close proves the series is continuous; anything else is
   fetched live.
+
+Per-symbol payloads (fast-info, company info, ticker history, small snapshots)
+add İş Yatırım's official figures (:func:`get_official_quote`, OneEndeks, cached
+for the quote TTL; the universe-wide paths stay TradingView):
+
+* volume / TL turnover — OneEndeks ``quantity`` / ``volume`` of the same session
+  (TradingView's same-day ``volume`` misses the trades at the closing price and its
+  ``Value.Traded`` is close × lots, not turnover); TradingView is the fallback;
+* share count — paid-in capital (1 TL nominal per lot): OneEndeks ``capital``, else
+  ``companies.paid_in_capital`` (:func:`share_count`); market cap = last × capital;
+* P/B — market cap / latest-quarter parent equity (OneEndeks ``equity``), else
+  TradingView ``price_book_fq`` (:func:`price_to_book`); never ``price_book_ratio``
+  (fiscal-year-end equity);
+* quote times are capped at the session close and carry ``session_state``
+  (:func:`src.adapters.price.with_session_view`).
 """
 
 from __future__ import annotations
@@ -44,6 +59,7 @@ from src.adapters.utils import (
     TTL_QUOTE,
     ChartPeriod,
     MarketDataError,
+    adapter_cache,
     cached,
     finite_float,
 )
@@ -515,7 +531,8 @@ async def get_quotes(symbols: Sequence[str], *, now: datetime | None = None) -> 
                 if symbol not in live and symbol in stored:
                     quotes[symbol] = stored[symbol]
                     served[symbol] = "stale"
-    ordered = {s: quotes[s] for s in wanted if s in quotes}
+    # Payload view: quote times capped at the session close + session_state (the store keeps provider times).
+    ordered = {s: price.with_session_view(quotes[s], now) for s in wanted if s in quotes}
     return QuoteResult(quotes=ordered, meta=_quote_meta(ordered, served), served=served)
 
 
@@ -529,6 +546,7 @@ async def get_quote(symbol: str, *, now: datetime | None = None) -> tuple[dict[s
 # ---------------------------------------------------------------------------
 
 EXTRAS_KEY = "market.quote_extras"
+# P/B: ``price_book_fq`` (latest quarter), never ``price_book_ratio`` (fiscal-year-end equity).
 EXTRA_COLUMNS: tuple[str, ...] = (
     "price_52_week_high",
     "price_52_week_low",
@@ -536,7 +554,7 @@ EXTRA_COLUMNS: tuple[str, ...] = (
     "SMA200",
     "total_shares_outstanding",
     "price_earnings_ttm",
-    "price_book_ratio",
+    "price_book_fq",
 )
 
 
@@ -544,15 +562,22 @@ EXTRA_COLUMNS: tuple[str, ...] = (
 class QuoteExtras:
     values: dict[str, dict[str, Any]]
     fetched_at: datetime
+    columns: tuple[str, ...] = ()  # the columns the worker requested (older rows: unknown)
+
+    def covers(self, columns: Iterable[str]) -> bool:
+        """True when the stored row was written with every one of ``columns`` requested."""
+        return set(columns) <= set(self.columns)
 
 
 async def save_quote_extras(values: dict[str, dict[str, Any]]) -> None:
     """Persist the latest extras of the whole universe as one ``data_snapshots`` row (worker)."""
     from src.db.repositories.market import save_snapshot
 
+    payload = {"symbols": values, "columns": list(EXTRA_COLUMNS)}
+
     async def call() -> None:
         async with async_session_factory() as session:
-            await save_snapshot(session, EXTRAS_KEY, EXTRAS_KEY, {"symbols": values}, TV_SOURCE)
+            await save_snapshot(session, EXTRAS_KEY, EXTRAS_KEY, payload, TV_SOURCE)
             await session.commit()
 
     await _store("save_quote_extras", call, None)
@@ -567,7 +592,12 @@ async def _read_quote_extras() -> QuoteExtras | None:
             if row is None or not isinstance(row.payload, dict):
                 return None
             symbols = row.payload.get("symbols")
-            return QuoteExtras(dict(symbols) if isinstance(symbols, dict) else {}, row.fetched_at)
+            columns = row.payload.get("columns")
+            return QuoteExtras(
+                dict(symbols) if isinstance(symbols, dict) else {},
+                row.fetched_at,
+                tuple(str(c) for c in columns) if isinstance(columns, list) else (),
+            )
 
     return await _store("read_quote_extras", call, None)
 
@@ -576,6 +606,224 @@ async def _read_quote_extras() -> QuoteExtras | None:
 async def get_quote_extras() -> QuoteExtras | None:
     """The stored extras (one row for the whole universe, L1-cached for a minute)."""
     return await _read_quote_extras()
+
+
+# ---------------------------------------------------------------------------
+# Official per-symbol figures (İş Yatırım OneEndeks) and the rules that use them
+# ---------------------------------------------------------------------------
+
+# An optional İş Yatırım read may add at most this much latency to a per-symbol payload.
+OFFICIAL_TIMEOUT_SECONDS = 3.0
+# Multi-symbol snapshots (watchlists) only add the official figures up to this size.
+OFFICIAL_OVERLAY_MAX_SYMBOLS = 3
+# companies.paid_in_capital is read for the whole table at most this often (it changes with statements).
+TTL_PAID_IN_CAPITAL = 3600
+_CAPITAL_CACHE_PREFIX = "market_capital:"
+
+SHARES_SOURCE_ISYATIRIM = "isyatirim_capital"  # OneEndeks ``capital``: current registered capital
+SHARES_SOURCE_PAID_IN = "paid_in_capital"  # companies.paid_in_capital: last balance sheet (WS3)
+SHARES_SOURCE_MARKET = "market_data"  # derived from İş Yatırım card / TradingView market caps
+VOLUME_SOURCE_ISYATIRIM = ISY_SOURCE
+VOLUME_SOURCE_TRADINGVIEW = TV_SOURCE
+PB_SOURCE_EQUITY = "isyatirim_equity"  # market cap / latest-quarter parent equity
+PB_SOURCE_TRADINGVIEW = "tradingview_fq"  # TradingView price_book_fq
+
+NOTE_VOLUME_OFFICIAL = "Hacim ve işlem hacmi: İş Yatırım (resmî)"
+NOTE_VOLUME_TRADINGVIEW = "Hacim: TradingView (kapanış fiyatından işlemler eksik olabilir)"
+NOTE_SHARES = {
+    SHARES_SOURCE_ISYATIRIM: "Pay adedi: ödenmiş sermaye (İş Yatırım)",
+    SHARES_SOURCE_PAID_IN: "Pay adedi: ödenmiş sermaye (son bilanço)",
+    SHARES_SOURCE_MARKET: "Pay adedi: piyasa değerinden türetildi",
+}
+NOTE_PB = {
+    PB_SOURCE_EQUITY: "PD/DD: son çeyrek ana ortaklık özkaynakları",
+    PB_SOURCE_TRADINGVIEW: "PD/DD: TradingView (son çeyrek)",
+}
+
+
+@dataclass(frozen=True)
+class CompanyCapital:
+    """Paid-in capital (TL = lots on BIST) and latest-quarter parent equity (TL) of one company."""
+
+    capital: float | None
+    equity: float | None
+
+
+def _positive(value: Any) -> float | None:
+    number = finite_float(value)
+    return number if number is not None and number > 0 else None
+
+
+def _seconds_until_midnight(now: datetime | None = None) -> float:
+    current = _istanbul(now)
+    midnight = datetime.combine(current.date() + timedelta(days=1), time(0, 0), tzinfo=ISTANBUL_TZ)
+    return max(60.0, (midnight - current).total_seconds())
+
+
+def remember_capital(symbol: str, quote: dict[str, Any] | None, now: datetime | None = None) -> None:
+    """Keep an official quote's capital/equity for the rest of the Istanbul day (L1 cache)."""
+    if not quote or (quote.get("capital") is None and quote.get("equity") is None):
+        return
+    value = CompanyCapital(_positive(quote.get("capital")), finite_float(quote.get("equity")))
+    adapter_cache.set(f"{_CAPITAL_CACHE_PREFIX}{symbol}", value, _seconds_until_midnight(now))
+
+
+def remembered_capital(symbol: str) -> CompanyCapital | None:
+    hit, value = adapter_cache.get(f"{_CAPITAL_CACHE_PREFIX}{symbol}")
+    return value if hit and isinstance(value, CompanyCapital) else None
+
+
+@cached(TTL_QUOTE, "market_official")
+async def _official_quote(symbol: str) -> dict[str, Any]:
+    from src.adapters.isyatirim_prices import fetch_quote
+
+    quote = await fetch_quote(symbol)
+    remember_capital(symbol, quote)
+    return quote
+
+
+async def get_official_quote(symbol: str, *, timeout: float = OFFICIAL_TIMEOUT_SECONDS) -> dict[str, Any] | None:
+    """İş Yatırım OneEndeks quote (lots, TL turnover, capital, equity) or ``None`` — never raises.
+
+    Cached for the quote TTL (single flight); a slow answer is abandoned after
+    ``timeout`` while its fetch finishes in the background for the next request.
+    """
+    try:
+        return await asyncio.wait_for(_official_quote(symbol), timeout)
+    except Exception as e:  # timeout, İş Yatırım down/WAF, unknown symbol
+        logger.info("official_quote_unavailable", symbol=symbol, error=f"{type(e).__name__}: {e}"[:200])
+        return None
+
+
+async def get_official_quotes(symbols: Sequence[str]) -> dict[str, dict[str, Any]]:
+    wanted = list(dict.fromkeys(symbols))
+    results = await asyncio.gather(*(get_official_quote(symbol) for symbol in wanted))
+    return {symbol: quote for symbol, quote in zip(wanted, results) if quote is not None}
+
+
+async def _read_paid_in_capitals() -> dict[str, float] | None:
+    from src.db.repositories.market import paid_in_capitals
+
+    async def call() -> dict[str, float]:
+        async with async_session_factory() as session:
+            return await paid_in_capitals(session)
+
+    return await _store("read_paid_in_capitals", call, None)
+
+
+@cached(TTL_PAID_IN_CAPITAL, "market_paid_in")
+async def get_paid_in_capitals() -> dict[str, float] | None:
+    """``companies.paid_in_capital`` by ticker (``None`` when the store is unavailable — not cached)."""
+    return await _read_paid_in_capitals()
+
+
+@dataclass(frozen=True)
+class ShareCount:
+    capital: float | None  # exact paid-in capital, TL (SASA: 52,501,931,146.27)
+    source: str | None
+
+    @property
+    def shares(self) -> float | None:
+        """Share (lot) count as a whole number."""
+        return float(round(self.capital)) if self.capital is not None else None
+
+    def market_cap(self, last: float | None) -> float | None:
+        if self.capital is None or last is None or last <= 0:
+            return None
+        return round(last * self.capital, 2)
+
+
+def share_count(official_capital: Any, stored_capital: Any) -> ShareCount:
+    """Share count = paid-in capital (BIST shares have 1 TL nominal value per lot).
+
+    İş Yatırım's OneEndeks ``capital`` comes first: it is the current registered
+    capital to the kuruş, while ``companies.paid_in_capital`` is the last balance
+    sheet's figure — rounded to the statement's presentation unit (KCHOL
+    2,536,000,000 vs 2,535,898,050) and stale between a capital increase and the
+    next statement (BIMAS 600 mn → 1.2 bn TL in 2026 Q2). TradingView's count
+    excludes treasury shares (BIMAS 1,185,780,000 vs 1,200,000,000) and is never
+    used here; callers fall back to their market-data estimate when both are missing.
+    """
+    official = _positive(official_capital)
+    if official is not None:
+        return ShareCount(official, SHARES_SOURCE_ISYATIRIM)
+    stored = _positive(stored_capital)
+    if stored is not None:
+        return ShareCount(stored, SHARES_SOURCE_PAID_IN)
+    return ShareCount(None, None)
+
+
+def price_to_book(market_cap: Any, equity: Any, provider_pb_fq: Any) -> tuple[float | None, str | None]:
+    """``(P/B rounded to 2 decimals, source)``.
+
+    Market cap (last × paid-in capital) / latest-quarter parent equity (OneEndeks
+    ``equity`` = the statements' ``parent_equity``) — the İş Yatırım / BIST
+    convention and the same market cap the payload shows. Without them
+    TradingView's ``price_book_fq`` (latest quarter; close / book value per share on
+    a treasury-excluded share count, so ~1-10 % lower for companies holding their
+    own shares). ``price_book_ratio`` (fiscal-year-end equity) is never used.
+    """
+    cap = _positive(market_cap)
+    book = finite_float(equity)
+    if cap is not None and book is not None and book != 0:
+        return round(cap / book, 2), PB_SOURCE_EQUITY
+    fallback = finite_float(provider_pb_fq)
+    if fallback is not None:
+        return round(fallback, 2), PB_SOURCE_TRADINGVIEW
+    return None, None
+
+
+def official_session_figures(official: dict[str, Any] | None, session_date: Any) -> tuple[float, float | None] | None:
+    """``(lots, TL turnover)`` of an official quote when it describes ``session_date``, else ``None``.
+
+    A quote without a session (the overnight reset, see
+    :func:`src.adapters.isyatirim_prices.parse_quote`) or without traded lots never qualifies.
+    """
+    if not official or not isinstance(session_date, date) or official.get("session_date") != session_date:
+        return None
+    lots = finite_float(official.get("volume"))
+    if lots is None or lots <= 0:
+        return None
+    turnover = finite_float(official.get("turnover"))
+    return lots, turnover if turnover is not None and turnover >= 0 else None
+
+
+def company_capital(symbol: str, official: dict[str, Any] | None) -> CompanyCapital | None:
+    """Capital/equity from a fresh official quote, else from earlier today's (:func:`remembered_capital`)."""
+    if official and (official.get("capital") is not None or official.get("equity") is not None):
+        return CompanyCapital(_positive(official.get("capital")), finite_float(official.get("equity")))
+    return remembered_capital(symbol)
+
+
+def official_notes(sources: dict[str, str | None]) -> list[str]:
+    """Human-readable provenance notes for ``volume_source`` / ``shares_source`` / ``pb_source``."""
+    notes: list[str] = []
+    volume = sources.get("volume_source")
+    if volume == VOLUME_SOURCE_ISYATIRIM:
+        notes.append(NOTE_VOLUME_OFFICIAL)
+    elif volume == VOLUME_SOURCE_TRADINGVIEW:
+        notes.append(NOTE_VOLUME_TRADINGVIEW)
+    shares = sources.get("shares_source")
+    if shares in NOTE_SHARES:
+        notes.append(NOTE_SHARES[shares])
+    pb = sources.get("pb_source")
+    if pb in NOTE_PB:
+        notes.append(NOTE_PB[pb])
+    return notes
+
+
+def with_official_provenance(meta: DataMeta | None, sources: dict[str, str | None]) -> DataMeta | None:
+    """``meta`` + İş Yatırım as a source (when it supplied a field) + the provenance notes."""
+    if meta is None:
+        return None
+    notes = list(meta.notes)
+    notes.extend(n for n in official_notes(sources) if n not in notes)
+    used = any(
+        value in (VOLUME_SOURCE_ISYATIRIM, SHARES_SOURCE_ISYATIRIM, PB_SOURCE_EQUITY) for value in sources.values()
+    )
+    parts = meta.source.split("+")
+    source = meta.source if not used or ISY_SOURCE in parts else f"{meta.source}+{ISY_SOURCE}"
+    return replace(meta, source=source, notes=notes)
 
 
 # ---------------------------------------------------------------------------
@@ -856,7 +1104,10 @@ SNAPSHOT_QUOTE_COLUMNS: tuple[str, ...] = ("change", "update_time", "update_mode
 
 
 def scan_row_from_store(quote: dict[str, Any], extras: dict[str, Any] | None) -> dict[str, Any]:
-    """Stored quote (+ extras) → the TradingView scanner row the snapshot builder consumes."""
+    """Stored quote (+ extras) → the TradingView scanner row the snapshot builder consumes.
+
+    ``session_date`` is not a scanner column: live rows carry ``time`` (the daily bar's open) instead.
+    """
     return {
         "close": quote.get("last"),
         "open": quote.get("open"),
@@ -869,6 +1120,8 @@ def scan_row_from_store(quote: dict[str, Any], extras: dict[str, Any] | None) ->
         "description": quote.get("name"),
         "currency": quote.get("currency"),
         "market_cap_basic": quote.get("market_cap"),
+        "update_time": quote.get("timestamp"),
+        "session_date": quote.get("session_date"),
         **(extras or {}),
     }
 
@@ -889,6 +1142,7 @@ async def get_snapshot_row(symbol: str, columns: Sequence[str]) -> tuple[dict[st
         and extras is not None
         and extra_values is not None
         and quote_is_fresh(extras.fetched_at)
+        and extras.covers(EXTRA_COLUMNS)  # a row from an older worker lacks e.g. price_book_fq
     ):
         return scan_row_from_store(stored, extra_values), _quote_meta({symbol: stored}, {symbol: "store"}) or build_meta(
             source=TV_SOURCE, fetched_at=None, served_from="store", symbol=symbol
@@ -958,40 +1212,54 @@ class ChartWindow:
     bars: pd.DataFrame
     reference: dict[str, Any]
     meta: DataMeta
+    # Bars immediately before the window (indicator warmup; same frame shape as ``bars``).
+    before: pd.DataFrame = field(default_factory=lambda: price.clean_bars(None))
 
 
-async def get_chart_window(symbol: str, spec: ChartPeriod, *, now: datetime | None = None) -> ChartWindow:
-    """Store-first :func:`price.get_chart_window`.
+async def get_chart_window(
+    symbol: str, spec: ChartPeriod, *, now: datetime | None = None, warmup: int = 0
+) -> ChartWindow:
+    """Store-first :func:`price.get_chart_window_parts`.
 
-    Daily periods (1ay … 1y) use the stored daily series; weekly periods (2y, 5y)
-    are derived from it when the store reaches back far enough (core companies keep
-    5 years), otherwise TradingView's weekly bars are fetched. Intraday (1g/5g) and
-    monthly (max) bars are not stored and always come live.
+    Daily periods (1ay … 1y) use the stored daily series (≈3 years: ``before`` holds
+    ≥ 1 year of bars); weekly periods (2y, 5y) are derived from it when the store
+    reaches back far enough — with ``warmup`` weeks more before the window when warmup
+    bars are wanted — otherwise TradingView's weekly bars are fetched (5y / 10y of
+    history). Intraday (1g/5g) and monthly (max) bars are not stored and always come live.
     """
     current = _istanbul(now)
     if spec.interval == "1d":
         daily = await get_daily_bars(symbol)
         window, before = price.split_chart_window(daily.frame, spec, current)
-        return ChartWindow(window, price.period_reference(before), daily.meta)
+        return ChartWindow(window, price.period_reference(before), daily.meta, before)
     stored: DailyBars | None = None
     if spec.interval == "1wk":
         start_ts = price.window_start(spec, current)
         if start_ts is not None:
-            # One week before the window supplies the reference close.
-            stored = await stored_daily_bars(symbol, min_start=start_ts.date() - timedelta(days=10), now=now)
+            # One week before the window supplies the reference close (+ the warmup weeks).
+            margin = timedelta(days=10 + 7 * max(0, warmup))
+            stored = await stored_daily_bars(symbol, min_start=start_ts.date() - margin, now=now)
         if stored is not None and stored.meta.served_from != "stale":
             window, before = price.split_chart_window(weekly_from_daily(stored.frame), spec, current)
-            return ChartWindow(window, price.period_reference(before), stored.meta)
+            return ChartWindow(window, price.period_reference(before), stored.meta, before)
     try:
-        window, reference = await price.get_chart_window(symbol, spec)
+        window, before, reference = await price.get_chart_window_parts(symbol, spec)
     except MarketDataError:
         if stored is None or stored.frame.empty:
             raise
         window, before = price.split_chart_window(weekly_from_daily(stored.frame), spec, current)
-        return ChartWindow(window, price.period_reference(before), stored.meta)
+        return ChartWindow(window, price.period_reference(before), stored.meta, before)
     last = pd.Timestamp(window.index[-1]).date() if not window.empty else None
     meta = build_meta(source=TV_SOURCE, fetched_at=datetime.now(UTC), served_from="live", as_of=last, symbol=symbol)
-    return ChartWindow(window, reference, meta)
+    return ChartWindow(window, reference, meta, before)
+
+
+async def get_chart_window_parts(
+    symbol: str, spec: ChartPeriod, *, now: datetime | None = None, warmup: int = 0
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """``(window, before, reference)`` of :func:`get_chart_window` (master's adapter API)."""
+    chart = await get_chart_window(symbol, spec, now=now, warmup=warmup)
+    return chart.bars, chart.before, chart.reference
 
 
 def meta_dict(meta: DataMeta | None) -> dict[str, Any]:

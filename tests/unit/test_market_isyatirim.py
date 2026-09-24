@@ -102,3 +102,16 @@ async def test_quote_units_and_unknown_symbols(monkeypatch):
     assert list(quotes) == ["XUSIN"]
     assert quotes["XUSIN"]["type"] == "index" and quotes["XUSIN"]["source"] == "isyatirim"
     assert quotes["XUSIN"]["session_date"] == date(2026, 9, 23) and quotes["XUSIN"]["delay_seconds"] == 900
+
+
+async def test_overnight_reset_rows_carry_no_session_and_are_not_used_as_fallback_quotes(monkeypatch):
+    # Seen 2026-09-24 08:05: figures zeroed, dayClose = last close, updateDate still the previous session.
+    reset = {"updateDate": "2026-09-23T18:09:54.000+03", "bid": 0, "ask": 0, "low": 0, "high": 0, "last": 433.75,
+             "dayClose": 433.75, "quantity": 0, "volume": 0, "open": 430.25, "capital": 1200000000,
+             "equity": 201353398000, "symbol": "BIMAS"}
+    _client(monkeypatch, lambda request: httpx.Response(200, json=[reset]))
+
+    quote = await isy.fetch_quote("BIMAS")
+    assert quote["session_date"] is None and quote["volume"] is None and quote["turnover"] is None
+    assert quote["capital"] == 1_200_000_000 and quote["equity"] == 201_353_398_000
+    assert await isy.fetch_isyatirim_quotes(["BIMAS"]) == {}

@@ -47,3 +47,17 @@ async def test_isyatirim_quote_covers_indices_missing_from_the_scanner():
     quote = await fetch_quote("XUSIN")
     assert quote["last"] > 0 and quote["prev_close"] > 0
     assert quote["quote_time"] is not None
+
+
+async def test_oneendeks_capital_and_equity_match_the_stored_statement_convention():
+    """Paid-in capital (share count) and latest-quarter parent equity come with every stock quote."""
+    from src.adapters.isyatirim_prices import fetch_quote
+
+    quote = await fetch_quote("GARAN")
+    assert quote["capital"] == pytest.approx(4.2e9)  # 1 TL nominal per lot
+    assert quote["equity"] is not None and quote["equity"] > quote["capital"]
+    # Between sessions (overnight reset) the row carries no session figures, never zeros.
+    if quote["session_date"] is None:
+        assert quote["volume"] is None and quote["turnover"] is None
+    else:
+        assert quote["volume"] is not None and quote["volume"] > 0

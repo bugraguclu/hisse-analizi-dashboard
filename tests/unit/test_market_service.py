@@ -32,9 +32,17 @@ def _isolated(monkeypatch):
     async def no_isyatirim(symbols):
         return {}
 
+    async def no_quote(symbol):
+        raise MarketDataError("İş Yatırım verisine ulaşılamadı", status_code=503)
+
+    async def no_capitals():
+        return None
+
     monkeypatch.setattr(ms, "_write_quotes", write_quotes)
     monkeypatch.setattr(ms, "_write_bars", write_bars)
     monkeypatch.setattr(isyatirim_prices, "fetch_isyatirim_quotes", no_isyatirim)
+    monkeypatch.setattr(isyatirim_prices, "fetch_quote", no_quote)
+    monkeypatch.setattr(ms, "_read_paid_in_capitals", no_capitals)
     yield writes
     adapter_cache.clear()
 
@@ -349,7 +357,7 @@ async def test_weekly_chart_uses_stored_history_when_it_reaches_back(monkeypatch
     async def no_live_weekly(symbol, spec):
         raise AssertionError("TradingView weekly bars must not be fetched")
 
-    monkeypatch.setattr(price, "get_chart_window", no_live_weekly)
+    monkeypatch.setattr(price, "get_chart_window_parts", no_live_weekly)
     window = await ms.get_chart_window("THYAO", resolve_period("5y"), now=TUE_1455)
 
     assert window.meta.served_from == "store"
@@ -365,9 +373,9 @@ async def test_weekly_chart_without_stored_history_uses_tradingview(monkeypatch,
     async def live_weekly(symbol, spec):
         calls.append(spec.key)
         frame = price.clean_bars(None)
-        return frame, {"reference_close": None, "reference_date": None}
+        return frame, frame, {"reference_close": None, "reference_date": None}
 
-    monkeypatch.setattr(price, "get_chart_window", live_weekly)
+    monkeypatch.setattr(price, "get_chart_window_parts", live_weekly)
     window = await ms.get_chart_window("KONTR", resolve_period("5y"), now=TUE_1455)
 
     assert calls == ["5y"] and window.meta.served_from == "live"

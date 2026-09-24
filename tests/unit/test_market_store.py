@@ -13,6 +13,7 @@ from src.db.repositories.market import (
     QuoteRepository,
     active_universe,
     enrich_bars,
+    paid_in_capitals,
     quality_check,
     upsert_bars,
 )
@@ -148,3 +149,57 @@ async def test_quality_rows_are_valid(pg_session):
     await pg_session.commit()
     row = (await pg_session.execute(select(DataQualityCheck))).scalar_one()
     assert row.check_name == "market.close_tv_vs_isy" and row.details_json == {"days": 30}
+
+
+async def test_official_volume_survives_a_same_close_tradingview_rewrite(pg_session):
+    await upsert_bars(pg_session, [_bar(D3, 2.26, volume=2_453_505_160)])  # TradingView, after the close
+    official = _bar(D3, 2.26, volume=2_473_505_158, turnover=5_665_266_988.47)  # OneEndeks lots / TL
+    assert (await upsert_bars(pg_session, [official])).updated == 1
+    # A later TradingView write of the same session (quote cycle, live read) keeps the official count ...
+    assert (await upsert_bars(pg_session, [_bar(D3, 2.26, volume=2_453_505_160)])).unchanged == 1
+    bar = await _stored(pg_session, D3)
+    assert bar.volume == Decimal("2473505158") and bar.turnover == Decimal("5665266988.47")
+    # ... a larger count (TradingView's corrected history) is taken ...
+    assert (await upsert_bars(pg_session, [_bar(D3, 2.26, volume=2_473_505_200)])).updated == 1
+    await pg_session.refresh(bar)
+    assert bar.volume == Decimal("2473505200")
+    # ... and a re-adjusted close (split) replaces the volume with the incoming one.
+    await upsert_bars(pg_session, [_bar(D3, 1.13, open=1.12, low=1.1, high=1.2, volume=4_947_010_400)])
+    await pg_session.refresh(bar)
+    assert bar.volume == Decimal("4947010400") and bar.close == Decimal("1.1300")
+    # Running bars follow the provider.
+    await upsert_bars(pg_session, [_bar(D2, 2.29, volume=100, is_final=False)])
+    await upsert_bars(pg_session, [_bar(D2, 2.29, volume=50, is_final=False)])
+    assert (await _stored(pg_session, D2)).volume == Decimal("50")
+
+
+async def test_enrich_bars_sets_the_official_lot_count_without_touching_ohlc(pg_session):
+    await upsert_bars(pg_session, [_bar(D3, 221.1, volume=24_664_697)])
+    assert await enrich_bars(pg_session, [{"symbol": "THYAO", "bar_date": D3, "volume": 25_272_597}]) == 1
+    bar = await _stored(pg_session, D3)
+    assert bar.volume == Decimal("25272597") and bar.close == Decimal("221.1000") and bar.turnover is None
+
+
+async def test_paid_in_capitals_are_read_for_known_positive_values_only(pg_session):
+    kchol = await _company(pg_session, "KCHOL")
+    kchol.paid_in_capital = Decimal("2536000000.00")
+    await _company(pg_session, "SASA")
+    await pg_session.flush()
+    assert await paid_in_capitals(pg_session) == {"KCHOL": 2_536_000_000.0}
+    assert await paid_in_capitals(pg_session, ["SASA"]) == {}
+
+
+async def test_marker_progress_merge_keeps_a_concurrent_refresh_request(pg_session):
+    repo = HistoryMarkerRepository(pg_session)
+    await repo.merge_extra("NEWCO", {"turnover_from": "2024-01-02"})  # creates the marker
+    await repo.save(HistoryMarker(symbol="THYAO", first_available=date(2021, 9, 1), bars=1260,
+                                  extra={"refreshed_on": "2026-09-20"}))
+    await repo.request_refresh("THYAO", "split")
+    await repo.merge_extra("THYAO", {"turnover_from": "2023-09-19", "turnover_done": False})
+    await pg_session.commit()
+    pg_session.expire_all()
+    markers = await repo.get_many(["THYAO", "NEWCO"])
+    assert markers["THYAO"].refresh is True and markers["THYAO"].bars == 1260
+    assert markers["THYAO"].extra == {"refreshed_on": "2026-09-20", "turnover_from": "2023-09-19",
+                                      "turnover_done": False}
+    assert markers["NEWCO"].extra == {"turnover_from": "2024-01-02"} and markers["NEWCO"].refresh is False

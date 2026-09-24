@@ -13,8 +13,11 @@ Jobs (``ingestion_runs.job``), all Europe/Istanbul, weekdays:
   when the last run predates the last close): final daily bars for the universe
   from one scanner request, plus a continuity check — the stored previous close
   must equal TradingView's ``close[1]``; a mismatch (missed sessions, a split that
-  re-adjusted the series) flags the symbol for a full history refresh. Updates the
-  legacy ``polling_state`` row ``price`` (``run_job``).
+  re-adjusted the series) flags the symbol for a full history refresh. Once the
+  session is final, one paced İş Yatırım OneEndeks pass over the stocks puts the
+  official lot count and TL turnover on the day's final bars (see *Volume and
+  turnover* below) and writes ``market.volume_vs_oneendeks``. Updates the legacy
+  ``polling_state`` row ``price`` (``run_job``).
 * ``market.bars.backfill`` — TradingView websocket history (split-adjusted, the
   canonical series) for symbols whose stored history is shorter than the target
   (``tracking_tier=core`` and the main indices: ``MARKET_BACKFILL_CORE_YEARS``,
@@ -22,9 +25,33 @@ Jobs (``ingestion_runs.job``), all Europe/Istanbul, weekdays:
   bounded per pass (``MARKET_BACKFILL_BATCH_SIZE`` / ``MARKET_BACKFILL_MAX_SECONDS``).
 * ``market.bars.reconcile`` — after ``MARKET_RECONCILE_AFTER``: İş Yatırım
   ``HisseTekil`` for the last ``MARKET_RECONCILE_DAYS`` → TL turnover + VWAP on the
-  stored bars, official closes for sessions TradingView lacks, and the
-  cross-source checks ``market.close_tv_vs_isy`` / ``market.volume_units``
-  (``data_quality_checks``).
+  stored bars, official closes for sessions TradingView lacks, the official lot
+  count of the latest session where the stored volume still disagrees with
+  ``HG_HACIM / HG_AOF`` (OneEndeks re-read), and the cross-source checks
+  ``market.close_tv_vs_isy`` / ``market.volume_units`` (``data_quality_checks``).
+* ``market.bars.reconcile.backfill`` — gradual, resumable enrichment of the stored
+  history with İş Yatırım ``HG_HACIM`` (turnover) and ``HG_AOF`` (VWAP, scaled to the
+  stored basis) through the same :func:`reconcile_symbol` rules (OHLCV untouched):
+  one ≤ ``TURNOVER_CHUNK_DAYS`` ``HisseTekil`` window per symbol and pass, newest
+  first, progress in the ``market.history:*`` marker (``extra.turnover_from``). Runs
+  from the backfill loop once the price history is complete.
+* ``market.accuracy`` — after ``MARKET_RECONCILE_AFTER`` (or on demand): the
+  served fast-info values of a rotating core sample (or ``symbols``) against the
+  official figures → ``market.pb_field``, ``market.shares_vs_paid_in`` and
+  ``market.volume_vs_oneendeks`` rows per symbol (:func:`run_accuracy_checks`).
+
+Volume and turnover of the stored daily bars (``price_bars``):
+
+* ``volume`` (lots) — İş Yatırım OneEndeks ``quantity`` for the day's final bar
+  (daily job; the reconciliation re-reads it where the stored count still differs
+  from ``HG_HACIM / HG_AOF``), otherwise TradingView's ``volume``. TradingView's
+  same-day volume misses the trades at the closing price (2026-09-23: SASA
+  19,999,998 lots, KCHOL 607,900); its history carries them from the next day on.
+  A same-close TradingView re-write never lowers a final bar's volume
+  (:func:`src.db.repositories.market.upsert_bars`, rule 5).
+* ``turnover`` (TL) — İş Yatırım ``HisseTekil`` ``HG_HACIM`` (reconciliation), else
+  OneEndeks ``volume`` (daily job). TradingView's ``Value.Traded`` (close × lots) is
+  never stored.
 
 Intraday bars (1h/15m) are not stored: the legacy poller never stored them either
 (``PriceAdapter`` emits daily bars only); intraday charts stay live.
@@ -44,9 +71,10 @@ import structlog
 
 from src.adapters import price
 from src.adapters.index_adapter import MAIN_INDICES
-from src.adapters.isyatirim_prices import IsyDailyRow, fetch_daily_history, fetch_isyatirim_quotes
+from src.adapters.isyatirim_prices import IsyDailyRow, fetch_daily_history, fetch_isyatirim_quotes, fetch_quote
 from src.adapters.utils import MarketDataError, finite_float, tradingview_scan
 from src.core.config import settings
+from src.db.models import DataQualityCheck
 from src.db.repositories.market import (
     HistoryMarker,
     HistoryMarkerRepository,
@@ -55,6 +83,7 @@ from src.db.repositories.market import (
     UniverseMember,
     active_universe,
     enrich_bars,
+    paid_in_capitals,
     quality_check,
     upsert_bars,
 )
@@ -69,7 +98,11 @@ JOB_QUOTES = "market.quotes"
 JOB_BARS_DAILY = "market.bars.daily"
 JOB_BACKFILL = "market.bars.backfill"
 JOB_RECONCILE = "market.bars.reconcile"
-ALL_JOBS: tuple[str, ...] = (JOB_QUOTES, JOB_BARS_DAILY, JOB_BACKFILL, JOB_RECONCILE)
+JOB_ACCURACY = "market.accuracy"
+JOB_TURNOVER_BACKFILL = "market.bars.reconcile.backfill"
+ALL_JOBS: tuple[str, ...] = (
+    JOB_QUOTES, JOB_BARS_DAILY, JOB_BACKFILL, JOB_RECONCILE, JOB_TURNOVER_BACKFILL, JOB_ACCURACY,
+)
 DEFAULT_ONCE_JOBS: tuple[str, ...] = (JOB_QUOTES, JOB_BARS_DAILY, JOB_BACKFILL)
 
 QUOTE_SCAN_COLUMNS: tuple[str, ...] = tuple(dict.fromkeys((*price._QUOTE_COLUMNS, *ms.EXTRA_COLUMNS)))
@@ -88,6 +121,24 @@ BACKFILL_MARGIN_DAYS = 21
 BACKFILL_BUSY_PAUSE_SECONDS = 30.0
 IDLE_RECHECK_SECONDS = 900.0
 ERROR_RETRY_SECONDS = 120.0
+# İş Yatırım OneEndeks passes (official lots / TL turnover): paced for the WAF and time-boxed.
+OFFICIAL_PASS_CONCURRENCY = 3
+OFFICIAL_PASS_PAUSE_SECONDS = (0.05, 0.15)
+OFFICIAL_PASS_BUDGET_SECONDS = 180.0
+OFFICIAL_PROBE_SYMBOLS = 3  # core symbols read first; all between sessions → the pass is skipped
+# Historical turnover/VWAP enrichment (market.bars.reconcile.backfill): one HisseTekil window of
+# at most this many days per symbol and pass (a 3-year window answers in 1-6 s), politely paced.
+TURNOVER_CHUNK_DAYS = 1100
+TURNOVER_CONCURRENCY = 3
+TURNOVER_PAUSE_SECONDS = (0.5, 1.0)
+TURNOVER_BATCH_SIZE = 25  # symbols per background pass
+TURNOVER_MAX_SECONDS = 300.0  # time budget of one background pass
+# İş Yatırım's history may start a few sessions after the first stored bar.
+TURNOVER_DONE_TOLERANCE_DAYS = 7
+# Stored volume vs HG_HACIM / HG_AOF: HG_AOF has three decimals, so the implied lot count is
+# only this exact (relative); a larger gap on the latest session means TradingView's short count.
+IMPLIED_LOTS_FLOOR = 0.0001
+IMPLIED_LOTS_PRICE_STEP = 0.0006
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +245,118 @@ async def run_quotes(symbols: Sequence[str] | None = None, *, now: datetime | No
             if not quotes and scan_error:
                 raise MarketDataError(scan_error, status_code=503)
             return {"job": JOB_QUOTES, **run.details, "items_total": run.items_total, "items_ok": run.items_ok}
+
+
+# ---------------------------------------------------------------------------
+# Official figures (İş Yatırım OneEndeks): lots and TL turnover of a finished session
+# ---------------------------------------------------------------------------
+
+async def fetch_official_quotes(
+    symbols: Sequence[str],
+    *,
+    budget_seconds: float = OFFICIAL_PASS_BUDGET_SECONDS,
+    stop: asyncio.Event | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """OneEndeks quotes of ``symbols`` — paced (the site sits behind a WAF) and time-boxed.
+
+    Returns ``(quotes, failures)``; symbols not reached within ``budget_seconds`` are
+    reported as failures (``"budget"``) and left to the reconciliation.
+    """
+    started = _time.monotonic()
+    semaphore = asyncio.Semaphore(OFFICIAL_PASS_CONCURRENCY)
+    quotes: dict[str, dict[str, Any]] = {}
+    failures: dict[str, str] = {}
+
+    async def one(symbol: str) -> None:
+        async with semaphore:
+            if (stop is not None and stop.is_set()) or _time.monotonic() - started > budget_seconds:
+                failures[symbol] = "budget"
+                return
+            try:
+                quotes[symbol] = await fetch_quote(symbol)
+            except MarketDataError as e:
+                failures[symbol] = e.message
+            await asyncio.sleep(random.uniform(*OFFICIAL_PASS_PAUSE_SECONDS))
+
+    await asyncio.gather(*(one(symbol) for symbol in dict.fromkeys(symbols)))
+    return quotes, failures
+
+
+def apply_official_volumes(bar_rows: list[dict[str, Any]], official: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Put OneEndeks lots / TL turnover on the final bars of the same session (in place).
+
+    Returns ``[{symbol, bar_date, tradingview, official}]`` for every bar whose
+    TradingView lot count differed from the official one.
+    """
+    differences: list[dict[str, Any]] = []
+    for row in bar_rows:
+        figures = ms.official_session_figures(official.get(row["symbol"]), row["bar_date"]) if row["is_final"] else None
+        if figures is None:
+            continue
+        lots, turnover = figures
+        tradingview = finite_float(row.get("volume"))
+        if tradingview != lots:
+            differences.append(
+                {"symbol": row["symbol"], "bar_date": row["bar_date"].isoformat(), "tradingview": tradingview,
+                 "official": lots}
+            )
+        row["volume"] = lots
+        if turnover is not None:
+            row["turnover"] = round(turnover, 2)
+    return differences
+
+
+def official_volume_check(
+    stored: dict[str, Any],
+    official: dict[str, dict[str, Any]],
+    differences: Sequence[dict[str, Any]],
+    failures: dict[str, str],
+    session_date: date,
+) -> Any:
+    """``market.volume_vs_oneendeks`` (subject ``universe``): stored final bars vs OneEndeks.
+
+    ``stored`` maps symbol → stored bar of ``session_date`` after the write. Status:
+    every compared bar must carry exactly the official lot count (``fail`` above 1 %
+    of them). ``tradingview_short`` lists how many same-day TradingView counts were
+    below the official ones (informational: that is why the official count is used).
+    """
+    compared = 0
+    mismatched: list[dict[str, Any]] = []
+    for symbol, quote in official.items():
+        bar = stored.get(symbol)
+        figures = ms.official_session_figures(quote, session_date)
+        if bar is None or figures is None or not bar.is_final:
+            continue
+        compared += 1
+        lots, turnover = figures
+        volume = finite_float(bar.volume)
+        stored_turnover = finite_float(bar.turnover)
+        if volume != lots:
+            mismatched.append({"symbol": symbol, "stored_lots": volume, "official_lots": lots,
+                               "stored_turnover": stored_turnover, "official_turnover": turnover})
+    if not compared:
+        return None
+    share = len(mismatched) / compared
+    short = [d for d in differences if (d["tradingview"] or 0) < d["official"]]
+    worst = sorted(short, key=lambda d: -(d["official"] - (d["tradingview"] or 0)) / d["official"])[:20]
+    return quality_check(
+        "market.volume_vs_oneendeks",
+        "pass" if not mismatched else ("warn" if share <= 0.01 else "fail"),
+        subject="universe",
+        expected=float(compared),
+        actual=float(compared - len(mismatched)),
+        deviation=round(share, 6),
+        details={
+            "session_date": session_date.isoformat(),
+            "rule": "stored final bar volume = OneEndeks quantity (lots), turnover = OneEndeks volume (TL)",
+            "mismatches": mismatched[:20],
+            "tradingview_short": len(short),
+            "tradingview_short_worst": [
+                {**d, "missing_lots": d["official"] - (d["tradingview"] or 0)} for d in worst
+            ],
+            "official_failures": len(failures),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +495,24 @@ async def run_daily_bars(symbols: Sequence[str] | None = None, *, now: datetime 
                     }
                 )
 
+            # Official lot count / TL turnover of the day's final stock bars (one paced OneEndeks pass).
+            stocks = {t.symbol for t in targets if t.security_type != "index"}
+            final_stocks = [r["symbol"] for r in bar_rows if r["is_final"] and r["symbol"] in stocks]
+            official: dict[str, dict[str, Any]] = {}
+            official_failures: dict[str, str] = {}
+            official_skipped: str | None = None
+            if final_stocks:
+                # A run before the open (catch-up after a restart) meets OneEndeks's overnight reset:
+                # probe the first core symbols instead of reading ~600 empty rows.
+                official, official_failures = await fetch_official_quotes(final_stocks[:OFFICIAL_PROBE_SYMBOLS])
+                if any(quote.get("session_date") is not None for quote in official.values()):
+                    rest, rest_failures = await fetch_official_quotes(final_stocks[OFFICIAL_PROBE_SYMBOLS:])
+                    official.update(rest)
+                    official_failures.update(rest_failures)
+                elif official:
+                    official_skipped = "between_sessions"
+            differences = apply_official_volumes(bar_rows, official)
+
             # Symbols the scanner lacks (XUSIN): the İş Yatırım quote carries the day's OHLCV.
             missing = [s for s in wanted if s not in rows]
             fallback = await fetch_isyatirim_quotes(missing[: max(0, settings.market_isy_fallback_max_symbols)])
@@ -340,19 +521,29 @@ async def run_daily_bars(symbols: Sequence[str] | None = None, *, now: datetime 
                 if bar is not None:
                     bar_rows.append({**bar, "company_id": ids.get(symbol)})
 
-            # Cross-source check of the same delayed snapshot (a rotating sample of the core).
+            # Cross-source check of the same delayed snapshot (a rotating sample of the core);
+            # after the close the official pass already holds the sample's quotes.
             sample = [s for s in pick_quote_sample(targets, current.date()) if s in rows]
-            check = quote_cross_check(rows, await fetch_isyatirim_quotes(sample)) if sample else None
+            sample_quotes = {s: official[s] for s in sample if s in official}
+            unread = [s for s in sample if s not in official]
+            if unread:
+                sample_quotes.update(await fetch_isyatirim_quotes(unread))
+            check = quote_cross_check(rows, sample_quotes) if sample_quotes else None
 
             breaks: dict[str, str] = {}
+            volume_check = None
             async with async_session_factory() as session:
                 repo = MarketBarRepository(session)
                 for session_date, session_rows in by_session.items():
                     previous = await repo.last_final_bars(list(session_rows), before=session_date)
                     breaks.update(continuity_breaks(session_rows, previous))
                 stats = await upsert_bars(session, bar_rows)
-                if check is not None:
-                    session.add(check)
+                official_days = sorted({r["bar_date"] for r in bar_rows if r["is_final"] and r["symbol"] in official})
+                if official_days:
+                    day = official_days[-1]
+                    stored = {symbol: bar for (symbol, _), bar in (await repo.bars_on(list(official), [day])).items()}
+                    volume_check = official_volume_check(stored, official, differences, official_failures, day)
+                session.add_all([c for c in (check, volume_check) if c is not None])
                 await session.commit()
             flagged = await _flag_refresh(breaks, current.date())
 
@@ -374,6 +565,14 @@ async def run_daily_bars(symbols: Sequence[str] | None = None, *, now: datetime 
                     if check is not None
                     else None
                 ),
+                "official_volume": {
+                    "skipped": official_skipped,
+                    "quotes": len(official),
+                    "failures": len(official_failures),
+                    "failed_symbols": sorted(official_failures)[:20],
+                    "tradingview_differs": len(differences),
+                    "check": volume_check.status if volume_check is not None else None,
+                },
                 "duration_seconds": _duration(started),
             }
             return {"job": JOB_BARS_DAILY, **run.details, "items_total": run.items_total}
@@ -705,6 +904,61 @@ def reconcile_symbol(
     )
 
 
+def official_volume_candidate(
+    symbol: str, isy_rows: Sequence[IsyDailyRow], stored: dict[date, Any], now: datetime
+) -> dict[str, Any] | None:
+    """The latest finished session whose stored lot count still disagrees with ``HG_HACIM / HG_AOF``.
+
+    Only as-traded sessions (stored close = ``HG_KAPANIS``) are considered; the
+    tolerance follows the precision of ``HG_AOF`` (three decimals).
+    """
+    latest = isy_rows[-1] if isy_rows else None
+    if latest is None or latest.close is None or not latest.vwap or not price.is_session_final(latest.bar_date, now):
+        return None
+    bar = stored.get(latest.bar_date)
+    implied = latest.lots
+    volume = finite_float(getattr(bar, "volume", None)) if bar is not None else None
+    if bar is None or not bar.is_final or implied is None or not volume:
+        return None
+    if not ms.closes_match(finite_float(bar.close), latest.close, CLOSE_MATCH_TOLERANCE):
+        return None
+    tolerance = max(IMPLIED_LOTS_FLOOR, IMPLIED_LOTS_PRICE_STEP / latest.vwap)
+    if abs(volume / implied - 1) <= tolerance:
+        return None
+    return {"symbol": symbol, "bar_date": latest.bar_date, "stored": volume, "implied": round(implied)}
+
+
+async def apply_official_lots(
+    candidates: Sequence[dict[str, Any]], *, stop: asyncio.Event | None = None
+) -> dict[str, Any]:
+    """Re-read OneEndeks for ``candidates`` and store the official lot count of their session."""
+    if not candidates:
+        return {"candidates": 0, "fixed": 0}
+    quotes, failures = await fetch_official_quotes([c["symbol"] for c in candidates], stop=stop)
+    rows: list[dict[str, Any]] = []
+    for candidate in candidates:
+        figures = ms.official_session_figures(quotes.get(candidate["symbol"]), candidate["bar_date"])
+        if figures is None or figures[0] == candidate["stored"]:
+            continue
+        rows.append({"symbol": candidate["symbol"], "interval": "1d", "bar_date": candidate["bar_date"],
+                     "volume": figures[0]})
+    if rows:
+        async with async_session_factory() as session:
+            await enrich_bars(session, rows)
+            await session.commit()
+    stored_by_symbol = {c["symbol"]: c for c in candidates}
+    return {
+        "candidates": len(candidates),
+        "fixed": len(rows),
+        "failures": len(failures),
+        "examples": [
+            {"symbol": r["symbol"], "bar_date": r["bar_date"].isoformat(), "stored": stored_by_symbol[r["symbol"]]["stored"],
+             "implied": stored_by_symbol[r["symbol"]]["implied"], "official": r["volume"]}
+            for r in rows[:10]
+        ],
+    }
+
+
 async def run_reconcile(
     symbols: Sequence[str] | None = None,
     *,
@@ -746,12 +1000,16 @@ async def run_reconcile(
             volume_mismatches: list[dict[str, Any]] = []
             splits: dict[str, float] = {}
             stale: dict[str, str] = {}
+            candidates: list[dict[str, Any]] = []
             max_dev = 0.0
             async with async_session_factory() as session:
                 repo = MarketBarRepository(session)
                 for symbol, rows in fetched.items():
                     stored = {bar.bar_date: bar for bar in await repo.series(symbol, since=start)}
                     outcome = reconcile_symbol(symbol, rows, stored, current)
+                    candidate = official_volume_candidate(symbol, rows, stored, current)
+                    if candidate is not None:
+                        candidates.append(candidate)
                     enrich_rows.extend(outcome.enrich)
                     fallback_rows.extend({**r, "company_id": ids.get(symbol)} for r in outcome.fallback_rows)
                     compared += outcome.compared
@@ -771,6 +1029,8 @@ async def run_reconcile(
                     )
                 )
                 await session.commit()
+            # The latest session's official lot count where the stored one is still TradingView's short count.
+            official_lots = await apply_official_lots(candidates, stop=stop)
             refresh = await _flag_refresh(stale, current.date())
 
             run.items_total = len(targets)
@@ -784,6 +1044,7 @@ async def run_reconcile(
                 "volume_compared": volume_compared,
                 "volume_mismatches": len(volume_mismatches),
                 "enriched": enriched,
+                "official_lots": official_lots,
                 "fallback_bars": fallback_stats.as_dict(),
                 "splits": splits,
                 "refresh_flagged": refresh,
@@ -841,6 +1102,438 @@ def reconcile_checks(
 
 
 # ---------------------------------------------------------------------------
+# market.bars.reconcile.backfill — İş Yatırım turnover/VWAP for the stored history
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class TurnoverItem:
+    target: Target
+    start: date
+    end: date
+    first_stored: date
+
+    @property
+    def completes(self) -> bool:
+        return self.start <= self.first_stored + timedelta(days=TURNOVER_DONE_TOLERANCE_DAYS)
+
+
+def _iso_date(value: Any) -> date | None:
+    try:
+        return date.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+
+
+def plan_turnover_backfill(
+    targets: Sequence[Target], coverage: dict[str, Any], markers: dict[str, HistoryMarker], today: date
+) -> list[TurnoverItem]:
+    """The next ≤ ``TURNOVER_CHUNK_DAYS`` window of every stock whose stored history is not yet
+    enriched back to its first bar (newest window first; core before the rest of the universe)."""
+    items: list[TurnoverItem] = []
+    for target in targets:
+        cov = coverage.get(target.symbol)
+        if cov is None or target.security_type == "index":
+            continue
+        extra = markers[target.symbol].extra if target.symbol in markers else {}
+        if extra.get("turnover_failed_on") == today.isoformat():
+            continue  # İş Yatırım refused it today: retry tomorrow
+        done_from = _iso_date(extra.get("turnover_from"))
+        if done_from is not None and done_from <= cov.first_date + timedelta(days=TURNOVER_DONE_TOLERANCE_DAYS):
+            continue
+        end = done_from - timedelta(days=1) if done_from is not None else today
+        start = max(cov.first_date, end - timedelta(days=TURNOVER_CHUNK_DAYS))
+        items.append(TurnoverItem(target, start, end, cov.first_date))
+    return sorted(items, key=lambda item: (0 if item.target.tier in ("core", "index") else 1, item.target.symbol))
+
+
+async def _enrich_turnover_window(item: TurnoverItem, isy_rows: Sequence[IsyDailyRow], now: datetime) -> dict[str, Any]:
+    """Reconcile one window (``reconcile_symbol`` rules: OHLCV untouched, VWAP on the stored basis)."""
+    symbol = item.target.symbol
+    async with async_session_factory() as session:
+        stored = {
+            bar.bar_date: bar
+            for bar in await MarketBarRepository(session).series(symbol, since=item.start, until=item.end)
+        }
+        outcome = reconcile_symbol(symbol, isy_rows, stored, now)
+        enriched = await enrich_bars(session, outcome.enrich)
+        await HistoryMarkerRepository(session).merge_extra(
+            symbol,
+            {"turnover_from": item.start.isoformat(), "turnover_done": item.completes,
+             "turnover_checked_on": now.date().isoformat()},
+        )
+        await session.commit()
+    return {
+        "symbol": symbol,
+        "start": item.start.isoformat(),
+        "end": item.end.isoformat(),
+        "sessions": len(isy_rows),
+        "stored": len(stored),
+        "compared": outcome.compared,
+        "enriched": enriched,
+        "close_mismatches": len(outcome.close_mismatches),
+        "split_ratio": round(outcome.split_ratio, 6) if outcome.split_ratio is not None else None,
+        "done": item.completes,
+    }
+
+
+async def run_turnover_backfill(
+    symbols: Sequence[str] | None = None,
+    *,
+    max_symbols: int | None = None,
+    max_seconds: float | None = None,
+    until_done: bool | None = None,
+    stop: asyncio.Event | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """İş Yatırım turnover/VWAP for the stored history, one window per symbol and pass.
+
+    Background passes (``symbols=None``) handle ``TURNOVER_BATCH_SIZE`` symbols within
+    ``TURNOVER_MAX_SECONDS``; explicit ``symbols`` are walked back to their first stored
+    bar (``until_done``). Resumable: progress lives in the ``market.history:*`` markers.
+    """
+    async with source_lock(JOB_TURNOVER_BACKFILL) as acquired:
+        if not acquired:
+            return {"job": JOB_TURNOVER_BACKFILL, "skipped": "locked"}
+        current = now or price.now_istanbul()
+        today = current.date()
+        targets = [t for t in await load_targets(symbols, include_indices=False) if t.security_type != "index"]
+        walk = bool(symbols) if until_done is None else until_done
+        limit = max_symbols if max_symbols is not None else (len(targets) if symbols else TURNOVER_BATCH_SIZE)
+        budget = max_seconds if max_seconds is not None else (None if symbols else TURNOVER_MAX_SECONDS)
+        async with run_job(JOB_TURNOVER_BACKFILL, scope=_scope(symbols)) as run:
+            started = _time.monotonic()
+            results: list[dict[str, Any]] = []
+            failures: dict[str, str] = {}
+            pending_before: int | None = None
+            plan: list[TurnoverItem] = []
+            semaphore = asyncio.Semaphore(TURNOVER_CONCURRENCY)
+            while stop is None or not stop.is_set():
+                symbol_list = [t.symbol for t in targets]
+                async with async_session_factory() as session:
+                    coverage = await MarketBarRepository(session).coverage(symbol_list)
+                    markers = await HistoryMarkerRepository(session).get_many(symbol_list)
+                plan = [item for item in plan_turnover_backfill(targets, coverage, markers, today)
+                        if item.target.symbol not in failures]
+                if pending_before is None:
+                    pending_before = len(plan)
+                if not plan or (budget is not None and _time.monotonic() - started > budget):
+                    break
+
+                async def one(item: TurnoverItem) -> None:
+                    async with semaphore:
+                        if (stop is not None and stop.is_set()) or (
+                            budget is not None and _time.monotonic() - started > budget
+                        ):
+                            return
+                        symbol = item.target.symbol
+                        try:
+                            rows = await fetch_daily_history(symbol, item.start, item.end)
+                            results.append(await _enrich_turnover_window(item, rows, current))
+                        except MarketDataError as e:
+                            failures[symbol] = e.message
+                            async with async_session_factory() as session:
+                                await HistoryMarkerRepository(session).merge_extra(
+                                    symbol, {"turnover_failed_on": today.isoformat(), "turnover_error": e.message[:200]}
+                                )
+                                await session.commit()
+                        await asyncio.sleep(random.uniform(*TURNOVER_PAUSE_SECONDS))
+
+                await asyncio.gather(*(one(item) for item in plan[:limit]))
+                if not walk:
+                    break
+            async with async_session_factory() as session:
+                symbol_list = [t.symbol for t in targets]
+                coverage = await MarketBarRepository(session).coverage(symbol_list)
+                markers = await HistoryMarkerRepository(session).get_many(symbol_list)
+            remaining = plan_turnover_backfill(targets, coverage, markers, today)
+            run.items_total = len({r["symbol"] for r in results}) + len(failures)
+            run.items_ok = len({r["symbol"] for r in results})
+            run.items_failed = len(failures)
+            run.details = {
+                "pending_before": pending_before or 0,
+                "pending_after": len(remaining),
+                "windows": len(results),
+                "sessions": sum(r["sessions"] for r in results),
+                "compared": sum(r["compared"] for r in results),
+                "enriched": sum(r["enriched"] for r in results),
+                "close_mismatches": sum(r["close_mismatches"] for r in results),
+                "completed_symbols": sorted({r["symbol"] for r in results if r["done"]})[:100],
+                "splits": {r["symbol"]: r["split_ratio"] for r in results if r["split_ratio"] is not None},
+                "failures": dict(list(failures.items())[:20]),
+                "duration_seconds": _duration(started),
+            }
+            return {"job": JOB_TURNOVER_BACKFILL, **run.details}
+
+
+# ---------------------------------------------------------------------------
+# market.accuracy — served per-symbol values vs the official figures
+# ---------------------------------------------------------------------------
+
+ACCURACY_TV_COLUMNS: tuple[str, ...] = (
+    "close", "change_abs", "volume", "Value.Traded", "market_cap_basic", "total_shares_outstanding",
+    "price_book_fq", "price_book_ratio", "update_time", "time",
+)
+PB_WARN_TOLERANCE = 0.02  # served P/B within 2 % of the expected one (other rounding) → warn
+SHARES_WARN_TOLERANCE = 0.005
+VOLUME_WARN_TOLERANCE = 0.01
+
+
+@dataclass
+class AccuracyInputs:
+    """Everything one symbol's accuracy checks compare (see :func:`run_accuracy_checks`)."""
+
+    symbol: str
+    served: dict[str, Any]  # the fast-info payload's ``fast_info`` block
+    tradingview: dict[str, Any]  # TradingView scanner row (:data:`ACCURACY_TV_COLUMNS`)
+    official: dict[str, Any] | None  # a fresh İş Yatırım OneEndeks quote
+    card: dict[str, Any] | None = None  # İş Yatırım company card (informational)
+    stored_capital: float | None = None  # companies.paid_in_capital
+    stored_bar: Any | None = None  # latest stored daily bar (what /prices/latest serves)
+
+    @property
+    def last(self) -> float | None:
+        return price._positive(self.served.get("last_price"))
+
+    @property
+    def tv_session(self) -> date | None:
+        return price.session_date_from_epoch(self.tradingview.get("time"))
+
+
+def _relative(actual: float | None, expected: float | None) -> float | None:
+    if actual is None or expected is None or expected == 0:
+        return None
+    return round(abs(actual / expected - 1), 8)
+
+
+def pb_field_check(inputs: AccuracyInputs) -> DataQualityCheck | None:
+    """``market.pb_field``: served P/B vs last × paid-in capital / latest-quarter parent equity.
+
+    Expected = the own calculation from OneEndeks ``capital``/``equity``, else
+    TradingView ``price_book_fq``; ``price_book_ratio`` (year-end equity) is shown only
+    as the legacy value.
+    """
+    served = finite_float(inputs.served.get("pb_ratio"))
+    official = inputs.official or {}
+    capital, equity, last = price._positive(official.get("capital")), finite_float(official.get("equity")), inputs.last
+    own = last * capital / equity if last is not None and capital is not None and equity else None
+    tv_fq = finite_float(inputs.tradingview.get("price_book_fq"))
+    expected = round(own, 2) if own is not None else (round(tv_fq, 2) if tv_fq is not None else None)
+    if served is None and expected is None:
+        return None
+    deviation = _relative(served, expected)
+    if served is not None and expected is not None and abs(served - expected) <= 0.0051:
+        status = "pass"
+    elif deviation is not None and deviation <= PB_WARN_TOLERANCE:
+        status = "warn"
+    else:
+        status = "fail"
+    card = inputs.card or {}
+    return quality_check(
+        "market.pb_field",
+        status,
+        subject=inputs.symbol,
+        expected=expected,
+        actual=served,
+        deviation=deviation,
+        details={
+            "rule": "PD/DD = son fiyat × ödenmiş sermaye / son çeyrek ana ortaklık özkaynakları (İş Yatırım); "
+            "yoksa TradingView price_book_fq",
+            "served_source": inputs.served.get("pb_source"),
+            "own_calc": round(own, 4) if own is not None else None,
+            "tradingview_price_book_fq": round(tv_fq, 4) if tv_fq is not None else None,
+            "legacy_tradingview_price_book_ratio": finite_float(inputs.tradingview.get("price_book_ratio")),
+            "isyatirim_card_pb": finite_float(card.get("pb_ratio")),
+            "last": last,
+            "capital": capital,
+            "parent_equity": equity,
+        },
+    )
+
+
+def shares_vs_paid_in_check(inputs: AccuracyInputs) -> DataQualityCheck | None:
+    """``market.shares_vs_paid_in``: served share count / market cap vs paid-in capital × last."""
+    from src.adapters.fundamentals_snapshot import _shares_outstanding  # legacy estimate, for the record
+
+    served_shares = finite_float(inputs.served.get("shares"))
+    served_cap = finite_float(inputs.served.get("market_cap"))
+    official_capital = price._positive((inputs.official or {}).get("capital"))
+    capital = official_capital or price._positive(inputs.stored_capital)
+    last = inputs.last
+    if capital is None or last is None:
+        return None
+    expected_cap = round(last * capital, 2)
+    shares_deviation = _relative(served_shares, float(round(capital)))
+    cap_deviation = _relative(served_cap, expected_cap)
+    exact = served_shares is not None and abs(served_shares - round(capital)) <= 1 and (cap_deviation or 0) <= 1e-6
+    if exact and cap_deviation is not None:
+        status = "pass"
+    elif max(shares_deviation or 1, cap_deviation or 1) <= SHARES_WARN_TOLERANCE:
+        status = "warn"
+    else:
+        status = "fail"
+    tv = inputs.tradingview
+    card = inputs.card or {}
+    close, change = finite_float(tv.get("close")), finite_float(tv.get("change_abs"))
+    legacy = _shares_outstanding(
+        finite_float(card.get("market_cap")),
+        finite_float(tv.get("market_cap_basic")),
+        close - change if close is not None and change is not None else None,
+        close,
+        finite_float(tv.get("total_shares_outstanding")),
+    )
+    return quality_check(
+        "market.shares_vs_paid_in",
+        status,
+        subject=inputs.symbol,
+        expected=float(round(capital)),
+        actual=served_shares,
+        deviation=shares_deviation,
+        details={
+            "rule": "pay adedi = ödenmiş sermaye (1 TL nominal); piyasa değeri = son fiyat × ödenmiş sermaye",
+            "served_source": inputs.served.get("shares_source"),
+            "served_market_cap": served_cap,
+            "expected_market_cap": expected_cap,
+            "market_cap_deviation": cap_deviation,
+            "isyatirim_capital": official_capital,
+            "stored_paid_in_capital": price._positive(inputs.stored_capital),
+            "tradingview_total_shares_outstanding": finite_float(tv.get("total_shares_outstanding")),
+            "tradingview_market_cap_basic": finite_float(tv.get("market_cap_basic")),
+            "isyatirim_card_market_cap": finite_float(card.get("market_cap")),
+            "legacy_shares": legacy,
+            "legacy_market_cap": round(last * legacy, 2) if legacy is not None else None,
+        },
+    )
+
+
+def volume_vs_oneendeks_check(inputs: AccuracyInputs, *, now: datetime) -> DataQualityCheck | None:
+    """``market.volume_vs_oneendeks``: served lots / TL turnover (fast-info and the stored daily bar)
+    vs OneEndeks ``quantity`` / ``volume`` of the same session — exact once the session is final."""
+    session_date = inputs.tv_session
+    figures = ms.official_session_figures(inputs.official, session_date)
+    if figures is None:
+        return None
+    lots, turnover = figures
+    served_volume = finite_float(inputs.served.get("volume"))
+    served_amount = finite_float(inputs.served.get("amount"))
+    bar = inputs.stored_bar
+    bar_volume = finite_float(getattr(bar, "volume", None)) if bar is not None else None
+    bar_turnover = finite_float(getattr(bar, "turnover", None)) if bar is not None else None
+    final = session_date is not None and price.is_session_final(session_date, now)
+    bar_is_session = bar is not None and bar.bar_date == session_date and bar.is_final
+    served_exact = served_volume == lots and (
+        turnover is None or (served_amount is not None and abs(served_amount - turnover) <= 0.5)
+    )
+    bar_exact = not (final and bar_is_session) or (
+        bar_volume == lots and (turnover is None or (bar_turnover is not None and abs(bar_turnover - turnover) <= 1.0))
+    )
+    deviation = _relative(served_volume, lots)
+    if served_exact and bar_exact:
+        status = "pass"
+    elif max(deviation if deviation is not None else 1, _relative(bar_volume, lots) or 0) <= VOLUME_WARN_TOLERANCE:
+        status = "warn"
+    else:
+        status = "fail"
+    tv = inputs.tradingview
+    return quality_check(
+        "market.volume_vs_oneendeks",
+        status,
+        subject=inputs.symbol,
+        expected=lots,
+        actual=served_volume,
+        deviation=deviation,
+        details={
+            "session_date": session_date.isoformat() if session_date else None,
+            "session_final": final,
+            "served_source": inputs.served.get("volume_source"),
+            "served_amount": served_amount,
+            "official_turnover": turnover,
+            "stored_bar": {
+                "bar_date": bar.bar_date.isoformat(), "volume": bar_volume, "turnover": bar_turnover,
+                "is_final": bar.is_final,
+            } if bar is not None else None,
+            "tradingview_volume": finite_float(tv.get("volume")),
+            "tradingview_value_traded": finite_float(tv.get("Value.Traded")),
+            "served_updated_at": inputs.served.get("updated_at"),
+            "session_state": inputs.served.get("session_state"),
+        },
+    )
+
+
+async def run_accuracy_checks(
+    symbols: Sequence[str] | None = None, *, now: datetime | None = None, include_card: bool | None = None
+) -> dict[str, Any]:
+    """Served fast-info values vs official figures → ``data_quality_checks`` rows per symbol.
+
+    ``symbols`` defaults to the day's rotating core sample (:func:`pick_quote_sample`);
+    ``include_card`` (default: only for explicit symbols) adds the İş Yatırım company
+    card to the details (2-3 s per symbol).
+    """
+    from src.adapters import fundamentals_snapshot  # the adapter layer builds the served payload
+
+    async with run_job(JOB_ACCURACY, scope=_scope(symbols)) as run:
+        started = _time.monotonic()
+        current = now or price.now_istanbul()
+        if symbols:
+            wanted = list(dict.fromkeys(s.strip().upper() for s in symbols if s and s.strip()))
+        else:
+            wanted = pick_quote_sample(await load_targets(include_indices=False), current.date())
+        with_card = bool(symbols) if include_card is None else include_card
+        tv_rows = await tradingview_scan(wanted, ACCURACY_TV_COLUMNS) if wanted else {}
+        official, failures = await fetch_official_quotes(wanted) if wanted else ({}, {})
+        async with async_session_factory() as session:
+            capitals = await paid_in_capitals(session, wanted)
+            repo = MarketBarRepository(session)
+            bars = {}
+            for symbol in wanted:
+                series = await repo.series(symbol, since=current.date() - timedelta(days=10))
+                bars[symbol] = series[-1] if series else None
+        checks: list[DataQualityCheck] = []
+        results: list[dict[str, Any]] = []
+        for symbol in wanted:
+            payload = await fundamentals_snapshot.get_fast_info(symbol)
+            card = None
+            if with_card:
+                try:
+                    card = await price.get_company_metrics(symbol)
+                except MarketDataError:
+                    card = None
+            inputs = AccuracyInputs(
+                symbol=symbol,
+                served=dict(payload.get("fast_info") or {}),
+                tradingview=tv_rows.get(symbol) or {},
+                official=official.get(symbol),
+                card=card,
+                stored_capital=capitals.get(symbol),
+                stored_bar=bars.get(symbol),
+            )
+            for check in (pb_field_check(inputs), shares_vs_paid_in_check(inputs),
+                          volume_vs_oneendeks_check(inputs, now=current)):
+                if check is None:
+                    continue
+                checks.append(check)
+                results.append({"check": check.check_name, "subject": symbol, "status": check.status,
+                                "expected": check.expected, "actual": check.actual, "deviation": check.deviation,
+                                "details": check.details_json})
+        async with async_session_factory() as session:
+            session.add_all(checks)
+            await session.commit()
+        statuses: dict[str, dict[str, str]] = {}
+        for result in results:
+            statuses.setdefault(result["subject"], {})[result["check"]] = result["status"]
+        run.items_total = len(wanted)
+        run.items_ok = sum(1 for s in wanted if statuses.get(s) and all(v == "pass" for v in statuses[s].values()))
+        run.items_failed = len(wanted) - run.items_ok
+        run.details = {
+            "symbols": wanted,
+            "statuses": statuses,
+            "official_failures": failures,
+            "checks_written": len(checks),
+            "duration_seconds": _duration(started),
+        }
+        return {"job": JOB_ACCURACY, **run.details, "results": results}
+
+
+# ---------------------------------------------------------------------------
 # Manual / admin entry point
 # ---------------------------------------------------------------------------
 
@@ -849,6 +1542,8 @@ _RUNNERS = {
     JOB_BARS_DAILY: lambda symbols: run_daily_bars(symbols),
     JOB_BACKFILL: lambda symbols: run_backfill(symbols),
     JOB_RECONCILE: lambda symbols: run_reconcile(symbols),
+    JOB_TURNOVER_BACKFILL: lambda symbols: run_turnover_backfill(symbols),
+    JOB_ACCURACY: lambda symbols: run_accuracy_checks(symbols),
 }
 
 
@@ -966,11 +1661,15 @@ async def _backfill_loop(stop: asyncio.Event) -> None:
             continue
         try:
             result = await run_backfill(stop=stop)
+            busy = bool(result.get("pending_after")) and not result.get("skipped")
+            if not busy and not stop.is_set():
+                # Price history complete: enrich the older bars with İş Yatırım turnover/VWAP.
+                turnover = await run_turnover_backfill(stop=stop)
+                busy = bool(turnover.get("pending_after")) and not turnover.get("skipped")
         except Exception as e:
             logger.error("market_backfill_pass_failed", error=f"{type(e).__name__}: {e}")
             await sleep_or_stop(stop, ERROR_RETRY_SECONDS)
             continue
-        busy = bool(result.get("pending_after")) and not result.get("skipped")
         await sleep_or_stop(stop, BACKFILL_BUSY_PAUSE_SECONDS if busy else settings.market_backfill_idle_seconds)
 
 
@@ -983,6 +1682,8 @@ async def market_loop(stop: asyncio.Event) -> None:
                             name="market:bars.daily"),
         asyncio.create_task(_scheduled_loop(stop, JOB_RECONCILE, settings.market_reconcile_after, "20:00"),
                             name="market:bars.reconcile"),
+        asyncio.create_task(_scheduled_loop(stop, JOB_ACCURACY, settings.market_reconcile_after, "20:00"),
+                            name="market:accuracy"),
         asyncio.create_task(_backfill_loop(stop), name="market:bars.backfill"),
     ]
     try:

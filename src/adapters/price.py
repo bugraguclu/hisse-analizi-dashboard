@@ -43,8 +43,11 @@ logger = structlog.get_logger(__name__)
 
 OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 
-# BIST continuous trading ends 18:00, the closing auction ~18:10 and the free
-# TradingView feed is 15 min delayed: a daily bar is final after ~18:30.
+# BIST continuous trading ends 18:00; the closing auction and the trades at the
+# closing price ("kapanış fiyatından işlemler") end at 18:10 — İş Yatırım's
+# OneEndeks ``updateDate`` of a finished session is 18:09:5x. The free TradingView
+# feed is 15 min delayed: a daily bar is final after ~18:30.
+SESSION_CLOSE_TIME = dtime(18, 10)
 SESSION_FINAL_TIME = dtime(18, 30)
 
 NAN = float("nan")
@@ -96,6 +99,53 @@ def is_session_final(bar_date: date, now: datetime | None = None) -> bool:
     if bar_date < current.date():
         return True
     return bar_date == current.date() and current.time() >= SESSION_FINAL_TIME
+
+
+SESSION_OPEN = "open"
+SESSION_CLOSED = "closed"
+
+
+def session_state(session_date: date | None, now: datetime | None = None) -> str | None:
+    """``"closed"`` once the session's daily bar is final (:func:`is_session_final`), else ``"open"``."""
+    if not isinstance(session_date, date):
+        return None
+    return SESSION_CLOSED if is_session_final(session_date, now) else SESSION_OPEN
+
+
+def session_close_epoch(session_date: date) -> int:
+    return int(datetime.combine(session_date, SESSION_CLOSE_TIME, tzinfo=ISTANBUL_TZ).timestamp())
+
+
+def cap_to_session_close(timestamp: Any, session_date: date | None) -> int | None:
+    """Provider time capped at the session's close (18:10 Istanbul).
+
+    TradingView's ``update_time`` keeps advancing after the close (post-close
+    refreshes at ~19:20) although the data is the 18:10 state; the payloads show
+    the close instead.
+    """
+    epoch = finite_float(timestamp)
+    if epoch is None or epoch <= 0:
+        return None
+    seconds = int(epoch)
+    day = session_date if isinstance(session_date, date) else datetime.fromtimestamp(seconds, ISTANBUL_TZ).date()
+    return min(seconds, session_close_epoch(day))
+
+
+def with_session_view(quote: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+    """Copy of a canonical quote for API payloads: ``timestamp``/``updated_at`` capped at the
+    session close (:func:`cap_to_session_close`) and the additive ``session_state``
+    (``"open"`` | ``"closed"``, ``None`` when the session day is unknown)."""
+    view = dict(quote)
+    session_date = quote.get("session_date")
+    day = session_date if isinstance(session_date, date) else None
+    timestamp = cap_to_session_close(quote.get("timestamp"), day)
+    if timestamp is not None:
+        view["timestamp"] = timestamp
+        view["updated_at"] = _epoch_to_iso(timestamp)
+    if day is None and timestamp is not None:
+        day = datetime.fromtimestamp(timestamp, ISTANBUL_TZ).date()
+    view["session_state"] = session_state(day, now)
+    return view
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +257,12 @@ def window_start(spec: ChartPeriod, now: datetime | None = None) -> pd.Timestamp
     return None
 
 
+# Frontend indicator warmup (SMA/RSI/MACD need bars before the visible window
+# to be correct at its left edge) and a little room to pan left. Validated by
+# the router via FastAPI's Query(..., le=MAX_CHART_WARMUP_BARS).
+MAX_CHART_WARMUP_BARS = 300
+
+
 def split_chart_window(
     frame: pd.DataFrame, spec: ChartPeriod, now: datetime | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -248,10 +304,16 @@ async def _chart_source_bars(symbol: str, spec: ChartPeriod) -> pd.DataFrame:
     return await _get_long_bars(symbol, spec.yf_period, spec.interval)
 
 
+async def get_chart_window_parts(symbol: str, spec: ChartPeriod) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """``(window, before, period_reference(before))`` — ``before`` is exposed for warmup bars."""
+    window, before = split_chart_window(await _chart_source_bars(symbol, spec), spec)
+    return window, before, period_reference(before)
+
+
 async def get_chart_window(symbol: str, spec: ChartPeriod) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Bars trimmed to the period's real window plus :func:`period_reference` fields."""
-    window, before = split_chart_window(await _chart_source_bars(symbol, spec), spec)
-    return window, period_reference(before)
+    window, _before, reference = await get_chart_window_parts(symbol, spec)
+    return window, reference
 
 
 async def get_chart_bars(symbol: str, spec: ChartPeriod) -> pd.DataFrame:

@@ -235,11 +235,15 @@ async def test_history_payloads_carry_the_period_reference(monkeypatch):
     async def no_isyatirim(symbols):
         return {}
 
+    async def no_official(symbol):
+        raise isyatirim_prices.MarketDataError("İş Yatırım verisine ulaşılamadı", status_code=503)
+
     # Store unavailable (unit tests run without the market store): the live path is used.
     monkeypatch.setattr(settings, "market_store_enabled", False)
     monkeypatch.setattr(price, "get_daily_bars", fake_daily)
     monkeypatch.setattr(price, "get_quotes", no_quotes)
     monkeypatch.setattr(isyatirim_prices, "fetch_isyatirim_quotes", no_isyatirim)
+    monkeypatch.setattr(isyatirim_prices, "fetch_quote", no_official)
     monkeypatch.setattr(index_adapter, "get_company_metrics", no_metrics)
     monkeypatch.setattr(price, "now_istanbul", lambda: NOW)
 
@@ -300,3 +304,55 @@ def test_price_adapter_stores_todays_bar_after_the_close_and_fridays_bar_on_the_
     assert [r.trading_date for r in after_close] == [date(2026, 9, 18), date(2026, 9, 21), date(2026, 9, 22)]
     assert after_close[-1].close == 298.0
     assert [r.trading_date for r in saturday] == [date(2026, 9, 18)]
+
+
+async def test_chart_payloads_carry_warmup_bars_right_before_the_window(monkeypatch):
+    days = pd.bdate_range("2023-06-01", "2026-09-22", tz=ISTANBUL_TZ) + pd.Timedelta(hours=9)
+    daily = clean_bars(_bars(days, [float(i + 1) for i in range(len(days))]))
+
+    async def fake_daily(symbol):
+        return daily
+
+    async def nothing(*args, **kwargs):
+        return {}
+
+    async def no_official(symbol):
+        raise isyatirim_prices.MarketDataError("İş Yatırım verisine ulaşılamadı", status_code=503)
+
+    monkeypatch.setattr(settings, "market_store_enabled", False)
+    monkeypatch.setattr(price, "get_daily_bars", fake_daily)
+    monkeypatch.setattr(price, "get_quotes", nothing)
+    monkeypatch.setattr(isyatirim_prices, "fetch_isyatirim_quotes", nothing)
+    monkeypatch.setattr(isyatirim_prices, "fetch_quote", no_official)
+    monkeypatch.setattr(index_adapter, "get_company_metrics", nothing)
+    monkeypatch.setattr(price, "now_istanbul", lambda: NOW)
+
+    stock = await index_adapter.get_ticker_history("THYAO", "3mo", warmup=250)
+    before = daily[daily.index < pd.Timestamp("2026-06-22", tz=ISTANBUL_TZ)]
+    assert len(stock["warmup"]) == 250 and stock["warmup"][-1]["Date"] < stock["data"][0]["Date"]
+    assert stock["warmup"][-1]["Close"] == float(before["Close"].iloc[-1])  # the bar right before the window
+    assert stock["warmup"][0]["Close"] == float(before["Close"].iloc[-250])
+    assert set(stock["warmup"][0]) == set(stock["data"][0])  # same record shape
+    assert "warmup" not in await index_adapter.get_ticker_history("THYAO", "3mo")
+
+    index = await index_adapter.get_index_data("XU100", "1y", warmup=250)
+    assert len(index["warmup"]) == 250 and index["warmup"][-1]["Date"] < index["data"][0]["Date"]
+    capped = await index_adapter.get_index_data("XU100", "1y", warmup=10_000)
+    assert len(capped["warmup"]) == price.MAX_CHART_WARMUP_BARS == 300
+    assert "warmup" not in await index_adapter.get_index_data("XU100", "1y")
+
+
+async def test_live_chart_window_parts_expose_the_bars_before_the_window(monkeypatch):
+    days = pd.bdate_range("2025-06-02", "2026-09-22", tz=ISTANBUL_TZ) + pd.Timedelta(hours=9)
+    daily = clean_bars(_bars(days, [float(i + 1) for i in range(len(days))]))
+
+    async def source(symbol, spec):
+        return daily
+
+    monkeypatch.setattr(price, "_chart_source_bars", source)
+    monkeypatch.setattr(price, "now_istanbul", lambda: NOW)
+    window, before, reference = await price.get_chart_window_parts("THYAO", resolve_period("3mo"))
+    assert before.index[-1] < window.index[0] and len(before) + len(window) == len(daily)
+    assert reference["reference_close"] == float(before["Close"].iloc[-1])
+    same_window, same_reference = await price.get_chart_window("THYAO", resolve_period("3mo"))
+    assert same_window.equals(window) and same_reference == reference

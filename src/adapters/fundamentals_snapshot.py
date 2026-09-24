@@ -2,10 +2,12 @@
 
 import asyncio
 from collections.abc import Mapping
+from datetime import date, datetime
 from typing import Any
 
 import structlog
 
+from src.adapters import price
 from src.adapters.financial_adapter import (
     to_number,
 )
@@ -59,8 +61,17 @@ logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Live market snapshot (TradingView scanner + İş Yatırım company card)
+# Live market snapshot (TradingView scanner + İş Yatırım OneEndeks + company card)
 # ---------------------------------------------------------------------------
+#
+# Field sources (additive ``*_source`` fields and ``meta.notes`` say which one served):
+# * volume / amount — İş Yatırım OneEndeks lots / TL turnover of the same session,
+#   else TradingView ``volume`` / ``Value.Traded`` (close × lots);
+# * shares / market_cap — paid-in capital (OneEndeks ``capital``, else
+#   ``companies.paid_in_capital``) and last × capital, else the market-data estimate;
+# * pb_ratio — market cap / latest-quarter parent equity, else TradingView
+#   ``price_book_fq``; pe_ratio — TradingView ``price_earnings_ttm``;
+# * updated_at — provider time capped at the session close, + ``session_state``.
 
 _SNAPSHOT_COLUMNS = (
     "close",
@@ -80,7 +91,7 @@ _SNAPSHOT_COLUMNS = (
     "market_cap_basic",
     "total_shares_outstanding",
     "price_earnings_ttm",
-    "price_book_ratio",
+    "price_book_fq",  # latest quarter — never price_book_ratio (fiscal-year-end equity)
 )
 
 
@@ -96,7 +107,8 @@ def _shares_outstanding(
     last: float | None,
     reported_shares: float | None,
 ) -> float | None:
-    """Total share count (= paid-in capital; BIST shares have 1 TL nominal value).
+    """Market-data estimate of the share count — used only when the paid-in capital is unknown
+    (see :func:`src.services.market_service.share_count`).
 
     İş Yatırım's company-card market cap uses the full paid-in capital, like
     Borsa İstanbul, but it is priced at the previous close during the session and
@@ -131,19 +143,63 @@ def _shares_outstanding(
     return None
 
 
-def _snapshot_from_scan(row: Mapping[str, Any], metrics: Mapping[str, Any]) -> dict[str, Any]:
+def _row_session_date(row: Mapping[str, Any]) -> date | None:
+    stored = row.get("session_date")
+    if isinstance(stored, date) and not isinstance(stored, datetime):
+        return stored
+    return price.session_date_from_epoch(row.get("time"))
+
+
+def _snapshot_from_scan(
+    row: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+    *,
+    official: Mapping[str, Any] | None = None,
+    capital: market_service.CompanyCapital | None = None,
+    stored_capital: float | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """fast-info block from a scanner row (+ İş Yatırım card ``metrics``, OneEndeks ``official``
+    quote, the company's ``capital``/equity and ``companies.paid_in_capital``)."""
     last = to_number(row.get("close"))
     change_abs = to_number(row.get("change_abs"))
     previous_close = round(last - change_abs, 4) if last is not None and change_abs is not None else None
     high, low = to_number(row.get("high")), to_number(row.get("low"))
-    shares = _shares_outstanding(
-        to_number(metrics.get("market_cap")),
-        to_number(row.get("market_cap_basic")),
-        previous_close,
-        last,
-        to_number(row.get("total_shares_outstanding")),
+    session_date = _row_session_date(row)
+
+    count = market_service.share_count(capital.capital if capital else None, stored_capital)
+    if count.capital is not None:
+        shares: float | None = count.shares
+        shares_source: str | None = count.source
+        market_cap = count.market_cap(last)
+    else:
+        shares = _shares_outstanding(
+            to_number(metrics.get("market_cap")),
+            to_number(row.get("market_cap_basic")),
+            previous_close,
+            last,
+            to_number(row.get("total_shares_outstanding")),
+        )
+        shares_source = market_service.SHARES_SOURCE_MARKET if shares is not None else None
+        market_cap = last * shares if last is not None and shares is not None else to_number(row.get("market_cap_basic"))
+    pb_ratio, pb_source = market_service.price_to_book(
+        market_cap if count.capital is not None else None,
+        capital.equity if capital else None,
+        row.get("price_book_fq"),
     )
-    market_cap = last * shares if last is not None and shares is not None else to_number(row.get("market_cap_basic"))
+
+    figures = market_service.official_session_figures(dict(official) if official else None, session_date)
+    volume: float | None
+    amount: float | None
+    volume_source: str | None
+    if figures is not None:
+        volume, amount = figures
+        volume_source = market_service.VOLUME_SOURCE_ISYATIRIM
+    else:
+        volume, amount = to_number(row.get("volume")), to_number(row.get("Value.Traded"))
+        volume_source = market_service.VOLUME_SOURCE_TRADINGVIEW if volume is not None else None
+
+    quote_time = price.cap_to_session_close(row.get("update_time"), session_date)
     year_high = to_number(row.get("price_52_week_high"))
     year_low = to_number(row.get("price_52_week_low"))
     if year_high is not None and high is not None:
@@ -159,12 +215,12 @@ def _snapshot_from_scan(row: Mapping[str, Any], metrics: Mapping[str, Any]) -> d
         "day_high": high,
         "day_low": low,
         "previous_close": previous_close,
-        "volume": to_number(row.get("volume")),
-        "amount": to_number(row.get("Value.Traded")),
+        "volume": volume,
+        "amount": amount,
         "market_cap": round(market_cap, 2) if market_cap is not None else None,
         "shares": shares,
         "pe_ratio": _round(row.get("price_earnings_ttm")),
-        "pb_ratio": _round(row.get("price_book_ratio")),
+        "pb_ratio": pb_ratio,
         "year_high": year_high,
         "year_low": year_low,
         "fifty_day_average": _round(row.get("SMA50")),
@@ -175,7 +231,15 @@ def _snapshot_from_scan(row: Mapping[str, Any], metrics: Mapping[str, Any]) -> d
         "name": row.get("description"),
         "change": change_abs,
         "change_percent": _round(row.get("change")),
+        "updated_at": datetime.fromtimestamp(quote_time, ISTANBUL_TZ).isoformat() if quote_time else None,
+        "session_state": price.session_state(session_date, now),
+        "volume_source": volume_source,
+        "shares_source": shares_source,
+        "pb_source": pb_source,
     }
+
+
+_SOURCE_FIELDS = ("volume_source", "shares_source", "pb_source")
 
 
 @cached(TTL_METRICS, "fund_metrics")
@@ -196,14 +260,25 @@ async def _company_metrics_or_empty(ticker: str) -> dict[str, Any]:
 
 @cached(TTL_SNAPSHOT, "fund_snapshot")
 async def _market_snapshot(ticker: str) -> tuple[dict[str, Any], DataMeta]:
-    """Store-first scanner row (quote + extras; see ``market_service.get_snapshot_row``) + company card."""
-    (row, meta), metrics = await asyncio.gather(
+    """Store-first scanner row (quote + extras; see ``market_service.get_snapshot_row``) + company card
+    + İş Yatırım OneEndeks (official lots / TL turnover, paid-in capital, parent equity)."""
+    (row, meta), metrics, official, stored_capitals = await asyncio.gather(
         market_service.get_snapshot_row(ticker, _SNAPSHOT_COLUMNS),
         _company_metrics_or_empty(ticker),
+        market_service.get_official_quote(ticker),
+        market_service.get_paid_in_capitals(),
     )
     if not row or to_number(row.get("close")) is None:
         raise SymbolNotFoundError(ticker)
-    return _snapshot_from_scan(row, metrics), meta
+    snapshot = _snapshot_from_scan(
+        row,
+        metrics,
+        official=official,
+        capital=market_service.company_capital(ticker, official),
+        stored_capital=(stored_capitals or {}).get(ticker),
+    )
+    sources = {key: snapshot.get(key) for key in _SOURCE_FIELDS}
+    return snapshot, market_service.with_official_provenance(meta, sources) or meta
 
 
 async def _get_market_snapshot(ticker: str) -> dict[str, Any]:

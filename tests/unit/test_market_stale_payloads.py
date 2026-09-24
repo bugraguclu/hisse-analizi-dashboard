@@ -53,7 +53,12 @@ def outage(monkeypatch):
     async def no_isyatirim(symbols):
         return {}
 
+    async def isyatirim_down(symbol):
+        raise DOWN
+
     monkeypatch.setattr(ms, "_read_quotes", read_quotes)
+    monkeypatch.setattr(isyatirim_prices, "fetch_quote", isyatirim_down)
+    monkeypatch.setattr(ms, "_read_paid_in_capitals", nothing)
     monkeypatch.setattr(ms, "_read_bars", read_bars)
     monkeypatch.setattr(ms, "_write_quotes", nothing)
     monkeypatch.setattr(ms, "_write_bars", nothing)

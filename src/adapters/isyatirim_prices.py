@@ -13,9 +13,21 @@ market store (docs/data-platform.md §2):
   ``HG_AOF`` the session VWAP ("ağırlıklı ortalama fiyat") and ``SERMAYE`` the
   paid-in capital (a change marks a capital increase).
 * :func:`fetch_quote` — last/open/high/low, previous close (``dayClose``),
-  bid/ask, TL turnover (``volume``) and lot quantity (``quantity``). The
-  ``updateDate`` equals TradingView's ``update_time``: the same ~15 minute
-  delayed feed. Indices (``XUSIN``, which the TradingView scanner lacks) work too.
+  bid/ask, TL turnover (``volume``) and lot quantity (``quantity``), plus the
+  company's paid-in capital (``capital`` — TL, 1 TL nominal per lot, so it is the
+  share count BIST/İş Yatırım value the company with) and the parent-company
+  equity of the latest reported quarter (``equity`` — equals the fundamentals
+  store's ``parent_equity``, e.g. BIMAS 2026/06 201,353,398,000). During the
+  session ``updateDate`` equals TradingView's ``update_time`` (the same ~15 minute
+  delayed feed); after the close it stays at the session end (18:09:5x). The
+  ``quantity``/``volume`` of a finished session are the official totals: they
+  include the trades at the closing price that TradingView's same-day ``volume``
+  misses (2026-09-23: SASA +19,999,998 lots, KCHOL +607,900). Overnight (seen at
+  08:05) the row is reset for the next session — ``quantity``/``volume``/``high``/
+  ``low``/``bid``/``ask`` are 0 and ``dayClose`` is the last close — while
+  ``updateDate`` still names the previous session's 18:09:5x: such a row carries no
+  session figures (``session_date``/``volume``/``turnover`` = ``None``) and is not used
+  as a fallback quote. Indices (``XUSIN``, which the TradingView scanner lacks) work too.
 
 Errors follow the adapter convention: :class:`MarketDataError` (503 transport,
 502 payload) and :class:`SymbolNotFoundError` for unknown symbols.
@@ -225,11 +237,16 @@ def parse_quote(symbol: str, row: dict[str, Any]) -> dict[str, Any] | None:
     """``OneEndeks`` row → quote fields (``None`` without a positive last price).
 
     ``volume`` is the lot quantity (``quantity``) so it is comparable with the
-    TradingView volume; ``turnover`` is İş Yatırım's TL volume.
+    TradingView volume; ``turnover`` is İş Yatırım's TL volume. ``capital``
+    (paid-in capital, TL) and ``equity`` (latest-quarter parent equity, TL) are
+    ``None`` for indices. ``session_date`` is the Istanbul day of ``updateDate`` —
+    ``None`` (with ``volume``/``turnover``) for a row without trades (no high/low):
+    the overnight reset keeps the previous session's ``updateDate``.
     """
     last = _positive(row.get("last"))
     if last is None:
         return None
+    traded = _positive(row.get("high")) is not None and _positive(row.get("low")) is not None
     prev_close = _positive(row.get("dayClose"))
     change = round(last - prev_close, 6) if prev_close is not None else None
     change_pct = round((last - prev_close) / prev_close * 100, 6) if prev_close is not None else None
@@ -243,13 +260,16 @@ def parse_quote(symbol: str, row: dict[str, Any]) -> dict[str, Any] | None:
         "prev_close": prev_close,
         "change": change,
         "change_percent": change_pct,
-        "volume": _non_negative(row.get("quantity")),
-        "turnover": _non_negative(row.get("volume")),
+        "volume": _non_negative(row.get("quantity")) if traded else None,
+        "turnover": _non_negative(row.get("volume")) if traded else None,
         "bid": _positive(row.get("bid")),
         "ask": _positive(row.get("ask")),
         "quote_time": quote_time,
         "timestamp": int(quote_time.timestamp()) if quote_time else None,
         "updated_at": quote_time.astimezone(ISTANBUL_TZ).isoformat() if quote_time else None,
+        "session_date": quote_time.astimezone(ISTANBUL_TZ).date() if quote_time and traded else None,
+        "capital": _positive(row.get("capital")),
+        "equity": finite_float(row.get("equity")),
     }
 
 
@@ -286,7 +306,10 @@ async def fetch_isyatirim_quotes(symbols: list[str] | tuple[str, ...]) -> dict[s
         except MarketDataError as e:
             logger.info("isyatirim_quote_unavailable", symbol=symbol, error=e.message)
             return symbol, None
-        quote_time = quote.pop("quote_time", None)
+        quote.pop("quote_time", None)
+        if quote.get("session_date") is None:  # between sessions (overnight reset): nothing to show
+            logger.info("isyatirim_quote_between_sessions", symbol=symbol)
+            return symbol, None
         return symbol, {
             **quote,
             "symbol": symbol,
@@ -296,7 +319,6 @@ async def fetch_isyatirim_quotes(symbols: list[str] | tuple[str, ...]) -> dict[s
             "market_cap": None,
             "source": SOURCE,
             "delay_seconds": QUOTE_DELAY_SECONDS,
-            "session_date": quote_time.astimezone(ISTANBUL_TZ).date() if quote_time else None,
         }
 
     results = await asyncio.gather(*(one(symbol) for symbol in dict.fromkeys(symbols)))
