@@ -469,3 +469,23 @@ async def refresh_financials(
     else:
         background_tasks.add_task(run_fundamentals_once, None, limit=max(1, settings.fundamentals_batch_size))
     return TaskAcceptedOut()
+
+
+@admin_router.post("/financials/rebuild", status_code=status.HTTP_202_ACCEPTED, response_model=TaskAcceptedOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def rebuild_financials(
+    request: Request, db: DB, background_tasks: BackgroundTasks, body: RecomputeRatiosRequest | None = None
+):
+    """Re-derive facts and ratios offline from the stored statements (no provider calls).
+
+    Use after a mapping/restatement rule change; with ``ticker`` only that company.
+    """
+    from src.services.fundamentals_service import rebuild_all_from_store
+
+    ticker = body.ticker if body is not None else None
+    if ticker is not None:
+        await _company_or_404(db, ticker)
+        background_tasks.add_task(rebuild_all_from_store, [ticker])
+    else:
+        background_tasks.add_task(rebuild_all_from_store, None)
+    return TaskAcceptedOut()
