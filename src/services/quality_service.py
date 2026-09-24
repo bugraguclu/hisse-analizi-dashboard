@@ -57,6 +57,8 @@ KNOWN_JOBS: tuple[str, ...] = (
     "market.bars.daily",
     "market.bars.backfill",
     "market.bars.reconcile",
+    "market.bars.reconcile.backfill",
+    "market.accuracy",
     "fundamentals.statements",
     "fundamentals.ratios",
     "macro.rates",

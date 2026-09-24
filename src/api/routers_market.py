@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from src.adapters.index_adapter import get_index_data, get_index_info, get_ticker_history, list_indices
+from src.adapters.price import MAX_CHART_WARMUP_BARS
 from src.adapters.scanner_adapter import resolve_condition, scan_signals
 from src.adapters.screener_adapter import get_screener_templates, normalize_filters, screen_stocks
 from src.adapters.search_adapter import list_companies, normalize_query, search_symbol
@@ -92,9 +93,20 @@ async def indices():
 
 
 @market_router.get("/index/{symbol}")
-async def index_data(symbol: str, period: str = Query(default="1ay", max_length=10)):
-    """Endeks fiyat verisi. period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max."""
-    return _ok(await get_index_data(_symbol(symbol), period=_period(period)))
+async def index_data(
+    symbol: str,
+    period: str = Query(default="1ay", max_length=10),
+    warmup: int = Query(default=0, ge=0, le=MAX_CHART_WARMUP_BARS),
+):
+    """Endeks fiyat verisi. period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max.
+
+    warmup: pencereden onceki en fazla N bar'i "warmup" alaninda ekler (gosterge
+    hesaplari ve sola kaydirma icin); 0 (varsayilan) iken alan hic donmez.
+    """
+    normalized_symbol, normalized_period = _symbol(symbol), _period(period)
+    if warmup:
+        return _ok(await get_index_data(normalized_symbol, period=normalized_period, warmup=warmup))
+    return _ok(await get_index_data(normalized_symbol, period=normalized_period))
 
 
 @market_router.get("/index/{symbol}/info")
@@ -124,9 +136,20 @@ async def all_companies():
 # --- Ticker History (live) ---
 
 @market_router.get("/ticker/{ticker}/history")
-async def ticker_history(ticker: str, period: str = Query(default="1ay", max_length=10)):
-    """Hisse fiyat gecmisi (canli). period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max."""
-    return _ok(await get_ticker_history(_symbol(ticker), period=_period(period)))
+async def ticker_history(
+    ticker: str,
+    period: str = Query(default="1ay", max_length=10),
+    warmup: int = Query(default=0, ge=0, le=MAX_CHART_WARMUP_BARS),
+):
+    """Hisse fiyat gecmisi (depo oncelikli). period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max.
+
+    warmup: pencereden onceki en fazla N bar'i "warmup" alaninda ekler (gosterge
+    hesaplari ve sola kaydirma icin); 0 (varsayilan) iken alan hic donmez.
+    """
+    normalized_ticker, normalized_period = _symbol(ticker), _period(period)
+    if warmup:
+        return _ok(await get_ticker_history(normalized_ticker, period=normalized_period, warmup=warmup))
+    return _ok(await get_ticker_history(normalized_ticker, period=normalized_period))
 
 
 # --- Snapshot ---
