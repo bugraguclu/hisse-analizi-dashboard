@@ -279,11 +279,24 @@ tanımlıdır (varsayılanlar §7.2-§7.4'te anıldı); tam liste: `QUALITY_WORK
 Branch, 22.09.2026 gecesi master'ın **commitlenmemiş** çalışma ağacının anlık görüntüsünden (`2080f8b`)
 dallandı; master'daki çalışma o tarihten beri commitlenmeden sürdü. Sıra:
 
-1. Master'daki çalışma ağacı commitlenir (dashboard, KAP akışı, migration `010_event_kap_feed` vb.).
-2. `alembic/versions/020_data_platform.py` içinde `down_revision = "009"` → `"010"` yapılır
-   (010 KAP olay akışı migration'ıdır; 020 ondan bağımsızdır, yalnızca zincir doğrusal kalmalı).
-   Ardından `alembic check` ve `upgrade → downgrade base → upgrade` gidiş-dönüşü yeniden koşulur.
-3. `git merge master` (data-infra üzerinde). Beklenen çakışmalar ve kural:
+1. Master'daki çalışma ağacı commitlenir (v1.0.0; dashboard, KAP akışı, migration `010_event_kap_feed`,
+   `011_drop_ai_usage_and_news_labels` vb.).
+2. `alembic/versions/020_data_platform.py` içinde `down_revision = "009"` → master'daki son migration yapılır
+   (25.09 itibarıyla `"011"`; 010 KAP olay akışı, 011 AI kullanım tablosu ve haber etiketlerinin kaldırılması;
+   020 ikisinden de bağımsızdır, yalnızca zincir doğrusal kalmalı). 020'nin `ai_usage` tablosuna ya da
+   `news_items.sentiment/impact/rationale` kolonlarına dokunmadığı doğrulanır. Ardından `alembic check` ve
+   `upgrade → downgrade base → upgrade` gidiş-dönüşü yeniden koşulur.
+3. Birleştirme tabanı **`2080f8b`** olmalıdır (master'ın v1.0.0 commit'i `fb9ef2b` üzerine atılırsa git
+   `fb9ef2b`'yi taban seçer ve 22.09 anlık görüntüsündeki her dosya sahte çakışma verir):
+   `git merge-tree --write-tree --merge-base=2080f8b master data-infra` ile ağaç üretilir, çakışmalar
+   aşağıdaki kurallarla çözülür, commit iki ebeveynle (`master`, `data-infra`) oluşturulur. Beklenen
+   çakışmalar ve kural:
+   - **AI özetinin/etiketlemesinin kaldırılması (25.09, master):** `src/adapters/llm.py`,
+     `tests/unit/test_llm_budget.py`, `test_news_classify_breaker.py`, `AIUsage` modeli ve repository'si,
+     `NewsItem.sentiment/impact/rationale`, config'teki `AI_*`/`GEMINI_*`/`ANTHROPIC_*` ayarları ve
+     pyproject'teki `anthropic`/`google-genai` master'da silindi → **master sürümü**; branch 2080f8b'den beri
+     bunlara dokunmadığı için taban 2080f8b iken silmeler temiz uygulanır, geri gelmemelidir
+     (`routers_news.py`/`news_service.py` içindeki etiket alanları da master'daki gibi kalkar).
    - `src/adapters/fundamentals.py`: branch'te yalnızca facade (yeniden dışa aktarım); master'daki
      düzeltmeler ilgili `fundamentals_*.py` modülüne taşınır (ör. PD/DD `price_book_fq` düzeltmesi
      `fundamentals_snapshot.py`'de zaten var) → **branch sürümü alınır**. Aynı şekilde
