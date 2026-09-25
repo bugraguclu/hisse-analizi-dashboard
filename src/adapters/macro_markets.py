@@ -342,12 +342,13 @@ _history_semaphore = asyncio.Semaphore(3)  # TradingView drops bursts of websock
 
 
 def _load_history_sync(ticker: str, period: str, interval: str) -> Any:
-    # borsapy has no public API for TVC/FX_IDC/OANDA symbols; the provider is
-    # stable within the pinned borsapy<0.11 range.
-    from borsapy._providers.tradingview import get_tradingview_provider
+    # borsapy has no public API for TVC/FX_IDC/OANDA symbols. tradingview_chart
+    # returns its provider's frame over one shared websocket (~0.5 s instead of
+    # ~2 s cold) and falls back to the provider's one-shot fetch.
+    from src.adapters import tradingview_chart
 
     exchange, symbol = ticker.split(":", 1)
-    return get_tradingview_provider().get_history(symbol, period=period, interval=interval, exchange=exchange)
+    return tradingview_chart.get_history(symbol, period=period, interval=interval, exchange=exchange)
 
 
 @cached(TTL_MARKET_HISTORY, "macro_market_bars")

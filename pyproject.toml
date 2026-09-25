@@ -20,7 +20,8 @@ classifiers = [
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
-    "sqlalchemy[asyncio]>=2.0.25",
+    # <2.1: 2.1 changed the Select/Row typing (CI mypy failed on it) and is untested here.
+    "sqlalchemy[asyncio]>=2.0.25,<2.1",
     "asyncpg>=0.29.0",
     "psycopg2-binary>=2.9.9",
     "alembic>=1.13.0",

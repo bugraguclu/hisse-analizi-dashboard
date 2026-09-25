@@ -181,8 +181,17 @@ const dict = {
   "preset.high_foreign": { tr: "Yüksek yabancı payı", en: "High foreign ownership", fr: "Forte détention étrangère" },
   "preset.high_foreign.note": { tr: "Yabancı yatırımcıların payı (İş Yatırım verisi)", en: "Share held by foreign investors (İş Yatırım data)", fr: "Part des investisseurs étrangers (données İş Yatırım)" },
   // Rule parts shared by several screens.
-  "rule.cross.golden": { tr: "SMA 50, SMA 200'ü yukarı kesti · son gün", en: "SMA 50 crossed above SMA 200 · last session", fr: "MM 50 passée au-dessus de la MM 200 · dernière séance" },
-  "rule.cross.death": { tr: "SMA 50, SMA 200'ü aşağı kesti · son gün", en: "SMA 50 crossed below SMA 200 · last session", fr: "MM 50 passée sous la MM 200 · dernière séance" },
+  // No-break spaces keep "SMA 50" and the "(son gün)" tail whole when the line wraps.
+  "rule.cross.golden": {
+    tr: "SMA\u00a050, SMA\u00a0200'ü yukarı kesti (son\u00a0gün)",
+    en: "SMA\u00a050 crossed above SMA\u00a0200 (last\u00a0session)",
+    fr: "MM\u00a050 passée au-dessus de la MM\u00a0200 (dernière\u00a0séance)",
+  },
+  "rule.cross.death": {
+    tr: "SMA\u00a050, SMA\u00a0200'ü aşağı kesti (son\u00a0gün)",
+    en: "SMA\u00a050 crossed below SMA\u00a0200 (last\u00a0session)",
+    fr: "MM\u00a050 passée sous la MM\u00a0200 (dernière\u00a0séance)",
+  },
   "rule.rec": { tr: "İş Yatırım önerisi: {rec}", en: "İş Yatırım rating: {rec}", fr: "Recommandation İş Yatırım : {rec}" },
   "rule.profitable": { tr: "Son 12 ayda net kâr", en: "Net profit over the last 12 months", fr: "Bénéfice net sur 12 mois" },
 
