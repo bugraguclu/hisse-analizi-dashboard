@@ -42,6 +42,9 @@ dependencies = [
     # src/api/dependencies.py for rate-limit string parsing) — was previously
     # only pulled in transitively via slowapi.
     "limits>=3.0",
+    # Imported directly (src/adapters/tradingview_chart.py) — was previously
+    # only pulled in transitively via borsapy.
+    "websocket-client>=1.9.0",
 ]
 
 [project.optional-dependencies]

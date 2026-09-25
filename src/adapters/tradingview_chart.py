@@ -28,13 +28,12 @@ from typing import Any
 
 import pandas as pd
 import structlog
-import websocket
-from borsapy._providers.tradingview import TradingViewProvider, get_tradingview_provider
-from borsapy.exceptions import APIError
 
 logger = structlog.get_logger(__name__)
 
-WS_URL = f"{TradingViewProvider.WS_URL}?type=chart"
+# TradingViewProvider.WS_URL / ORIGIN; borsapy itself is imported lazily (~0.35 s), like everywhere in src.
+WS_URL = "wss://data.tradingview.com/socket.io/websocket?type=chart"
+ORIGIN = "https://www.tradingview.com"
 CONNECT_TIMEOUT = 10.0
 # A healthy request answers in well under a second; after this the connection
 # is presumed dead, replaced, and the request retried one-shot.
@@ -50,7 +49,9 @@ MAX_SESSIONS = 8
 
 _FRAME_SPLIT = re.compile(r"~m~\d+~m~")
 _HEARTBEAT = re.compile(r"~h~\d+")
-_SESSION_MESSAGES = frozenset({"timescale_update", "series_completed", "symbol_error", "series_error", "critical_error"})
+_SESSION_MESSAGES = frozenset(
+    {"timescale_update", "series_completed", "symbol_error", "series_error", "critical_error"}
+)
 
 
 class _Unavailable(Exception):
@@ -83,8 +84,10 @@ class _Connection:
     """One chart websocket; a reader thread routes messages to the waiting sessions."""
 
     def __init__(self, auth_token: str) -> None:
-        self.ws = websocket.create_connection(
-            WS_URL, header={"Origin": TradingViewProvider.ORIGIN}, timeout=CONNECT_TIMEOUT
+        import websocket
+
+        self.ws: websocket.WebSocket = websocket.create_connection(
+            WS_URL, header={"Origin": ORIGIN}, timeout=CONNECT_TIMEOUT
         )
         self.ws.settimeout(READ_TIMEOUT)
         self.pid = os.getpid()
@@ -117,16 +120,18 @@ class _Connection:
             self._last_used = time.monotonic()
 
     def close(self, reason: str) -> None:
-        """Drop the socket; every waiting request learns the connection is gone."""
+        """Drop the socket; every request still waiting learns the connection is gone."""
         with self._lock:
             if not self.alive:
                 return
             self.alive = False
             pending = list(self._pending.values())
             self._pending.clear()
+        # The reader can no longer reach these requests: an answer that already completed stays valid.
         for request in pending:
-            request.lost = reason
-            request.done.set()
+            if not request.done.is_set():
+                request.lost = reason
+                request.done.set()
         try:
             self.ws.shutdown()
         except Exception:
@@ -143,6 +148,8 @@ class _Connection:
                 raw = self.ws.recv()
                 if not raw:
                     raise ConnectionError("closed by server")
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8", "replace")
                 for part in _FRAME_SPLIT.split(raw):
                     if part:
                         self._handle(part)
@@ -161,9 +168,11 @@ class _Connection:
             return
         if not isinstance(packet, dict) or packet.get("m") not in _SESSION_MESSAGES:
             return
-        method, params = packet["m"], packet.get("p") or []
+        method, params = packet["m"], packet.get("p")
+        if not isinstance(params, list) or not params or not isinstance(params[0], str):
+            return
         with self._lock:
-            request = self._pending.get(params[0]) if isinstance(params[0], str) else None
+            request = self._pending.get(params[0])
             if request is None:
                 return
             if method == "timescale_update":
@@ -202,6 +211,8 @@ class _ChartClient:
                 return self._connection
             if time.monotonic() < self._retry_at:
                 raise _Unavailable("reconnect backoff")
+            from borsapy._providers.tradingview import get_tradingview_provider
+
             try:
                 self._connection = _Connection(get_tradingview_provider()._get_auth_token())
             except Exception as e:
@@ -217,27 +228,28 @@ class _ChartClient:
             raise _Unavailable("no free chart session")
         try:
             connection.register(session, request)
+            symbol = json.dumps(
+                {"symbol": tv_symbol, "adjustment": "splits", "session": "regular"}, separators=(",", ":")
+            )
             try:
-                symbol = json.dumps({"symbol": tv_symbol, "adjustment": "splits", "session": "regular"}, separators=(",", ":"))
                 connection.send(_message("chart_create_session", [session, ""]))
                 connection.send(_message("resolve_symbol", [session, "ser_1", f"={symbol}"]))
                 connection.send(_message("create_series", [session, "$prices", "s1", "ser_1", timeframe, bars, ""]))
-                answered = request.done.wait(REQUEST_TIMEOUT)
-                connection.unregister(session)
-                if connection.alive:
-                    connection.send(_message("chart_delete_session", [session]))
-            except _Unavailable:
-                raise
-            except Exception as e:  # the socket broke under a send
+            except Exception as e:  # the socket broke; close() also wakes the other waiting requests
                 connection.close(f"send failed: {type(e).__name__}: {e}")
-                if not request.done.is_set():
-                    raise _Unavailable(f"send failed: {type(e).__name__}") from e
-                answered = True
+                raise _Unavailable(f"send failed: {type(e).__name__}") from e
+            answered = request.done.wait(REQUEST_TIMEOUT)
         finally:
+            # From here on the reader cannot touch `request` any more.
             connection.unregister(session)
             connection.slots.release()
+        if connection.alive:
+            try:
+                connection.send(_message("chart_delete_session", [session]))
+            except Exception as e:
+                connection.close(f"send failed: {type(e).__name__}: {e}")
         if request.error is not None:
-            raise APIError(f"TradingView error: {request.error}")
+            raise _api_error(f"TradingView error: {request.error}")
         if request.lost is not None:
             raise _Unavailable(request.lost)
         if not answered and not request.bars:
@@ -250,10 +262,20 @@ class _ChartClient:
 _client = _ChartClient()
 
 
-def _history_frame(tv_symbol: str, bars: dict[int, dict[str, Any]], start: datetime | None, end: datetime | None) -> pd.DataFrame:
+def _api_error(message: str) -> Exception:
+    """The provider's exception type, so callers map errors the same way (``price._history_error``)."""
+    from borsapy.exceptions import APIError
+
+    error: Exception = APIError(message)
+    return error
+
+
+def _history_frame(
+    tv_symbol: str, bars: dict[int, dict[str, Any]], start: datetime | None, end: datetime | None
+) -> pd.DataFrame:
     """The provider's frame: Open/High/Low/Close/Volume on an Istanbul DatetimeIndex, trimmed to start/end."""
     if not bars:
-        raise APIError(f"No data received for {tv_symbol}")
+        raise _api_error(f"No data received for {tv_symbol}")
     df = pd.DataFrame(list(bars.values()))
     df["Date"] = pd.to_datetime(df["time"], unit="s", utc=True)
     df = df.set_index("Date").sort_index()
@@ -279,6 +301,8 @@ def get_history(
     exchange: str = "BIST",
 ) -> pd.DataFrame:
     """``TradingViewProvider.get_history`` over the shared connection (blocking; run it in a thread)."""
+    from borsapy._providers.tradingview import get_tradingview_provider
+
     provider = get_tradingview_provider()
     symbol = symbol.upper().replace(".IS", "").replace(".E", "")
     tv_symbol = f"{exchange}:{symbol}"

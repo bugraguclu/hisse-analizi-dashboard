@@ -37,9 +37,11 @@ MAIN_INDICES = [
 TTL_INDEX_QUOTE = 60
 
 # Secondary parts of a chart response (quote, company card, 52-week stats) may
-# not hold the chart hostage: after this many seconds they are left out (their
+# not hold the chart hostage: once the bars are in they get OPTIONAL_PART_GRACE
+# more seconds (OPTIONAL_PART_TIMEOUT in all), then they are left out (their
 # cached fetch keeps running in the background and serves the next request).
 OPTIONAL_PART_TIMEOUT = 6.0
+OPTIONAL_PART_GRACE = 1.0
 
 T = TypeVar("T")
 
@@ -53,7 +55,11 @@ async def _optional(awaitable: Awaitable[T], part: str, symbol: str) -> T | None
 
 
 async def _with_optional_parts(primary: Awaitable[T], optional: dict[str, Awaitable[Any]], symbol: str) -> tuple[T, dict[str, Any]]:
-    """Await ``primary`` and the optional parts concurrently; a failing primary cancels the rest."""
+    """Await ``primary`` and the optional parts concurrently.
+
+    A part still running ``OPTIONAL_PART_GRACE`` seconds after the primary is
+    left out (``None``); a failing primary cancels the rest.
+    """
     parts = {name: asyncio.ensure_future(_optional(aw, name, symbol)) for name, aw in optional.items()}
     try:
         result = await primary
@@ -61,7 +67,18 @@ async def _with_optional_parts(primary: Awaitable[T], optional: dict[str, Awaita
         for task in parts.values():
             task.cancel()
         raise
-    return result, {name: await task for name, task in parts.items()}
+    waiting = [task for task in parts.values() if not task.done()]
+    if waiting:
+        await asyncio.wait(waiting, timeout=OPTIONAL_PART_GRACE)
+    values: dict[str, Any] = {}
+    for name, task in parts.items():
+        if task.done():
+            values[name] = task.result()
+        else:
+            task.cancel()
+            logger.info("chart_part_skipped", symbol=symbol, part=name, grace=OPTIONAL_PART_GRACE)
+            values[name] = None
+    return result, values
 
 
 def _index_names() -> dict[str, str]:

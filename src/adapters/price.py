@@ -18,6 +18,7 @@ from typing import Any
 import pandas as pd
 import structlog
 
+from src.adapters import tradingview_chart
 from src.adapters.base import BasePriceAdapter, PriceRecord
 from src.adapters.utils import (
     ISTANBUL_TZ,
@@ -138,13 +139,9 @@ def bars_to_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _history_sync(symbol: str, period: str | None, interval: str, start: datetime | None) -> Any:
-    import borsapy as bp
-
-    # TradingView serves stocks and indices (XU100) through the same endpoint.
-    ticker = bp.Ticker(symbol)
-    if start is not None:
-        return ticker.history(interval=interval, start=start)
-    return ticker.history(period=period or "1mo", interval=interval)
+    # TradingView serves stocks and indices (XU100) through the same endpoint. Same request
+    # as borsapy's Ticker.history, over the shared chart connection (no handshake per fetch).
+    return tradingview_chart.get_history(symbol, period=period or "1mo", interval=interval, start=start)
 
 
 def _history_error(symbol: str, exc: Exception) -> MarketDataError:
