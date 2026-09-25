@@ -41,6 +41,7 @@ import structlog
 
 from src.adapters.financial_adapter import (
     FLOW_KEYS,
+    IAS29_FIRST_PERIOD,
     ISYATIRIM_COMPANY_CARD_URL,
     ISYATIRIM_GROUP_FINANCIAL,
     ISYATIRIM_GROUP_INDUSTRIAL,
@@ -558,10 +559,8 @@ _REFERENCE_AGREEMENT = 0.002  # companies whose ratios form a period's cross-com
 _REFERENCE_MIN_COMPANIES = 3
 # Twelve-month CPI ratios since IAS 29 was adopted stay above 0.55; ≤ 0.998 = re-expressed.
 _PLAUSIBLE_OWN_RATIO = (0.3, 1 - _RESTATED_THRESHOLD)
-#: First period reported under IAS 29 in Turkey (KGK: periods ending on/after 31 December 2023).
-#: Interim reports before it were published at historical cost, so their re-expressed
-#: comparatives cannot be converted back with an index ratio.
-IAS29_FIRST_PERIOD: tuple[int, int] = (2023, 12)
+# IAS29_FIRST_PERIOD (financial_adapter): interim reports before it were published at
+# historical cost, so their re-expressed comparatives cannot be converted back with an index ratio.
 _BALANCE_PERIOD_PROFIT_LABELS = frozenset({"donem net kar/zarari"})  # İş Yatırım 2OCF
 #: Canonical flows a re-presented comparative still converts with the index ratio.
 REPRESENTED_SAFE_FLOWS: frozenset[str] = frozenset(
@@ -891,6 +890,52 @@ class CanonicalFacts:
 def _is_year_end(period: str, fiscal_year_end_month: int) -> bool:
     parsed = parse_period(period)
     return parsed is not None and months_into_fiscal_year(parsed[1], fiscal_year_end_month) == 12
+
+
+#: Column methods of a re-expressed interim comparative (:class:`ColumnRestatement`).
+_INTERIM_RESTATED_METHODS = frozenset({"own_ratio", "period_reference", "own_ratio_unconfirmed", "unknown"})
+
+
+def applies_ias29(columns: Mapping[str, ColumnRestatement], fiscal_year_end_month: int = 12) -> bool:
+    """True when the company reports under IAS 29: one of its İş Yatırım *interim* columns is a
+    re-expressed comparative. Fiscal year-ends do not count (İş Yatırım re-expresses those for
+    every company, THYAO included)."""
+    return any(
+        column.method in _INTERIM_RESTATED_METHODS and not _is_year_end(period, fiscal_year_end_month)
+        for period, column in columns.items()
+    )
+
+
+def applies_ias29_sources(sources_by_period: Mapping[str, Any], fiscal_year_end_month: int = 12) -> bool:
+    """:func:`applies_ias29` from stored facts (``sources_json["isyatirim_column"]`` per period)."""
+    for period, summary in sources_by_period.items():
+        column = summary.get("isyatirim_column") if isinstance(summary, Mapping) else None
+        if (
+            isinstance(column, Mapping)
+            and column.get("method") in _INTERIM_RESTATED_METHODS
+            and not _is_year_end(period, fiscal_year_end_month)
+        ):
+            return True
+    return False
+
+
+def ias29_quarter_factors(
+    ias29: bool, cpi_factors: Mapping[str, float] | None
+) -> Mapping[str, float] | None:
+    """The CPI quarter factors to de-cumulate with: IAS 29 reporters only, ``None`` otherwise
+    (or when the CPI series is unavailable — quarters then stay plain differences)."""
+    return cpi_factors if ias29 and cpi_factors else None
+
+
+_IAS29_TTM_NOTE = (
+    "Enflasyon muhasebesi (TMS 29): son 12 ay, şirketin kendi 3 aylık tutarlarının toplamıdır "
+    "(2. ve 3. çeyrekte önceki kümülatif tutar TÜFE ile yeniden ifade edilir; TradingView ile aynı yöntem)."
+)
+_IAS29_QUARTER_NOTE = (
+    "Enflasyon muhasebesi (TMS 29): tek çeyrek tutarları şirketin kendi 3 aylık kolonlarıdır; "
+    "2. ve 3. çeyrekte önceki kümülatif tutar TÜFE ile çeyrek sonuna taşınarak çıkarılır, "
+    "4. çeyrek = yıllık − 9 aylık."
+)
 
 
 def _factor_for(key: str, factors: Mapping[str, float | None]) -> float:
@@ -1643,8 +1688,15 @@ def _opening_balance_values(
     return result
 
 
-def _discrete_rows(records: Sequence[Mapping[str, Any]], fiscal_year_end_month: int) -> list[dict[str, Any]]:
-    """Single-quarter values; balance lines keep their period-end value (see above)."""
+def _discrete_rows(
+    records: Sequence[Mapping[str, Any]],
+    fiscal_year_end_month: int,
+    quarter_factors: Mapping[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Single-quarter values; balance lines keep their period-end value (see above).
+
+    ``quarter_factors``: IAS 29 re-expression of the previous cumulative value
+    (:func:`ias29_quarter_factors`, :func:`discrete_quarter_values`)."""
     keys = [normalize_label(record.get("Item")) for record in records]
     closing_cash = next(
         (
@@ -1662,7 +1714,7 @@ def _discrete_rows(records: Sequence[Mapping[str, Any]], fiscal_year_end_month: 
         elif _CLOSING_BALANCE_LINE_RE.search(key):
             discrete = {period: to_number(value) for period, value in values.items()}
         else:
-            discrete = discrete_quarter_values(values, fiscal_year_end_month)
+            discrete = discrete_quarter_values(values, fiscal_year_end_month, quarter_factors)
         rows.append({"Item": record["Item"], **discrete})
     return rows
 
@@ -1790,6 +1842,7 @@ def build_statement_view(
     quarterly: bool,
     section: str,
     reference: Mapping[str, float] | None = None,
+    cpi_factors: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Balance sheet (``section="balance"``) / income statement (``"income"``) payload.
 
@@ -1797,7 +1850,9 @@ def build_statement_view(
     from the store (:func:`kap_summary_from_rows`, :func:`isyatirim_table_from_rows`).
     İş Yatırım interim columns are shown on the first-published basis (IAS 29
     re-expressed comparatives converted per column; ``reference`` =
-    :func:`restatement_reference`).
+    :func:`restatement_reference`). ``cpi_factors``
+    (:func:`~src.adapters.financial_adapter.cpi_quarter_factors`): single quarters of
+    an IAS 29 reporter are its own three-month figures (``discrete_basis``).
     """
     if kap is None and isy is None:
         raise MarketDataError(_MSG_STATEMENTS, status_code=503)
@@ -1860,8 +1915,25 @@ def build_statement_view(
         "notes": notes,
     }
     if flows and quarterly:
-        payload["discrete"] = _discrete_rows(records, fy_month)
+        _add_discrete(payload, records, fy_month, ias29_quarter_factors(applies_ias29(columns, fy_month), cpi_factors))
     return payload
+
+
+def _add_discrete(
+    payload: dict[str, Any],
+    records: Sequence[Mapping[str, Any]],
+    fiscal_year_end_month: int,
+    quarter_factors: Mapping[str, float] | None,
+    periods: Sequence[str] | None = None,
+) -> None:
+    """``discrete`` single-quarter rows (+ ``discrete_basis`` and the IAS 29 note) of a flow payload."""
+    discrete = _discrete_rows(records, fiscal_year_end_month, quarter_factors)
+    if periods is not None:
+        discrete = [{"Item": r["Item"], **{p: r.get(p) for p in periods}} for r in discrete]
+    payload["discrete"] = discrete
+    payload["discrete_basis"] = "ias29_three_month" if quarter_factors is not None else "ytd_difference"
+    if quarter_factors is not None:
+        payload["notes"].append(_IAS29_QUARTER_NOTE)
 
 
 async def _statement_view(ticker: str, quarterly: bool, section: str) -> dict[str, Any]:
@@ -1892,6 +1964,7 @@ def build_cashflow_view(
     *,
     quarterly: bool,
     reference: Mapping[str, float] | None = None,
+    cpi_factors: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Cash-flow payload: İş Yatırım rows on KAP's first-published basis.
 
@@ -1899,6 +1972,7 @@ def build_cashflow_view(
     KAP's factor, earlier-year interim comparatives with 2OCF ÷ 3Z / the period's
     cross-company factor (``reference``); columns re-expressed by an unknown factor
     are left out. Without KAP only the interim columns can be converted.
+    ``cpi_factors``: single quarters as in :func:`build_statement_view`.
     """
     fy_month = int((kap or {}).get("fiscal_year_end_month") or 12)
     base: dict[str, Any] = {
@@ -1943,8 +2017,8 @@ def build_cashflow_view(
         "notes": notes,
     }
     if quarterly:
-        discrete = _discrete_rows(all_rows, fy_month)
-        payload["discrete"] = [{"Item": r["Item"], **{p: r.get(p) for p in periods}} for r in discrete]
+        factors = ias29_quarter_factors(applies_ias29(columns, fy_month), cpi_factors)
+        _add_discrete(payload, all_rows, fy_month, factors, periods)
     return payload
 
 
@@ -1990,10 +2064,12 @@ def compute_live_ratios(
     template: str = "industrial",
     price: float | None = None,
     snapshot_shares: float | None = None,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> dict[str, Any] | None:
     """Pure core of ``/live-ratios``: pick the latest period, build TTM inputs, compute ratios.
 
     Returns ``None`` when no period has both a balance sheet and a result.
+    ``quarter_factors``: IAS 29 quarter re-expression (:func:`ias29_quarter_factors`).
     """
     latest = _latest_ratio_period(items_by_period)
     if latest is None:
@@ -2001,7 +2077,7 @@ def compute_live_ratios(
     basis = "ttm"
     period = latest
     try:
-        current, previous = build_ratio_inputs(items_by_period, latest, fiscal_year_end_month)
+        current, previous = build_ratio_inputs(items_by_period, latest, fiscal_year_end_month, quarter_factors)
     except ValueError:
         # Interim period without the prior-year comparatives → latest fiscal year instead.
         fy_periods = [
@@ -2012,7 +2088,7 @@ def compute_live_ratios(
         if not fy_periods:
             return None
         period = fy_periods[0]
-        current, previous = build_ratio_inputs(items_by_period, period, fiscal_year_end_month)
+        current, previous = build_ratio_inputs(items_by_period, period, fiscal_year_end_month, quarter_factors)
         basis = "annual"
     if ttm_components(period, fiscal_year_end_month) is None:
         basis = "annual"
@@ -2029,11 +2105,16 @@ def compute_live_ratios(
     )
     amounts = derive_financial_amounts({**current, **latest_stocks}, market_cap, is_bank=financial)
     ttm_quarters = trailing_quarters(period)
+    if ttm_components(period, fiscal_year_end_month) is None:
+        ttm_method = "fiscal_year"
+    else:
+        ttm_method = "ias29_three_month" if quarter_factors is not None else "ytd_difference"
     return {
         "as_of": period,
         "basis": basis,
         "balance_sheet_as_of": latest,
         "ttm_quarters": ttm_quarters,
+        "ttm_method": ttm_method,
         "template": template,
         "ratios": ratios,
         "ttm": {
@@ -2067,14 +2148,19 @@ def build_live_ratios_view(
     fiscal_year_end_month: int,
     snapshot: Mapping[str, Any],
     sources: Sequence[str],
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
-    """``/live-ratios`` payload from canonical facts + a market snapshot (``last_price``, ``shares``)."""
+    """``/live-ratios`` payload from canonical facts + a market snapshot (``last_price``, ``shares``).
+
+    ``quarter_factors``: IAS 29 reporters' CPI quarter factors (:func:`ias29_quarter_factors`).
+    """
     result = compute_live_ratios(
         items_by_period,
         fiscal_year_end_month=fiscal_year_end_month,
         template=template,
         price=snapshot.get("last_price"),
         snapshot_shares=snapshot.get("shares"),
+        quarter_factors=quarter_factors,
     )
     if result is None or not any(v is not None for v in result["ratios"].values()):
         return {"ticker": ticker, "ratios": None, "available": False}
@@ -2089,6 +2175,7 @@ def build_live_ratios_view(
             "stok kalemleri son bilanço; büyüme bir önceki yılın aynı TTM dönemine göre.",
             "FAVÖK = esas faaliyet kârı + amortisman ve itfa payları (nakit akış tablosundan).",
         ]
+        + ([_IAS29_TTM_NOTE] if result.get("ttm_method") == "ias29_three_month" else [])
         + ([template_note] if template_note else []),
     }
 

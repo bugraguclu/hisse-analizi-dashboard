@@ -48,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.adapters import fundamentals_statements as fs
 from src.adapters.financial_adapter import (
     ISYATIRIM_COMPANY_CARD_URL,
+    cpi_quarter_factors,
     discrete_quarter_values,
     months_into_fiscal_year,
     parse_period,
@@ -70,6 +71,7 @@ from src.core.meta import DataMeta, ServedFrom, with_meta
 from src.core.time import utcnow
 from src.db.models import Company, DataSnapshot, FinancialFact, FinancialRatio, FinancialStatement
 from src.db.repositories.fundamentals import FACT_COLUMNS, FundamentalsRepository, StatementUpsertResult
+from src.db.repositories.macro import MacroRepository
 from src.db.session import async_session_factory
 from src.services.analysis_service import MarketInputs, choose_shares, ratio_rows
 
@@ -88,6 +90,11 @@ _TV_MARKET_COLUMNS = (
 )
 _REFERENCE_CACHE_SECONDS = 900.0
 _reference_cache: dict[str, Any] = {"at": None, "value": {}}
+_cpi_cache: dict[str, Any] = {"at": None, "value": {}}
+#: TÜİK monthly CPI change (macro store, WS4): the IAS 29 quarter re-expression factors.
+CPI_MONTHLY_SERIES = "tuik.cpi.mom"
+#: CPI months loaded for the factors: the quarter before the first IAS 29 period on.
+_CPI_SINCE = date(2023, 10, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +398,29 @@ async def restatement_reference(session: AsyncSession) -> dict[str, float]:
     """Cross-company IAS 29 factor per interim period from every stored İş Yatırım column."""
     rows = await FundamentalsRepository(session).isyatirim_profit_evidence()
     return fs.restatement_reference_from_evidence(rows)
+
+
+async def cpi_factors(session: AsyncSession) -> dict[str, float]:
+    """IAS 29 quarter factors (:func:`~src.adapters.financial_adapter.cpi_quarter_factors`)
+    from the stored TÜİK monthly CPI changes."""
+    rows = await MacroRepository(session).history(CPI_MONTHLY_SERIES, since=_CPI_SINCE)
+    return cpi_quarter_factors({f"{r.observation_date:%Y-%m}": to_number(r.value) for r in rows})
+
+
+async def _cached_cpi_factors(session: AsyncSession) -> dict[str, float]:
+    """:func:`cpi_factors` for read paths (15 min in-process cache; ``{}`` on errors — single
+    quarters and TTM then stay plain YTD differences)."""
+    now = time.monotonic()
+    at = _cpi_cache.get("at")
+    if at is not None and now - at < _REFERENCE_CACHE_SECONDS:
+        return dict(_cpi_cache["value"])
+    try:
+        value = await cpi_factors(session)
+    except Exception as e:
+        logger.warning("fundamentals_cpi_factors_failed", error=_error_text(e))
+        return {}
+    _cpi_cache.update(at=now, value=value)
+    return dict(value)
 
 
 async def _cached_reference(session: AsyncSession) -> dict[str, float]:
@@ -981,7 +1011,10 @@ def ttm_checks(ticker: str, rows: Sequence[Mapping[str, Any]], market: MarketInp
 
 
 def derived_quarter_check(
-    ticker: str, items_by_period: Mapping[str, Mapping[str, Any]], fiscal_year_end_month: int = 12
+    ticker: str,
+    items_by_period: Mapping[str, Mapping[str, Any]],
+    fiscal_year_end_month: int = 12,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> dict[str, Any] | None:
     """``fundamentals.derived_quarter_negative``: single quarters derived from the cumulative facts.
 
@@ -1002,8 +1035,8 @@ def derived_quarter_check(
         operating = to_number(items_by_period[p].get("operating_profit"))
         d_and_a = to_number(items_by_period[p].get("depreciation_amortization"))
         ebitda[p] = operating + d_and_a if operating is not None and d_and_a is not None else None
-    quarters = {"revenue": discrete_quarter_values(revenue, fiscal_year_end_month),
-                "ebitda": discrete_quarter_values(ebitda, fiscal_year_end_month)}
+    quarters = {"revenue": discrete_quarter_values(revenue, fiscal_year_end_month, quarter_factors),
+                "ebitda": discrete_quarter_values(ebitda, fiscal_year_end_month, quarter_factors)}
     positive_revenue = sorted(v for v in quarters["revenue"].values() if v is not None and v > 0)
     typical = statistics.median(positive_revenue) if positive_revenue else None
     noise = _NEGATIVE_QUARTER_NOISE * typical if typical else 0.0
@@ -1042,6 +1075,7 @@ def accuracy_checks(
     market: MarketInputs | None,
     *,
     fiscal_year_end_month: int = 12,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Every fundamentals accuracy check of one company (``data_quality_checks`` rows).
 
@@ -1049,7 +1083,7 @@ def accuracy_checks(
     vs TradingView's share count, and derived quarters that cannot be real.
     """
     checks = [*ratio_checks(ticker, rows, market), *ttm_checks(ticker, rows, market)]
-    quarter = derived_quarter_check(ticker, items_by_period, fiscal_year_end_month)
+    quarter = derived_quarter_check(ticker, items_by_period, fiscal_year_end_month, quarter_factors)
     if quarter is not None:
         checks.append(quarter)
     if items_by_period and market is not None:
@@ -1075,10 +1109,18 @@ async def compute_company_ratios(
     items, sources = facts_by_period(fact_rows)
     fy = int(fact_rows[0].fiscal_year_end_month or company.fiscal_year_end_month or 12)
     template = fact_rows[0].template or company.statement_template or "industrial"
-    rows = ratio_rows(items, fiscal_year_end_month=fy, template=template, market=market, sources_by_period=sources)
+    quarter_factors = (
+        fs.ias29_quarter_factors(True, await cpi_factors(session)) if fs.applies_ias29_sources(sources, fy) else None
+    )
+    rows = ratio_rows(
+        items, fiscal_year_end_month=fy, template=template, market=market, sources_by_period=sources,
+        quarter_factors=quarter_factors,
+    )
     written = await repo.replace_ratios(company.id, rows)
     if write_checks:
-        checks = accuracy_checks(company.ticker, items, rows, market, fiscal_year_end_month=fy)
+        checks = accuracy_checks(
+            company.ticker, items, rows, market, fiscal_year_end_month=fy, quarter_factors=quarter_factors
+        )
         if checks:
             await repo.add_quality_checks(checks)  # one row per check, subject and day
     return written
@@ -1138,6 +1180,8 @@ class StoreState:
     facts: list[FinancialFact] = field(default_factory=list)
     #: cross-company IAS 29 factor per interim period (:func:`restatement_reference`)
     reference: dict[str, float] = field(default_factory=dict)
+    #: CPI quarter factors (:func:`cpi_factors`) for IAS 29 reporters' single quarters / TTM
+    cpi_factors: dict[str, float] = field(default_factory=dict)
 
     @property
     def tracked(self) -> bool:
@@ -1193,6 +1237,7 @@ async def load_store(
     async with session_factory() as session:
         repo = FundamentalsRepository(session)
         state.reference = await _cached_reference(session)  # also converts live payloads of untracked tickers
+        state.cpi_factors = await _cached_cpi_factors(session)
         company = await repo.company_by_ticker(ticker)
         if company is None:
             return state
@@ -1229,7 +1274,9 @@ async def _live_sources(ticker: str, isy_wait: float) -> tuple[dict[str, Any] | 
 async def _store_first_view(
     ticker: str,
     *,
-    build: Callable[[dict[str, Any] | None, dict[str, Any] | None, Mapping[str, float]], dict[str, Any]],
+    build: Callable[
+        [dict[str, Any] | None, dict[str, Any] | None, Mapping[str, float], Mapping[str, float]], dict[str, Any]
+    ],
     isy_wait: float,
     message: str,
     event: str,
@@ -1245,7 +1292,7 @@ async def _store_first_view(
 
     def from_store(served_from: ServedFrom, stale: bool, notes: Sequence[str] = ()) -> dict[str, Any]:
         kap, isy = store.sources()
-        payload = build(kap, isy, store.reference)
+        payload = build(kap, isy, store.reference, store.cpi_factors)
         return with_meta(payload, store.meta(served_from, stale=stale, notes=notes, as_of=payload.get("as_of")))
 
     if store.rows and store.is_fresh(max_age, now):
@@ -1256,7 +1303,7 @@ async def _store_first_view(
         if store.tracked:
             start_background_refresh(ticker, session_factory)
         kap, isy = await _live_sources(ticker, isy_wait)
-        payload = build(kap, isy, store.reference)
+        payload = build(kap, isy, store.reference, store.cpi_factors)
         return with_meta(payload, _live_meta(ticker, kap, isy, payload.get("as_of")))
     except SymbolNotFoundError as e:
         if store.rows:
@@ -1279,8 +1326,12 @@ async def get_statement_view(
     """``/fundamentals/{t}/balance-sheet`` (``section="balance"``) and ``/income-statement`` (``"income"``)."""
     ticker = ticker.strip().upper()
 
-    def build(kap: dict[str, Any] | None, isy: dict[str, Any] | None, reference: Mapping[str, float]) -> dict[str, Any]:
-        return fs.build_statement_view(ticker, kap, isy, quarterly=quarterly, section=section, reference=reference)
+    def build(
+        kap: dict[str, Any] | None, isy: dict[str, Any] | None, reference: Mapping[str, float], cpi: Mapping[str, float]
+    ) -> dict[str, Any]:
+        return fs.build_statement_view(
+            ticker, kap, isy, quarterly=quarterly, section=section, reference=reference, cpi_factors=cpi
+        )
 
     return await _store_first_view(
         ticker,
@@ -1298,8 +1349,10 @@ async def get_cashflow_view(
     """``/fundamentals/{t}/cashflow``."""
     ticker = ticker.strip().upper()
 
-    def build(kap: dict[str, Any] | None, isy: dict[str, Any] | None, reference: Mapping[str, float]) -> dict[str, Any]:
-        return fs.build_cashflow_view(ticker, kap, isy, quarterly=quarterly, reference=reference)
+    def build(
+        kap: dict[str, Any] | None, isy: dict[str, Any] | None, reference: Mapping[str, float], cpi: Mapping[str, float]
+    ) -> dict[str, Any]:
+        return fs.build_cashflow_view(ticker, kap, isy, quarterly=quarterly, reference=reference, cpi_factors=cpi)
 
     return await _store_first_view(
         ticker,
@@ -1356,6 +1409,7 @@ async def get_live_ratios_view(
         payload = fs.build_live_ratios_view(
             ticker, items, template=template, fiscal_year_end_month=fy, snapshot=snapshot,
             sources=_facts_sources_label(sources) or [fs._SOURCE_KAP],
+            quarter_factors=fs.ias29_quarter_factors(fs.applies_ias29_sources(sources, fy), store.cpi_factors),
         )
         return with_meta(payload, store.meta(served_from, stale=stale, notes=notes, as_of=payload.get("as_of")))
 
@@ -1373,6 +1427,9 @@ async def get_live_ratios_view(
             ticker, facts.items, template=facts.template, fiscal_year_end_month=facts.fiscal_year_end_month,
             snapshot=snapshot,
             sources=[s for s, present in ((fs._SOURCE_KAP, kap), (fs._SOURCE_ISY, isy)) if present],
+            quarter_factors=fs.ias29_quarter_factors(
+                fs.applies_ias29(facts.columns, facts.fiscal_year_end_month), store.cpi_factors
+            ),
         )
         return with_meta(payload, _live_meta(ticker, kap, isy, payload.get("as_of")))
     except Exception as e:

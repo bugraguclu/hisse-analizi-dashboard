@@ -361,14 +361,78 @@ def is_bank_items(items: Mapping[str, Any]) -> bool:
 # Cumulative (YTD) → discrete quarter / TTM
 # ---------------------------------------------------------------------------
 
+#: First period reported under inflation accounting (TMS/IAS 29) in Türkiye (KGK: periods
+#: ending on or after 31 December 2023): the 2023 annual reports and every later report.
+IAS29_FIRST_PERIOD: tuple[int, int] = (2023, 12)
+
+#: Quarters (months into the fiscal year) whose own three-month figure re-expresses the
+#: previous cumulative value. The fourth quarter has no three-month column in the annual
+#: report and stays FY − 9M (TradingView/FactSet derive it the same way).
+_REEXPRESSED_QUARTERS = (6, 9)
+
+
+def cpi_quarter_factors(cpi_monthly_change: Mapping[str, float | None]) -> dict[str, float]:
+    """``{quarter label: CPI(month end) ÷ CPI(three months earlier)}`` for IAS 29 periods.
+
+    ``cpi_monthly_change`` maps ``"YYYY-MM"`` to TÜİK's monthly CPI change in percent
+    (``tuik.cpi.mom``). A label is listed when its three months are known and the
+    quarter it follows is an IAS 29 period (:data:`IAS29_FIRST_PERIOD`). Every month
+    gets a label, so any fiscal year end works. The product of the rounded monthly
+    changes reproduces the companies' own re-expression: BIMAS 2026/06 1.07010 vs
+    1.07014 implied by its KAP report.
+    """
+    changes: dict[tuple[int, int], float] = {}
+    for key, raw in cpi_monthly_change.items():
+        change = to_number(raw)
+        match = re.match(r"^(\d{4})-(\d{2})", str(key))
+        if match and change is not None:
+            changes[(int(match.group(1)), int(match.group(2)))] = change
+    factors: dict[str, float] = {}
+    for year, month in changes:
+        if shift_months(year, month, -3) < IAS29_FIRST_PERIOD:
+            continue
+        months = [shift_months(year, month, -k) for k in range(3)]
+        if all(m in changes for m in months):
+            factors[period_label(year, month)] = math.prod(1 + changes[m] / 100 for m in months)
+    return factors
+
+
+def reexpression_factor(
+    period: str, quarter_factors: Mapping[str, float] | None, fiscal_year_end_month: int
+) -> float | None:
+    """Factor for the previous cumulative value when de-cumulating ``period``.
+
+    ``1.0`` = subtract as is (no factors, first/fourth quarter, pre-IAS 29 period);
+    ``None`` = a re-expression is due but its CPI factor is unknown.
+    """
+    parsed = parse_period(period)
+    if quarter_factors is None or parsed is None:
+        return 1.0
+    year, month = parsed
+    if months_into_fiscal_year(month, fiscal_year_end_month) not in _REEXPRESSED_QUARTERS:
+        return 1.0
+    if shift_months(year, month, -3) < IAS29_FIRST_PERIOD:
+        return 1.0
+    return quarter_factors.get(period)
+
+
 def discrete_quarter_values(
     values_by_period: Mapping[str, float | None],
     fiscal_year_end_month: int = 12,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> dict[str, float | None]:
     """Single-quarter values from cumulative (year-to-date) values.
 
     Q1 = YTD(Q1); Qn = YTD(Qn) − YTD(Qn−1) of the same fiscal year. ``None``
     when the previous cumulative value is missing (never guessed).
+
+    ``quarter_factors`` (:func:`cpi_quarter_factors`, IAS 29 reporters only): each
+    report is in its own period-end purchasing power, so the second and third
+    quarters first re-express the previous cumulative value,
+    Qn = YTD(Qn) − YTD(Qn−1) × CPI(Qn) ÷ CPI(Qn−1). That is the three-month
+    column of the company's own report: BIMAS 2026/Q2 revenue 221.9 bn on KAP,
+    236.8 bn by plain subtraction. The fourth quarter stays FY − 9M. ``None`` when
+    the factor is missing.
     """
     result: dict[str, float | None] = {}
     for period, raw in values_by_period.items():
@@ -382,7 +446,8 @@ def discrete_quarter_values(
             result[period] = value
             continue
         prev = to_number(values_by_period.get(period_label(*shift_months(year, month, -3))))
-        result[period] = value - prev if prev is not None else None
+        factor = reexpression_factor(period, quarter_factors, fiscal_year_end_month)
+        result[period] = value - prev * factor if prev is not None and factor is not None else None
     return result
 
 
@@ -407,6 +472,7 @@ def ttm_flows(
     items_by_period: Mapping[str, Mapping[str, Any]],
     period: str,
     fiscal_year_end_month: int = 12,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> dict[str, float | None] | None:
     """Trailing-twelve-month flow items ending at ``period``.
 
@@ -414,6 +480,12 @@ def ttm_flows(
     sum of the last four discrete quarters. Returns ``None`` when a required
     period is missing entirely; individual items are ``None`` when any of the
     three inputs lacks them.
+
+    With ``quarter_factors`` (IAS 29 reporters) the four quarters are the companies'
+    own figures (:func:`discrete_quarter_values`): every second or third quarter ``q``
+    of the window also subtracts YTD(q − 3) × (factor(q) − 1). An item is ``None`` when
+    that cumulative value or the factor is missing. At a fiscal year end the annual
+    figure stays the TTM.
     """
     parsed = parse_period(period)
     if parsed is None or period not in items_by_period:
@@ -431,6 +503,22 @@ def ttm_flows(
     for key in FLOW_KEYS:
         a, b, c = to_number(latest.get(key)), to_number(fy.get(key)), to_number(prev.get(key))
         result[key] = a + b - c if a is not None and b is not None and c is not None else None
+    if quarter_factors is None:
+        return result
+    year, month = parsed
+    for q_year, q_month in (shift_months(year, month, -3 * i) for i in range(4)):
+        factor = reexpression_factor(period_label(q_year, q_month), quarter_factors, fiscal_year_end_month)
+        if factor == 1.0:
+            continue
+        base_items = items_by_period.get(period_label(*shift_months(q_year, q_month, -3)))
+        for key in FLOW_KEYS:
+            value = result[key]
+            base = to_number(base_items.get(key)) if base_items is not None else None
+            result[key] = (
+                value - base * (factor - 1)
+                if value is not None and base is not None and factor is not None
+                else None
+            )
     return result
 
 

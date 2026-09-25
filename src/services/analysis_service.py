@@ -16,7 +16,11 @@ loss-making P/E give ``None`` — never ``0``.
 
 TTM (trailing twelve months) from cumulative (year-to-date) facts:
 ``TTM(P) = YTD(P) + FY(previous fiscal year) − YTD(P − 12 months)``, i.e. the
-sum of the four discrete quarters ending at ``P``.
+sum of the four discrete quarters ending at ``P``. For IAS 29 reporters the
+second and third quarters are the companies' own three-month figures (previous
+cumulative value re-expressed with CPI, ``quarter_factors``), which is how
+TradingView builds its TTM (2026/06 revenue: 26 of 27 core IAS 29 companies
+within 0.3 %, 4.6 % median gap before).
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ from src.adapters.financial_adapter import (
     months_into_fiscal_year,
     parse_period,
     period_label,
+    reexpression_factor,
     shift_months,
     sort_periods_desc,
     to_number,
@@ -285,14 +290,16 @@ def build_ratio_inputs(
     items_by_period: Mapping[str, Mapping[str, Any]],
     period: str,
     fiscal_year_end_month: int = 12,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> tuple[dict[str, float | None], dict[str, float | None] | None]:
     """``(current, previous)`` inputs for :func:`compute_financial_ratios`.
 
     ``current`` = TTM flows ending at ``period`` + balance sheet at ``period``;
     ``previous`` = the same one year earlier (for growth and averages), or
     ``None`` when unavailable. Raises ``ValueError`` if ``period`` has no TTM.
+    ``quarter_factors``: IAS 29 quarter re-expression (:func:`ttm_flows`).
     """
-    ttm = ttm_flows(items_by_period, period, fiscal_year_end_month)
+    ttm = ttm_flows(items_by_period, period, fiscal_year_end_month, quarter_factors)
     if ttm is None:
         raise ValueError(f"TTM hesaplanamadı: {period}")
     stocks = items_by_period[period]
@@ -304,7 +311,7 @@ def build_ratio_inputs(
         prev_label = period_label(parsed[0] - 1, parsed[1])
         prev_stocks = items_by_period.get(prev_label)
         if prev_stocks is not None:
-            prev_ttm = ttm_flows(items_by_period, prev_label, fiscal_year_end_month)
+            prev_ttm = ttm_flows(items_by_period, prev_label, fiscal_year_end_month, quarter_factors)
             previous = {
                 **{k: to_number(prev_stocks.get(k)) for k in STOCK_KEYS},
                 **(prev_ttm or {k: None for k in FLOW_KEYS}),
@@ -424,6 +431,7 @@ def _window_flows(
     facts_by_period: Mapping[str, Mapping[str, Any]],
     period: str,
     fiscal_year_end_month: int,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> tuple[dict[str, float | None] | None, dict[str, str], list[str]]:
     """Twelve-month flows ending at ``period`` + the facts periods they come from + missing periods."""
     components = ttm_components(period, fiscal_year_end_month)
@@ -436,7 +444,27 @@ def _window_flows(
     used = {"latest": latest, "fiscal_year": fiscal_year, "prior_ytd": prior}
     if missing:
         return None, used, missing
-    return ttm_flows(facts_by_period, period, fiscal_year_end_month), used, []
+    return ttm_flows(facts_by_period, period, fiscal_year_end_month, quarter_factors), used, []
+
+
+def ias29_window_factors(
+    period: str, quarter_factors: Mapping[str, float] | None, fiscal_year_end_month: int = 12
+) -> dict[str, float | None] | None:
+    """The re-expression factors a TTM window ending at ``period`` applies (audit trail).
+
+    ``{quarter: factor}`` for its second/third quarters of IAS 29 fiscal years (``None`` =
+    factor unknown), ``{}`` when none applies, ``None`` without ``quarter_factors``.
+    """
+    if quarter_factors is None:
+        return None
+    if ttm_components(period, fiscal_year_end_month) is None:
+        return {}
+    used: dict[str, float | None] = {}
+    for quarter in trailing_quarters(period):
+        factor = reexpression_factor(quarter, quarter_factors, fiscal_year_end_month)
+        if factor != 1.0:
+            used[quarter] = round(factor, 6) if factor is not None else None
+    return used
 
 
 def _has_balance_sheet(items: Mapping[str, Any]) -> bool:
@@ -447,9 +475,10 @@ def _period_inputs(
     facts_by_period: Mapping[str, Mapping[str, Any]],
     period: str,
     fiscal_year_end_month: int,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     stocks = {k: _finite(facts_by_period[period].get(k)) for k in STOCK_KEYS}
-    flows, flow_periods, missing = _window_flows(facts_by_period, period, fiscal_year_end_month)
+    flows, flow_periods, missing = _window_flows(facts_by_period, period, fiscal_year_end_month, quarter_factors)
     fiscal_year: dict[str, Any] | None = None
     components = ttm_components(period, fiscal_year_end_month)
     if components is not None and components[1] in facts_by_period:
@@ -463,7 +492,7 @@ def _period_inputs(
         prev_label = period_label(parsed[0] - 1, parsed[1])
         if prev_label in facts_by_period:
             prev_flows, prev_flow_periods, prev_missing = _window_flows(
-                facts_by_period, prev_label, fiscal_year_end_month
+                facts_by_period, prev_label, fiscal_year_end_month, quarter_factors
             )
             previous = {
                 "period": prev_label,
@@ -479,6 +508,7 @@ def _period_inputs(
         "missing": missing,
         "previous": previous,
         "fiscal_year": fiscal_year,
+        "ias29_quarter_factors": ias29_window_factors(period, quarter_factors, fiscal_year_end_month),
     }
 
 
@@ -489,8 +519,12 @@ def ratio_rows(
     template: str | None = None,
     market: MarketInputs | None = None,
     sources_by_period: Mapping[str, Mapping[str, Any]] | None = None,
+    quarter_factors: Mapping[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """``financial_ratios`` rows for every period of canonical, cumulative facts.
+
+    ``quarter_factors``: CPI quarter factors for an IAS 29 reporter (``None`` otherwise);
+    its TTM windows then sum the companies' own three-month figures (:func:`ttm_flows`).
 
     * ``basis="ttm"`` for every period: flows = trailing twelve months ending at
       the period (``ttm_quarters`` lists the four quarters; empty when a needed
@@ -524,7 +558,7 @@ def ratio_rows(
         parsed = parse_period(period)
         assert parsed is not None
         is_year_end = months_into_fiscal_year(parsed[1], fiscal_year_end_month) == 12
-        inputs = _period_inputs(facts_by_period, period, fiscal_year_end_month)
+        inputs = _period_inputs(facts_by_period, period, fiscal_year_end_month, quarter_factors)
         for basis in ("ttm", "annual"):
             if basis == "annual" and not is_year_end:
                 continue
@@ -652,6 +686,7 @@ def _ratio_row(
         "fiscal_year_end_month": fiscal_year_end_month,
         "flows": None if flows is None else {k: flows.get(k) for k in FLOW_KEYS},
         "flow_periods": inputs["flow_periods"],
+        "ias29_quarter_factors": inputs.get("ias29_quarter_factors") if basis == "ttm" else None,
         "stocks": stocks,
         "previous": previous_info,
         "derived": {
