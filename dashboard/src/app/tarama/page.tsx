@@ -1,327 +1,226 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatNumber, formatCompact } from "@/lib/format";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
-import { TickerSearch } from "@/components/shared/TickerSearch";
-import { motion } from "framer-motion";
-import { Filter, Search, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "next/link";
-import { useLocale } from "@/lib/locale-context";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { RowSkeleton } from "@/components/dashboard/ui";
+import { ScreenerFilters, type StateUpdate } from "@/components/tarama/ScreenerFilters";
+import { ScreenerResults } from "@/components/tarama/ScreenerResults";
+import type { TableContext } from "@/components/tarama/ScreenerTable";
+import { sectorLabel, useTaramaI18n } from "@/components/tarama/i18n";
+import { buildCsvColumns, csvFileName } from "@/components/tarama/csv";
+import {
+  DEFAULT_STATE,
+  breadth,
+  clearFilters,
+  defaultDir,
+  filterRows,
+  hasFilters,
+  hasLegacyParams,
+  paginate,
+  parseState,
+  serializeState,
+  sortRows,
+  toCsv,
+  type ScreenerState,
+  type SortKey,
+  type ViewKey,
+} from "@/components/tarama/model";
+import { api, isApiError } from "@/lib/api";
+import { formatMarketDate } from "@/lib/format";
+import { STALE_TIME } from "@/lib/queryClient";
+import { useLiveRefetchInterval } from "@/hooks/use-market-status";
+import { useNow } from "@/hooks/use-now";
+import { DEFAULT_WATCHLIST_ID, useWatchlists } from "@/hooks/use-watchlists";
 
-const stagger = {
-  hidden: { opacity: 0, y: 12 },
-  show: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as const },
-  }),
-};
+/** The universe endpoint is cached for 120 s on the backend. */
+const REFRESH_MS = 120_000;
 
-export default function TaramaPage() {
-  const { t, locale } = useLocale();
-  const [scanCondition, setScanCondition] = useState("");
-  const [stockPage, setStockPage] = useState(0);
-  const [activeTemplate, setActiveTemplate] = useState<string>("");
-  const stocksPerPage = 25;
+function Header({ asOf, delay }: { asOf?: string; delay?: number }) {
+  const { t } = useTaramaI18n();
+  const now = useNow();
+  let status: string | null = null;
+  if (asOf && now !== null) {
+    const sameDay = formatMarketDate(asOf, "date") === formatMarketDate(now, "date");
+    status = t("status.updated", { time: formatMarketDate(asOf, sameDay ? "time" : "dayMonthTime") });
+    if (delay) status += ` · ${t("status.delayed", { minutes: delay })}`;
+  }
+  return (
+    <PageHeader
+      title={t("page.title")}
+      description={t("page.description")}
+      actions={status ? <p className="text-[11px] text-muted-foreground">{status}</p> : undefined}
+    />
+  );
+}
 
-  const templatesQ = useQuery({ queryKey: ["screenerTemplates"], queryFn: () => api.screenerTemplates() });
-  const screenerQ = useQuery({
-    queryKey: ["screener", activeTemplate],
-    queryFn: () => activeTemplate ? api.screener({ template: activeTemplate }) : api.screener(),
+function Screener() {
+  const { t, locale } = useTaramaI18n();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
+  const state = useMemo(() => parseState(new URLSearchParams(search)), [search]);
+
+  // Updates are applied to the newest state, not to the URL that may not have caught up
+  // yet — a debounced edit and a click landing in the same tick must not undo each other.
+  const latest = useRef(state);
+  useEffect(() => {
+    latest.current = state;
+  }, [state]);
+
+  const navigate = useCallback(
+    (next: ScreenerState) => {
+      latest.current = next;
+      const query = serializeState(next);
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [router, pathname],
+  );
+
+  const update = useCallback<StateUpdate>(
+    (change) => {
+      const previous = latest.current;
+      const next = change(previous);
+      if (serializeState(next) !== serializeState(previous)) navigate(next);
+    },
+    [navigate],
+  );
+
+  // Old links (?template=low_pe, ?condition=golden_cross, million-TL bounds) → current format.
+  useEffect(() => {
+    if (hasLegacyParams(new URLSearchParams(search))) navigate(parseState(new URLSearchParams(search)));
+  }, [search, navigate]);
+
+  const refetchInterval = useLiveRefetchInterval(REFRESH_MS);
+  const universeQ = useQuery({
+    queryKey: ["screenerUniverse"],
+    queryFn: ({ signal }) => api.screenerUniverse(signal),
+    staleTime: STALE_TIME.market,
+    refetchInterval,
   });
-  const scannerQ = useQuery({
-    queryKey: ["scanner", scanCondition],
-    queryFn: () => api.scanner(scanCondition || undefined),
-    enabled: true,
-  });
-  const indicesQ = useQuery({ queryKey: ["indexQuotes"], queryFn: () => api.indices(), staleTime: 120_000 });
-  const allCompaniesQ = useQuery({ queryKey: ["allCompanies"], queryFn: () => api.allCompanies(), staleTime: 300_000 });
+  const data = universeQ.data;
+  const status = data ? "ready" : universeQ.isError ? "error" : "loading";
 
-  const screenerData = screenerQ.data;
-  const stocks = screenerData && typeof screenerData === "object" && "results" in (screenerData as Record<string, unknown>)
-    ? ((screenerData as Record<string, unknown>).results as Record<string, unknown>[])
-    : Array.isArray(screenerData) ? screenerData : [];
+  const turkishSectors = useMemo(() => new Map((data?.sectors ?? []).map((sector) => [sector.key, sector.name_tr])), [data]);
+  const sectorName = useCallback((key: string) => sectorLabel(key, locale, turkishSectors), [locale, turkishSectors]);
+  const industryName = useCallback((key: string) => (locale === "tr" ? (data?.industries[key] ?? key) : key), [locale, data]);
 
-  const scannerData = scannerQ.data;
-  const scanResults = scannerData && typeof scannerData === "object" && "results" in (scannerData as Record<string, unknown>)
-    ? ((scannerData as Record<string, unknown>).results as Record<string, unknown>[])
-    : scannerData && typeof scannerData === "object" && "data" in (scannerData as Record<string, unknown>)
-    ? ((scannerData as Record<string, unknown>).data as Record<string, unknown>[])
-    : Array.isArray(scannerData) ? scannerData : [];
+  const filtered = useMemo(() => (data ? filterRows(data.rows, state) : []), [data, state]);
+  const sorted = useMemo(() => sortRows(filtered, state.sort, state.dir, sectorName), [filtered, state.sort, state.dir, sectorName]);
+  const slice = useMemo(() => paginate(sorted, state.page, state.size), [sorted, state.page, state.size]);
+  const counts = useMemo(() => breadth(filtered), [filtered]);
 
-  const indicesLoading = indicesQ.isLoading;
-  const indexNames = ["XU100", "XU030", "XUSIN", "XBANK"];
-  const quotesRaw = indicesQ.data as { quotes?: Array<Record<string, unknown>> } | null;
-  const allQuotes = quotesRaw?.quotes ?? [];
-  const indicesArr = indexNames.map((sym) => {
-    const q = allQuotes.find((x) => String(x.symbol) === sym);
-    return {
-      symbol: sym,
-      close: Number(q?.last ?? 0),
-      change_pct: Number(q?.change_percent ?? 0),
-    };
-  });
+  const { lists, addTicker, removeTicker } = useWatchlists();
+  const favoritesList = lists.find((list) => list.id === DEFAULT_WATCHLIST_ID) ?? lists[0];
+  const favorites = useMemo(() => new Set(favoritesList?.tickers ?? []), [favoritesList]);
+  const toggleFavorite = useCallback(
+    (ticker: string) => {
+      if (!favoritesList) return;
+      if (favorites.has(ticker)) {
+        removeTicker(favoritesList.id, ticker);
+        toast(t("watch.removed", { ticker }));
+        return;
+      }
+      const result = addTicker(favoritesList.id, ticker);
+      if (result === "added") toast.success(t("watch.added", { ticker }));
+      else if (result === "full") toast.error(t("watch.full"));
+    },
+    [favoritesList, favorites, addTicker, removeTicker, t],
+  );
 
-  const allCompaniesRaw = allCompaniesQ.data as Record<string, unknown> | null;
-  const allCompaniesList: Record<string, unknown>[] = Array.isArray(allCompaniesRaw) ? allCompaniesRaw as Record<string, unknown>[]
-    : allCompaniesRaw && typeof allCompaniesRaw === "object" && "companies" in allCompaniesRaw
-    ? (allCompaniesRaw.companies as Record<string, unknown>[])
-    : allCompaniesRaw && typeof allCompaniesRaw === "object" && "data" in allCompaniesRaw
-    ? (allCompaniesRaw.data as Record<string, unknown>[])
-    : [];
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const goToPage = useCallback(
+    (page: number) => {
+      update((prev) => ({ ...prev, page }));
+      // Paging from the bottom pager: bring the top of the table back into view.
+      const node = resultsRef.current;
+      if (node && node.getBoundingClientRect().top < 0) {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        node.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+      }
+    },
+    [update],
+  );
+
+  const context: TableContext = useMemo(() => ({ t, sectorName, industryName }), [t, sectorName, industryName]);
+
+  function exportCsv() {
+    const csv = toCsv(sorted, buildCsvColumns(locale, sectorName), locale !== "en");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = csvFileName(data?.as_of);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  }
+
+  const errorMessage = isApiError(universeQ.error) ? universeQ.error.detail : undefined;
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        <motion.div custom={0} variants={stagger} initial="hidden" animate="show">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-              <Search className="h-5 w-5 text-purple-500" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">{t("nav.screening")}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{t("tarama.screenerDesc")}</p>
-            </div>
-          </div>
-        </motion.div>
-        <div className="w-64"><TickerSearch /></div>
+    <div className="mx-auto max-w-7xl space-y-6">
+      <Header asOf={data?.as_of} delay={data?.delay_minutes} />
+
+      <ScreenerFilters state={state} onChange={update} data={data} />
+
+      <div ref={resultsRef} className="scroll-mt-20">
+        <ScreenerResults
+          state={state}
+          data={data}
+          status={status}
+          errorMessage={errorMessage}
+          onRetry={() => void universeQ.refetch()}
+          isRefreshing={universeQ.isFetching && !universeQ.isPending}
+          slice={slice}
+          breadth={counts}
+          hasFilters={hasFilters(state)}
+          favorites={favorites}
+          context={context}
+          onView={(view: ViewKey) => update((prev) => ({ ...prev, view }))}
+          onSort={(key: SortKey) =>
+            update((prev) => ({
+              ...prev,
+              sort: key,
+              dir: prev.sort === key ? (prev.dir === "asc" ? "desc" : "asc") : defaultDir(key),
+              page: 1,
+            }))
+          }
+          onResetSort={() => update((prev) => ({ ...prev, sort: DEFAULT_STATE.sort, dir: DEFAULT_STATE.dir, page: 1 }))}
+          onPage={goToPage}
+          onToggleFavorite={toggleFavorite}
+          onClearFilters={() => update(clearFilters)}
+          onExport={exportCsv}
+        />
       </div>
 
-      {/* Indices */}
-      <motion.div custom={1} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-3">{t("tarama.bistIndices")}</h2>
-        {indicesLoading ? <LoadingSpinner /> : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {indicesArr.map((idx, i) => {
-              const isUp = idx.change_pct >= 0;
-              return (
-                <motion.div key={i} custom={i + 2} variants={stagger} initial="hidden" animate="show">
-                  <div className="bg-muted/30 rounded-xl p-4 hover:bg-muted/50 transition-colors">
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{idx.symbol}</div>
-                    <div className="text-xl font-bold font-mono text-foreground">{idx.close > 0 ? formatNumber(idx.close, 2) : "-"}</div>
-                    {idx.close > 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                        {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {isUp ? "+" : ""}{formatNumber(idx.change_pct)}%
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </motion.div>
-
-      {/* Screener Templates */}
-      {(() => {
-        const rawTemplates = templatesQ.data;
-        const templates: string[] = Array.isArray(rawTemplates) ? rawTemplates.map(String) :
-          rawTemplates && typeof rawTemplates === "object" && "templates" in (rawTemplates as Record<string, unknown>)
-            ? ((rawTemplates as Record<string, unknown>).templates as string[]) : [];
-        const templateLabels: Record<string, Record<string, string>> = {
-          low_pe: { tr: "Dusuk F/K", en: "Low P/E", fr: "Faible PER" },
-          high_roe: { tr: "Yuksek ROE", en: "High ROE", fr: "ROE Eleve" },
-          high_dividend: { tr: "Yuksek Temettu", en: "High Dividend", fr: "Dividende Eleve" },
-          high_volume: { tr: "Yuksek Hacim", en: "High Volume", fr: "Volume Eleve" },
-          small_cap: { tr: "Kucuk Sermaye", en: "Small Cap", fr: "Petite Cap." },
-          mid_cap: { tr: "Orta Sermaye", en: "Mid Cap", fr: "Moyenne Cap." },
-          large_cap: { tr: "Buyuk Sermaye", en: "Large Cap", fr: "Grande Cap." },
-          high_upside: { tr: "Yuksek Potansiyel", en: "High Upside", fr: "Fort Potentiel" },
-          buy_recommendation: { tr: "Al Onerisi", en: "Buy Recommendation", fr: "Recommandation Achat" },
-          high_net_margin: { tr: "Yuksek Net Marj", en: "High Net Margin", fr: "Marge Nette Elevee" },
-          high_return: { tr: "Yuksek Getiri", en: "High Return", fr: "Rendement Eleve" },
-          high_foreign_ownership: { tr: "Yuksek Yabanci Oran", en: "High Foreign Ownership", fr: "Fort Taux Etranger" },
-        };
-        return templates.length > 0 ? (
-          <motion.div custom={5} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-3">
-              {locale === "en" ? "Quick Filters" : locale === "fr" ? "Filtres rapides" : "Hazır Filtreler"}
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => { setActiveTemplate(""); setStockPage(0); }}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
-                  !activeTemplate ? "bg-primary text-primary-foreground border-primary" : "border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40"
-                }`}
-              >
-                {t("common.all")}
-              </button>
-              {templates.map((tmpl) => (
-                <button
-                  key={tmpl}
-                  onClick={() => { setActiveTemplate(tmpl); setStockPage(0); }}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
-                    activeTemplate === tmpl ? "bg-primary text-primary-foreground border-primary" : "border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40"
-                  }`}
-                >
-                  {templateLabels[tmpl]?.[locale] ?? tmpl.replace(/_/g, " ")}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        ) : null;
-      })()}
-
-      {/* Screener Table */}
-      <motion.div custom={6} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
-        <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">{t("tarama.results")}</h2>
-          <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{Array.isArray(stocks) ? stocks.length : 0} {t("common.stocks")}</span>
-        </div>
-        {screenerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(stocks) || stocks.length === 0 ? <EmptyState message={t("tarama.noResults")} /> : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/20">
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.price")}</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.change")}</th>
-                    <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("index.volume")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/20">
-                  {(stocks as Record<string, unknown>[]).slice(stockPage * stocksPerPage, (stockPage + 1) * stocksPerPage).map((s, i) => {
-                    const tk = String(s.symbol || s.ticker || s.code || "");
-                    const name = String(s.name || "");
-                    const price = Number(s.criteria_7 || s.close || s.price || s.last || 0);
-                    // Show "-" instead of fake +0,00% / 0 when the screener
-                    // response doesn't include these fields
-                    const changeRaw = s.change_pct ?? s.change_percent;
-                    const volRaw = s.volume;
-                    const change = changeRaw != null ? Number(changeRaw) : null;
-                    const vol = volRaw != null ? Number(volRaw) : null;
-                    const isUp = (change ?? 0) >= 0;
-                    return (
-                      <tr key={i} className="hover:bg-muted/15 transition-colors">
-                        <td className="px-5 py-3">
-                          <Link href={`/hisse/${tk}`} className="font-semibold text-primary hover:underline text-xs">{tk}</Link>
-                          {name && <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">{name}</p>}
-                        </td>
-                        <td className="px-5 py-3 font-mono text-xs text-foreground">{price > 0 ? formatNumber(price) : "-"}</td>
-                        <td className={`px-5 py-3 font-mono text-xs font-semibold ${change == null ? "text-muted-foreground" : isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                          {change == null ? "-" : (
-                            <span className="flex items-center gap-1">
-                              {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                              {isUp ? "+" : ""}{formatNumber(change)}%
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{vol != null && vol > 0 ? formatCompact(vol) : "-"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {/* Pagination */}
-            {stocks.length > stocksPerPage && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-border/40">
-                <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
-                  {t("tarama.page")} {stockPage + 1} / {Math.ceil(stocks.length / stocksPerPage)}
-                </span>
-                <div className="flex gap-1.5">
-                  <button
-                    disabled={stockPage === 0}
-                    onClick={() => setStockPage(Math.max(0, stockPage - 1))}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 text-foreground hover:bg-muted/30 disabled:opacity-30 transition-colors"
-                  >
-                    <ChevronLeft className="h-3 w-3" /> {t("common.previous")}
-                  </button>
-                  <button
-                    disabled={(stockPage + 1) * stocksPerPage >= stocks.length}
-                    onClick={() => setStockPage(stockPage + 1)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 text-foreground hover:bg-muted/30 disabled:opacity-30 transition-colors"
-                  >
-                    {t("common.next")} <ChevronRight className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </motion.div>
-
-      {/* Scanner */}
-      <motion.div custom={7} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">{t("tarama.signalScanning")}</h2>
-          </div>
-          <select
-            value={scanCondition}
-            onChange={(e) => setScanCondition(e.target.value)}
-            className="text-xs border border-border/60 rounded-lg px-3 py-1.5 bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all outline-none"
-          >
-            <option value="">{t("common.all")}</option>
-            <option value="rsi_oversold">{t("tarama.rsiOversold")}</option>
-            <option value="rsi_overbought">{t("tarama.rsiOverbought")}</option>
-            <option value="golden_cross">Golden Cross</option>
-          </select>
-        </div>
-        {scannerQ.isLoading ? <LoadingSpinner /> : !Array.isArray(scanResults) || scanResults.length === 0 ? <EmptyState message={t("tarama.scanNoResults")} /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/40">
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ticker</th>
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("tarama.signal")}</th>
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t("teknik.value")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/20">
-                {(scanResults as Record<string, unknown>[]).slice(0, 30).map((r, i) => {
-                  const tk = String(r.ticker || r.symbol || "");
-                  const signal = String(r.signal || r.condition || r.type || "-");
-                  const value = r.value != null ? formatNumber(Number(r.value)) : "-";
-                  return (
-                    <tr key={i} className="hover:bg-muted/15 transition-colors">
-                      <td className="py-2.5">
-                        <Link href={`/hisse/${tk}`} className="font-semibold text-primary hover:underline text-xs">{tk}</Link>
-                      </td>
-                      <td className="py-2.5 text-xs text-foreground">{signal}</td>
-                      <td className="py-2.5 text-xs font-mono text-muted-foreground">{value}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
-
-      {/* All BIST Companies */}
-      {allCompaniesList.length > 0 && (
-        <motion.div custom={8} variants={stagger} initial="hidden" animate="show" className="bg-card rounded-2xl border border-border/60 overflow-hidden">
-          <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">
-              {locale === "en" ? "All BIST Companies" : locale === "fr" ? "Toutes les sociétés BIST" : "Tüm BIST Şirketleri"}
-            </h2>
-            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
-              {allCompaniesList.length}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-0 divide-x divide-y divide-border/20 max-h-96 overflow-y-auto">
-            {allCompaniesList.map((c, i) => {
-              const symbol = String(c.symbol ?? c.ticker ?? c.code ?? c.name ?? "");
-              const name = String(c.name ?? c.company_name ?? c.shortName ?? c.title ?? "");
-              return (
-                <Link key={i} href={`/hisse/${symbol}`} className="px-4 py-3 hover:bg-muted/10 transition-colors">
-                  <div className="text-xs font-bold text-primary">{symbol}</div>
-                  {name && name !== symbol && (
-                    <div className="text-[10px] text-muted-foreground truncate mt-0.5">{name}</div>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        {t("status.sources")} · {t("status.notAdvice")}
+      </p>
     </div>
+  );
+}
+
+function ScreenerFallback() {
+  return (
+    <div className="mx-auto max-w-7xl space-y-6" aria-busy="true">
+      <Header />
+      <div className="card-surface h-40 skeleton-shimmer bg-muted/40" aria-hidden="true" />
+      <div className="card-surface">
+        <RowSkeleton rows={8} />
+      </div>
+    </div>
+  );
+}
+
+export default function TaramaPage() {
+  // useSearchParams needs a Suspense boundary for the static shell.
+  return (
+    <Suspense fallback={<ScreenerFallback />}>
+      <Screener />
+    </Suspense>
   );
 }

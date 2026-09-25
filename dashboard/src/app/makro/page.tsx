@@ -1,253 +1,108 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatNumber, formatPercent } from "@/lib/format";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState } from "@/components/shared/ErrorState";
-import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Landmark, BarChart3, Globe, DollarSign, Calendar } from "lucide-react";
-import { useLocale } from "@/lib/locale-context";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { useMakroI18n, type MakroKey } from "@/components/makro/i18n";
+import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
+import { MacroSection } from "@/components/makro/ui";
+import { KpiStrip } from "@/components/makro/KpiStrip";
+import { CorridorPanel, PolicyInflationPanel } from "@/components/makro/MonetaryPolicy";
+import { InflationTiles, InflationTrendPanel, MonthlyCpiPanel } from "@/components/makro/InflationSection";
+import { ACTIVITY_KEYS, EXTERNAL_KEYS, IndicatorGrid } from "@/components/makro/IndicatorGrid";
+import { MarketsSection } from "@/components/makro/MarketsSection";
+import { EconomicCalendar } from "@/components/makro/EconomicCalendar";
 
-const stagger = {
-  hidden: { opacity: 0, y: 12 },
-  show: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as const },
-  }),
-};
+const SECTIONS: Array<{ id: string; title: MakroKey }> = [
+  { id: "para-politikasi", title: "section.monetary" },
+  { id: "enflasyon", title: "section.inflation" },
+  { id: "buyume", title: "section.activity" },
+  { id: "dis-denge", title: "section.external" },
+  { id: "piyasalar", title: "section.markets" },
+  { id: "takvim", title: "section.calendar" },
+];
 
-function MacroCard({ title, icon: Icon, children, isLoading: loading, index = 0 }: { title: string; icon?: React.ComponentType<{ className?: string }>; children: React.ReactNode; isLoading?: boolean; index?: number }) {
+function RefreshButton() {
+  const { t } = useMakroI18n();
+  const queryClient = useQueryClient();
+  const fetching = useIsFetching({ queryKey: MACRO_QUERY_ROOT }) > 0;
   return (
-    <motion.div custom={index} variants={stagger} initial="hidden" animate="show">
-      <div className="bg-card rounded-2xl border border-border/60 p-5 hover:shadow-sm transition-all h-full">
-        <div className="flex items-center gap-2 mb-4">
-          {Icon && <Icon className="h-4 w-4 text-primary" />}
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        </div>
-        {loading ? <LoadingSpinner /> : children}
-      </div>
-    </motion.div>
+    <button
+      type="button"
+      onClick={() => void queryClient.invalidateQueries({ queryKey: MACRO_QUERY_ROOT })}
+      disabled={fetching}
+      className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <RefreshCw className={cn("h-3.5 w-3.5", fetching && "animate-spin")} aria-hidden="true" />
+      {fetching ? t("page.refreshing") : t("page.refresh")}
+    </button>
   );
 }
 
-function FxCard({ label, data, isLoading, index, noDataLabel }: { label: string; data: Record<string, unknown> | null; isLoading: boolean; index: number; noDataLabel: string }) {
-  const { locale } = useLocale();
-  if (isLoading) return <MacroCard title={label} icon={DollarSign} isLoading={true} index={index}><span /></MacroCard>;
-  if (!data) return <MacroCard title={label} icon={DollarSign} index={index}><EmptyState message={noDataLabel} /></MacroCard>;
-
-  // Backend returns: {"currency": ..., "info": {...}, "history": [...]}
-  const info = (data.info && typeof data.info === "object" ? data.info : data) as Record<string, unknown>;
-  const historyArr = Array.isArray(data.history) ? data.history as Record<string, unknown>[] : [];
-  const lastHist = historyArr.length > 0 ? historyArr[historyArr.length - 1] : null;
-  const prevHist = historyArr.length > 1 ? historyArr[historyArr.length - 2] : null;
-
-  const price = info.close ?? info.last ?? info.price ?? info.rate ?? info.value ?? (lastHist ? lastHist.Close ?? lastHist.close : null);
-  const prevPrice = prevHist ? Number(prevHist.Close ?? prevHist.close ?? 0) : 0;
-  const curPrice = price != null ? Number(price) : 0;
-  const rawChange = info.change_pct ?? info.change_percent;
-  const change = prevPrice > 0
-    ? ((curPrice - prevPrice) / prevPrice) * 100
-    : rawChange != null ? Number(rawChange) : null;
-  const isUp = (change ?? 0) >= 0;
-  const source = String(data.source ?? "");
-  const asOf = String(data.as_of ?? info.update_time ?? "");
-  const sourceLabel = source === "TCMB"
-    ? locale === "tr" ? "TCMB döviz satış" : locale === "fr" ? "Vente devises CBRT" : "CBRT forex selling"
-    : source;
-
+function SectionNav() {
+  const { t } = useMakroI18n();
   return (
-    <MacroCard title={label} icon={DollarSign} index={index}>
-      <div className="text-3xl font-bold font-mono text-foreground tracking-tight">{price != null ? formatNumber(Number(price), 4) : "-"}</div>
-      {change != null && Number.isFinite(change) && (
-        <div className={`flex items-center gap-1.5 text-sm font-semibold mt-2 ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-          {isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-          {isUp ? "+" : ""}{formatNumber(change)}%
-        </div>
-      )}
-      {(sourceLabel || asOf) && (
-        <p className="text-[10px] text-muted-foreground mt-1">
-          {[sourceLabel, asOf].filter(Boolean).join(" · ")}
-        </p>
-      )}
-    </MacroCard>
+    <nav aria-label={t("page.sections")} className="-mx-1 overflow-x-auto scrollbar-none">
+      <ul className="flex w-max gap-1 px-1">
+        {SECTIONS.map((section) => (
+          <li key={section.id}>
+            <a
+              href={`#${section.id}`}
+              className="inline-flex h-7 items-center rounded-sm px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {t(section.title)}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
 export default function MakroPage() {
-  const { t, locale } = useLocale();
-
-  const rateQ = useQuery({ queryKey: ["policy-rate"], queryFn: () => api.policyRate() });
-  const infQ = useQuery({ queryKey: ["inflation"], queryFn: () => api.inflation() });
-  const usdQ = useQuery({ queryKey: ["fx-usd"], queryFn: () => api.fx("USD") });
-  const eurQ = useQuery({ queryKey: ["fx-eur"], queryFn: () => api.fx("EUR") });
-  const gbpQ = useQuery({ queryKey: ["fx-gbp"], queryFn: () => api.fx("GBP") });
-  const calQ = useQuery({ queryKey: ["calendar"], queryFn: () => api.calendar() });
-  const tcmbQ = useQuery({ queryKey: ["tcmb-detail"], queryFn: () => api.tcmb() });
-
-  // Backend returns: {"source": "TCMB", "policy_rate": ...}
-  const rate = rateQ.data as Record<string, unknown> | null;
-  const policyRateRaw = rate?.policy_rate;
-  const rateVal = typeof policyRateRaw === "object" && policyRateRaw != null
-    ? (policyRateRaw as Record<string, unknown>).value ?? (policyRateRaw as Record<string, unknown>).rate
-    : policyRateRaw ?? rate?.rate ?? rate?.value;
-
-  // Backend returns: {"source": "TCMB", "latest": {...}, "tufe_history": [...]}
-  const infRaw = infQ.data as Record<string, unknown> | null;
-  const inf = (infRaw?.latest && typeof infRaw.latest === "object" ? infRaw.latest : infRaw) as Record<string, unknown> | null;
-
-  // Backend returns: {"calendar": [...]}
-  const calData = calQ.data as Record<string, unknown> | null;
-  const calArr = calData?.calendar ? calData.calendar
-    : Array.isArray(calData) ? calData
-    : (calData && typeof calData === "object" && "data" in calData) ? calData.data
-    : null;
+  const { t } = useMakroI18n();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      <motion.div custom={0} variants={stagger} initial="hidden" animate="show">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
-            <Globe className="h-5 w-5 text-violet-500" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">{t("nav.macroEconomy")}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{t("makro.tcmbFx")}</p>
-          </div>
+    <div className="mx-auto max-w-7xl space-y-8 pb-6">
+      <div className="space-y-3">
+        <PageHeader eyebrow={t("page.eyebrow")} title={t("page.title")} description={t("page.description")} actions={<RefreshButton />} />
+        <SectionNav />
+      </div>
+
+      <KpiStrip />
+
+      <MacroSection id="para-politikasi" title={t("section.monetary")} description={t("section.monetary.desc")}>
+        {/* Panels stretch to one row height; the chart grows to fill it. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <CorridorPanel />
+          <PolicyInflationPanel className="lg:col-span-2" />
         </div>
-      </motion.div>
+      </MacroSection>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MacroCard title={t("makro.policyRate")} icon={Landmark} index={1}>
-          <div className="text-3xl font-bold font-mono text-primary tracking-tight">
-            {rateVal != null ? formatPercent(Number(rateVal)) : rateQ.isLoading ? "..." : "-"}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">{t("makro.weeklyRepo")}</p>
-          {typeof policyRateRaw === "object" && policyRateRaw != null && (policyRateRaw as Record<string, unknown>).date != null && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">{String((policyRateRaw as Record<string, unknown>).date)}</p>
-          )}
-        </MacroCard>
-        <MacroCard title={t("makro.inflation")} icon={BarChart3} index={2}>
-          {inf ? (
-            <>
-              <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
-                {formatPercent(Number(inf.yearly_inflation ?? inf.rate ?? inf.value ?? inf.cpi ?? 0))}
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">{t("makro.yearlyCpi")}</p>
-              {inf.monthly_inflation != null && (
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-muted-foreground">{t("makro.monthly")}</span>
-                  <span className="text-sm font-bold font-mono text-foreground">{formatPercent(Number(inf.monthly_inflation))}</span>
-                </div>
-              )}
-              {inf.year_month && (
-                <p className="text-[10px] text-muted-foreground mt-1">{String(inf.year_month)}</p>
-              )}
-            </>
-          ) : infQ.isLoading ? (
-            <div className="text-3xl font-bold font-mono tracking-tight">...</div>
-          ) : (
-            <div className="text-3xl font-bold font-mono tracking-tight">-</div>
-          )}
-        </MacroCard>
-        <FxCard label="USD/TRY" data={usdQ.data as Record<string, unknown> | null} isLoading={usdQ.isLoading} index={3} noDataLabel={t("makro.noData")} />
-        <FxCard label="EUR/TRY" data={eurQ.data as Record<string, unknown> | null} isLoading={eurQ.isLoading} index={4} noDataLabel={t("makro.noData")} />
-      </div>
+      <MacroSection id="enflasyon" title={t("section.inflation")} description={t("section.inflation.desc")}>
+        <InflationTiles />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <InflationTrendPanel className="lg:col-span-2" />
+          <MonthlyCpiPanel />
+        </div>
+      </MacroSection>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <FxCard label="GBP/TRY" data={gbpQ.data as Record<string, unknown> | null} isLoading={gbpQ.isLoading} index={5} noDataLabel={t("makro.noData")} />
+      <MacroSection id="buyume" title={t("section.activity")} description={t("section.activity.desc")}>
+        <IndicatorGrid keys={ACTIVITY_KEYS} label={t("section.activity")} />
+      </MacroSection>
 
-        {/* Economic Calendar */}
-        <MacroCard title={t("makro.calendar")} icon={Calendar} isLoading={calQ.isLoading} index={6}>
-          {!calArr || !Array.isArray(calArr) || calArr.length === 0 ? (
-            <EmptyState message={t("makro.noCalendar")} />
-          ) : (
-            <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
-              {(calArr as Record<string, unknown>[]).slice(0, 12).map((item, i) => {
-                // borsapy calendar uses capitalized keys (Event, Date, Time, ...)
-                const name = String(item.Event ?? item.event ?? item.title ?? item.name ?? "-");
-                const dateRaw = String(item.Date ?? item.date ?? "");
-                const time = String(item.Time ?? item.time ?? "");
-                const country = String(item.Country ?? item.country ?? "");
-                const actual = item.Actual ?? item.actual;
-                const forecast = item.Forecast ?? item.forecast;
-                const previous = item.Previous ?? item.previous;
-                const dateLabel = dateRaw ? dateRaw.split("T")[0] : "";
-                return (
-                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-foreground truncate">{name}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">
-                        {dateLabel}{time && time !== "00:00" ? ` ${time}` : ""}{country ? ` · ${country}` : ""}
-                      </div>
-                    </div>
-                    {(actual != null || forecast != null || previous != null) ? (
-                      <div className="text-[11px] font-mono text-muted-foreground ml-3 shrink-0 space-x-2">
-                        {actual != null && <span className="text-foreground font-semibold">G: {String(actual)}</span>}
-                        {forecast != null && <span>T: {String(forecast)}</span>}
-                        {previous != null && <span>Ö: {String(previous)}</span>}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </MacroCard>
-      </div>
+      <MacroSection id="dis-denge" title={t("section.external")} description={t("section.external.desc")}>
+        <IndicatorGrid keys={EXTERNAL_KEYS} label={t("section.external")} />
+      </MacroSection>
 
-      {/* TCMB Detail */}
-      {(() => {
-        const tcmbRaw = tcmbQ.data as Record<string, unknown> | null;
-        const rates = tcmbRaw?.rates ?? tcmbRaw?.interest_rates ?? tcmbRaw?.data;
-        const tcmbLabels: Record<string, Record<string, string>> = {
-          title: { tr: "TCMB Faiz Oranlari", en: "CBRT Interest Rates", fr: "Taux CBRT" },
-          overnight_lending: { tr: "Gecelik Faiz (Brc. Verme)", en: "Overnight Lending", fr: "Pret au jour le jour" },
-          overnight_borrowing: { tr: "Gecelik Faiz (Brc. Alma)", en: "Overnight Borrowing", fr: "Emprunt au jour le jour" },
-          late_liquidity_lending: { tr: "Gec Likidite (Brc. Verme)", en: "Late Liquidity Lending", fr: "Pret de liquidite tardive" },
-          late_liquidity_borrowing: { tr: "Gec Likidite (Brc. Alma)", en: "Late Liquidity Borrowing", fr: "Emprunt de liquidite tardive" },
-          policy_rate: { tr: "Politika Faizi", en: "Policy Rate", fr: "Taux directeur" },
-        };
-        const rateItems: Array<{ key: string; value: unknown }> = [];
-        if (Array.isArray(rates)) {
-          // Backend shape: [{type: "policy"|"overnight"|"late_liquidity", borrowing, lending}, ...]
-          for (const row of rates as Array<Record<string, unknown>>) {
-            const kind = String(row.type ?? "");
-            if (kind === "policy" && row.lending != null) {
-              rateItems.push({ key: "policy_rate", value: row.lending });
-            } else {
-              if (row.borrowing != null) rateItems.push({ key: `${kind}_borrowing`, value: row.borrowing });
-              if (row.lending != null) rateItems.push({ key: `${kind}_lending`, value: row.lending });
-            }
-          }
-        } else if (rates && typeof rates === "object") {
-          const r = rates as Record<string, unknown>;
-          for (const [k, v] of Object.entries(r)) {
-            if (v != null && typeof v !== "object") rateItems.push({ key: k, value: v });
-          }
-        }
-        return rateItems.length > 0 ? (
-          <motion.div custom={7} variants={stagger} initial="hidden" animate="show">
-            <div className="bg-card rounded-2xl border border-border/60 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Landmark className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">{tcmbLabels.title[locale]}</h2>
-              </div>
-              <div className="space-y-0">
-                {rateItems.map(({ key, value }) => (
-                  <div key={key} className="flex justify-between py-2.5 border-b border-border/30 last:border-0">
-                    <span className="text-xs text-muted-foreground">{tcmbLabels[key]?.[locale] ?? key.replace(/_/g, " ")}</span>
-                    <span className="text-xs font-bold font-mono text-foreground">
-                      {typeof value === "number" ? formatPercent(value) : String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        ) : null;
-      })()}
+      <MacroSection id="piyasalar" title={t("section.markets")} description={t("section.markets.desc")}>
+        <MarketsSection />
+      </MacroSection>
+
+      <MacroSection id="takvim" title={t("section.calendar")} description={t("section.calendar.desc")}>
+        <EconomicCalendar />
+      </MacroSection>
     </div>
   );
 }

@@ -16,53 +16,154 @@ const translations = {
   "common.next": { tr: "Sonraki", en: "Next", fr: "Suivant" },
   "common.close": { tr: "Kapat", en: "Close", fr: "Fermer" },
   "common.records": { tr: "kayıt", en: "records", fr: "enregistrements" },
-  "common.stock": { tr: "hisse", en: "stock", fr: "action" },
   "common.stocks": { tr: "hisse", en: "stocks", fr: "actions" },
   "common.search": { tr: "Hisse ara... (THYAO, GARAN)", en: "Search stock... (THYAO, GARAN)", fr: "Rechercher... (THYAO, GARAN)" },
+  "common.reset": { tr: "Sıfırla", en: "Reset", fr: "Réinitialiser" },
+  "common.loadError": { tr: "Veri yüklenemedi", en: "Failed to load", fr: "Échec du chargement" },
+  "common.min": { tr: "Min", en: "Min", fr: "Min" },
+  "common.max": { tr: "Maks", en: "Max", fr: "Max" },
 
   // Navigation / Breadcrumbs
-  "nav.dashboard": { tr: "Dashboard", en: "Dashboard", fr: "Tableau de bord" },
-  "nav.events": { tr: "Olaylar & KAP", en: "Events & KAP", fr: "Événements & KAP" },
+  "nav.dashboard": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
+  "nav.events": { tr: "KAP Haberleri", en: "KAP News", fr: "Actualités KAP" },
   "nav.stockAnalysis": { tr: "Hisse Analizi", en: "Stock Analysis", fr: "Analyse d'actions" },
   "nav.technicalAnalysis": { tr: "Teknik Analiz", en: "Technical Analysis", fr: "Analyse technique" },
   "nav.fundamentalAnalysis": { tr: "Temel Analiz", en: "Fundamental Analysis", fr: "Analyse fondamentale" },
   "nav.combinedAnalysis": { tr: "Kombine Analiz", en: "Combined Analysis", fr: "Analyse combinée" },
-  "nav.macroEconomy": { tr: "Makro Ekonomi", en: "Macro Economy", fr: "Macro-économie" },
+  "nav.macroEconomy": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
   "nav.screening": { tr: "Hisse Tarama", en: "Stock Screening", fr: "Filtrage d'actions" },
-  "nav.technical": { tr: "Teknik", en: "Technical", fr: "Technique" },
-  "nav.fundamental": { tr: "Temel", en: "Fundamental", fr: "Fondamental" },
 
   // Dashboard
   "dashboard.marketOverview": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
   "dashboard.marketOpen": { tr: "Piyasa Açık", en: "Market Open", fr: "Marché ouvert" },
   "dashboard.marketClosed": { tr: "Piyasa Kapalı", en: "Market Closed", fr: "Marché fermé" },
-  "dashboard.systemStatus": { tr: "Sistem Durumu", en: "System Status", fr: "État du système" },
-  "dashboard.active": { tr: "Aktif", en: "Active", fr: "Actif" },
-  "dashboard.eventsProcessed": { tr: "olay işlendi", en: "events processed", fr: "événements traités" },
-  "dashboard.priceRecords": { tr: "Fiyat Kaydı", en: "Price Records", fr: "Enregistrements de prix" },
-  "dashboard.rawEvents": { tr: "Ham Olay", en: "Raw Events", fr: "Événements bruts" },
-  "dashboard.pending": { tr: "Bekleyen", en: "Pending", fr: "En attente" },
-  "dashboard.marketPulse": { tr: "Piyasa Nabzı", en: "Market Pulse", fr: "Pouls du marché" },
   "dashboard.latestDevelopments": { tr: "Son Gelişmeler", en: "Latest Developments", fr: "Dernières nouvelles" },
-  "dashboard.allReports": { tr: "Tüm raporlar", en: "All reports", fr: "Tous les rapports" },
   "dashboard.noEventsYet": { tr: "Henüz olay kaydedilmemiş", en: "No events recorded yet", fr: "Aucun événement enregistré" },
   "dashboard.watchlist": { tr: "Takip Listesi", en: "Watchlist", fr: "Liste de suivi" },
   "dashboard.chartNoData": { tr: "Grafik verisi bulunamadı", en: "No chart data found", fr: "Aucune donnée graphique" },
-  "dashboard.detailedAnalysis": { tr: "Detaylı hisse analizi", en: "Detailed stock analysis", fr: "Analyse détaillée des actions" },
+  "dashboard.breadth": { tr: "Piyasa genişliği", en: "Market breadth", fr: "Largeur du marché" },
+  "dashboard.advancers": { tr: "yükselen", en: "advancing", fr: "en hausse" },
+  "dashboard.decliners": { tr: "düşen", en: "declining", fr: "en baisse" },
+  "dashboard.unchanged": { tr: "yatay", en: "unchanged", fr: "inchangées" },
+  "dashboard.topGainers": { tr: "En çok yükselenler", en: "Top gainers", fr: "Plus fortes hausses" },
+  "dashboard.topLosers": { tr: "En çok düşenler", en: "Top losers", fr: "Plus fortes baisses" },
+  "dashboard.universeBist100": { tr: "BIST 100 hisseleri", en: "BIST 100 stocks", fr: "Actions du BIST 100" },
+  "dashboard.universeAll": { tr: "Tüm BIST hisseleri", en: "All BIST stocks", fr: "Toutes les actions BIST" },
+  "dashboard.moversUnavailable": { tr: "Hisse hareketleri şu an alınamıyor", en: "Stock movers are unavailable right now", fr: "Mouvements des actions indisponibles pour le moment" },
+  "dashboard.updatedAt": { tr: "Son güncelleme {time}", en: "Updated {time}", fr: "Mis à jour à {time}" },
+  "dashboard.sessionHours": { tr: "Seans 10:00–18:00 (İstanbul)", en: "Session 10:00–18:00 (Istanbul)", fr: "Séance 10:00–18:00 (Istanbul)" },
+  "market.preOpen": { tr: "Açılış 10:00", en: "Opens 10:00", fr: "Ouverture 10:00" },
+  "market.afterClose": { tr: "Seans kapandı", en: "Session closed", fr: "Séance terminée" },
+  "market.weekend": { tr: "Hafta sonu", en: "Weekend", fr: "Week-end" },
+  "market.noTrading": { tr: "Bugün işlem yok", en: "No trading today", fr: "Pas de séance aujourd'hui" },
+  "chart.periodSelect": { tr: "Grafik dönemi", en: "Chart period", fr: "Période du graphique" },
+  "chart.lastSession": { tr: "Son seans", en: "Last session", fr: "Dernière séance" },
+  "chart.ariaLabel": { tr: "BIST 100 fiyat grafiği", en: "BIST 100 price chart", fr: "Graphique du BIST 100" },
+  "chart.loadError": { tr: "BIST 100 grafiği yüklenemedi", en: "Could not load the BIST 100 chart", fr: "Impossible de charger le graphique du BIST 100" },
+  "period.1d": { tr: "1G", en: "1D", fr: "1J" },
+  "period.5d": { tr: "5G", en: "5D", fr: "5J" },
+  "period.1mo": { tr: "1A", en: "1M", fr: "1M" },
+  "period.3mo": { tr: "3A", en: "3M", fr: "3M" },
+  "period.6mo": { tr: "6A", en: "6M", fr: "6M" },
+  "period.ytd": { tr: "YBB", en: "YTD", fr: "YTD" },
+  "period.1y": { tr: "1Y", en: "1Y", fr: "1A" },
+  "period.5y": { tr: "5Y", en: "5Y", fr: "5A" },
+  "period.max": { tr: "Maks.", en: "Max", fr: "Max" },
+  "index.periodReturn": { tr: "Dönem getirisi", en: "Period return", fr: "Rendement de la période" },
+  "indices.loadError": { tr: "Endeks verileri yüklenemedi", en: "Could not load index data", fr: "Impossible de charger les indices" },
+  "watchlist.done": { tr: "Bitti", en: "Done", fr: "Terminé" },
+  "watchlist.remove": { tr: "{ticker} hissesini listeden çıkar", en: "Remove {ticker} from the list", fr: "Retirer {ticker} de la liste" },
+  "watchlist.addHint": { tr: "Listeye eklemek için hisse arayın", en: "Search for a stock to add it", fr: "Recherchez une action à ajouter" },
+  "watchlist.alreadyInList": { tr: "{ticker} zaten bu listede", en: "{ticker} is already in this list", fr: "{ticker} est déjà dans cette liste" },
+  "watchlist.deleteConfirm": { tr: "“{name}” listesi silinsin mi?", en: "Delete the list “{name}”?", fr: "Supprimer la liste « {name} » ?" },
+  "watchlist.quoteError": { tr: "Takip listesi fiyatları yüklenemedi", en: "Could not load watchlist prices", fr: "Impossible de charger les cours de la liste" },
+  "watchlist.dayRange": { tr: "Gün aralığı", en: "Day range", fr: "Fourchette du jour" },
+  "watchlist.lists": { tr: "Takip listeleri", en: "Watchlists", fr: "Listes de suivi" },
+  "events.loadError": { tr: "Son gelişmeler yüklenemedi", en: "Could not load the latest developments", fr: "Impossible de charger les dernières nouvelles" },
+  "events.staleBadge": { tr: "Güncel değil", en: "Outdated", fr: "Pas à jour" },
+  "events.staleHint": { tr: "En yeni bildirim {time}. KAP akışı şu an güncellenmiyor olabilir.", en: "Newest disclosure {time}. The KAP feed may not be updating.", fr: "Dernière publication {time}. Le flux KAP n'est peut-être pas à jour." },
+  "common.viewAll": { tr: "Tümünü gör", en: "View all", fr: "Tout voir" },
+  "common.dataLoadError": { tr: "Veri yüklenemedi", en: "Could not load data", fr: "Impossible de charger les données" },
+  "common.searching": { tr: "Aranıyor…", en: "Searching…", fr: "Recherche…" },
+  "search.label": { tr: "Hisse ara", en: "Search stocks", fr: "Rechercher une action" },
+  "search.placeholder": { tr: "Hisse veya şirket ara", en: "Search ticker or company", fr: "Action ou société" },
+  "search.noResultsFor": { tr: "“{q}” için sonuç bulunamadı", en: "No results for “{q}”", fr: "Aucun résultat pour « {q} »" },
+  "search.unavailable": { tr: "Arama geçici olarak kullanılamıyor", en: "Search is temporarily unavailable", fr: "La recherche est temporairement indisponible" },
+  "search.resultCount": { tr: "{count} sonuç", en: "{count} results", fr: "{count} résultats" },
+  "search.mostTraded": { tr: "En çok işlem gören", en: "Most traded", fr: "Les plus échangées" },
+  "search.clear": { tr: "Aramayı temizle", en: "Clear search", fr: "Effacer la recherche" },
+  "shell.openMenu": { tr: "Menüyü aç", en: "Open menu", fr: "Ouvrir le menu" },
+  "shell.closeMenu": { tr: "Menüyü kapat", en: "Close menu", fr: "Fermer le menu" },
+  "shell.mainNav": { tr: "Ana menü", en: "Main navigation", fr: "Navigation principale" },
+  "shell.home": { tr: "Hisse Analizi ana sayfa", en: "Hisse Analizi home", fr: "Accueil Hisse Analizi" },
+  "shell.tagline": { tr: "BIST piyasa analizi", en: "BIST market analytics", fr: "Analyse du marché BIST" },
+  "shell.openSearch": { tr: "Hisse ara", en: "Search stocks", fr: "Rechercher une action" },
+  "shell.closeSearch": { tr: "Aramayı kapat", en: "Close search", fr: "Fermer la recherche" },
+  "shell.breadcrumb": { tr: "Sayfa konumu", en: "Breadcrumb", fr: "Fil d'Ariane" },
+  "shell.skipToContent": { tr: "İçeriğe geç", en: "Skip to content", fr: "Aller au contenu" },
+  "shell.language": { tr: "Dil", en: "Language", fr: "Langue" },
+  "shell.fxTcmbHint": {
+    tr: "TCMB döviz satış kuru (gösterge kur, iş günleri 15:30'da yayımlanır; değişim önceki bültene göre)",
+    en: "CBRT forex selling rate (indicative, published 15:30 on business days; change vs previous bulletin)",
+    fr: "Cours vendeur de la BCRT (indicatif, publié à 15h30 les jours ouvrés ; variation vs bulletin précédent)",
+  },
+  "shell.theme": { tr: "Tema", en: "Theme", fr: "Thème" },
+  "shell.indices": { tr: "BIST endeksleri", en: "BIST indices", fr: "Indices BIST" },
+  "shell.tapeMarkets": { tr: "Döviz ve emtia", en: "FX and commodities", fr: "Devises et matières premières" },
+  "shell.tapeBonds": { tr: "Tahvil faizleri", en: "Bond yields", fr: "Rendements obligataires" },
+  "shell.tapeGramGold": { tr: "Gram altın", en: "Gold/g", fr: "Or/g" },
+  "shell.tapeOunceGold": { tr: "Ons altın", en: "Gold/oz", fr: "Or/once" },
+  "shell.tapeBrent": { tr: "Brent petrol", en: "Brent crude", fr: "Pétrole Brent" },
+  "shell.tapeTr2y": { tr: "TR 2 yıllık", en: "TR 2-year", fr: "TR 2 ans" },
+  "shell.tapeTr10y": { tr: "TR 10 yıllık", en: "TR 10-year", fr: "TR 10 ans" },
+  "shell.tapePriceSource": { tr: "Piyasa fiyatı (TradingView)", en: "Market price (TradingView)", fr: "Cours de marché (TradingView)" },
+  "shell.tapeYieldSource": {
+    tr: "Gösterge tahvil faizi (TradingView), değişim baz puan",
+    en: "Benchmark bond yield (TradingView), change in basis points",
+    fr: "Rendement obligataire de référence (TradingView), variation en points de base",
+  },
+  "shell.tapeUpdated": { tr: "son güncelleme {time}", en: "last updated {time}", fr: "dernière mise à jour {time}" },
+  "shell.tapePause": { tr: "Şeridi durdur", en: "Pause ticker", fr: "Mettre le bandeau en pause" },
+  "shell.tapePlay": { tr: "Şeridi oynat", en: "Play ticker", fr: "Relancer le bandeau" },
+  "nav.short.markets": { tr: "Piyasa", en: "Markets", fr: "Marchés" },
+  "nav.short.events": { tr: "KAP Haberleri", en: "KAP News", fr: "Actualités KAP" },
+  "nav.short.stock": { tr: "Hisse", en: "Stock", fr: "Action" },
+  "nav.short.combined": { tr: "Kombine", en: "Combined", fr: "Combinée" },
+  "nav.short.macro": { tr: "Makro", en: "Macro", fr: "Macro" },
+  "nav.short.screening": { tr: "Tarama", en: "Screener", fr: "Filtrage" },
+  "footer.disclaimer": {
+    tr: "Veriler bilgilendirme amaçlıdır ve gecikmeli olabilir; yatırım tavsiyesi değildir.",
+    en: "Data is for information only and may be delayed; it is not investment advice.",
+    fr: "Données fournies à titre informatif, éventuellement différées ; ceci n'est pas un conseil en investissement.",
+  },
+  "footer.sources": { tr: "Kaynaklar: KAP, TCMB, İş Yatırım, TradingView", en: "Sources: KAP, CBRT, İş Yatırım, TradingView", fr: "Sources : KAP, BCRT, İş Yatırım, TradingView" },
+  "theme.toLight": { tr: "Açık temaya geç", en: "Switch to light theme", fr: "Passer au thème clair" },
+  "theme.toDark": { tr: "Koyu temaya geç", en: "Switch to dark theme", fr: "Passer au thème sombre" },
+  "status.title": { tr: "Veri durumu", en: "Data status", fr: "État des données" },
+  "status.fresh": { tr: "Veriler güncel", en: "Data is up to date", fr: "Données à jour" },
+  "status.stale": { tr: "Veri akışı gecikmede", en: "Data feed delayed", fr: "Flux de données en retard" },
+  "status.unknown": { tr: "Veri durumu alınamadı", en: "Data status unavailable", fr: "État des données indisponible" },
+  "status.never": { tr: "henüz çalışmadı", en: "never ran", fr: "jamais exécuté" },
+  "status.failures": { tr: "{count} ardışık hata", en: "{count} consecutive failures", fr: "{count} échecs consécutifs" },
+  "status.source.kap": { tr: "KAP bildirimleri", en: "KAP disclosures", fr: "Publications KAP" },
+  "status.source.price": { tr: "Fiyat kayıtları", en: "Price records", fr: "Historique des prix" },
+  "status.source.financials": { tr: "Finansal tablolar", en: "Financial statements", fr: "États financiers" },
+  "status.totals": { tr: "{events} olay · {prices} fiyat kaydı", en: "{events} events · {prices} price records", fr: "{events} événements · {prices} cours enregistrés" },
+  "error.title": { tr: "Beklenmeyen bir hata oluştu", en: "Something went wrong", fr: "Une erreur inattendue s'est produite" },
+  "error.description": { tr: "Bu ekran yüklenirken bir sorun oluştu. İşlemi güvenle yeniden deneyebilirsiniz.", en: "This screen failed to load. You can safely try again.", fr: "Cet écran n'a pas pu se charger. Vous pouvez réessayer sans risque." },
+  "error.appTitle": { tr: "Uygulama yüklenemedi", en: "The app failed to load", fr: "L'application n'a pas pu se charger" },
+  "error.appDescription": { tr: "Beklenmeyen bir sorun oluştu. Verileriniz etkilenmedi; sayfayı yeniden deneyebilirsiniz.", en: "An unexpected problem occurred. Your data is safe; you can reload the page.", fr: "Un problème inattendu est survenu. Vos données sont intactes ; vous pouvez recharger la page." },
+  "error.code": { tr: "Hata kodu", en: "Error code", fr: "Code d'erreur" },
+  "error.backHome": { tr: "Piyasa özetine dön", en: "Back to market overview", fr: "Retour à l'aperçu du marché" },
+  "notFound.title": { tr: "Sayfa bulunamadı", en: "Page not found", fr: "Page introuvable" },
+  "notFound.description": { tr: "Aradığınız sayfa taşınmış veya kaldırılmış olabilir.", en: "The page you are looking for may have been moved or removed.", fr: "La page que vous cherchez a peut-être été déplacée ou supprimée." },
+  "meta.title": { tr: "Hisse Analizi — BIST piyasa analizi", en: "Hisse Analizi — BIST market analytics", fr: "Hisse Analizi — analyse du marché BIST" },
+  "meta.description": { tr: "Borsa İstanbul hisseleri için piyasa özeti, teknik ve temel analiz, makro veriler ve KAP bildirimleri.", en: "Market overview, technical and fundamental analysis, macro data and KAP disclosures for Borsa Istanbul stocks.", fr: "Aperçu du marché, analyses technique et fondamentale, données macro et publications KAP pour les actions de Borsa Istanbul." },
 
   // Quick actions
-  "quick.stockAnalysis": { tr: "Hisse Analizi", en: "Stock Analysis", fr: "Analyse d'actions" },
-  "quick.technicalAnalysis": { tr: "Teknik Analiz", en: "Technical Analysis", fr: "Analyse technique" },
-  "quick.screening": { tr: "Hisse Tarama", en: "Stock Screening", fr: "Filtrage d'actions" },
-  "quick.rsiMacdBollinger": { tr: "RSI, MACD, Bollinger", en: "RSI, MACD, Bollinger", fr: "RSI, MACD, Bollinger" },
-  "quick.filteredScreening": { tr: "Filtreli tarama", en: "Filtered screening", fr: "Filtrage avancé" },
 
   // BIST 100 / Index Chart
   "index.periodStart": { tr: "Dönem başı", en: "Period start", fr: "Début de période" },
-  "index.dailyChange": { tr: "Günlük", en: "Daily", fr: "Journalier" },
-  "hisse.pbRatio": { tr: "PD/DD", en: "P/B", fr: "C/VC" },
-  "hisse.freeFloat": { tr: "Halka Açıklık", en: "Free Float", fr: "Flottant" },
-  "hisse.foreignRatio": { tr: "Yabancı Oranı", en: "Foreign Ratio", fr: "Part étrangère" },
   "index.today": { tr: "bugün", en: "today", fr: "aujourd'hui" },
   "index.5days": { tr: "5 gün", en: "5 days", fr: "5 jours" },
   "index.1month": { tr: "1 ay", en: "1 month", fr: "1 mois" },
@@ -76,7 +177,6 @@ const translations = {
   "index.open": { tr: "Açılış", en: "Open", fr: "Ouverture" },
   "index.high": { tr: "Yüksek", en: "High", fr: "Haut" },
   "index.low": { tr: "Düşük", en: "Low", fr: "Bas" },
-  "index.close": { tr: "Kapanış", en: "Close", fr: "Clôture" },
   "index.volume": { tr: "Hacim", en: "Volume", fr: "Volume" },
   "index.periodHigh": { tr: "Dönem Yüksek", en: "Period High", fr: "Plus haut de la période" },
   "index.periodLow": { tr: "Dönem Düşük", en: "Period Low", fr: "Plus bas de la période" },
@@ -84,84 +184,11 @@ const translations = {
   "index.52wLow": { tr: "52H Düşük", en: "52W Low", fr: "Plus bas 52S" },
 
   // Hisse (Stock Analysis) Page
-  "hisse.priceChart": { tr: "Fiyat Grafiği", en: "Price Chart", fr: "Graphique des prix" },
-  "hisse.noPriceData": { tr: "Fiyat verisi bulunamadı", en: "No price data found", fr: "Aucune donnée de prix trouvée" },
-  "hisse.financialRatios": { tr: "Finansal Oranlar", en: "Financial Ratios", fr: "Ratios financiers" },
-  "hisse.ratiosLoadError": { tr: "Finansal oranlar yüklenemedi", en: "Failed to load financial ratios", fr: "Échec du chargement des ratios" },
-  "hisse.noRatios": { tr: "Bu hisse için finansal oran verisi henüz yok", en: "No financial ratio data for this stock yet", fr: "Pas encore de ratios financiers pour cette action" },
-  "hisse.someRatiosMissing": { tr: "Bazı oranlar bu hisse için hesaplanamamıştır", en: "Some ratios could not be calculated for this stock", fr: "Certains ratios n'ont pas pu être calculés" },
-  "hisse.recentEvents": { tr: "Son Olaylar", en: "Recent Events", fr: "Événements récents" },
-  "hisse.noEvents": { tr: "Bu hisse için henüz olay kaydedilmemiş", en: "No events recorded for this stock yet", fr: "Aucun événement enregistré pour cette action" },
-  "hisse.newsTitle": { tr: "Haberler (48 sa)", en: "News (48h)", fr: "Actualités (48h)" },
-  "hisse.noNews": { tr: "Son 48 saatte haber bulunamadı", en: "No news in the last 48 hours", fr: "Aucune actualité ces dernières 48h" },
-  "hisse.grossMargin": { tr: "Brüt Kâr Marjı", en: "Gross Margin", fr: "Marge brute" },
-  "hisse.ebitdaMargin": { tr: "FAVÖK Marjı", en: "EBITDA Margin", fr: "Marge EBITDA" },
-  "hisse.netMargin": { tr: "Net Kâr Marjı", en: "Net Margin", fr: "Marge nette" },
-  "hisse.currentRatio": { tr: "Cari Oran", en: "Current Ratio", fr: "Ratio courant" },
-  "hisse.netDebtEbitda": { tr: "Net Borç/FAVÖK", en: "Net Debt/EBITDA", fr: "Dette nette/EBITDA" },
-  "hisse.debtToEquity": { tr: "Borç/Özsermaye", en: "Debt/Equity", fr: "Dette/Fonds propres" },
-  "hisse.peRatio": { tr: "F/K", en: "P/E", fr: "PER" },
 
   // Temel (Fundamental) Page
-  "temel.companyInfo": { tr: "Şirket Bilgileri", en: "Company Information", fr: "Informations sur l'entreprise" },
-  "temel.noCompanyInfo": { tr: "Şirket bilgisi bulunamadı — bu hisse için veri mevcut olmayabilir", en: "Company info not found — data may not be available for this stock", fr: "Informations introuvables — les données peuvent ne pas être disponibles" },
-  "temel.name": { tr: "İsim", en: "Name", fr: "Nom" },
-  "temel.sector": { tr: "Sektör", en: "Sector", fr: "Secteur" },
-  "temel.exchange": { tr: "Pazar / Borsa", en: "Exchange / Market", fr: "Marché / Bourse" },
   "temel.marketCap": { tr: "Piyasa Değeri", en: "Market Cap", fr: "Capitalisation boursière" },
-  "temel.freeFloat": { tr: "Halka Açıklık", en: "Free Float", fr: "Flottant" },
-  "temel.freeFloatShares": { tr: "Halka Açık Hisse", en: "Float Shares", fr: "Actions en circulation" },
-  "temel.sharesOutstanding": { tr: "Ödenmiş Sermaye (Hisse)", en: "Shares Outstanding", fr: "Actions totales" },
-  "temel.dividendYield": { tr: "Temettü Verimi", en: "Dividend Yield", fr: "Rendement du dividende" },
-  "temel.lastPrice": { tr: "Son Fiyat", en: "Last Price", fr: "Dernier prix" },
-  "temel.52wHighLow": { tr: "52H Yüksek/Düşük", en: "52W High/Low", fr: "52S Haut/Bas" },
-  "temel.employees": { tr: "Çalışan", en: "Employees", fr: "Employés" },
-  "temel.website": { tr: "Web", en: "Website", fr: "Site web" },
-  "temel.priceTarget": { tr: "Hedef Fiyat", en: "Price Target", fr: "Objectif de cours" },
-  "temel.noPriceTarget": { tr: "Hedef fiyat yok", en: "No price target", fr: "Pas d'objectif de cours" },
-  "temel.currentPrice": { tr: "Mevcut Fiyat", en: "Current Price", fr: "Prix actuel" },
-  "temel.lowTarget": { tr: "Düşük Hedef", en: "Low Target", fr: "Objectif bas" },
-  "temel.avgTarget": { tr: "Ortalama Hedef", en: "Average Target", fr: "Objectif moyen" },
-  "temel.medianTarget": { tr: "Medyan Hedef", en: "Median Target", fr: "Objectif médian" },
-  "temel.highTarget": { tr: "Yüksek Hedef", en: "High Target", fr: "Objectif haut" },
-  "temel.analystCount": { tr: "Analist Sayısı", en: "Analyst Count", fr: "Nombre d'analystes" },
-  "temel.majorHolders": { tr: "Büyük Ortaklar", en: "Major Holders", fr: "Principaux actionnaires" },
-  "temel.noHolders": { tr: "Ortaklık verisi yok", en: "No holders data", fr: "Aucune donnée" },
-  "temel.valuationMultiples": { tr: "Değerleme Çarpanları & Performans", en: "Valuation Multiples & Performance", fr: "Multiples de valorisation & Performance" },
-  "temel.capitalStructure": { tr: "Sermaye Yapısı & Pazar", en: "Capital Structure & Market", fr: "Structure du capital & Marché" },
-  "temel.beta": { tr: "Beta (Oynaklık)", en: "Beta (Volatility)", fr: "Bêta (Volatilité)" },
-  "temel.forwardPE": { tr: "Gelecek F/K", en: "Forward P/E", fr: "PER Futur" },
-  "temel.pegRatio": { tr: "PEG Oranı", en: "PEG Ratio", fr: "Ratio PEG" },
-  "temel.epsTrailing": { tr: "HBK (Mevcut)", en: "EPS (Trailing)", fr: "BPA (Réel)" },
-  "temel.epsForward": { tr: "HBK (Gelecek)", en: "EPS (Forward)", fr: "BPA (Futur)" },
-  "temel.bookValue": { tr: "Hisse Başı Defter Değeri", en: "Book Value per Share", fr: "Valeur comptable par action" },
-  "temel.psRatio": { tr: "Fiyat / Satış (F/S)", en: "Price / Sales (P/S)", fr: "Prix / Ventes (P/V)" },
-  "temel.enterpriseValue": { tr: "Firma Değeri (EV)", en: "Enterprise Value (EV)", fr: "Valeur d'entreprise (EV)" },
-  "temel.evEbitda": { tr: "FD / FAVÖK", en: "EV / EBITDA", fr: "EV / EBITDA" },
-  "temel.evRevenue": { tr: "FD / Satışlar", en: "EV / Revenue", fr: "EV / Chiffre d'affaires" },
-  "temel.netDebtEbitda": { tr: "Net Borç / FAVÖK", en: "Net Debt / EBITDA", fr: "Dette Nette / EBITDA" },
-  "temel.riskScores": { tr: "Kurumsal Risk Skorları", en: "Corporate Risk Scores", fr: "Scores de risque d'entreprise" },
-  "temel.auditRisk": { tr: "Denetim Riski", en: "Audit Risk", fr: "Risque d'audit" },
-  "temel.boardRisk": { tr: "Yönetim Riski", en: "Board Risk", fr: "Risque de conseil" },
-  "temel.compensationRisk": { tr: "Ücretlendirme Riski", en: "Compensation Risk", fr: "Risque de rémunération" },
-  "temel.overallRisk": { tr: "Genel Kurumsal Risk", en: "Overall Risk", fr: "Risque global" },
 
   // Teknik (Technical) Page
-  "teknik.signalNoData": { tr: "Sinyal verisi alınamadı", en: "Could not fetch signal data", fr: "Impossible de récupérer les signaux" },
-  "teknik.overbought": { tr: "Aşırı Alım", en: "Overbought", fr: "Surachat" },
-  "teknik.oversold": { tr: "Aşırı Satım", en: "Oversold", fr: "Survente" },
-  "teknik.neutral": { tr: "Nötr", en: "Neutral", fr: "Neutre" },
-  "teknik.normalZone": { tr: "Normal Bölge", en: "Normal Zone", fr: "Zone normale" },
-  "teknik.overboughtZone": { tr: "Aşırı Alım Bölgesi", en: "Overbought Zone", fr: "Zone de surachat" },
-  "teknik.oversoldZone": { tr: "Aşırı Satım Bölgesi", en: "Oversold Zone", fr: "Zone de survente" },
-  "teknik.rsiIndicator": { tr: "RSI Göstergesi", en: "RSI Indicator", fr: "Indicateur RSI" },
-  "teknik.bollingerBands": { tr: "Bollinger Bantları", en: "Bollinger Bands", fr: "Bandes de Bollinger" },
-  "teknik.upper": { tr: "Üst", en: "Upper", fr: "Supérieure" },
-  "teknik.middle": { tr: "Orta", en: "Middle", fr: "Médiane" },
-  "teknik.lower": { tr: "Alt", en: "Lower", fr: "Inférieure" },
-  "teknik.signals": { tr: "Sinyaller", en: "Signals", fr: "Signaux" },
-  "teknik.up": { tr: "YUKARI", en: "UP", fr: "HAUT" },
-  "teknik.down": { tr: "AŞAĞI", en: "DOWN", fr: "BAS" },
   "teknik.value": { tr: "Değer", en: "Value", fr: "Valeur" },
 
   // Events Page
@@ -181,20 +208,8 @@ const translations = {
   "events.heading": { tr: "Başlık", en: "Title", fr: "Titre" },
   "events.category": { tr: "Kategori", en: "Category", fr: "Catégorie" },
   "events.severity": { tr: "Önem", en: "Severity", fr: "Gravité" },
-  "events.news": { tr: "Haberler", en: "News", fr: "Actualités" },
-
-  // Tarama (Screening) Page
-  "tarama.results": { tr: "Hisse Tarama Sonuçları", en: "Stock Screening Results", fr: "Résultats du filtrage" },
-  "tarama.noResults": { tr: "Sonuç yok", en: "No results", fr: "Aucun résultat" },
-  "tarama.change": { tr: "Değişim", en: "Change", fr: "Variation" },
-  "tarama.price": { tr: "Fiyat", en: "Price", fr: "Prix" },
-  "tarama.signalScanning": { tr: "Teknik Sinyal Tarama", en: "Technical Signal Scanning", fr: "Analyse des signaux techniques" },
-  "tarama.rsiOversold": { tr: "RSI Aşırı Satım", en: "RSI Oversold", fr: "RSI Survente" },
-  "tarama.rsiOverbought": { tr: "RSI Aşırı Alım", en: "RSI Overbought", fr: "RSI Surachat" },
-  "tarama.scanNoResults": { tr: "Tarama sonucu yok", en: "No scan results", fr: "Aucun résultat d'analyse" },
-  "tarama.signal": { tr: "Sinyal", en: "Signal", fr: "Signal" },
-  "tarama.screenerDesc": { tr: "Screener, sinyal tarama ve endeks verileri", en: "Screener, signal scanning, and index data", fr: "Screener, analyse de signaux et données d'indices" },
-  "tarama.bistIndices": { tr: "BIST Endeksleri", en: "BIST Indices", fr: "Indices BIST" },
+  "events.dateFrom": { tr: "Başlangıç", en: "From", fr: "Du" },
+  "events.dateTo": { tr: "Bitiş", en: "To", fr: "Au" },
 
   // Makro Page
   "makro.tcmbFx": { tr: "TCMB, enflasyon, döviz kurları, ekonomik takvim", en: "CBRT, inflation, exchange rates, economic calendar", fr: "CBRT, inflation, taux de change, calendrier économique" },
@@ -206,6 +221,7 @@ const translations = {
   "makro.calendar": { tr: "Ekonomik Takvim", en: "Economic Calendar", fr: "Calendrier économique" },
   "makro.noCalendar": { tr: "Takvim verisi yok", en: "No calendar data", fr: "Aucune donnée de calendrier" },
   "makro.noData": { tr: "Veri yok", en: "No data", fr: "Pas de données" },
+  "makro.lastDecisionDate": { tr: "Son karar tarihi", en: "Last decision date", fr: "Date de dernière décision" },
 
   // Severity
   "severity.high": { tr: "Yüksek", en: "High", fr: "Élevé" },
@@ -220,35 +236,27 @@ const translations = {
   "category.financial": { tr: "Finansal", en: "Financial", fr: "Financier" },
   "category.newBusiness": { tr: "Yeni İş", en: "New Business", fr: "Nouvelle activité" },
   "category.other": { tr: "Diğer", en: "Other", fr: "Autre" },
+  "category.shareBuyback": { tr: "Pay Geri Alımı", en: "Share Buyback", fr: "Rachat d'actions" },
+  "category.mergerAcquisition": { tr: "Birleşme & Devralma", en: "M&A", fr: "Fusions & acquisitions" },
+  "category.financialResults": { tr: "Finansal Sonuç", en: "Financial Results", fr: "Résultats financiers" },
+  "category.generalAssembly": { tr: "Genel Kurul", en: "General Meeting", fr: "Assemblée générale" },
+  "category.insiderTrading": { tr: "Pay Alım Satım", en: "Share Transactions", fr: "Transactions sur titres" },
+  "category.creditRating": { tr: "Kredi Notu", en: "Credit Rating", fr: "Notation" },
+  "category.debtInstrument": { tr: "Borçlanma Aracı", en: "Debt Instruments", fr: "Titres de créance" },
+  "category.marketNotice": { tr: "Piyasa Duyurusu", en: "Market Notice", fr: "Avis de marché" },
 
   // Analiz (Combined) page
-  "analiz.combined": { tr: "Kombine Analiz", en: "Combined Analysis", fr: "Analyse combinée" },
-  "analiz.sideBySide": { tr: "Yan Yana", en: "Side by Side", fr: "Côte à côte" },
-  "analiz.noCompanyInfo": { tr: "Şirket bilgisi yok", en: "No company info", fr: "Aucune info" },
 
   // Watchlist
-  "watchlist.title": { tr: "Takip Listesi", en: "Watchlist", fr: "Liste de suivi" },
   "watchlist.newList": { tr: "Yeni Liste", en: "New List", fr: "Nouvelle liste" },
   "watchlist.editLists": { tr: "Listeleri Düzenle", en: "Edit Lists", fr: "Modifier les listes" },
-  "watchlist.addStock": { tr: "Hisse Ekle", en: "Add Stock", fr: "Ajouter une action" },
   "watchlist.listName": { tr: "Liste Adı", en: "List Name", fr: "Nom de la liste" },
   "watchlist.deleteList": { tr: "Listeyi Sil", en: "Delete List", fr: "Supprimer la liste" },
   "watchlist.emptyList": { tr: "Bu listede hisse yok", en: "No stocks in this list", fr: "Aucune action dans cette liste" },
   "watchlist.favorites": { tr: "Favoriler", en: "Favorites", fr: "Favoris" },
-  "watchlist.potential": { tr: "Potansiyel Yukselis", en: "Potential Rise", fr: "Hausse potentielle" },
-
-  // AI Report
-  "ai.reportButton": { tr: "AI Analiz Raporu", en: "AI Analysis Report", fr: "Rapport d'analyse IA" },
-  "ai.reportDesc": { tr: "Yapay zeka destekli detayli finansal analiz raporu", en: "AI-powered detailed financial analysis report", fr: "Rapport d'analyse financière détaillé par IA" },
-  "ai.generating": { tr: "Rapor hazirlaniyor...", en: "Generating report...", fr: "Génération du rapport..." },
-  "ai.reportTitle": { tr: "AI Finansal Analiz Raporu", en: "AI Financial Analysis Report", fr: "Rapport d'analyse financière IA" },
 
   // Events summary
   "events.summary": { tr: "Ozet", en: "Summary", fr: "Résumé" },
-
-  // Tarama pagination
-  "tarama.page": { tr: "Sayfa", en: "Page", fr: "Page" },
-  "tarama.perPage": { tr: "hisse/sayfa", en: "stocks/page", fr: "actions/page" },
 
   // Signal labels
   "signal.buy": { tr: "AL", en: "BUY", fr: "ACHAT" },
@@ -258,38 +266,45 @@ const translations = {
   "signal.strongSell": { tr: "Güçlü Sat", en: "Strong Sell", fr: "Vente forte" },
 
   // Risk badges
-  "risk.low": { tr: "Düşük Risk", en: "Low Risk", fr: "Risque faible" },
-  "risk.medium": { tr: "Orta Risk", en: "Moderate Risk", fr: "Risque modéré" },
-  "risk.high": { tr: "Yüksek Risk", en: "High Risk", fr: "Risque élevé" },
 
   // Moving Averages & Pivots
   "ma.title": { tr: "Hareketli Ortalamalar (SMA & EMA)", en: "Moving Averages (SMA & EMA)", fr: "Moyennes mobiles (SMA & EMA)" },
-  "ma.goldenCross": { tr: "Golden Cross (Boğa Trendi)", en: "Golden Cross (Bullish)", fr: "Golden Cross (Haussier)" },
-  "ma.deathCross": { tr: "Death Cross (Ayı Trendi)", en: "Death Cross (Bearish)", fr: "Death Cross (Baissier)" },
   "ma.period": { tr: "Periyot", en: "Period", fr: "Période" },
-  "ma.daily": { tr: "Günlük", en: "Daily", fr: "Journalier" },
   "pivots.title": { tr: "Klasik Pivot Destek ve Direnç Seviyeleri", en: "Classic Pivot Support & Resistance Levels", fr: "Niveaux de support & résistance pivot classique" },
   "pivots.support": { tr: "Destek Seviyeleri", en: "Support Levels", fr: "Niveaux de support" },
   "pivots.resistance": { tr: "Direnç Seviyeleri", en: "Resistance Levels", fr: "Niveaux de résistance" },
-  "pivots.main": { tr: "Ana Pivot (P)", en: "Main Pivot (P)", fr: "Pivot principal (P)" },
-  "pivots.noData": { tr: "Pivot verisi bulunamadı", en: "No pivot data found", fr: "Aucune donnée pivot" },
 
   // Scorecard
-  "scorecard.title": { tr: "Şirket Analiz Karnesi", en: "Stock Analysis Scorecard", fr: "Carnet d'analyse des actions" },
-  "scorecard.overall": { tr: "Genel Skor:", en: "Overall Score:", fr: "Score global:" },
-  "scorecard.profitability": { tr: "Karlılık", en: "Profitability", fr: "Rentabilité" },
-  "scorecard.growth": { tr: "Büyüme", en: "Growth", fr: "Croissance" },
-  "scorecard.health": { tr: "Finansal Sağlık & Borçluluk", en: "Financial Health", fr: "Santé financière" },
-  "scorecard.valuation": { tr: "Değerleme", en: "Valuation", fr: "Valorisation" },
-  "scorecard.techTrend": { tr: "Teknik Trend", en: "Technical Trend", fr: "Tendance technique" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
 
-export function t(key: TranslationKey, locale: Locale): string {
+/** Values for `{name}` placeholders in a translation. */
+export type TranslationVars = Record<string, string | number>;
+
+export function t(key: TranslationKey, locale: Locale, vars?: TranslationVars): string {
   const entry = translations[key];
   if (!entry) return key;
-  return entry[locale] ?? entry.tr;
+  const text: string = entry[locale] ?? entry.tr;
+  if (!vars) return text;
+  return text.replace(/\{(\w+)\}/g, (match, name: string) => (name in vars ? String(vars[name]) : match));
 }
+
+/** Native language names for the language switcher. */
+export const localeNames: Record<Locale, string> = {
+  tr: "Türkçe",
+  en: "English",
+  fr: "Français",
+};
+
+export const LOCALES: readonly Locale[] = ["tr", "en", "fr"];
+
+/** Narrow an arbitrary string (cookie, storage) to a supported locale. */
+export function parseLocale(value: unknown): Locale | null {
+  return value === "tr" || value === "en" || value === "fr" ? value : null;
+}
+
+/** Cookie that carries the UI language so the server renders the right one. */
+export const LOCALE_COOKIE = "locale";
 
 export default translations;

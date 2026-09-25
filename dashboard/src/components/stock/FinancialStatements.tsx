@@ -1,247 +1,243 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatCompact } from "@/lib/format";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
-import { useLocale } from "@/lib/locale-context";
-import { motion } from "framer-motion";
-import { FileText } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { ApiDataMeta } from "@/components/shared/DataMeta";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { isNotFoundError, useStatement, type StatementKind } from "./hooks";
+import { useStockI18n, type StockKey } from "./i18n";
+import { CASHFLOW_SUMMARY, isEmphasisLine, statementLabel } from "./statementLabels";
+import type { StatementPeriod } from "./types";
+import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
 
-type StatementTab = "balance_sheet" | "income_stmt" | "cashflow";
+const KINDS: Array<{ value: StatementKind; label: StockKey }> = [
+  { value: "balance", label: "fin.balance" },
+  { value: "income", label: "fin.income" },
+  { value: "cashflow", label: "fin.cashflow" },
+];
 
-interface StatementKey {
-  key: string;
-  aliases?: string[];
-  label: Record<string, string>;
+const MINUS_SIGN = "−";
+
+/** One precision per row so its figures line up: whole millions, unless every figure in the
+ *  row is small (< 10 mn) and fractional — then 1 decimal, so small items don't collapse to 0. */
+function rowDecimals(values: ReadonlyArray<number | null>): number {
+  const millions = values.filter((v): v is number => v != null).map((v) => v / 1_000_000);
+  return millions.some((m) => Math.abs(m) >= 10) || millions.every((m) => Number.isInteger(m)) ? 0 : 1;
 }
 
-interface FinancialStatementsProps {
-  ticker: string;
+/** TRY → million TRY with a real minus sign (Intl's default hyphen reads as a dash in a
+ *  dense figures table); values that round to zero print as a plain "0". */
+function formatMillions(value: number | null, decimals: number): string {
+  if (value == null) return formatNumber(null);
+  const millions = value / 1_000_000;
+  if (Math.round(millions * 10 ** decimals) === 0) return formatNumber(0, decimals);
+  const formatted = formatNumber(millions, decimals);
+  return formatted.startsWith("-") ? `${MINUS_SIGN}${formatted.slice(1)}` : formatted;
 }
 
-function parseStatementData(raw: unknown): Record<string, unknown>[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw as Record<string, unknown>[];
-  const obj = raw as Record<string, unknown>;
-  if (obj.data && Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
-  if (obj.annual && Array.isArray(obj.annual)) return obj.annual as Record<string, unknown>[];
-  // DataFrame-style: {column: {index: value}}
-  const keys = Object.keys(obj);
-  if (keys.length > 0 && typeof obj[keys[0]] === "object" && obj[keys[0]] !== null) {
-    const firstCol = obj[keys[0]] as Record<string, unknown>;
-    const indices = Object.keys(firstCol);
-    return indices.map((idx) => {
-      const row: Record<string, unknown> = { period: idx };
-      for (const col of keys) {
-        const colData = obj[col] as Record<string, unknown>;
-        row[col] = colData?.[idx] ?? null;
-      }
-      return row;
-    });
-  }
-  return [];
-}
+/** Label-cell indent per depth tier. On phones the label text gets a fixed width that shrinks by
+ *  the same amount as the indent grows, so every sticky label cell is equally narrow (~10rem)
+ *  and two figure columns stay visible beside it; from `sm` the column sizes to its content. */
+const LABEL_TIERS = [
+  { indent: "pl-4", width: "w-[8.5rem]" },
+  { indent: "pl-6", width: "w-[8rem]" },
+  { indent: "pl-8", width: "w-[7.5rem]" },
+] as const;
 
-function statementMatrix(raw: unknown, items: StatementKey[]) {
-  const rows = parseStatementData(raw);
-  if (rows.length === 0) return { periods: [] as string[], rows: [] as Array<{ item: StatementKey; values: unknown[] }> };
+/** API path segment of each statement (lib/api.ts), for the provenance line. */
+const STATEMENT_PATHS: Record<StatementKind, string> = {
+  income: "income-statement",
+  balance: "balance-sheet",
+  cashflow: "cashflow",
+};
 
-  // borsapy/KAP contract: one row per financial item and one column per
-  // reporting period, e.g. {Item: "Toplam Varlıklar", "2025/12": ...}.
-  if (rows.some((row) => row.Item != null)) {
-    const sample = rows.find((row) => row.Item != null) ?? {};
-    const periods = Object.keys(sample)
-      .filter((key) => !["Item", "index"].includes(key))
-      .sort((a, b) => {
-        const rank = (period: string) => {
-          const match = period.match(/^(\d{4})(?:[\/-](\d{1,2}))?/);
-          if (!match) return 0;
-          return Number(match[1]) * 100 + Number(match[2] ?? 12);
-        };
-        return rank(b) - rank(a);
-      })
-      .slice(0, 5);
-    const matrixRows = items.flatMap((item) => {
-      const aliases = [item.key, ...(item.aliases ?? [])].map((value) => value.trim().toLocaleLowerCase("tr-TR"));
-      const match = rows.find((row) => aliases.includes(String(row.Item ?? "").trim().toLocaleLowerCase("tr-TR")));
-      if (!match) return [];
-      const values = periods.map((period) => match[period]);
-      return values.some((value) => value != null && Number(value) !== 0) ? [{ item, values }] : [];
-    });
-    return { periods, rows: matrixRows };
-  }
-
-  // Legacy/yfinance contract: one row per period with canonical field names.
-  const periodRows = rows.slice(0, 5);
-  const periods = periodRows.map((row) => String(row.period ?? row.date ?? row.fiscalDateEnding ?? "")).filter(Boolean);
-  const matrixRows = items.flatMap((item) => {
-    const values = periodRows.map((row) => row[item.key]);
-    return values.some((value) => value != null && Number(value) !== 0) ? [{ item, values }] : [];
-  });
-  return { periods, rows: matrixRows };
-}
-
-function formatStatValue(val: unknown): string {
-  if (val === null || val === undefined) return "-";
-  const num = Number(val);
-  if (isNaN(num)) return String(val);
-  return formatCompact(num);
-}
-
-const BALANCE_SHEET_KEYS = [
-  { key: "TotalAssets", aliases: ["Toplam Varlıklar", "TOPLAM VARLIKLAR"], label: { tr: "Toplam Varlıklar", en: "Total Assets", fr: "Total des actifs" } },
-  { key: "CurrentAssets", aliases: ["Dönen Varlıklar"], label: { tr: "Dönen Varlıklar", en: "Current Assets", fr: "Actifs courants" } },
-  { key: "TotalLiabilitiesNetMinorityInterest", aliases: ["Toplam Yükümlülükler"], label: { tr: "Toplam Yükümlülükler", en: "Total Liabilities", fr: "Total des passifs" } },
-  { key: "CurrentLiabilities", aliases: ["Kısa Vadeli Yükümlülükler"], label: { tr: "Kısa Vadeli Yükümlülükler", en: "Current Liabilities", fr: "Passifs courants" } },
-  { key: "StockholdersEquity", aliases: ["Toplam Özkaynaklar", "Özkaynaklar", "Ana Ortaklığa Ait Özkaynaklar"], label: { tr: "Özkaynaklar", en: "Stockholders Equity", fr: "Fonds propres" } },
-  { key: "CashAndCashEquivalents", aliases: ["Nakit ve Nakit Benzerleri"], label: { tr: "Nakit ve Benzerleri", en: "Cash & Equivalents", fr: "Trésorerie" } },
-] satisfies StatementKey[];
-
-const INCOME_KEYS = [
-  { key: "TotalRevenue", aliases: ["Hasılat", "Satış Gelirleri"], label: { tr: "Hasılat", en: "Total Revenue", fr: "Revenu total" } },
-  { key: "GrossProfit", aliases: ["Brüt Kâr (Zarar)", "BRÜT KAR (ZARAR)"], label: { tr: "Brüt Kâr", en: "Gross Profit", fr: "Bénéfice brut" } },
-  { key: "OperatingIncome", aliases: ["Esas Faaliyet Kârı (Zararı)", "FAALİYET KARI (ZARARI)"], label: { tr: "Esas Faaliyet Kârı", en: "Operating Income", fr: "Résultat opérationnel" } },
-  { key: "EBITDA", aliases: ["FAVÖK", "FAVOK"], label: { tr: "FAVÖK", en: "EBITDA", fr: "EBITDA" } },
-  { key: "NetIncome", aliases: ["Net Dönem Kârı (Zararı)", "DÖNEM KARI (ZARARI)"], label: { tr: "Net Dönem Kârı", en: "Net Income", fr: "Résultat net" } },
-  { key: "BasicEPS", aliases: ["Hisse Başına Kazanç"], label: { tr: "Hisse Başına Kâr", en: "EPS", fr: "BPA" } },
-] satisfies StatementKey[];
-
-const CASHFLOW_KEYS = [
-  { key: "OperatingCashFlow", aliases: ["İşletme Faaliyetlerinden Kaynaklanan Net Nakit"], label: { tr: "İşletme Nakit Akışı", en: "Operating Cash Flow", fr: "Flux de trésorerie opérationnel" } },
-  { key: "InvestingCashFlow", aliases: ["Yatırım Faaliyetlerinden Kaynaklanan Nakit"], label: { tr: "Yatırım Nakit Akışı", en: "Investing Cash Flow", fr: "Flux d'investissement" } },
-  { key: "FinancingCashFlow", aliases: ["Finansman Faaliyetlerden Kaynaklanan Nakit"], label: { tr: "Finansman Nakit Akışı", en: "Financing Cash Flow", fr: "Flux de financement" } },
-  { key: "FreeCashFlow", aliases: ["Serbest Nakit Akım"], label: { tr: "Serbest Nakit Akışı", en: "Free Cash Flow", fr: "Flux de trésorerie libre" } },
-  { key: "CapitalExpenditure", aliases: ["Sabit Sermaye Yatırımları"], label: { tr: "Sermaye Harcaması", en: "Capital Expenditure", fr: "Dépenses d'investissement" } },
-] satisfies StatementKey[];
-
-export function FinancialStatements({ ticker }: FinancialStatementsProps) {
-  const { t, locale } = useLocale();
-  const [tab, setTab] = useState<StatementTab>("balance_sheet");
+export function FinancialStatements({ ticker }: { ticker: string }) {
+  const { t, locale } = useStockI18n();
+  const [kind, setKind] = useState<StatementKind>("income");
   const [quarterly, setQuarterly] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [discrete, setDiscrete] = useState(false);
+  const statementQ = useStatement(ticker, kind, quarterly);
+  const table = statementQ.data ?? null;
 
-  const bsQ = useQuery({
-    queryKey: ["balanceSheet", ticker, quarterly],
-    queryFn: () => api.balanceSheet(ticker, quarterly),
-  });
-  const isQ = useQuery({
-    queryKey: ["incomeStatement", ticker, quarterly],
-    queryFn: () => api.incomeStatement(ticker, quarterly),
-  });
-  const cfQ = useQuery({
-    queryKey: ["cashflow", ticker, quarterly],
-    queryFn: () => api.cashflow(ticker, quarterly),
-  });
+  const isFlow = kind !== "balance";
+  // Single-quarter view is only offered when the backend sends de-cumulated values.
+  const canShowDiscrete = isFlow && quarterly && table?.cumulative === true && table.discreteRows !== null;
+  const showDiscrete = canShowDiscrete && discrete;
+  const cumulative = isFlow && quarterly && table?.cumulative !== false && !showDiscrete;
+  const allRows = (showDiscrete ? table?.discreteRows : table?.rows) ?? [];
+  const summaryRows = allRows.filter((row) => CASHFLOW_SUMMARY.has(row.label));
+  // Fall back to every line if the upstream labels ever stop matching the summary list.
+  const summaryMode = kind === "cashflow" && !showAll && summaryRows.length > 0;
+  const rows = summaryMode ? summaryRows : allRows;
+  const periods = table?.periods ?? [];
 
-  const queryMap = { balance_sheet: bsQ, income_stmt: isQ, cashflow: cfQ };
-  const keyMap = { balance_sheet: BALANCE_SHEET_KEYS, income_stmt: INCOME_KEYS, cashflow: CASHFLOW_KEYS };
-  const currentQuery = queryMap[tab];
-  const currentKeys = keyMap[tab];
-  const matrix = statementMatrix(currentQuery.data, currentKeys);
-  const statementMeta = currentQuery.data as Record<string, unknown> | null;
+  const periodHeader = (period: StatementPeriod) => {
+    if (period.year == null || period.month == null) return { main: period.key, sub: null };
+    const main = !quarterly && period.month === 12 ? String(period.year) : `${period.year}/${String(period.month).padStart(2, "0")}`;
+    let sub: string | null = null;
+    if (quarterly && isFlow) {
+      if (showDiscrete || table?.cumulative === false) sub = t("fin.quarterN", { n: Math.ceil(period.month / 3) });
+      else sub = t("fin.months", { count: period.months ?? period.month });
+    }
+    return { main, sub };
+  };
 
-  const tabs: { key: StatementTab; label: string }[] = [
-    { key: "balance_sheet", label: locale === "en" ? "Balance Sheet" : locale === "fr" ? "Bilan" : "Bilanço" },
-    { key: "income_stmt", label: locale === "en" ? "Income Statement" : locale === "fr" ? "Compte de résultat" : "Gelir Tablosu" },
-    { key: "cashflow", label: locale === "en" ? "Cash Flow" : locale === "fr" ? "Flux de trésorerie" : "Nakit Akışı" },
-  ];
+  const footer = (
+    <div className="space-y-1">
+      <p>
+        {t("fin.unitNote")}
+        {cumulative ? ` ${t("fin.cumulativeNote")}` : ""}
+        {showDiscrete ? ` ${t("fin.discreteNote")}` : ""}
+      </p>
+      {table?.notes.map((note) => (
+        <p key={note}>{note}</p>
+      ))}
+      <ApiDataMeta path={`/fundamentals/${ticker}/${STATEMENT_PATHS[kind]}`} />
+      {table?.source ? (
+        <p className="flex flex-wrap items-center gap-1">
+          {t("fin.source", { source: table.source })}
+          {table.sourceUrl ? (
+            <a href={table.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+              {t("fin.openSource")} <ExternalLink aria-hidden className="h-3 w-3" />
+              <span className="sr-only">{t("common.opensInNewTab")}</span>
+            </a>
+          ) : null}
+        </p>
+      ) : null}
+    </div>
+  );
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-      className="bg-card rounded-2xl border border-border/60 overflow-hidden"
-    >
-      <div className="px-5 py-4 border-b border-border/40">
-        <div className="flex items-center gap-2 mb-3">
-          <FileText className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">
-            {locale === "en" ? "Financial Statements" : locale === "fr" ? "États financiers" : "Finansal Tablolar"}
-          </h2>
-          {statementMeta?.source ? (
-            <span className="ml-auto text-[10px] text-muted-foreground">
-              {String(statementMeta.source)}{statementMeta.as_of ? ` · ${String(statementMeta.as_of)}` : ""}
-            </span>
+    <SectionCard
+      title={t("fin.title")}
+      actions={
+        <>
+          <SegmentedControl
+            label={t("fin.statementLabel")}
+            value={kind}
+            onChange={(value) => {
+              setKind(value);
+              setShowAll(false);
+            }}
+            options={KINDS.map((k) => ({ value: k.value, label: t(k.label) }))}
+            size="xs"
+          />
+          <SegmentedControl
+            label={t("fin.periodTypeLabel")}
+            value={quarterly ? "interim" : "annual"}
+            onChange={(value) => setQuarterly(value === "interim")}
+            options={[
+              { value: "annual", label: t("fin.annual") },
+              { value: "interim", label: t("fin.interim") },
+            ]}
+            size="xs"
+          />
+          {canShowDiscrete ? (
+            <SegmentedControl
+              label={t("fin.viewLabel")}
+              value={discrete ? "discrete" : "cumulative"}
+              onChange={(value) => setDiscrete(value === "discrete")}
+              options={[
+                { value: "cumulative", label: t("fin.cumulativeView") },
+                { value: "discrete", label: t("fin.discreteView") },
+              ]}
+              size="xs"
+            />
           ) : null}
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex gap-0 bg-muted/50 rounded-lg p-0.5">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
-                  tab === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-0 bg-muted/50 rounded-lg p-0.5">
-            <button
-              onClick={() => setQuarterly(false)}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${!quarterly ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              {locale === "en" ? "Annual" : locale === "fr" ? "Annuel" : "Yıllık"}
-            </button>
-            <button
-              onClick={() => setQuarterly(true)}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${quarterly ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              {locale === "en" ? "Interim" : locale === "fr" ? "Intermédiaire" : "Ara Dönem"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-5">
-        {currentQuery.isError ? (
-          <ErrorState message={locale === "tr" ? "Finansal tablo yüklenemedi" : "Financial statement could not be loaded"} onRetry={() => { void currentQuery.refetch(); }} />
-        ) : currentQuery.isLoading ? (
-          <LoadingSpinner />
-        ) : matrix.rows.length === 0 ? (
-          <EmptyState message={t("common.noData")} />
+        </>
+      }
+      footer={footer}
+    >
+      {statementQ.isPending ? (
+        <SectionSkeleton rows={8} />
+      ) : statementQ.isError ? (
+        isNotFoundError(statementQ.error) ? (
+          <SectionEmpty message={t("fin.notAvailable")} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <SectionError error={statementQ.error} showDetail onRetry={() => void statementQ.refetch()} />
+        )
+      ) : !table || table.unavailable || rows.length === 0 || periods.length === 0 ? (
+        <SectionEmpty message={t("fin.notAvailable")} />
+      ) : (
+        <>
+          <div className="-mx-4 overflow-x-auto scrollbar-thin">
+            {/* Separate borders drawn on the cells: in the collapsed model the sticky label cell
+                paints over the row rules, which then stop short of the label column. */}
+            <table className="w-full border-separate border-spacing-0 text-xs sm:min-w-[34rem]">
+              <caption className="sr-only">
+                {t(KINDS.find((k) => k.value === kind)?.label ?? "fin.income")} · {t("fin.unitShort")}
+              </caption>
               <thead>
-                <tr className="border-b border-border/40">
-                  <th className="pb-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-40" />
-                  {matrix.periods.map((p) => (
-                    <th key={p} className="pb-2.5 text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3">
-                      {p.length > 10 ? p.substring(0, 10) : p}
-                    </th>
-                  ))}
+                <tr>
+                  <th scope="col" className="sticky left-0 top-0 z-20 border-b border-border/50 bg-card py-2 pl-4 pr-3 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("fin.unitShort")}
+                  </th>
+                  {periods.map((period) => {
+                    const header = periodHeader(period);
+                    return (
+                      <th key={period.key} scope="col" className="sticky top-0 z-10 whitespace-nowrap border-b border-border/50 bg-card px-3 py-2 text-right font-mono text-[11px] font-semibold text-foreground last:pr-4">
+                        {header.main}
+                        {header.sub ? <span className="block font-sans text-[10px] font-medium text-muted-foreground">{header.sub}</span> : null}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {matrix.rows.map(({ item, values }) => {
+                {rows.map((row, index) => {
+                  const emphasis = isEmphasisLine(row.label);
+                  const decimals = rowDecimals(row.values);
+                  const tier = LABEL_TIERS[summaryMode ? 0 : Math.min(Math.max(row.depth, 0), 2)];
+                  // Rule above every row but the first (the header draws that one); stronger above totals.
+                  const rule = cn("border-t group-first:border-t-0", emphasis ? "border-border/60" : "border-border/20");
                   return (
-                    <tr key={item.key} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
-                      <td className="py-2.5 text-xs text-muted-foreground font-medium">
-                        {item.label[locale] ?? item.label.tr}
-                      </td>
-                      {values.map((v, i) => {
-                        const num = Number(v);
-                        const isNeg = !isNaN(num) && num < 0;
-                        return (
-                          <td key={i} className={`py-2.5 text-right px-3 text-xs font-mono ${isNeg ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
-                            {formatStatValue(v)}
-                          </td>
-                        );
-                      })}
+                    <tr key={`${row.label}-${index}`} className="group transition-colors hover:bg-muted/20">
+                      <th
+                        scope="row"
+                        title={row.label}
+                        className={cn(
+                          // Opaque hover tint: the sticky label cell must hide figures scrolling under it.
+                          "sticky left-0 z-10 max-w-[18rem] bg-card py-2 pr-3 text-left font-normal group-hover:bg-[color-mix(in_oklab,var(--color-muted)_20%,var(--color-card))]",
+                          rule,
+                          tier.indent,
+                          emphasis ? "font-semibold text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        <span className={cn("block sm:w-auto", tier.width)}>{statementLabel(row.label, locale)}</span>
+                      </th>
+                      {row.values.map((value, i) => (
+                        <td
+                          key={periods[i]?.key ?? i}
+                          className={cn(
+                            "whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums last:pr-4",
+                            rule,
+                            emphasis ? "font-semibold text-foreground" : "text-foreground/85",
+                          )}
+                        >
+                          {formatMillions(value, decimals)}
+                        </td>
+                      ))}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-    </motion.div>
+          {kind === "cashflow" && summaryRows.length > 0 && summaryRows.length < allRows.length ? (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              aria-pressed={showAll}
+              className="mt-3 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              {showAll ? t("fin.showSummary") : t("fin.showAll")}
+            </button>
+          ) : null}
+        </>
+      )}
+    </SectionCard>
   );
 }

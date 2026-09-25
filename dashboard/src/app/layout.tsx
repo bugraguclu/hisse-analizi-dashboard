@@ -1,46 +1,75 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import { AppSidebar } from "@/components/layout/Sidebar";
-import { TopBar } from "@/components/layout/TopBar";
+import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
+import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Type system (mapped to font-sans / font-mono / font-display in globals.css):
+// Plex Sans for UI text, Plex Mono for figures and tickers, Newsreader for page titles.
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
+  subsets: ["latin", "latin-ext"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
 });
 
-export const metadata: Metadata = {
-  title: "Hisse Analizi Dashboard",
-  description: "BIST Hisse Analizi Dashboard — Teknik, Temel, Makro Analiz",
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin", "latin-ext"],
+  axes: ["opsz"],
+});
+
+const OPEN_GRAPH_LOCALES: Record<Locale, string> = { tr: "tr_TR", en: "en_US", fr: "fr_FR" };
+
+async function requestLocale(): Promise<Locale> {
+  const store = await cookies();
+  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await requestLocale();
+  const title = t("meta.title", locale);
+  const description = t("meta.description", locale);
+  return {
+    title: { default: title, template: "%s · Hisse Analizi" },
+    description,
+    applicationName: "Hisse Analizi",
+    // app/favicon.ico is picked up by the file convention.
+    formatDetection: { telephone: false },
+    openGraph: { type: "website", siteName: "Hisse Analizi", title, description, locale: OPEN_GRAPH_LOCALES[locale] },
+  };
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f6f3" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e0e0e" },
+  ],
+  colorScheme: "dark light",
+  width: "device-width",
+  initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // The UI language travels in a cookie so the server renders it directly
+  // (correct <html lang>, no flash of Turkish text for EN/FR users).
+  const locale = await requestLocale();
   return (
-    <html lang="tr" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang={locale} className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full">
-        <Providers>
-          <div className="flex min-h-screen">
-            <div className="fixed inset-x-0 top-0 z-40 h-14 w-full md:sticky md:inset-auto md:h-screen md:w-auto flex-shrink-0">
-              <AppSidebar />
-            </div>
-            <div className="flex-1 flex flex-col min-w-0 w-full pt-14 md:pt-0">
-              <TopBar />
-              <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                {children}
-              </main>
-            </div>
-          </div>
+        <Providers initialLocale={locale}>
+          <AppShell>{children}</AppShell>
           <Toaster />
         </Providers>
       </body>

@@ -1,20 +1,43 @@
+# Dev stack: docker compose up -d
+# The db port is published on 127.0.0.1 only (not reachable from other hosts).
+# For a production-like run, layer the override: see docker-compose.prod.yml.
+
+x-postgres-vars: &postgres-vars
+  POSTGRES_USER: ${POSTGRES_USER:-hisse}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hisse}
+  POSTGRES_DB: ${POSTGRES_DB:-hisse_analizi}
+
+x-backend-db-urls: &backend-db-urls
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
+  DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
 
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-hisse}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hisse}
-      POSTGRES_DB: ${POSTGRES_DB:-hisse_analizi}
+      <<: *postgres-vars
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hisse -d hisse_analizi"]
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # One-shot migration runner. app/worker wait for it to exit 0 before starting.
+  migrate:
+    build: .
+    command: alembic upgrade head
+    env_file: .env
+    environment:
+      <<: *backend-db-urls
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   app:
     build: .
@@ -23,26 +46,36 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
-      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
+      <<: *backend-db-urls
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Readiness (DB included), not just liveness — dashboard should wait for a
+      # genuinely usable API. The Dockerfile's own HEALTHCHECK stays on /health.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
 
   # Worker process — separate from API.
-  # IMPORTANT: Deploy with exactly 1 replica unless WORKER_SINGLE_REPLICA=false.
-  # With WORKER_SINGLE_REPLICA=false, multiple replicas are safe (advisory locks + outbox claiming).
+  # IMPORTANT: always run exactly 1 replica. Source polling (advisory locks) and
+  # the outbox (FOR UPDATE SKIP LOCKED) are replica-safe, but the news loop is
+  # not — see src/workers/run_workers.py. WORKER_SINGLE_REPLICA is
+  # informational only (logged, not enforced); it does not make extra replicas safe.
   worker:
     build: .
     command: python -m src.workers.run_workers
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
-      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
+      <<: *backend-db-urls
       WORKER_SINGLE_REPLICA: "true"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
     deploy:
       replicas: 1
 
@@ -55,7 +88,8 @@ services:
     environment:
       API_URL: http://app:8000
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     restart: unless-stopped
 
   mailhog:

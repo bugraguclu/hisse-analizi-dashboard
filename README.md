@@ -8,40 +8,50 @@ Borsa İstanbul için piyasa takibi ve analiz uygulaması. Next.js arayüzü; Fa
 
 ## Özellikler
 
-- BIST endeksleri, fiyat/hacim grafikleri ve takip listesi
-- RSI, MACD, Bollinger, SMA/EMA, SuperTrend, Stochastic, pivot ve çoklu zaman dilimi sinyalleri
-- Resmî KAP bilanço ve gelir tabloları; nakit akışı, temettü, ortaklık ve analist hedefleri
-- TCMB politika faizi, enflasyon, döviz kurları ve ekonomik takvim
-- Temel filtreler ve teknik sinyallerle hisse tarama
-- KAP/haber arşivi ve e-posta bildirim altyapısı
-- İsteğe bağlı Gemini veya Anthropic analiz raporu
-- Türkçe/İngilizce, koyu/açık tema ve responsive arayüz
+- BIST endeksleri, piyasa genişliği, günün en çok yükselen/düşen hisseleri ve takip listesi
+- Hisse sayfası: fiyat/hacim grafiği, günlük değişim, KAP bildirimleri, haberler, analist hedefleri, temettü, ortaklık yapısı
+- Teknik analiz: RSI, MACD, Bollinger, SMA/EMA, SuperTrend, Stochastic, pivot ve dokuz zaman diliminde TradingView özeti
+- Temel analiz: KAP bilanço, gelir ve nakit akışı tabloları (dönem, birim ve kümülatif/çeyreklik etiketiyle); son 12 ay (TTM) oranları
+- TCMB politika faizi ve koridor, TÜFE, döviz kurları, ekonomik takvim
+- Hazır şablon ve filtrelerle hisse tarama, teknik sinyal taraması
+- KAP/haber arşivi (önem ve kategori filtreleri) ve e-posta bildirim altyapısı
+- Türkçe/İngilizce/Fransızca, koyu/açık tema, mobil uyumlu arayüz
 
-Eksik upstream veri `0` gibi gösterilmez. API hatası ve boş veri arayüzde ayrı durumlar olarak ele alınır.
+Eksik veri `0` gibi gösterilmez; API hatası, boş veri ve yükleniyor durumları arayüzde ayrı ele alınır.
 
 ## Veri kaynakları
 
 | Veri | Kaynak |
 |---|---|
-| Bilanço ve gelir tablosu | KAP |
+| Bilanço, gelir tablosu, nakit akışı | KAP (çeyreklik ayrıştırma için İş Yatırım) |
 | Fiyat, endeks, teknik analiz ve tarama | `borsapy` üzerinden BIST/İş Yatırım/TradingView |
 | Politika faizi, enflasyon ve döviz | TCMB/TÜİK |
-| Haberler | KAP ve Google News RSS |
+| Şirket bildirimleri | KAP |
+| Haberler | Google News RSS |
 
-Finansal tablolarda dönem, sunum birimi ve kaynak bilgisi korunur. Veri kalite sözleşmeleri otomatik testlerle kontrol edilir. Ürün kapsamının kısa iş özeti [PROJE_OZETI.md](./PROJE_OZETI.md) dosyasındadır.
+## Mimari
 
-## Hızlı başlangıç
+```
+Tarayıcı ──> Next.js (dashboard, :3000) ──/api/*──> FastAPI (app, :8000) ──> PostgreSQL (db)
+                                                                ▲
+                                   worker (KAP, fiyat, finansal tablo, haber, bildirim) ─┘
+```
 
-Gereksinimler: Docker ve Docker Compose v2.
+- Tarayıcı yalnızca Next.js ile konuşur; `/api/*` istekleri aynı origin üzerinden FastAPI’ye iletilir.
+- Worker ayrı bir süreçtir; her zaman tek replika ile çalıştırılır. Kaynak taraması (advisory lock) ve outbox (`FOR UPDATE SKIP LOCKED`) çoklu replikaya güvenli olsa da haber döngüsü değildir.
+- Production’da Caddy önde durur, otomatik HTTPS sağlar ve yalnızca 80/443 dışarı açılır.
+
+## Hızlı başlangıç (Docker)
+
+Gereksinimler: Docker ve Docker Compose v2.24+.
 
 ```bash
 git clone https://github.com/bugraguclu/hisse-analizi-dashboard.git
 cd hisse-analizi-dashboard
 cp .env.example .env
 
-docker compose up --build -d
-docker compose exec app alembic upgrade head
-docker compose exec app python scripts/seed.py
+docker compose up --build -d                 # migration'lar migrate servisiyle otomatik çalışır
+docker compose exec app python scripts/seed.py   # BIST 100 şirketleri ve kaynaklar (tekrar çalıştırılabilir)
 ```
 
 | Servis | Adres |
@@ -49,35 +59,42 @@ docker compose exec app python scripts/seed.py
 | Dashboard | http://localhost:3000 |
 | API | http://localhost:8000 |
 | Swagger | http://localhost:8000/docs |
-| Health | http://localhost:8000/health |
+| Health / readiness | http://localhost:8000/health, `/health/ready` |
 
-Mail testi gerektiğinde:
+Mail testi için: `docker compose --profile mail up -d mailhog` (arayüz: http://localhost:8025).
+
+## Production
 
 ```bash
-docker compose --profile mail up -d mailhog
+# .env içinde en az: POSTGRES_PASSWORD, ADMIN_API_KEY (≥ 24 karakter; örn. `openssl rand -hex 32`), CORS_ORIGINS=https://<DOMAIN>,
+# DOMAIN, ACME_EMAIL, APP_ENV=production
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec app python scripts/seed.py
 ```
 
-MailHog arayüzü `http://localhost:8025` adresindedir.
+- `DOMAIN` için DNS kaydı ilk başlatmadan önce sunucuyu göstermelidir (Let’s Encrypt doğrulaması). Sertifikalar otomatik yenilenir.
+- Yalnızca Caddy (80/443) dışarı açılır; veritabanı, API ve Next.js yalnızca compose ağında erişilebilir.
+- Uygulama; eksik/kısa `ADMIN_API_KEY`, varsayılan veritabanı parolası veya `*` CORS ile başlamayı reddeder.
+- Yedekleme: `scripts/backup.sh` (gzip, zaman damgalı, gün bazlı saklama) ve `scripts/restore.sh`. Düzenli çalıştırmak için cron’a ekleyin.
+- Yayından sonra `/health/ready`, `/stats`, `/events` ve hisse sayfalarını doğrulayın; hata takibi ve uptime izlemesini deployment katmanında kurun.
 
 ## Yapılandırma
 
-Başlangıç şablonu [`.env.example`](./.env.example) dosyasıdır.
+Tüm ayarlar açıklamalarıyla [`.env.example`](./.env.example) dosyasındadır. Başlıcaları:
 
 | Değişken | Açıklama |
 |---|---|
-| `DATABASE_URL`, `DATABASE_URL_SYNC` | PostgreSQL bağlantıları |
-| `ADMIN_API_KEY` | Production’da zorunlu yönetim anahtarı |
-| `CORS_ORIGINS` | İzin verilen frontend origin’leri |
-| `GEMINI_API_KEY` veya `ANTHROPIC_API_KEY` | İsteğe bağlı AI raporu |
-| `AI_DAILY_BUDGET_USD` | Günlük LLM harcama sınırı |
-| `SMTP_*`, `ENABLE_REAL_EMAIL` | İsteğe bağlı gerçek e-posta gönderimi |
-| `API_URL` | Next.js sunucusunun FastAPI adresi |
-
-AI anahtarı yoksa yalnızca `/ai/*` endpoint’leri devre dışı kalır.
+| `DATABASE_URL`, `DATABASE_URL_SYNC` | PostgreSQL bağlantıları (async uygulama / alembic) |
+| `ADMIN_API_KEY` | `X-Admin-Key` ile korunan yönetim uç noktaları; production’da zorunlu |
+| `CORS_ORIGINS` | İzin verilen origin’ler |
+| `TRUSTED_PROXIES` | `X-Forwarded-For` başlığına güvenilen proxy adresleri (istemci bazlı oran sınırı) |
+| `RATE_LIMIT_DEFAULT`, `RATE_LIMIT_ADMIN` | İstemci başına genel ve yönetim uç noktası sınırları |
+| `SMTP_*`, `ENABLE_REAL_EMAIL` | İsteğe bağlı gerçek e-posta gönderimi (varsayılan: kuru çalıştırma) |
+| `API_URL`, `TRUSTED_PROXY_HOPS` | Next.js → FastAPI adresi ve Next önündeki proxy sayısı ([`dashboard/.env.example`](./dashboard/.env.example)) |
 
 ## Yerel geliştirme
 
-Backend:
+Backend (PostgreSQL için `docker compose up -d db` yeterlidir):
 
 ```bash
 python -m venv .venv
@@ -87,6 +104,7 @@ cp .env.example .env
 alembic upgrade head
 python scripts/seed.py
 uvicorn src.api.app:app --reload
+python -m src.workers.run_workers    # ayrı terminalde, isteğe bağlı
 ```
 
 Frontend:
@@ -98,44 +116,31 @@ npm ci
 npm run dev
 ```
 
-Tarayıcı `/api/*` isteklerini Next.js sunucusu üzerinden `API_URL` ile FastAPI’ye iletir. Backend kök adresi Swagger’a yönlenir.
-
 ## Kontroller
 
 ```bash
-.venv/bin/ruff check src tests
-.venv/bin/pytest -q
+ruff check src tests
+mypy src
+SKIP_NETWORK_TESTS=1 pytest -q
 
 cd dashboard
 npm run lint -- --max-warnings=0
+npx tsc --noEmit
 npm run build
-npm audit --audit-level=high
-
-cd ..
-docker compose config --quiet
+npm audit --omit=dev --audit-level=high
 ```
 
-CI aynı backend, frontend ve Compose kontrollerini push ve pull request’lerde çalıştırır. Canlı sağlayıcı testleri `tests/integration` altındadır.
+CI aynı kontrollere ek olarak migration gidiş-dönüş testini (`upgrade → downgrade base → upgrade`), Compose doğrulamasını ve iki Docker imajının derlenmesini çalıştırır. Canlı sağlayıcı testleri `tests/integration` altındadır (`SKIP_NETWORK_TESTS=1` ile atlanır).
 
 ## API
 
-OpenAPI sözleşmesi çalışma zamanında üretilir:
+OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/redoc`, JSON `/openapi.json`.
 
-- Swagger: `/docs`
-- ReDoc: `/redoc`
-- OpenAPI JSON: `/openapi.json`
+- Uç nokta grupları: sistem/arşiv, teknik analiz, temel analiz, piyasa, makro, haber ve `X-Admin-Key` korumalı yönetim işlemleri.
+- Hatalar her zaman `{"detail": "<Türkçe mesaj>"}` biçimindedir; her yanıt `X-Request-ID` taşır.
+- Geçersiz sembol 400, bilinmeyen sembol 404, veri sağlayıcı hatası 502/503 döner. `/events` toplam kayıt sayısını `X-Total-Count` başlığında verir.
 
-Endpoint grupları: sistem/arşiv, teknik analiz, temel analiz, piyasa, makro, haber, AI ve `X-Admin-Key` korumalı yönetim işlemleri.
-
-## Production notları
-
-- `APP_ENV=production`, güçlü veritabanı parolaları, `ADMIN_API_KEY` ve açık bir `CORS_ORIGINS` değeri kullanın.
-- Migration ve seed adımlarını release sırasında çalıştırın.
-- Worker’ı tek replica ile başlatın.
-- TLS, yedekleme, hata takibi ve uptime izlemesini deployment katmanında yapılandırın.
-- `/health`, `/stats`, `/events`, `/news` ve temel canlı veri akışlarını yayından sonra doğrulayın.
-
-Değişiklik geçmişi [CHANGELOG.md](./CHANGELOG.md) dosyasındadır.
+Değişiklik geçmişi [CHANGELOG.md](./CHANGELOG.md), iş özeti [PROJE_OZETI.md](./PROJE_OZETI.md) dosyasındadır.
 
 ## Lisans
 

@@ -1,42 +1,28 @@
 "use client";
 
 import { useLocale } from "@/lib/locale-context";
-import { type Locale, localeLabels } from "@/lib/i18n";
+import { LOCALES, localeLabels, localeNames } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { Languages } from "lucide-react";
 
-const locales: Locale[] = ["tr", "en", "fr"];
-
-interface LocaleToggleProps {
-  className?: string;
-}
-
-export function LocaleToggle({ className }: LocaleToggleProps) {
-  const { locale, setLocale } = useLocale();
+/** TR / EN / FR switch; the choice persists in a cookie (see LocaleProvider). */
+export function LocaleToggle({ className }: { className?: string }) {
+  const { locale, setLocale, t } = useLocale();
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-0.5 h-8 px-1 rounded-full border transition-all duration-200",
-        "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800",
-        className,
-      )}
-      role="group"
-      aria-label="Dil seçimi"
-    >
-      <Languages className="w-3.5 h-3.5 text-muted-foreground ml-1 mr-0.5 flex-shrink-0" />
-      {locales.map((l) => (
+    <div role="group" aria-label={t("shell.language")} className={cn("inline-flex h-8 shrink-0 items-center", className)}>
+      {LOCALES.map((l) => (
         <button
           type="button"
           key={l}
+          lang={l}
           onClick={() => setLocale(l)}
-          aria-label={`${localeLabels[l]} dilini seç`}
           aria-pressed={locale === l}
+          aria-label={localeNames[l]}
+          title={localeNames[l]}
           className={cn(
-            "px-2 py-1 rounded-full text-[10px] font-bold transition-all duration-200",
-            locale === l
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
+            "h-7 min-w-7 rounded-md px-1.5 font-mono text-[11px] font-medium transition-colors",
+            "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+            locale === l ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {localeLabels[l]}

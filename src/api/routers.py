@@ -1,53 +1,67 @@
 import uuid
-from datetime import datetime
-from typing import Annotated
+from collections.abc import Callable
+from datetime import date, datetime
+from typing import Annotated, Any, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from sqlalchemy import select, func
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.adapters.kap import CONTENT_FORMAT_VERSION, KapUnavailableError, disclosure_id, fetch_disclosure_content
+from src.api.dependencies import require_admin, validate_ticker
+from src.api.limiter import limiter
 from src.core.config import settings
-from src.db.session import get_db
-from src.db.models import (
-    NormalizedEvent,
-    RawEvent,
-    PriceData,
-    EventOutbox,
-    Notification,
-    FinancialStatement,
-)
+from src.core.enums import EventType, PriceInterval, parse_event_category, parse_severity
+from src.core.time import to_utc, utcnow
+from src.db.models import Company
 from src.db.repository import (
     CompanyRepository,
-    SourceRepository,
+    EventFilters,
+    EventSort,
+    FinancialRatioRepository,
+    FinancialStatementRepository,
     NormalizedEventRepository,
-    PriceDataRepository,
-    OutboxRepository,
     NotificationRepository,
     NotificationRuleRepository,
+    OutboxRepository,
     PollingStateRepository,
-    FinancialStatementRepository,
-    FinancialRatioRepository,
+    PriceDataRepository,
+    SourceRepository,
+    StatsRepository,
 )
+from src.db.session import check_database, get_db
 from src.schemas.events import (
-    HealthOut,
+    BackfillAcceptedOut,
+    BackfillRequest,
     CompanyOut,
-    SourceOut,
-    EventOut,
+    EventContentOut,
     EventDetailOut,
-    PriceOut,
-    OutboxOut,
+    EventFacetsOut,
+    EventOut,
+    FinancialRatioOut,
+    FinancialStatementOut,
+    HealthOut,
     NotificationOut,
     NotificationRuleCreate,
+    NotificationRuleOut,
+    OutboxOut,
+    PollAcceptedOut,
     PollingStateOut,
     PollRunRequest,
-    BackfillRequest,
+    PriceOut,
+    ReclassifyOut,
+    ReclassifyRequest,
+    RecomputeRatiosOut,
+    RecomputeRatiosRequest,
+    SourceOut,
+    StatementType,
     StatsOut,
-    FinancialStatementOut,
-    FinancialRatioOut,
+    TaskAcceptedOut,
 )
-from src.api.dependencies import require_admin, validate_ticker
 
 DB = Annotated[AsyncSession, Depends(get_db)]
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 admin_router = APIRouter(
@@ -56,104 +70,325 @@ admin_router = APIRouter(
     dependencies=[Depends(require_admin)],
 )
 
+T = TypeVar("T")
+
+COMPANY_NOT_FOUND = "Şirket bulunamadı."
+EVENT_NOT_FOUND = "Olay bulunamadı."
+HEALTH_DB_TIMEOUT_SECONDS = 2.0
+
+
+def _optional_ticker(ticker: str | None) -> str | None:
+    return validate_ticker(ticker) if ticker and ticker.strip() else None
+
+
+def _bad_request(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+async def _company_or_404(db: AsyncSession, ticker: str) -> Company:
+    company = await CompanyRepository(db).get_by_ticker(validate_ticker(ticker))
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=COMPANY_NOT_FOUND)
+    return company
+
+
+# --- System ---
+
+def _health(db_ok: bool) -> HealthOut:
+    return HealthOut(
+        status="ok" if db_ok else "degraded",
+        environment=settings.app_env,
+        database="ok" if db_ok else "unavailable",
+    )
+
+
+@router.get("/health", response_model=HealthOut, tags=["system"])
+async def health() -> HealthOut:
+    """Liveness + diagnostics: always HTTP 200 while the process runs.
+
+    ``status`` is ``degraded`` (and ``database`` ``unavailable``) when PostgreSQL does
+    not answer ``SELECT 1`` within 2 s. Use ``/health/ready`` for readiness probes.
+    """
+    return _health(await check_database(HEALTH_DB_TIMEOUT_SECONDS))
+
+
+@router.get(
+    "/health/ready",
+    response_model=HealthOut,
+    tags=["system"],
+    responses={503: {"model": HealthOut, "description": "Veritabanına ulaşılamıyor"}},
+)
+async def readiness(response: Response) -> HealthOut:
+    """Readiness probe: HTTP 503 while the database is unreachable."""
+    db_ok = await check_database(HEALTH_DB_TIMEOUT_SECONDS)
+    if not db_ok:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return _health(db_ok)
+
+
+@router.get("/stats", response_model=StatsOut, tags=["system"])
+async def get_stats(db: DB) -> StatsOut:
+    return StatsOut(**await StatsRepository(db).get_counts())
+
 
 # --- Public Endpoints ---
 
-@router.get("/health", response_model=HealthOut)
-async def health():
-    return HealthOut(environment=settings.app_env)
-
-
 @router.get("/companies", response_model=list[CompanyOut])
 async def list_companies(db: DB):
-    repo = CompanyRepository(db)
-    return await repo.get_all()
+    return await CompanyRepository(db).get_all()
 
 
 @router.get("/companies/{ticker}", response_model=CompanyOut)
 async def get_company(ticker: str, db: DB):
-    repo = CompanyRepository(db)
-    company = await repo.get_by_ticker(validate_ticker(ticker))
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    return company
+    return await _company_or_404(db, ticker)
 
 
 @router.get("/sources", response_model=list[SourceOut])
 async def list_sources(db: DB):
-    repo = SourceRepository(db)
-    return await repo.get_all()
+    return await SourceRepository(db).get_all()
+
+
+TOTAL_COUNT_HEADER = "X-Total-Count"
+MAX_TICKER_FILTER = 50
+# Content views are the only /events calls that can reach KAP; keep them polite.
+CONTENT_RATE_LIMIT = "30/minute"
+CONTENT_UNAVAILABLE = "Bildirim içeriği şu an KAP'tan alınamadı. Lütfen biraz sonra tekrar deneyin."
+_MAX_BODY_TEXT = 20_000
+
+
+def _parse_list(raw: str | None, parse: Callable[[str], T | None], error: str) -> list[T]:
+    """Comma-separated, de-duplicated values; any unknown value -> 400."""
+    values: list[T] = []
+    for item in (raw or "").split(","):
+        if not item.strip():
+            continue
+        parsed = parse(item)
+        if parsed is None:
+            raise _bad_request(error)
+        if parsed not in values:
+            values.append(parsed)
+    return values
+
+
+def _parse_tickers(raw: str | None) -> list[str]:
+    tickers = _parse_list(raw, validate_ticker, "Geçersiz hisse kodu.")
+    if len(tickers) > MAX_TICKER_FILTER:
+        raise _bad_request(f"En fazla {MAX_TICKER_FILTER} hisse kodu ile filtrelenebilir.")
+    return tickers
+
+
+def event_filters(
+    source_code: Annotated[str | None, Query(max_length=50, description="Kaynak kodu (ör. kap)")] = None,
+    event_type: EventType | None = None,
+    ticker: Annotated[
+        str | None,
+        Query(max_length=600, description="Tam eşleşen hisse kodu/kodları, virgülle en fazla 50 (ör. THYAO,GARAN)"),
+    ] = None,
+    category: Annotated[
+        str | None,
+        Query(
+            max_length=300,
+            description="Kategori; değer (temettü) veya ad (DIVIDEND), büyük/küçük harf duyarsız, virgülle birden fazla",
+        ),
+    ] = None,
+    severity: Annotated[
+        str | None,
+        Query(max_length=50, description="Önem: INFO, WATCH, HIGH (büyük/küçük harf duyarsız, virgülle birden fazla)"),
+    ] = None,
+    since: Annotated[
+        datetime | None,
+        Query(description="Bu andan itibaren (dahil), ISO 8601. Saat dilimi yoksa Europe/Istanbul kabul edilir."),
+    ] = None,
+    until: Annotated[
+        datetime | None,
+        Query(description="Bu ana kadar (dahil), ISO 8601. Saat dilimi yoksa Europe/Istanbul kabul edilir."),
+    ] = None,
+    search: Annotated[
+        str | None,
+        Query(
+            min_length=2,
+            max_length=100,
+            description="Başlık, KAP özeti ve şirket adında arama; hisse kodu önekinde eşleşme",
+        ),
+    ] = None,
+) -> EventFilters:
+    """Filters shared by ``/events`` and ``/events/facets``."""
+    since_utc = to_utc(since, settings.tz) if since else None
+    until_utc = to_utc(until, settings.tz) if until else None
+    if since_utc and until_utc and since_utc > until_utc:
+        raise _bad_request("'since' değeri 'until' değerinden sonra olamaz.")
+    return EventFilters(
+        source_code=source_code.strip() if source_code and source_code.strip() else None,
+        event_type=event_type,
+        tickers=_parse_tickers(ticker),
+        categories=_parse_list(category, parse_event_category, "Geçersiz kategori."),
+        severities=_parse_list(severity, parse_severity, "Geçersiz önem düzeyi (INFO, WATCH, HIGH)."),
+        since=since_utc,
+        until=until_utc,
+        search=search,
+    )
+
+
+Filters = Annotated[EventFilters, Depends(event_filters)]
 
 
 @router.get("/events", response_model=list[EventOut])
 async def list_events(
     db: DB,
-    source_code: str | None = None,
-    event_type: str | None = None,
-    ticker: str | None = None,
-    since: datetime | None = None,
-    until: datetime | None = None,
-    limit: int = Query(default=50, le=200),
-    offset: int = Query(default=0, ge=0),
+    response: Response,
+    filters: Filters,
+    sort: Annotated[
+        EventSort,
+        Query(description="newest (varsayılan), oldest, severity (önce yüksek), ticker (A→Z)"),
+    ] = "newest",
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0, le=10_000)] = 0,
 ):
+    """KAP disclosures, one row per disclosure (a disclosure that concerns several tracked
+    companies lists all of them in ``tickers``). The number of matching disclosures
+    (ignoring limit/offset) is returned in the ``X-Total-Count`` header."""
     repo = NormalizedEventRepository(db)
-    return await repo.get_list(
-        source_code=source_code,
-        event_type=event_type,
-        ticker=ticker,
-        since=since,
-        until=until,
-        limit=limit,
-        offset=offset,
-    )
+    events = await repo.get_page(filters, sort=sort, limit=limit, offset=offset)
+    total = len(events) + offset if len(events) < limit and (events or offset == 0) else await repo.count(filters)
+    response.headers[TOTAL_COUNT_HEADER] = str(total)
+    return events
 
 
 @router.get("/events/latest", response_model=list[EventOut])
-async def latest_events(db: DB):
-    repo = NormalizedEventRepository(db)
-    return await repo.get_latest()
+async def latest_events(db: DB, limit: Annotated[int, Query(ge=1, le=50)] = 10):
+    return await NormalizedEventRepository(db).get_latest(limit=limit)
+
+
+@router.get("/events/facets", response_model=EventFacetsOut)
+async def event_facets(
+    db: DB,
+    filters: Filters,
+    ticker_facet: Annotated[
+        str | None,
+        Query(
+            max_length=600,
+            description="Sayısı istenen hisse kodları, virgülle en fazla 50 (filtre panelindeki seçenekler)",
+        ),
+    ] = None,
+) -> EventFacetsOut:
+    """Disclosure counts per category, severity and (asked-for) ticker for the current
+    filters (for the filter bar): each facet ignores its own filter, ``total`` applies
+    all of them."""
+    facets = await NormalizedEventRepository(db).facets(filters, tickers=_parse_tickers(ticker_facet))
+    return EventFacetsOut(
+        total=facets.total, categories=facets.categories, severities=facets.severities, tickers=facets.tickers
+    )
 
 
 @router.get("/events/{event_id}", response_model=EventDetailOut)
 async def get_event(event_id: uuid.UUID, db: DB):
+    event = await NormalizedEventRepository(db).get_by_id(event_id)
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=EVENT_NOT_FOUND)
+    return event
+
+
+def _content_out(event_id: uuid.UUID, source_url: str | None, content: dict[str, Any], fetched_at: datetime) -> EventContentOut:
+    return EventContentOut.model_validate(
+        {
+            "event_id": event_id,
+            "source_url": source_url,
+            "blocks": content.get("blocks") or [],
+            "attachments": content.get("attachments") or [],
+            "truncated": bool(content.get("truncated")),
+            "fetched_at": fetched_at,
+        }
+    )
+
+
+def _blocks_to_text(blocks: list[dict[str, Any]]) -> str:
+    """Plain-text rendition of content blocks (``body_text``, shown by simpler clients)."""
+    parts: list[str] = []
+    for block in blocks:
+        if block["type"] in ("heading", "text"):
+            parts.append(block["text"])
+        elif block["type"] == "field":
+            parts.append(f"{block['label']}: {block['value']}")
+        elif block["type"] == "table":
+            parts.append("\n".join(" | ".join(cell for cell in row) for row in block["rows"]))
+    return "\n\n".join(parts)[:_MAX_BODY_TEXT]
+
+
+@router.get(
+    "/events/{event_id}/content",
+    response_model=EventContentOut,
+    responses={503: {"description": "KAP'a şu an ulaşılamıyor (code: upstream_unavailable)"}},
+)
+@limiter.limit(CONTENT_RATE_LIMIT)
+async def get_event_content(request: Request, event_id: uuid.UUID, db: DB):
+    """Full text of a KAP disclosure as display blocks. Fetched from KAP on the first view
+    and cached on every company row of the disclosure."""
     repo = NormalizedEventRepository(db)
     event = await repo.get_by_id(event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-    return event
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=EVENT_NOT_FOUND)
+    cached = await repo.get_content(event_id)
+    if cached is not None and cached[0] is not None and cached[1] is not None and cached[0].get("v") == CONTENT_FORMAT_VERSION:
+        return _content_out(event_id, event.event_url, cached[0], cached[1])
+
+    index = disclosure_id(event.event_url or "") if event.source_code == "kap" else None
+    if index is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu olay için bildirim içeriği yok.")
+    try:
+        content = await fetch_disclosure_content(index)
+    except KapUnavailableError as e:
+        logger.warning("kap_content_unavailable", event_id=str(event_id), index=index, error=str(e))
+        return JSONResponse(
+            {"detail": CONTENT_UNAVAILABLE, "code": "upstream_unavailable"},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            headers={"Retry-After": "60"},
+        )
+    payload = content.to_json()
+    fetched_at = utcnow()
+    await repo.save_content(
+        event.event_url or "",
+        payload,
+        _blocks_to_text(payload["blocks"]) or None,
+        fetched_at,
+        summary=content.summary,
+    )
+    await db.commit()
+    return _content_out(event_id, event.event_url, payload, fetched_at)
 
 
 @router.get("/prices", response_model=list[PriceOut])
 async def list_prices(
     db: DB,
     ticker: str = "THYAO",
-    since: str | None = None,
-    until: str | None = None,
-    interval: str = "1d",
-    limit: int = Query(default=100, le=500),
+    since: date | None = None,
+    until: date | None = None,
+    interval: PriceInterval = PriceInterval.ONE_DAY,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ):
-    repo = PriceDataRepository(db)
-    return await repo.get_list(ticker=validate_ticker(ticker), since=since, until=until, interval=interval, limit=limit)
+    """Stored OHLCV rows, newest first, one row per trading date."""
+    company = await _company_or_404(db, ticker)
+    if since and until and since > until:
+        raise _bad_request("'since' değeri 'until' değerinden sonra olamaz.")
+    return await PriceDataRepository(db).get_list(
+        ticker=company.ticker, since=since, until=until, interval=interval, limit=limit
+    )
 
 
 @router.get("/prices/latest", response_model=PriceOut | None)
-async def latest_price(db: DB, ticker: str = "THYAO"):
-    repo = PriceDataRepository(db)
-    return await repo.get_latest(validate_ticker(ticker))
+async def latest_price(db: DB, ticker: str = "THYAO", interval: PriceInterval = PriceInterval.ONE_DAY):
+    """Latest stored row; ``null`` when the company has no price data yet."""
+    company = await _company_or_404(db, ticker)
+    return await PriceDataRepository(db).get_latest(company.ticker, interval=interval)
 
 
 @router.get("/financials", response_model=list[FinancialStatementOut])
 async def list_financials(
     db: DB,
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
-    statement_type: str | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
+    statement_type: StatementType | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
 ):
-    company_repo = CompanyRepository(db)
-    company = await company_repo.get_by_ticker(validate_ticker(ticker))
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    repo = FinancialStatementRepository(db)
-    return await repo.get_for_company(company.id, statement_type=statement_type)
+    company = await _company_or_404(db, ticker)
+    return await FinancialStatementRepository(db).get_for_company(company.id, statement_type=statement_type)
 
 
 @router.get("/financials/ratios", response_model=list[FinancialRatioOut])
@@ -161,98 +396,98 @@ async def list_ratios(
     db: DB,
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
 ):
-    company_repo = CompanyRepository(db)
-    company = await company_repo.get_by_ticker(validate_ticker(ticker))
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    repo = FinancialRatioRepository(db)
-    return await repo.get_for_company(company.id)
+    company = await _company_or_404(db, ticker)
+    return await FinancialRatioRepository(db).get_for_company(company.id)
 
 
-@router.get("/notifications", response_model=list[NotificationOut])
-async def list_notifications(db: DB):
-    repo = NotificationRepository(db)
-    return await repo.get_all()
+@router.get("/notifications", response_model=list[NotificationOut], dependencies=[Depends(require_admin)])
+async def list_notifications(db: DB, limit: Annotated[int, Query(ge=1, le=200)] = 50):
+    """Recent notifications (recipient addresses are masked)."""
+    return await NotificationRepository(db).get_all(limit=limit)
 
 
-@router.get("/outbox", response_model=list[OutboxOut])
-async def list_outbox(db: DB):
-    repo = OutboxRepository(db)
-    return await repo.get_all()
+@router.get("/outbox", response_model=list[OutboxOut], dependencies=[Depends(require_admin)])
+async def list_outbox(db: DB, limit: Annotated[int, Query(ge=1, le=200)] = 50):
+    return await OutboxRepository(db).get_all(limit=limit)
 
 
 @router.get("/polling-state", response_model=list[PollingStateOut])
 async def list_polling_state(db: DB):
-    repo = PollingStateRepository(db)
-    return await repo.get_all()
+    return await PollingStateRepository(db).get_all()
 
 
-# --- Admin Endpoints (protected by require_admin dependency) ---
+# --- Admin Endpoints (protected by require_admin, rate limited per client) ---
 
-@admin_router.post("/poll/run-once", status_code=202)
-async def run_poll_once(body: PollRunRequest, background_tasks: BackgroundTasks):
+@admin_router.post("/poll/run-once", status_code=status.HTTP_202_ACCEPTED, response_model=PollAcceptedOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def run_poll_once(request: Request, body: PollRunRequest, background_tasks: BackgroundTasks):
     from src.workers.polling_worker import poll_source, run_all_sources_once
 
     if body.source_code:
         background_tasks.add_task(poll_source, body.source_code)
     else:
         background_tasks.add_task(run_all_sources_once)
-    return {"status": "accepted", "source_code": body.source_code or "all"}
+    return PollAcceptedOut(source_code=body.source_code or "all")
 
 
-@admin_router.post("/backfill", status_code=202)
-async def backfill(body: BackfillRequest, background_tasks: BackgroundTasks):
+@admin_router.post("/backfill", status_code=status.HTTP_202_ACCEPTED, response_model=BackfillAcceptedOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def backfill(request: Request, body: BackfillRequest, background_tasks: BackgroundTasks):
     from src.workers.polling_worker import run_backfill
 
     background_tasks.add_task(run_backfill, body.days, body.source_code)
-    return {"status": "accepted", "days": body.days, "source_code": body.source_code or "all"}
+    return BackfillAcceptedOut(days=body.days, source_code=body.source_code or "all")
 
 
-@admin_router.post("/notification-rules")
-async def create_notification_rule(body: NotificationRuleCreate, db: DB):
-    company_repo = CompanyRepository(db)
-    company = await company_repo.get_by_ticker(body.company_ticker.upper())
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    rule_repo = NotificationRuleRepository(db)
-    rule = await rule_repo.create(
+@admin_router.post("/notification-rules", status_code=status.HTTP_201_CREATED, response_model=NotificationRuleOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def create_notification_rule(request: Request, body: NotificationRuleCreate, db: DB):
+    company = await _company_or_404(db, body.company_ticker)
+    rule = await NotificationRuleRepository(db).create(
         company_id=company.id,
         email=body.email,
         min_severity=body.min_severity,
         source_filters=body.source_filters,
     )
     await db.commit()
-    return {"id": str(rule.id), "email": rule.email, "status": "created"}
+    return NotificationRuleOut(
+        id=rule.id,
+        email=rule.email,
+        company_ticker=company.ticker,
+        min_severity=body.min_severity,
+        source_filters=body.source_filters,
+    )
 
 
-@admin_router.post("/notifications/test-send")
-async def test_notification(background_tasks: BackgroundTasks):
+@admin_router.post("/notifications/test-send", status_code=status.HTTP_202_ACCEPTED, response_model=TaskAcceptedOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def test_notification(request: Request, background_tasks: BackgroundTasks):
     from src.workers.notification_worker import process_notifications_once
 
     background_tasks.add_task(process_notifications_once)
-    return {"status": "accepted"}
+    return TaskAcceptedOut()
 
 
-@router.get("/stats", response_model=StatsOut, tags=["system"])
-@admin_router.get("/stats", response_model=StatsOut, include_in_schema=False)
-async def get_stats(db: DB):
-    raw_count = (await db.execute(select(func.count(RawEvent.id)))).scalar() or 0
-    norm_count = (await db.execute(select(func.count(NormalizedEvent.id)))).scalar() or 0
-    price_count = (await db.execute(select(func.count(PriceData.id)))).scalar() or 0
-    notif_count = (await db.execute(select(func.count(Notification.id)))).scalar() or 0
-    financial_count = (await db.execute(select(func.count(FinancialStatement.id)))).scalar() or 0
-    pending_outbox = (
-        await db.execute(
-            select(func.count(EventOutbox.id)).where(EventOutbox.status == "pending")
-        )
-    ).scalar() or 0
+@admin_router.post("/events/reclassify", response_model=ReclassifyOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def reclassify_events(request: Request, db: DB, body: ReclassifyRequest | None = None):
+    """Re-run severity/category classification on stored events (idempotent).
 
-    return StatsOut(
-        total_raw_events=raw_count,
-        total_normalized_events=norm_count,
-        total_price_records=price_count,
-        total_notifications=notif_count,
-        total_financial_records=financial_count,
-        pending_outbox=pending_outbox,
-    )
+    ``dry_run`` (default true) only reports what would change.
+    """
+    from src.services.event_service import reclassify_events as run_reclassification
+
+    dry_run = body.dry_run if body is not None else True
+    return await run_reclassification(db, dry_run=dry_run)
+
+
+@admin_router.post("/financials/recompute-ratios", response_model=RecomputeRatiosOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def recompute_ratios(request: Request, db: DB, body: RecomputeRatiosRequest | None = None):
+    """Recompute ``financial_ratios`` from the stored statements (idempotent, no network)."""
+    from src.services.event_service import recompute_financial_ratios
+
+    ticker = body.ticker if body is not None else None
+    if ticker is not None:
+        await _company_or_404(db, ticker)
+    return await recompute_financial_ratios(db, ticker=ticker)

@@ -1,73 +1,119 @@
-"""Teknik sinyal tarama adaptoru — borsapy TechnicalScanner.
+"""Teknik sinyal tarama adaptoru — borsapy TechnicalScanner (TradingView Scanner API).
 
-TechnicalScanner API:
-  - add_condition(condition) -> condition ekle
-  - run() -> tarama calistir
-  - results -> sonuclar
-  - to_dataframe() -> DataFrame olarak sonuclar
+Only the named conditions below are accepted: borsapy silently returns an
+empty result for expressions it cannot parse, which the UI would show as
+"no matches" instead of an error.
 """
+
+from typing import NamedTuple
 
 import structlog
 
-from src.adapters.utils import cached, df_to_records, run_sync, TTL_MARKET
+from src.adapters.utils import (
+    TTL_MARKET,
+    InvalidInputError,
+    MarketDataError,
+    cached,
+    df_to_records,
+    error_payload,
+    finite_float,
+    run_sync,
+    tradingview_scan,
+)
 
 logger = structlog.get_logger(__name__)
 
-_CONDITION_ALIASES = {
-    "rsi_oversold": ("rsi < 30", "RSI Aşırı Satım", "rsi"),
-    "rsi_overbought": ("rsi > 70", "RSI Aşırı Alım", "rsi"),
-    "golden_cross": ("sma_20 crosses_above sma_50", "Golden Cross", "sma_spread"),
+SOURCE = "TradingView Scanner API (borsapy)"
+SCAN_UNIVERSE = "XU100"
+
+
+class ScanCondition(NamedTuple):
+    expression: str      # borsapy TechnicalScanner condition
+    signal: str          # label shown in the UI (Turkish)
+    value_field: str     # row field reported as "value"
+
+
+SCAN_CONDITIONS: dict[str, ScanCondition] = {
+    "rsi_oversold": ScanCondition("rsi < 30", "RSI Aşırı Satım", "rsi"),
+    "rsi_overbought": ScanCondition("rsi > 70", "RSI Aşırı Alım", "rsi"),
+    # Standard definition: the 50-day SMA crosses the 200-day SMA on the latest daily bar.
+    "golden_cross": ScanCondition("sma_50 crosses_above sma_200", "Golden Cross", "sma_spread"),
+    "death_cross": ScanCondition("sma_50 crosses_below sma_200", "Death Cross", "sma_spread"),
 }
+DEFAULT_CONDITION = ScanCondition("close > 0", "RSI", "rsi")
+_EXTRA_COLUMNS = ("rsi", "sma_20", "sma_50", "sma_200")
 
 
-def _format_scan_records(records: list[dict], signal: str, value_field: str) -> list[dict]:
+def resolve_condition(condition: str | None) -> ScanCondition:
+    key = (condition or "").strip().lower()
+    if not key:
+        return DEFAULT_CONDITION
+    spec = SCAN_CONDITIONS.get(key)
+    if spec is None:
+        raise InvalidInputError(
+            f"Geçersiz tarama koşulu: '{condition}'. Geçerli değerler: {', '.join(SCAN_CONDITIONS)}"
+        )
+    return spec
+
+
+def _format_scan_records(records: list[dict], signal: str, value_field: str, signal_key: str | None = None) -> list[dict]:
     formatted: list[dict] = []
     for row in records:
         value = row.get(value_field)
         if value_field == "sma_spread":
-            sma20 = row.get("sma20")
-            sma50 = row.get("sma50")
-            if isinstance(sma20, (int, float)) and isinstance(sma50, (int, float)):
-                value = float(sma20) - float(sma50)
-            else:
-                value = None
+            sma50 = finite_float(row.get("sma50"))
+            sma200 = finite_float(row.get("sma200"))
+            value = sma50 - sma200 if sma50 is not None and sma200 is not None else None
         formatted.append({
             **row,
             "ticker": row.get("symbol") or row.get("ticker"),
             "signal": signal,
-            "value": value,
+            "signal_key": signal_key,
+            "value": finite_float(value),
+            "change_pct": finite_float(row.get("change")),
         })
     return formatted
 
 
+def _run_scan(expression: str, signal: str) -> object:
+    import borsapy as bp
+
+    scanner = bp.TechnicalScanner().set_universe(SCAN_UNIVERSE)
+    if not scanner.symbols or scanner.symbols == [SCAN_UNIVERSE]:
+        # borsapy falls back to no symbols (or the index code itself) when the
+        # component list cannot be downloaded; that is an outage, not "no matches".
+        raise MarketDataError("Endeks bileşen listesi alınamadı", status_code=503)
+    scanner.add_condition(expression, name=signal)
+    for column in _EXTRA_COLUMNS:
+        scanner.add_column(column)
+    # run() already returns the result DataFrame. The deprecated
+    # results/to_dataframe accessors either lose the data or run twice.
+    return scanner.run(limit=100)
+
+
 @cached(TTL_MARKET, "scanner")
 async def scan_signals(condition: str | None = None) -> dict:
-    """Teknik sinyal taramasi.
+    """XU100 hisselerinde teknik sinyal taramasi.
 
-    condition ornekleri: "rsi_below_30", "macd_cross_above_signal"
+    condition: None (tum XU100, RSI ile), "rsi_oversold", "rsi_overbought",
+    "golden_cross" (SMA50, SMA200'u yukari keser), "death_cross".
     """
     try:
-        import borsapy as bp
-        expression, signal, value_field = _CONDITION_ALIASES.get(
-            condition or "",
-            (condition or "close > 0", "RSI", "rsi"),
-        )
-        scanner = await run_sync(lambda: bp.TechnicalScanner().set_universe("XU100"))
-        await run_sync(lambda: scanner.add_condition(expression, name=signal))
-        for column in ("rsi", "sma_20", "sma_50"):
-            await run_sync(lambda current=column: scanner.add_column(current))
-
-        # run() already returns the result DataFrame. Calling the deprecated
-        # results/to_dataframe accessors either loses the data or runs twice.
-        result = await run_sync(lambda: scanner.run(limit=100))
+        spec = resolve_condition(condition)
+        result = await run_sync(_run_scan, spec.expression, spec.signal)
         records = df_to_records(result) if result is not None else []
-        data = _format_scan_records(records, signal, value_field)
+        if not records:
+            # borsapy reports a failed scanner request only as a warning plus an
+            # empty frame. Probe the same endpoint so an outage becomes a 503
+            # (and is not cached) instead of an empty "no matches" list.
+            await tradingview_scan([SCAN_UNIVERSE], ["close"])
+        signal_key = (condition or "").strip().lower() or None
         return {
             "condition": condition,
-            "expression": expression,
-            "source": "TradingView Scanner API (borsapy)",
-            "results": data,
+            "expression": spec.expression,
+            "source": SOURCE,
+            "results": _format_scan_records(records, spec.signal, spec.value_field, signal_key),
         }
     except Exception as e:
         logger.error("scanner_error", condition=condition, error=str(e))
-        return {"condition": condition, "results": [], "error": str(e)}
+        return {"condition": condition, "results": [], **error_payload(e, "Teknik tarama yapılamadı")}

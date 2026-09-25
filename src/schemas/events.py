@@ -1,9 +1,32 @@
-from datetime import datetime, date
+import re
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
-from src.core.enums import EventType, Severity, OutboxStatus, NotificationStatus, PriceInterval
+from pydantic import BaseModel, Field, field_serializer, field_validator
+
+from src.core.enums import EventType, NotificationStatus, OutboxStatus, PriceInterval, Severity
+from src.core.version import get_version
+
+# Sources that the polling worker knows how to run.
+PollSourceCode = Literal["kap", "price", "financials"]
+StatementType = Literal["balance_sheet", "income_stmt", "cash_flow"]
+
+_EMAIL_RE = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+)
+_TICKER_RE = re.compile(r"^[A-Z0-9]{1,10}$")
+_SOURCE_CODE_RE = re.compile(r"^[a-z0-9_]{1,50}$")
+
+
+def mask_email(email: str) -> str:
+    """``test@example.com`` -> ``t***@example.com`` (public endpoints must not leak PII)."""
+    local, sep, domain = email.partition("@")
+    if not sep:
+        return "***"
+    return f"{local[:1]}***@{domain}"
 
 
 class CompanyOut(BaseModel):
@@ -29,9 +52,12 @@ class SourceOut(BaseModel):
 
 
 class EventOut(BaseModel):
+    """One KAP disclosure. ``/events`` returns one row per disclosure even when it concerns
+    several tracked companies (all of them in ``tickers``; ``ticker`` is the first)."""
+
     id: UUID
     event_type: EventType
-    title: str | None = None
+    title: str | None = Field(default=None, description="KAP form adı, ör. 'Özel Durum Açıklaması (Genel)'")
     excerpt: str | None = None
     published_at: datetime | None = None
     event_url: str | None = None
@@ -39,8 +65,15 @@ class EventOut(BaseModel):
     severity: Severity
     is_notifiable: bool
     ticker: str | None = None
-    category: str | None = None
+    category: str | None = None  # EventCategory value, e.g. "temettü"
     created_at: datetime
+    category_code: str | None = Field(default=None, description="EventCategory adı, ör. DIVIDEND")
+    summary: str | None = Field(default=None, description="KAP özeti (form adından farklıysa)")
+    tickers: list[str] = Field(default_factory=list, description="Bildirimin ilgili olduğu tüm takipteki hisseler")
+    company_name: str | None = None
+    publisher: str | None = Field(default=None, description="Bildirimi yayımlayan kurum (KAP)")
+    is_correction: bool = False
+    attachment_count: int | None = None
     model_config = {"from_attributes": True}
 
 
@@ -48,6 +81,59 @@ class EventDetailOut(EventOut):
     body_text: str | None = None
     metadata_json: dict | None = None
     raw_event_id: UUID
+
+
+class EventFacetsOut(BaseModel):
+    """Disclosure counts for the /events filter bar. ``categories`` ignores the category
+    filter, ``severities`` the severity filter and ``tickers`` (only the codes asked for
+    with ``ticker_facet``) the ticker filter (faceted search); ``total`` applies all."""
+
+    total: int
+    categories: dict[str, int]
+    severities: dict[str, int]
+    tickers: dict[str, int] = Field(default_factory=dict)
+
+
+class EventContentHeading(BaseModel):
+    type: Literal["heading"] = "heading"
+    text: str
+
+
+class EventContentField(BaseModel):
+    type: Literal["field"] = "field"
+    label: str
+    value: str
+
+
+class EventContentText(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class EventContentTable(BaseModel):
+    type: Literal["table"] = "table"
+    rows: list[list[str]]
+
+
+EventContentBlock = Annotated[
+    EventContentHeading | EventContentField | EventContentText | EventContentTable,
+    Field(discriminator="type"),
+]
+
+
+class EventContentAttachment(BaseModel):
+    name: str
+
+
+class EventContentOut(BaseModel):
+    """Full text of a disclosure as display blocks (fetched from KAP on first view, then cached)."""
+
+    event_id: UUID
+    source_url: str | None = None
+    blocks: list[EventContentBlock] = Field(default_factory=list)
+    attachments: list[EventContentAttachment] = Field(default_factory=list)
+    truncated: bool = False
+    fetched_at: datetime
 
 
 class PriceOut(BaseModel):
@@ -86,12 +172,50 @@ class NotificationOut(BaseModel):
     created_at: datetime
     model_config = {"from_attributes": True}
 
+    @field_serializer("email")
+    def _mask_email(self, email: str) -> str:
+        return mask_email(email)
+
 
 class NotificationRuleCreate(BaseModel):
     company_ticker: str = "THYAO"
-    email: str
+    email: str = Field(max_length=254)
     min_severity: Severity = Severity.INFO
-    source_filters: list[str] = Field(default_factory=list)
+    source_filters: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("company_ticker")
+    @classmethod
+    def _validate_ticker(cls, value: str) -> str:
+        ticker = value.strip().upper()
+        if not _TICKER_RE.match(ticker):
+            raise ValueError("Geçersiz hisse kodu (1-10 harf/rakam olmalı)")
+        return ticker
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: str) -> str:
+        email = value.strip()
+        if not _EMAIL_RE.match(email):
+            raise ValueError("Geçersiz e-posta adresi")
+        return email
+
+    @field_validator("source_filters")
+    @classmethod
+    def _validate_source_filters(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip().lower() for item in value if item.strip()]
+        for item in cleaned:
+            if not _SOURCE_CODE_RE.match(item):
+                raise ValueError(f"Geçersiz kaynak kodu: {item!r}")
+        return sorted(set(cleaned))
+
+
+class NotificationRuleOut(BaseModel):
+    id: UUID
+    email: str
+    status: str = "created"
+    company_ticker: str
+    min_severity: Severity
+    source_filters: list[str]
 
 
 class PollingStateOut(BaseModel):
@@ -104,14 +228,64 @@ class PollingStateOut(BaseModel):
     last_error: str | None = None
     model_config = {"from_attributes": True}
 
+    @field_serializer("last_error")
+    def _truncate_error(self, value: str | None) -> str | None:
+        return value[:300] if value else value
+
 
 class PollRunRequest(BaseModel):
-    source_code: str | None = None
+    source_code: PollSourceCode | None = None
 
 
 class BackfillRequest(BaseModel):
-    days: int = 30
-    source_code: str | None = None
+    days: int = Field(default=30, ge=1, le=3650)
+    source_code: PollSourceCode | None = None
+
+
+class PollAcceptedOut(BaseModel):
+    status: str = "accepted"
+    source_code: str
+
+
+class BackfillAcceptedOut(BaseModel):
+    status: str = "accepted"
+    days: int
+    source_code: str
+
+
+class TaskAcceptedOut(BaseModel):
+    status: str = "accepted"
+
+
+class ReclassifyRequest(BaseModel):
+    dry_run: bool = True
+
+
+class ReclassifyOut(BaseModel):
+    dry_run: bool
+    scanned: int
+    changed: int
+    severity_changes: dict[str, int] = Field(default_factory=dict, description='e.g. {"HIGH->WATCH": 12}')
+    category_changes: dict[str, int] = Field(default_factory=dict)
+
+
+class RecomputeRatiosRequest(BaseModel):
+    ticker: str | None = Field(default=None, description="Tek şirket; boşsa tüm aktif şirketler")
+
+    @field_validator("ticker")
+    @classmethod
+    def _validate_ticker(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        ticker = value.strip().upper()
+        if not _TICKER_RE.match(ticker):
+            raise ValueError("Geçersiz hisse kodu (1-10 harf/rakam olmalı)")
+        return ticker
+
+
+class RecomputeRatiosOut(BaseModel):
+    companies: int
+    ratios_written: int
 
 
 class StatsOut(BaseModel):
@@ -124,9 +298,10 @@ class StatsOut(BaseModel):
 
 
 class HealthOut(BaseModel):
-    status: str = "ok"
-    version: str = "0.8.0"
+    status: Literal["ok", "degraded"] = "ok"
+    version: str = Field(default_factory=get_version)
     environment: str = "development"
+    database: Literal["ok", "unavailable"] = "ok"
 
 
 class FinancialStatementOut(BaseModel):
@@ -138,6 +313,11 @@ class FinancialStatementOut(BaseModel):
     data_json: dict
     fetched_at: datetime
     model_config = {"from_attributes": True}
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _default_currency(cls, value: str | None) -> str:
+        return value or "TRY"
 
 
 class FinancialRatioOut(BaseModel):

@@ -1,61 +1,162 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { useLocale } from "@/lib/locale-context";
+import type { TranslationKey } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
-const severityClassNames: Record<string, string> = {
-  HIGH: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-  WATCH: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  INFO: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-};
+/**
+ * KAP event taxonomy shared by the home page, the stock pages and /events.
+ *
+ * Visual language (site-wide): severity is a word only — "Yüksek" in the
+ * destructive tone, "Orta" in the warn tone, routine ("Bilgi") items stay
+ * unmarked — optionally paired with a 2px rule on the row's left edge
+ * (SEVERITY_RULE_CLASS). Categories are plain muted text, never coloured badges.
+ */
 
-const severityKeys: Record<string, "severity.high" | "severity.medium" | "severity.info"> = {
+export type SeverityKey = "HIGH" | "WATCH" | "INFO";
+
+/** Most to least important — the order used by filters and sorting. */
+export const SEVERITY_LEVELS: readonly SeverityKey[] = ["HIGH", "WATCH", "INFO"];
+
+export const severityKeys: Record<SeverityKey, TranslationKey> = {
   HIGH: "severity.high",
   WATCH: "severity.medium",
   INFO: "severity.info",
 };
 
-export function SeverityBadge({ severity }: { severity?: string | null }) {
+/** Text tone of the severity word ("" = default foreground). */
+export const SEVERITY_TEXT_CLASS: Record<SeverityKey, string> = {
+  HIGH: "text-destructive",
+  WATCH: "text-warn",
+  INFO: "text-muted-foreground",
+};
+
+/** Background of the 2px row-edge rule; INFO rows get none. */
+export const SEVERITY_RULE_CLASS: Record<SeverityKey, string | null> = {
+  HIGH: "bg-destructive",
+  WATCH: "bg-warn",
+  INFO: null,
+};
+
+export function toSeverity(value?: string | null): SeverityKey {
+  const upper = (value ?? "").trim().toUpperCase();
+  return upper === "HIGH" || upper === "WATCH" ? upper : "INFO";
+}
+
+/**
+ * Severity as a word. INFO renders nothing unless `showInfo` is set — routine
+ * disclosures are the default and would only add noise.
+ */
+export function SeverityBadge({
+  severity,
+  showInfo = false,
+  className,
+}: {
+  severity?: string | null;
+  showInfo?: boolean;
+  className?: string;
+}) {
   const { t } = useLocale();
-  const s = (severity || "INFO").toUpperCase();
-  const className = severityClassNames[s] || severityClassNames.INFO;
-  const labelKey = severityKeys[s] || severityKeys.INFO;
+  const key = toSeverity(severity);
+  if (key === "INFO" && !showInfo) return null;
   return (
-    <Badge variant="outline" className={`text-[11px] font-semibold ${className}`}>
-      {t(labelKey)}
-    </Badge>
+    <span className={cn("whitespace-nowrap text-[11px] font-medium", SEVERITY_TEXT_CLASS[key], className)}>
+      {t(severityKeys[key])}
+    </span>
   );
 }
 
-const categoryClassNames: Record<string, string> = {
-  DIVIDEND: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  CAPITAL_INCREASE: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  LEGAL: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-  MANAGEMENT: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  FINANCIAL_RESULTS: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-  NEW_BUSINESS: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20",
-  OTHER: "bg-muted text-muted-foreground border-border",
-};
+export type CategoryKey =
+  | "DIVIDEND"
+  | "CAPITAL_INCREASE"
+  | "SHARE_BUYBACK"
+  | "NEW_BUSINESS"
+  | "MERGER_ACQUISITION"
+  | "FINANCIAL_RESULTS"
+  | "MANAGEMENT"
+  | "GENERAL_ASSEMBLY"
+  | "INSIDER_TRADING"
+  | "LEGAL"
+  | "CREDIT_RATING"
+  | "DEBT_INSTRUMENT"
+  | "MARKET_NOTICE"
+  | "OTHER";
 
-const categoryKeys: Record<string, "category.dividend" | "category.capitalIncrease" | "category.legal" | "category.management" | "category.financial" | "category.newBusiness" | "category.other"> = {
+/** Every category code (backend EventCategory enum names) in display order. */
+export const CATEGORY_CODES: readonly CategoryKey[] = [
+  "DIVIDEND",
+  "CAPITAL_INCREASE",
+  "SHARE_BUYBACK",
+  "NEW_BUSINESS",
+  "MERGER_ACQUISITION",
+  "FINANCIAL_RESULTS",
+  "MANAGEMENT",
+  "GENERAL_ASSEMBLY",
+  "INSIDER_TRADING",
+  "LEGAL",
+  "CREDIT_RATING",
+  "DEBT_INSTRUMENT",
+  "MARKET_NOTICE",
+  "OTHER",
+];
+
+export const categoryKeys: Record<CategoryKey, TranslationKey> = {
   DIVIDEND: "category.dividend",
   CAPITAL_INCREASE: "category.capitalIncrease",
-  LEGAL: "category.legal",
-  MANAGEMENT: "category.management",
-  FINANCIAL_RESULTS: "category.financial",
+  SHARE_BUYBACK: "category.shareBuyback",
   NEW_BUSINESS: "category.newBusiness",
+  MERGER_ACQUISITION: "category.mergerAcquisition",
+  FINANCIAL_RESULTS: "category.financialResults",
+  MANAGEMENT: "category.management",
+  GENERAL_ASSEMBLY: "category.generalAssembly",
+  INSIDER_TRADING: "category.insiderTrading",
+  LEGAL: "category.legal",
+  CREDIT_RATING: "category.creditRating",
+  DEBT_INSTRUMENT: "category.debtInstrument",
+  MARKET_NOTICE: "category.marketNotice",
   OTHER: "category.other",
 };
 
-export function CategoryBadge({ category }: { category?: string | null }) {
-  const { t } = useLocale();
+/**
+ * Older API versions serialise EventCategory by *value* — Turkish slugs such as
+ * "temettü" — in the legacy `category` field, while `category_code` carries the
+ * enum name. Accept both so labels never silently collapse to "Other".
+ */
+const categoryAliases: Record<string, CategoryKey> = {
+  "temettü": "DIVIDEND",
+  "sermaye_artırımı": "CAPITAL_INCREASE",
+  "pay_geri_alımı": "SHARE_BUYBACK",
+  "yeni_iş": "NEW_BUSINESS",
+  "birleşme_devralma": "MERGER_ACQUISITION",
+  "finansal_sonuç": "FINANCIAL_RESULTS",
+  "yönetim_değişimi": "MANAGEMENT",
+  "genel_kurul": "GENERAL_ASSEMBLY",
+  "pay_alım_satım": "INSIDER_TRADING",
+  "dava_ceza": "LEGAL",
+  "kredi_notu": "CREDIT_RATING",
+  "borçlanma_aracı": "DEBT_INSTRUMENT",
+  "piyasa_duyurusu": "MARKET_NOTICE",
+  "diğer": "OTHER",
+};
+
+export function isCategoryKey(value: unknown): value is CategoryKey {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(categoryKeys, value);
+}
+
+/** Enum name or legacy slug → CategoryKey; null when empty, OTHER when unrecognised. */
+export function toCategoryKey(category?: string | null): CategoryKey | null {
   if (!category) return null;
-  const key = category.toUpperCase();
-  const className = categoryClassNames[key] || categoryClassNames.OTHER;
-  const labelKey = categoryKeys[key] || categoryKeys.OTHER;
-  return (
-    <Badge variant="outline" className={`text-[11px] font-semibold ${className}`}>
-      {t(labelKey)}
-    </Badge>
-  );
+  const trimmed = category.trim().normalize("NFC");
+  if (!trimmed) return null;
+  const upper = trimmed.toUpperCase();
+  if (isCategoryKey(upper)) return upper;
+  return categoryAliases[trimmed.toLocaleLowerCase("tr-TR")] ?? "OTHER";
+}
+
+/** Category as plain muted text. */
+export function CategoryBadge({ category, className }: { category?: string | null; className?: string }) {
+  const { t } = useLocale();
+  const key = toCategoryKey(category);
+  if (!key) return null;
+  return <span className={cn("whitespace-nowrap text-[11px] text-muted-foreground", className)}>{t(categoryKeys[key])}</span>;
 }

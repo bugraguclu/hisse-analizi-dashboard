@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 export default function AppError({
   error,
@@ -10,27 +13,32 @@ export default function AppError({
   error: Error & { digest?: string };
   retry: () => void;
 }) {
+  const { t } = useLocale();
+
   useEffect(() => {
     console.error(error);
   }, [error]);
 
   return (
-    <section className="min-h-[60vh] flex items-center justify-center" role="alert">
-      <div className="max-w-md w-full rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm">
-        <div className="mx-auto mb-4 h-12 w-12 rounded-2xl bg-destructive/10 flex items-center justify-center">
-          <AlertTriangle className="h-6 w-6 text-destructive" />
+    <section className="mx-auto max-w-7xl py-10 md:py-16" role="alert" aria-labelledby="error-title">
+      <div className="max-w-lg border-l-2 border-destructive pl-5">
+        <h1 id="error-title" className="text-[32px] font-semibold leading-tight text-foreground">
+          {t("error.title")}
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t("error.description")}</p>
+        {error.digest && (
+          <p className="mt-3 font-mono text-[11px] text-muted-foreground">
+            {t("error.code")}: {error.digest}
+          </p>
+        )}
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <Button onClick={() => retry()}>
+            <RefreshCw aria-hidden="true" /> {t("common.retry")}
+          </Button>
+          <Link href="/" className={buttonVariants({ variant: "outline" })}>
+            <ArrowLeft aria-hidden="true" /> {t("error.backHome")}
+          </Link>
         </div>
-        <h1 className="text-xl font-bold text-foreground">Beklenmeyen bir hata oluştu</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Ekran yüklenirken bir sorunla karşılaşıldı. İşlemi güvenle yeniden deneyebilirsiniz.
-        </p>
-        <button
-          type="button"
-          onClick={retry}
-          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          <RefreshCw className="h-4 w-4" /> Yeniden dene
-        </button>
       </div>
     </section>
   );
