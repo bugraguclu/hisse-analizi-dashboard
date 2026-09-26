@@ -114,18 +114,6 @@ export function formatSigned(val?: number | null, decimals = 2): string {
   }).format(Number(val));
 }
 
-/** Turkish lira amount: 455 → "₺455,00". */
-export function formatCurrency(val?: number | null, decimals = 2): string {
-  if (isMissing(val)) return EMPTY_VALUE;
-  return numberFormat({
-    style: "currency",
-    currency: "TRY",
-    currencyDisplay: "narrowSymbol",
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(Number(val));
-}
-
 /** Multiple/ratio: 5.72 → "5,72x". */
 export function formatMultiple(val?: number | null, decimals = 2): string {
   if (isMissing(val)) return EMPTY_VALUE;
@@ -164,28 +152,12 @@ export function parseDate(val?: string | number | Date | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Date + time: "5 Ağu 2026 18:35". Falls back to the raw input when unparseable. */
-export function formatDate(dateStr?: string | number | Date | null): string {
-  if (dateStr === null || dateStr === undefined || dateStr === "") return EMPTY_VALUE;
-  const date = parseDate(dateStr);
-  if (!date) return String(dateStr);
-  return dateFormat({ dateStyle: "medium", timeStyle: "short" }).format(date);
-}
-
-/** Calendar day only: "2025-09-02" → "2 Eyl 2025". */
+/** Calendar day only: "2025-09-02" → "2 Eyl 2025". Falls back to the raw input when unparseable. */
 export function formatDay(dateStr?: string | number | Date | null): string {
   if (dateStr === null || dateStr === undefined || dateStr === "") return EMPTY_VALUE;
   const date = parseDate(dateStr);
   if (!date) return String(dateStr);
   return dateFormat({ day: "numeric", month: "short", year: "numeric" }).format(date);
-}
-
-/** Month period: "08-2026" / "2026-08" → "Ağu 2026". */
-export function formatMonthYear(dateStr?: string | number | Date | null): string {
-  if (dateStr === null || dateStr === undefined || dateStr === "") return EMPTY_VALUE;
-  const date = parseDate(dateStr);
-  if (!date) return String(dateStr);
-  return dateFormat({ month: "short", year: "numeric" }).format(date);
 }
 
 /** Clock time: "14:30". */

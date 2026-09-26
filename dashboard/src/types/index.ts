@@ -178,19 +178,6 @@ export interface StatsOut {
   pending_outbox: number;
 }
 
-export interface ScreenerResult {
-  ticker?: string;
-  symbol?: string;
-  name?: string;
-  price?: number;
-  close?: number;
-  change_pct?: number;
-  volume?: number;
-  pe?: number;
-  roe?: number;
-  market_cap?: number;
-}
-
 export interface HealthResponse {
   status: string;
   version: string;

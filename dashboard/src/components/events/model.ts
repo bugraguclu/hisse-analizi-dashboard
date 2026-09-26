@@ -187,11 +187,6 @@ export function activeFilterCount(state: EventsUrlState): number {
   );
 }
 
-/** Filters that live in the collapsible panel (date, importance, category). */
-export function panelFilterCount(state: EventsUrlState): number {
-  return state.categories.length + state.severities.length + (state.range !== "all" ? 1 : 0);
-}
-
 export function hasActiveFilters(state: EventsUrlState): boolean {
   return activeFilterCount(state) > 0;
 }
@@ -384,16 +379,6 @@ export function eventTickers(event: EventOut): string[] {
   return all;
 }
 
-/**
- * Row order: tickers the user filtered on first (why the row matched), then
- * the representative ticker, then the rest.
- */
-export function displayTickers(event: EventOut, active: ReadonlySet<string>): string[] {
-  const all = eventTickers(event);
-  if (active.size === 0) return all;
-  return [...all.filter((ticker) => active.has(ticker)), ...all.filter((ticker) => !active.has(ticker))];
-}
-
 export function eventCategory(event: EventOut): CategoryKey | null {
   return toCategoryKey(event.category_code) ?? toCategoryKey(event.category);
 }
@@ -409,13 +394,6 @@ export function eventDate(event: EventOut): Date | null {
 export function eventCompanyName(event: EventOut, companies: ReadonlyMap<string, Company> | null): string | null {
   const ticker = eventTickers(event)[0];
   return clean(event.company_name) ?? (ticker ? clean(companies?.get(ticker)?.display_name) : null);
-}
-
-/** Display name of one of the disclosure's tickers. */
-export function tickerCompanyName(event: EventOut, ticker: string | undefined, companies: ReadonlyMap<string, Company> | null): string | null {
-  if (!ticker) return null;
-  if (ticker === eventTickers(event)[0]) return eventCompanyName(event, companies);
-  return clean(companies?.get(ticker)?.display_name);
 }
 
 function foldCompanyName(value: string): string {

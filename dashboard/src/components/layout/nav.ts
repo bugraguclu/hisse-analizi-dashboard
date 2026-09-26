@@ -7,9 +7,6 @@ export const DEFAULT_TICKER = "THYAO";
 /** Route sections whose pages take a ticker: /<section>/<TICKER>. */
 export const TICKER_SECTIONS: ReadonlySet<string> = new Set(["hisse", "teknik", "temel", "analiz"]);
 
-/** Sections with their own index page (the others need a ticker). */
-export const SECTIONS_WITH_INDEX: ReadonlySet<string> = new Set(["events", "makro", "tarama"]);
-
 /** Label per first path segment. */
 export const SECTION_LABELS: Readonly<Record<string, TranslationKey>> = {
   events: "nav.events",

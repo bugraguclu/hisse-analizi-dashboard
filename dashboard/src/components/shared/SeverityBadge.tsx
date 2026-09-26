@@ -152,11 +152,3 @@ export function toCategoryKey(category?: string | null): CategoryKey | null {
   if (isCategoryKey(upper)) return upper;
   return categoryAliases[trimmed.toLocaleLowerCase("tr-TR")] ?? "OTHER";
 }
-
-/** Category as plain muted text. */
-export function CategoryBadge({ category, className }: { category?: string | null; className?: string }) {
-  const { t } = useLocale();
-  const key = toCategoryKey(category);
-  if (!key) return null;
-  return <span className={cn("whitespace-nowrap text-[11px] text-muted-foreground", className)}>{t(categoryKeys[key])}</span>;
-}

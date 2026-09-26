@@ -13,7 +13,6 @@ import type {
   CompanyProfile,
   MovingAverageCross,
   RatioPeriod,
-  ChartPeriod,
   Dividend,
   EarningsDate,
   FastInfo,
@@ -434,43 +433,6 @@ export function parseHistory(resp: unknown): PriceHistory {
   }
   bars.sort((a, b) => a.time - b.time);
   return { bars, interval: asStr(root?.interval), referenceClose: pos(root?.reference_close) };
-}
-
-const PERIOD_MONTHS: Partial<Record<ChartPeriod, number>> = { "1mo": 1, "3mo": 3, "6mo": 6, "1y": 12, "5y": 60 };
-
-/**
- * borsapy treats periods as bar counts (e.g. "3mo" = 90 daily bars ≈ 4.3
- * months, "ytd" = 265 bars reaching into the previous year), so the chart is
- * trimmed to the calendar window here. The baseline for the period change is
- * the close of the last bar *before* the window (i.e. previous close), falling
- * back to the first bar when the payload does not reach further back. Callers
- * prefer the backend's `reference_close` (see `PriceHistory.referenceClose`)
- * because the backend already trims its payload to the window.
- */
-export function sliceChartWindow(bars: PriceBar[], period: ChartPeriod): { bars: PriceBar[]; baseline: number | null } {
-  if (bars.length === 0) return { bars, baseline: null };
-  const last = bars[bars.length - 1];
-  let start: number | null = null;
-
-  if (period === "1d" || period === "5d") {
-    const days = [...new Set(bars.map((b) => istanbulDay(b.time)))];
-    const firstDay = days[Math.max(0, days.length - (period === "1d" ? 1 : 5))];
-    start = bars.find((b) => istanbulDay(b.time) === firstDay)?.time ?? null;
-  } else if (period === "ytd") {
-    start = Date.parse(`${istanbulDay(last.time).slice(0, 4)}-01-01T00:00:00+03:00`);
-  } else if (PERIOD_MONTHS[period]) {
-    const d = new Date(last.time);
-    d.setUTCMonth(d.getUTCMonth() - (PERIOD_MONTHS[period] ?? 0));
-    start = d.getTime();
-  }
-
-  if (start == null) return { bars, baseline: bars[0].close };
-  const startTime = start;
-  const firstIdx = bars.findIndex((b) => b.time >= startTime);
-  if (firstIdx <= 0) return { bars, baseline: bars[0].close };
-  const windowBars = bars.slice(firstIdx);
-  if (windowBars.length < 2 && period !== "1d") return { bars, baseline: bars[0].close };
-  return { bars: windowBars, baseline: bars[firstIdx - 1].close };
 }
 
 // ---------------------------------------------------------------------------

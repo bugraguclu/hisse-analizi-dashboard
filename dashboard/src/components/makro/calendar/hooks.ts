@@ -6,7 +6,6 @@ import {
   CALENDAR_TAGS,
   IMPORTANCE_LEVELS,
   type CalendarFilters,
-  type CalendarTag,
   type Importance,
   type RangePreset,
   type SortKey,
@@ -192,8 +191,4 @@ export function isNarrowed(filters: CalendarFilters): boolean {
 
 export function toggleIn<T>(items: readonly T[], item: T): T[] {
   return items.includes(item) ? items.filter((x) => x !== item) : [...items, item];
-}
-
-export function isTag(value: string): value is CalendarTag {
-  return (CALENDAR_TAGS as readonly string[]).includes(value);
 }

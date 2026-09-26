@@ -2,7 +2,6 @@
 
 import { QueryClient, isServer } from "@tanstack/react-query";
 import { isApiError } from "./api";
-import { isLiveDataWindow } from "./market-hours";
 
 /**
  * Freshness per data class (ms). Pick the class that matches how often the
@@ -22,18 +21,11 @@ export const STALE_TIME = {
   reference: 30 * 60_000,
 } as const;
 
-/** Polling cadence for live data during the BIST session. */
-export const LIVE_REFETCH_MS = 60_000;
-
 /**
- * refetchInterval that only polls while live quotes can change (session plus
- * closing auction, see isLiveDataWindow). React Query re-evaluates it after every
- * fetch; components that must resume polling at the open should use
- * useLiveRefetchInterval() (hooks/use-market-status.ts).
+ * Polling cadence for live data during the BIST session; poll through
+ * useLiveRefetchInterval() (hooks/use-market-status.ts), which stops outside it.
  */
-export function marketHoursRefetchInterval(intervalMs: number = LIVE_REFETCH_MS) {
-  return () => (isLiveDataWindow() ? intervalMs : false);
-}
+export const LIVE_REFETCH_MS = 60_000;
 
 /** Retry transient failures (network, timeout, 5xx) twice; never retry 4xx. */
 export function shouldRetry(failureCount: number, error: unknown): boolean {

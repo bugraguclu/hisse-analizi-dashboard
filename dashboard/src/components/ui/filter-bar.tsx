@@ -150,10 +150,6 @@ export interface FilterOption<V extends string = string> {
   exclusive?: boolean;
 }
 
-export function optionText(option: FilterOption): string {
-  return option.text ?? (typeof option.label === "string" ? option.label : option.value);
-}
-
 function isDimmed(option: FilterOption, picked: boolean): boolean {
   if (picked) return false;
   if (option.disabled) return true;

@@ -93,10 +93,6 @@ export function getMarketStatus(now: Date | number = Date.now(), lastQuoteAt?: D
   return { isOpen: true, phase: "open" };
 }
 
-export function isMarketOpen(now: Date | number = Date.now()): boolean {
-  return getMarketStatus(now).isOpen;
-}
-
 /**
  * Quotes keep changing after the 18:00 close: the closing auction prints at
  * ~18:10 and the feed runs ~15 min behind, so live data settles around 18:30.

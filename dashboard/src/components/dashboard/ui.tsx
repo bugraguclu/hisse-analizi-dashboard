@@ -59,18 +59,6 @@ export function GroupLabel({ children, className }: { children: ReactNode; class
 
 const TREND_ICON = { up: ArrowUpRight, down: ArrowDownRight, flat: Minus } as const;
 
-/** Signed percent change in the up/down colour, e.g. "+%1,51". Missing → "—". */
-export function ChangePercent({ value, className, withIcon = false }: { value: number | null | undefined; className?: string; withIcon?: boolean }) {
-  const tone = trendTone(value);
-  const Icon = TREND_ICON[tone];
-  return (
-    <span className={cn("inline-flex items-center gap-0.5 font-mono tabular-nums", TREND_TEXT_CLASS[tone], className)}>
-      {withIcon && value !== null && value !== undefined && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
-      {formatChangePercent(value)}
-    </span>
-  );
-}
-
 /** Right-aligned change figure for tables/lists: coloured text on a faint tint. */
 export function ChangePill({ value, className }: { value: number | null | undefined; className?: string }) {
   const tone = trendTone(value);

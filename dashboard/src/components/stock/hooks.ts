@@ -141,18 +141,6 @@ function selectHistory(data: { period: ChartPeriod; payload: unknown }): PriceHi
   return { period: data.period, ...parseHistory(data.payload) };
 }
 
-/**
- * Chart series. Values sent as `period` are the canonical yfinance-style
- * strings (1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 5y, max) accepted by the backend.
- */
-export function usePriceHistory(ticker: string, period: ChartPeriod) {
-  return useQuery({
-    ...historyOptions(ticker, period),
-    select: selectHistory,
-    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === ticker ? previous : undefined),
-  });
-}
-
 export function useFastInfo(ticker: string, enabled = true) {
   return useQuery({
     queryKey: stockKeys.fastInfo(ticker),
