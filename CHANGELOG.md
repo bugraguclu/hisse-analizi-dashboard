@@ -79,6 +79,19 @@ Mimari sözleşme ve ölçülen kaynak gerçekleri [docs/data-platform.md](./doc
 - Sitenin ilk açılışında bir kez “Yasal uyarı” penceresi çıkar: sitedeki hiçbir içerik yatırım tavsiyesi değildir; fiyatlar, grafikler, sinyaller ve analizler bilgilendirme amaçlıdır, veriler gecikmeli ya da hatalı olabilir. “Anladım” ya da Esc ile kapanır, seçim tarayıcıda hatırlanır (`hisse.legalNotice.v1`). Metin esaslı biçimde değişirse anahtarın sürümü artırılıp uyarı yeniden gösterilir. Sayfa altındaki “Yasal uyarı” bağlantısı pencereyi yeniden açar (`dashboard/src/components/layout/LegalNotice.tsx`).
 - Kart ve satır altlarındaki tekrar eden “Yatırım tavsiyesi değildir” / “bilgilendirme amaçlıdır” notları kaldırıldı. Kaldırılan yerler: sayfa altı, hisse başlığındaki teknik sinyal açıklaması, finansal sağlık karnesi, analist önerileri, zaman dilimi sinyalleri, teknik özet, pivot seviyeleri ve Hisse Tarama kaynak satırı. Kaynak ve yöntem açıklamaları yerinde duruyor.
 
+### Kartlar yatırımcı için önem sırasında
+
+Her sayfa yukarıdan aşağı yatırımcının ihtiyaç sırasıyla dizildi: özet ve hüküm kartları arkasındaki rakamlardan, temel analiz teknikten önce, tam finansal tablolar en sonda. Yan yana iki kartta soldaki (telefonda üstteki) daha önemli olandır.
+
+- **Piyasa Özeti:** BIST 100 → takip listesi → piyasa genişliği ve en çok yükselen / düşenler → son KAP gelişmeleri. Geniş ekranda takip listesi ve piyasa genişliği grafiğin yanında sağ sütunda (uzun bir takip listesi grafiğin satırını uzatmaz); telefonda kartlar aynı sırayla alt alta.
+- **Hisse sekmeleri:** Genel Bakış · Temel Analiz · Teknik Analiz · Kombine (temel analiz öne alındı).
+- **Genel Bakış:** günlük işlem özeti ve grafik → şirket analiz karnesi ve analist görüşleri → KAP bildirimleri ve haberler → finansal oranlar ve zaman dilimlerine göre sinyaller → temettü geçmişi ve finansal rapor takvimi → finansal tablolar.
+- **Temel Analiz:** karne ve altında finansal oranlar | analist görüşleri ve altında şirket profili (değerleme); iki sütun aynı çizgide biter → temettü geçmişi | ortaklık yapısı ve rapor takvimi → finansal tablolar.
+- **Teknik Analiz:** teknik özet → grafik → hareketli ortalamalar ve zaman dilimlerine göre sinyaller → göstergeler → pivot seviyeleri.
+- **Kombine:** temel analiz sütunu solda (karne, analist görüşleri, oranlar, şirket profili, ortaklık), teknik sütun sağda (teknik özet, sinyaller, göstergeler, pivot); dar ekranda temel sütun önce gelir.
+- **Makro Ekonomi:** para politikası → enflasyon → piyasalar → ekonomik takvim → büyüme ve istihdam → dış denge; bölüm menüsü ve sayfa açıklaması da bu sırada.
+- **Haberler kartı** varsayılan olarak son 7 günü gösterir (48 saat hafta sonları ve orta ölçekli hisselerde çoğu zaman boştu, KAP kartının yanında boş bir kart kalıyordu); yanındaki KAP kartı gibi ilk 10 haberi listeler, “Tümünü göster (N)” hepsini açar.
+
 ## 1.0.0 — 22 Eylül 2026
 
 İlk üretim sürümü: veri doğruluğu, güvenlik, performans ve işletim tarafı baştan sona gözden geçirildi.

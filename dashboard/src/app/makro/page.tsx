@@ -14,13 +14,18 @@ import { ACTIVITY_KEYS, EXTERNAL_KEYS, IndicatorGrid } from "@/components/makro/
 import { MarketsSection } from "@/components/makro/MarketsSection";
 import { EconomicCalendar } from "@/components/makro/EconomicCalendar";
 
+/**
+ * Page order, most important for an investor first: the policy rate and
+ * inflation drive valuations, markets and the release calendar move every day,
+ * growth and the external balance change slowly.
+ */
 const SECTIONS: Array<{ id: string; title: MakroKey }> = [
   { id: "para-politikasi", title: "section.monetary" },
   { id: "enflasyon", title: "section.inflation" },
-  { id: "buyume", title: "section.activity" },
-  { id: "dis-denge", title: "section.external" },
   { id: "piyasalar", title: "section.markets" },
   { id: "takvim", title: "section.calendar" },
+  { id: "buyume", title: "section.activity" },
+  { id: "dis-denge", title: "section.external" },
 ];
 
 function RefreshButton() {
@@ -88,20 +93,20 @@ export default function MakroPage() {
         </div>
       </MacroSection>
 
-      <MacroSection id="buyume" title={t("section.activity")} description={t("section.activity.desc")}>
-        <IndicatorGrid keys={ACTIVITY_KEYS} label={t("section.activity")} />
-      </MacroSection>
-
-      <MacroSection id="dis-denge" title={t("section.external")} description={t("section.external.desc")}>
-        <IndicatorGrid keys={EXTERNAL_KEYS} label={t("section.external")} />
-      </MacroSection>
-
       <MacroSection id="piyasalar" title={t("section.markets")} description={t("section.markets.desc")}>
         <MarketsSection />
       </MacroSection>
 
       <MacroSection id="takvim" title={t("section.calendar")} description={t("section.calendar.desc")}>
         <EconomicCalendar />
+      </MacroSection>
+
+      <MacroSection id="buyume" title={t("section.activity")} description={t("section.activity.desc")}>
+        <IndicatorGrid keys={ACTIVITY_KEYS} label={t("section.activity")} />
+      </MacroSection>
+
+      <MacroSection id="dis-denge" title={t("section.external")} description={t("section.external.desc")}>
+        <IndicatorGrid keys={EXTERNAL_KEYS} label={t("section.external")} />
       </MacroSection>
     </div>
   );

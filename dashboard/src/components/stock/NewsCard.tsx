@@ -18,6 +18,11 @@ const WINDOWS: Array<{ hours: number; label: StockKey }> = [
   { hours: 720, label: "news.window30d" },
 ];
 
+/** A week by default: 48 hours is often empty (weekends, mid caps), which left a blank card beside the KAP list. */
+const DEFAULT_HOURS = 168;
+/** Same length as the KAP card beside it; the rest opens on request. */
+const VISIBLE_ITEMS = 10;
+
 function NewsRow({ item, now }: { item: NewsItem; now: number | null }) {
   const { t } = useStockI18n();
   const published = parseDate(item.publishedAt);
@@ -85,7 +90,8 @@ export function NewsCard({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
   const now = useNow();
   const identity = useShellIdentity();
-  const [hours, setHours] = useState(48);
+  const [hours, setHours] = useState(DEFAULT_HOURS);
+  const [expanded, setExpanded] = useState(false);
   const tracked = identity.status === "found" ? identity.identity.tracked : identity.status === "unknown";
   const newsQ = useTickerNews(ticker, hours, tracked);
   const windowLabel = t(WINDOWS.find((w) => w.hours === hours)?.label ?? "news.window48h");
@@ -109,14 +115,29 @@ export function NewsCard({ ticker }: { ticker: string }) {
       />
     );
   } else {
+    const items = expanded ? newsQ.data : newsQ.data.slice(0, VISIBLE_ITEMS);
     body = (
-      <ul className="divide-y divide-border">
-        {newsQ.data.map((item, index) => (
-          <li key={item.url ?? `${item.title}-${index}`}>
-            <NewsRow item={item} now={now} />
-          </li>
-        ))}
-      </ul>
+      <>
+        <ul className="divide-y divide-border">
+          {items.map((item, index) => (
+            <li key={item.url ?? `${item.title}-${index}`}>
+              <NewsRow item={item} now={now} />
+            </li>
+          ))}
+        </ul>
+        {newsQ.data.length > VISIBLE_ITEMS ? (
+          <div className="border-t border-border px-4 py-2.5">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+              className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              {expanded ? t("common.showLess") : t("common.showAllCount", { count: newsQ.data.length })}
+            </button>
+          </div>
+        ) : null}
+      </>
     );
   }
 
@@ -128,7 +149,10 @@ export function NewsCard({ ticker }: { ticker: string }) {
           <Segmented
             label={t("news.windowLabel")}
             value={hours}
-            onChange={setHours}
+            onChange={(value) => {
+              setHours(value);
+              setExpanded(false);
+            }}
             size="xs"
             options={WINDOWS.map((w) => ({ value: w.hours, label: t(w.label) }))}
           />

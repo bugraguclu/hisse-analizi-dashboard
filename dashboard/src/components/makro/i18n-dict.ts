@@ -12,9 +12,9 @@ const dict = {
   "page.eyebrow": { tr: "Türkiye ekonomisi", en: "Turkish economy", fr: "Économie turque" },
   "page.title": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
   "page.description": {
-    tr: "Para politikası, enflasyon, büyüme, dış denge ve piyasalar — TCMB, TÜİK ve piyasa verileriyle tek sayfada.",
-    en: "Monetary policy, inflation, growth, external balance and markets — CBRT, TurkStat and market data on one page.",
-    fr: "Politique monétaire, inflation, croissance, équilibre extérieur et marchés — données de la CBRT, de TurkStat et des marchés sur une page.",
+    tr: "Para politikası, enflasyon, piyasalar, büyüme ve dış denge — TCMB, TÜİK ve piyasa verileriyle tek sayfada.",
+    en: "Monetary policy, inflation, markets, growth and the external balance — CBRT, TurkStat and market data on one page.",
+    fr: "Politique monétaire, inflation, marchés, croissance et équilibre extérieur — données de la CBRT, de TurkStat et des marchés sur une page.",
   },
   "page.sections": { tr: "Bölümler", en: "Sections", fr: "Sections" },
   "page.refresh": { tr: "Yenile", en: "Refresh", fr: "Actualiser" },

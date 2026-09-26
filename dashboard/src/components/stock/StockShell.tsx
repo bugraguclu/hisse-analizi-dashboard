@@ -11,10 +11,11 @@ import { StockHeader } from "./StockHeader";
 
 export type StockView = "overview" | "technical" | "fundamental" | "combined";
 
+/** Fundamentals before technicals: the order an investor weighs them (as on the overview and /analiz). */
 const TABS: Array<{ view: StockView; href: (ticker: string) => string; label: StockKey }> = [
   { view: "overview", href: (t) => `/hisse/${t}`, label: "tabs.overview" },
-  { view: "technical", href: (t) => `/teknik/${t}`, label: "tabs.technical" },
   { view: "fundamental", href: (t) => `/temel/${t}`, label: "tabs.fundamental" },
+  { view: "technical", href: (t) => `/teknik/${t}`, label: "tabs.technical" },
   { view: "combined", href: (t) => `/analiz/${t}`, label: "tabs.combined" },
 ];
 

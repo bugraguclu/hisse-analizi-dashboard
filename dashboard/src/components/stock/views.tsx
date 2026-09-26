@@ -36,15 +36,27 @@ const STACK = "flex min-w-0 flex-col gap-4 [&>*]:shrink-0 [&>*]:grow";
 /** A LazySection inside a STACK: the mounted card fills the (growing) wrapper. */
 const STACK_ITEM = "flex flex-col [&>*]:grow";
 
-/** /hisse/[ticker] — overview. Below-the-fold sections mount when scrolled near. */
+/*
+ * Every stock page runs top to bottom in the order an investor needs it:
+ * summaries and verdicts before the figures behind them, fundamentals before
+ * technicals, the full statement tables last. In a pair the left card (first
+ * on phones) is the more important one.
+ */
+
+/**
+ * /hisse/[ticker] — overview: key figures and the chart, the verdicts
+ * (scorecard, analysts), what is new (KAP, news), ratios and signals,
+ * dividends and the report calendar, then the statements. Below-the-fold
+ * sections mount when scrolled near.
+ */
 export function StockOverviewView({ ticker }: { ticker: string }) {
   return (
     <StockShell ticker={ticker} view="overview">
       <QuoteStats ticker={ticker} />
       <PriceChartCard ticker={ticker} />
       <div className={PAIR}>
-        <RatiosCard ticker={ticker} />
         <FinancialHealthScorecard ticker={ticker} />
+        <AnalystRecommendations ticker={ticker} />
       </div>
       <LazySection columns={2} minHeight={560}>
         <div className={PAIR}>
@@ -52,14 +64,11 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
           <NewsCard ticker={ticker} />
         </div>
       </LazySection>
-      <LazySection columns={2} minHeight={400}>
+      <LazySection columns={2} minHeight={480}>
         <div className={PAIR}>
-          <AnalystRecommendations ticker={ticker} />
+          <RatiosCard ticker={ticker} />
           <AllTimeframeSignals ticker={ticker} />
         </div>
-      </LazySection>
-      <LazySection minHeight={480}>
-        <FinancialStatements ticker={ticker} />
       </LazySection>
       <LazySection columns={2} minHeight={300}>
         <div className={PAIR}>
@@ -67,56 +76,66 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
           <EarningsCalendar ticker={ticker} />
         </div>
       </LazySection>
-    </StockShell>
-  );
-}
-
-/** /teknik/[ticker] — technical analysis. */
-export function StockTechnicalView({ ticker }: { ticker: string }) {
-  return (
-    <StockShell ticker={ticker} view="technical">
-      <TechnicalSummary ticker={ticker} />
-      <PriceChartCard ticker={ticker} variant="technical" />
-      <IndicatorPanel ticker={ticker} />
-      <div className={PAIR}>
-        <MovingAveragesTable ticker={ticker} />
-        <AllTimeframeSignals ticker={ticker} />
-      </div>
-      <LazySection minHeight={240}>
-        <PivotsCard ticker={ticker} />
+      <LazySection minHeight={480}>
+        <FinancialStatements ticker={ticker} />
       </LazySection>
     </StockShell>
   );
 }
 
 /**
- * /temel/[ticker] — fundamentals. The first block is two columns (company +
- * ownership | ratios + scorecard) that end on the same line.
+ * /temel/[ticker] — fundamentals: the scorecard over the ratios behind it
+ * beside the analysts' view over valuation and the company profile (two
+ * columns that end on the same line, so a bank's short ratio list doesn't
+ * leave one half-empty card), dividends beside ownership and the report
+ * calendar, then the statements.
  */
 export function StockFundamentalView({ ticker }: { ticker: string }) {
   return (
     <StockShell ticker={ticker} view="fundamental">
       <div className={PAIR}>
         <div className={STACK}>
-          <CompanyProfileCard ticker={ticker} />
-          <HoldersCard ticker={ticker} />
+          <FinancialHealthScorecard ticker={ticker} />
+          <RatiosCard ticker={ticker} />
         </div>
         <div className={STACK}>
-          <RatiosCard ticker={ticker} />
-          <FinancialHealthScorecard ticker={ticker} />
+          <AnalystRecommendations ticker={ticker} />
+          <CompanyProfileCard ticker={ticker} />
         </div>
       </div>
-      <LazySection columns={2} minHeight={340}>
+      <LazySection columns={2} minHeight={440}>
         <div className={PAIR}>
-          <AnalystRecommendations ticker={ticker} />
           <DividendHistory ticker={ticker} />
+          <div className={STACK}>
+            <HoldersCard ticker={ticker} />
+            <EarningsCalendar ticker={ticker} />
+          </div>
         </div>
       </LazySection>
       <LazySection minHeight={480}>
         <FinancialStatements ticker={ticker} />
       </LazySection>
-      <LazySection minHeight={200}>
-        <EarningsCalendar ticker={ticker} />
+    </StockShell>
+  );
+}
+
+/**
+ * /teknik/[ticker] — technical analysis: the daily verdict and the chart, the
+ * trend (moving averages) beside the verdict per timeframe, the oscillators,
+ * then pivot levels.
+ */
+export function StockTechnicalView({ ticker }: { ticker: string }) {
+  return (
+    <StockShell ticker={ticker} view="technical">
+      <TechnicalSummary ticker={ticker} />
+      <PriceChartCard ticker={ticker} variant="technical" />
+      <div className={PAIR}>
+        <MovingAveragesTable ticker={ticker} />
+        <AllTimeframeSignals ticker={ticker} />
+      </div>
+      <IndicatorPanel ticker={ticker} />
+      <LazySection minHeight={240}>
+        <PivotsCard ticker={ticker} />
       </LazySection>
     </StockShell>
   );
@@ -137,28 +156,29 @@ function CombinedColumn({ id, title, children }: { id: string; title: string; ch
 }
 
 /**
- * /analiz/[ticker] — technical and fundamental summaries side by side from xl
- * (below that the two columns stack, so no card is squeezed into ~450px).
+ * /analiz/[ticker] — fundamental and technical summaries side by side from xl
+ * (below that the two columns stack, fundamentals first, so no card is
+ * squeezed into ~450px). Each column opens with its verdicts.
  */
 export function StockCombinedView({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
   return (
     <StockShell ticker={ticker} view="combined">
       <div className="grid grid-cols-1 gap-x-4 gap-y-8 xl:grid-cols-2">
+        <CombinedColumn id="combined-fundamental" title={t("tabs.fundamental")}>
+          <FinancialHealthScorecard ticker={ticker} />
+          <AnalystRecommendations ticker={ticker} />
+          <RatiosCard ticker={ticker} />
+          <CompanyProfileCard ticker={ticker} />
+          <HoldersCard ticker={ticker} />
+        </CombinedColumn>
         <CombinedColumn id="combined-technical" title={t("tabs.technical")}>
           <TechnicalSummary ticker={ticker} />
-          <IndicatorPanel ticker={ticker} compact />
           <AllTimeframeSignals ticker={ticker} />
+          <IndicatorPanel ticker={ticker} compact />
           <LazySection minHeight={240} className={STACK_ITEM}>
             <PivotsCard ticker={ticker} />
           </LazySection>
-        </CombinedColumn>
-        <CombinedColumn id="combined-fundamental" title={t("tabs.fundamental")}>
-          <AnalystRecommendations ticker={ticker} />
-          <FinancialHealthScorecard ticker={ticker} />
-          <CompanyProfileCard ticker={ticker} />
-          <RatiosCard ticker={ticker} />
-          <HoldersCard ticker={ticker} />
         </CombinedColumn>
       </div>
     </StockShell>
