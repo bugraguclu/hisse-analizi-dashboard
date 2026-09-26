@@ -1,7 +1,10 @@
 """Polling worker — fetches data from external sources for all active companies.
 
 Concurrency / resilience model:
-- Every source runs in its own loop, so a slow financials cycle never delays KAP.
+- Every source runs in its own loop. Since the data platform (market_worker /
+  fundamentals_worker) took over prices and financial statements, only KAP is
+  polled here; the price/financials branches stay for the admin "run once" /
+  backfill endpoints and write through the same store-aware upserts.
 - A source cycle holds a PostgreSQL session-level advisory lock on a dedicated
   connection: the same source is never polled twice at the same time, whether the
   second attempt comes from another worker replica or from the API's admin
@@ -38,7 +41,10 @@ from src.services.event_service import EventService, FinancialService, PriceServ
 
 logger = structlog.get_logger(__name__)
 
-POLL_SOURCES: tuple[str, ...] = ("kap", "price", "financials")
+# "price" -> market_worker (market.bars.daily updates polling_state "price"),
+# "financials" -> fundamentals_worker (fundamentals.statements -> "financials").
+POLL_SOURCES: tuple[str, ...] = ("kap",)
+MANUAL_SOURCES: tuple[str, ...] = ("price", "financials")  # admin run-once / backfill only
 # KAP needs ONE list request per cycle (shared by every company, see adapters.kap), so it
 # can be polled every minute; per-company requests used to get throttled at 30 s.
 DEFAULT_INTERVALS: dict[str, int] = {"kap": 60, "price": 300, "financials": 3600}

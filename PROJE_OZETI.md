@@ -38,6 +38,14 @@ Hedef kullanıcılar; BIST’i takip eden bireysel yatırımcılar, araştırma 
 
 Eksik veri hiçbir ekranda `0` olarak gösterilmez; hata, boş veri ve yükleniyor durumları ayrıdır.
 
+**Veri platformu (1.1.0, `data-infra`):** her veri kümesi kaynağı, çekilme zamanı ve verinin kendi tarihiyle
+PostgreSQL'de saklanır; sayfalar depodan servis edilir, depo bayatsa canlı kaynak çekilip depo güncellenir,
+kaynak yanıt vermezse son iyi kopya "son kayıtlı veri" uyarısıyla gösterilir. Kotasyon ve barlar TradingView
+(15 dk gecikmeli; İş Yatırım resmî kapanışıyla her gün mutabakat), finansal tablolar KAP ilk açıklanan bazında
+(İş Yatırım çeyrekleri IAS 29 katsayısıyla KAP bazına çevrilir), makro seriler TCMB/TÜİK tam geçmişiyle depodadır.
+Çapraz kaynak kontrolleri her gün çalışır ve `/data/quality` ile izlenir; ölçülen sapmalar
+[docs/data-platform.md](./docs/data-platform.md) ve [CHANGELOG.md](./CHANGELOG.md) dosyalarındadır.
+
 ## Son kalite kontrolü (22 Eylül 2026)
 
 - 589 otomatik test geçti (6 canlı sağlayıcı testi CI’da atlanır); başlangıçta 88 testti. Kod, yazanlardan bağımsız 8 gözden geçirme ajanıyla ayrıca denetlendi.

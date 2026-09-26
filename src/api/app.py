@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.api.limiter import RATE_LIMIT_DETAIL, enforce_default_rate_limit, limiter
 from src.api.middleware import INTERNAL_ERROR_DETAIL, REQUEST_ID_HEADER, RequestContextMiddleware
 from src.api.routers import admin_router, router
+from src.api.routers_data import router as data_router
 from src.api.routers_fundamentals import fundamentals_router
 from src.api.routers_macro import macro_router
 from src.api.routers_market import market_router
@@ -114,7 +115,7 @@ app.add_middleware(
     allow_origins=settings.cors_allowed_origins,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Admin-Key", REQUEST_ID_HEADER],
-    expose_headers=[REQUEST_ID_HEADER, "Retry-After", "X-Total-Count"],
+    expose_headers=[REQUEST_ID_HEADER, "Retry-After", "X-Total-Count", "X-Data-Meta"],
 )
 
 # API routers
@@ -125,6 +126,7 @@ app.include_router(fundamentals_router)
 app.include_router(macro_router)
 app.include_router(market_router)
 app.include_router(news_router)
+app.include_router(data_router)
 
 
 @app.get("/", include_in_schema=False)

@@ -8,21 +8,18 @@ boşsa hata değil ``available: false``.
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.economic_calendar import get_economic_calendar
-from src.adapters.macro import (
-    get_fx_bulletin,
-    get_fx_rates,
-    get_inflation,
-    get_policy_rate,
-    get_tcmb_calendar,
-    get_tcmb_rates,
-)
+from src.adapters.macro import get_fx_bulletin, get_tcmb_calendar
 from src.adapters.macro_markets import get_macro_indicators, get_market_history, get_market_snapshot
 from src.adapters.utils import upstream_failure
+from src.db.session import get_db
+from src.services import macro_service
 
 macro_router = APIRouter(prefix="/macro", tags=["macro"])
+DB = Annotated[AsyncSession, Depends(get_db)]
 
 
 def _respond(payload: Any) -> Any:
@@ -34,15 +31,15 @@ def _respond(payload: Any) -> Any:
 
 
 @macro_router.get("/tcmb")
-async def tcmb_rates():
-    """Güncel politika faizi ve faiz koridoru (gecelik, geç likidite)."""
-    return _respond(await get_tcmb_rates())
+async def tcmb_rates(db: DB):
+    """Güncel politika faizi ve faiz koridoru (gecelik, geç likidite); depo öncelikli (+``meta``)."""
+    return _respond(await macro_service.get_tcmb_store_first(db))
 
 
 @macro_router.get("/policy-rate")
-async def policy_rate():
-    """TCMB politika faizi (tarihe göre en son karar) + son 24 karar."""
-    return _respond(await get_policy_rate())
+async def policy_rate(db: DB):
+    """TCMB politika faizi (tarihe göre en son karar) + son 24 karar; depo öncelikli."""
+    return _respond(await macro_service.get_policy_rate_store_first(db))
 
 
 @macro_router.get("/tcmb-calendar")
@@ -52,9 +49,9 @@ async def tcmb_calendar():
 
 
 @macro_router.get("/inflation")
-async def inflation():
-    """TÜFE ve ÜFE: en son dönem (yıllık / aylık ayrı) + geçmiş."""
-    return _respond(await get_inflation())
+async def inflation(db: DB):
+    """TÜFE ve ÜFE: en son dönem (yıllık / aylık ayrı) + geçmiş; depo öncelikli."""
+    return _respond(await macro_service.get_inflation_store_first(db))
 
 
 @macro_router.get("/fx-bulletin")
@@ -64,9 +61,9 @@ async def fx_bulletin():
 
 
 @macro_router.get("/fx/{currency}")
-async def fx_rates(currency: str = "USD"):
-    """TCMB döviz kuru (1 birim). currency: USD, EUR, GBP, JPY, CHF, vb."""
-    return _respond(await get_fx_rates(currency.strip().upper()))
+async def fx_rates(db: DB, currency: str = "USD"):
+    """TCMB döviz kuru (1 birim). currency: USD, EUR, GBP, JPY, CHF, vb.; depo öncelikli."""
+    return _respond(await macro_service.get_fx_store_first(db, currency.strip().upper()))
 
 
 @macro_router.get("/markets")

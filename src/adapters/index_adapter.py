@@ -1,4 +1,16 @@
-"""Endeks adaptoru — BIST endeks verileri ve canli hisse fiyat gecmisi."""
+"""Endeks adaptoru — BIST endeks verileri ve canli hisse fiyat gecmisi.
+
+Store-first (``src.services.market_service``): quotes and daily/weekly bars come
+from the market store when it is fresh, otherwise live from TradingView (written
+through). Every payload carries an additive ``meta`` block (source, served_from
+live|store|stale, delay_seconds=900 for the free TradingView feed). Quote times
+are capped at the session close (18:10) and carry ``session_state``.
+
+The stock history's ``info`` block follows the fast-info rules
+(``market_service``): volume/amount from İş Yatırım OneEndeks for the same
+session, share count = paid-in capital, market cap = last × capital, P/B = market
+cap / latest-quarter parent equity (fallback: the İş Yatırım company card).
+"""
 
 import asyncio
 from collections.abc import Awaitable
@@ -8,12 +20,10 @@ import pandas as pd
 import structlog
 
 from src.adapters.price import (
+    MAX_CHART_WARMUP_BARS,
     bars_to_records,
     daily_stats,
-    get_chart_window_parts,
     get_company_metrics,
-    get_daily_bars,
-    get_quotes,
 )
 from src.adapters.utils import (
     TTL_QUOTE,
@@ -22,6 +32,7 @@ from src.adapters.utils import (
     error_payload,
     resolve_period,
 )
+from src.services import market_service
 
 logger = structlog.get_logger(__name__)
 
@@ -116,14 +127,20 @@ def _index_quote_payload(quote: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _index_quote(symbol: str) -> dict[str, Any] | None:
-    quote = (await get_quotes((symbol,))).get(symbol)
-    return _index_quote_payload(quote) if quote else None
+def _warmup_bars(before: pd.DataFrame, warmup: int) -> dict[str, Any]:
+    """``{"warmup": [...]}`` — the bars right before the window (``data`` record shape); ``{}`` when 0."""
+    count = min(int(warmup), MAX_CHART_WARMUP_BARS)
+    return {"warmup": bars_to_records(before.tail(count))} if count > 0 else {}
+
+
+def _metas(*metas: Any) -> dict[str, Any]:
+    """Additive ``meta`` block of a payload assembled from several store-first reads."""
+    return market_service.meta_dict(market_service.combine_meta([m for m in metas if m is not None]))
 
 
 @cached(TTL_QUOTE, "index")
 async def get_index_data(symbol: str = "XU100", period: str = "1ay", warmup: int = 0) -> dict:
-    """Endeks fiyat verisi (XU100, XU030, vb.) + canli kotasyon.
+    """Endeks fiyat verisi (XU100, XU030, vb.) + kotasyon (depo öncelikli).
 
     ``info`` onceki kapanis ve gunluk degisimi tasir; grafik barlari
     periyodun gercek takvim/seans penceresine kirpilir. ``reference_close`` /
@@ -134,21 +151,24 @@ async def get_index_data(symbol: str = "XU100", period: str = "1ay", warmup: int
     """
     try:
         spec = resolve_period(period)
-        (bars, before, reference), parts = await _with_optional_parts(
-            get_chart_window_parts(symbol, spec), {"quote": _index_quote(symbol)}, symbol
+        chart, parts = await _with_optional_parts(
+            market_service.get_chart_window(symbol, spec, warmup=warmup),
+            {"quote": market_service.get_cached_quotes((symbol,))},
+            symbol,
         )
-        result = {
+        quotes = parts["quote"]
+        quote = quotes.quotes.get(symbol) if quotes else None
+        return {
             "symbol": symbol,
             "period": period,
             "interval": spec.interval,
             "source": SOURCE,
-            "info": parts["quote"] or {},
-            **reference,
-            "data": bars_to_records(bars),
+            "info": _index_quote_payload(quote) if quote else {},
+            **chart.reference,
+            "data": bars_to_records(chart.bars),
+            **_warmup_bars(chart.before, warmup),
+            **_metas(chart.meta, quotes.meta if quotes else None),
         }
-        if warmup > 0:
-            result["warmup"] = bars_to_records(before.tail(warmup))
-        return result
     except Exception as e:
         logger.error("index_data_error", symbol=symbol, period=period, error=str(e))
         return {"symbol": symbol, "period": period, "data": [], **error_payload(e, "Endeks verisi alınamadı")}
@@ -156,12 +176,13 @@ async def get_index_data(symbol: str = "XU100", period: str = "1ay", warmup: int
 
 @cached(TTL_INDEX_QUOTE, "index")
 async def get_index_info(symbol: str = "XU100") -> dict:
-    """Endeks bilgileri (canli kotasyon)."""
+    """Endeks bilgileri (kotasyon, depo öncelikli)."""
     try:
-        info = await _index_quote(symbol)
-        if info is None:
+        quotes = await market_service.get_cached_quotes((symbol,))
+        quote = quotes.quotes.get(symbol)
+        if quote is None:
             raise SymbolNotFoundError(symbol)
-        return {"symbol": symbol, "source": SOURCE, "info": info}
+        return {"symbol": symbol, "source": SOURCE, "info": _index_quote_payload(quote), **_metas(quotes.meta)}
     except Exception as e:
         logger.error("index_info_error", symbol=symbol, error=str(e))
         return {"symbol": symbol, "info": {}, **error_payload(e, "Endeks kotasyonu alınamadı")}
@@ -169,17 +190,19 @@ async def get_index_info(symbol: str = "XU100") -> dict:
 
 @cached(TTL_INDEX_QUOTE, "index")
 async def list_indices() -> dict:
-    """Tum BIST endekslerini listele; ana endeksler icin canli kotasyon ekle.
+    """Tum BIST endekslerini listele; ana endeksler icin kotasyon ekle.
 
-    Kotasyonlar tek TradingView scanner isteginden gelir (tarayicida olmayan
-    XUSIN icin websocket yedegi) — endeks basina ayri baglanti acilmaz.
+    Kotasyonlar piyasa deposundan (market worker, dakikada bir tek TradingView
+    tarayıcı isteği) gelir; depo eskiyse tek canlı istek atılır (tarayıcıda olmayan
+    XUSIN için websocket / İş Yatırım yedeği).
     """
     try:
-        quotes = await get_quotes(tuple(MAIN_INDICES))
+        quotes = await market_service.get_cached_quotes(tuple(MAIN_INDICES))
         return {
             "source": SOURCE,
             "indices": list(_index_names()),
-            "quotes": [_index_quote_payload(quotes[s]) for s in MAIN_INDICES if s in quotes],
+            "quotes": [_index_quote_payload(quotes.quotes[s]) for s in MAIN_INDICES if s in quotes.quotes],
+            **_metas(quotes.meta),
         }
     except Exception as e:
         logger.error("indices_list_error", error=str(e))
@@ -190,13 +213,27 @@ def _ticker_info(
     quote: dict[str, Any] | None,
     metrics: dict[str, Any] | None,
     stats: dict[str, float | None],
+    *,
+    official: dict[str, Any] | None = None,
+    capital: market_service.CompanyCapital | None = None,
+    stored_capital: float | None = None,
 ) -> dict[str, Any]:
     """Live key stats in the historical ``Ticker.fast_info`` shape (+ change fields)."""
     quote = quote or {}
     metrics = metrics or {}
     last_price = quote.get("last")
-    market_cap = metrics.get("market_cap") or quote.get("market_cap")
-    shares = int(market_cap / last_price) if market_cap and last_price else None
+    count = market_service.share_count(capital.capital if capital else None, stored_capital)
+    market_cap: Any = count.market_cap(last_price)
+    if market_cap is not None:
+        shares = int(count.shares) if count.shares is not None else None
+        pb_ratio, _ = market_service.price_to_book(market_cap, capital.equity if capital else None, None)
+    else:  # capital unknown: the company card's market cap (previous close in session) — legacy estimate
+        market_cap = metrics.get("market_cap") or quote.get("market_cap")
+        shares = int(market_cap / last_price) if market_cap and last_price else None
+        pb_ratio = None
+    if pb_ratio is None:
+        pb_ratio = metrics.get("pb_ratio")
+    figures = market_service.official_session_figures(official, quote.get("session_date"))
     return {
         "currency": quote.get("currency") or "TRY",
         "exchange": "BIST",
@@ -208,12 +245,12 @@ def _ticker_info(
         "previous_close": quote.get("prev_close"),
         "change": quote.get("change"),
         "change_percent": quote.get("change_percent"),
-        "volume": quote.get("volume"),
-        "amount": quote.get("turnover"),
+        "volume": figures[0] if figures is not None else quote.get("volume"),
+        "amount": figures[1] if figures is not None else quote.get("turnover"),
         "market_cap": market_cap,
         "shares": shares,
         "pe_ratio": metrics.get("pe_ratio"),
-        "pb_ratio": metrics.get("pb_ratio"),
+        "pb_ratio": pb_ratio,
         "year_high": stats.get("year_high"),
         "year_low": stats.get("year_low"),
         "fifty_day_average": stats.get("fifty_day_average"),
@@ -221,16 +258,25 @@ def _ticker_info(
         "free_float": metrics.get("free_float"),
         "foreign_ratio": metrics.get("foreign_ratio"),
         "updated_at": quote.get("updated_at"),
+        # add-only
+        "session_state": quote.get("session_state"),
+        "volume_source": (
+            market_service.VOLUME_SOURCE_ISYATIRIM if figures is not None
+            else (market_service.VOLUME_SOURCE_TRADINGVIEW if quote.get("volume") is not None else None)
+        ),
+        "shares_source": count.source if count.capital is not None else (
+            market_service.SHARES_SOURCE_MARKET if shares is not None else None
+        ),
     }
 
 
 @cached(TTL_QUOTE, "ticker_history")
 async def get_ticker_history(ticker: str, period: str = "1ay", warmup: int = 0) -> dict:
-    """Hisse fiyat gecmisi + canli temel istatistikler (borsapy/TradingView).
+    """Hisse fiyat gecmisi + temel istatistikler (depo öncelikli, TradingView).
 
     Grafik barlari, kotasyon, sirket karti ve gunluk bar istatistikleri
     paralel cekilir; gunluk periyotlar (1ay–1y) teknik gostergelerle ayni
-    onbellekli gunluk seriyi paylasir. ``reference_close`` / ``reference_date``:
+    gunluk seriyi (piyasa deposu) paylasir. ``reference_close`` / ``reference_date``:
     pencereden onceki son kapanis (periyot degisiminin bazi; 1g'de onceki kapanis).
     ``warmup`` > 0: yanita, pencereden hemen once gelen en fazla ``warmup``
     bar'i tasiyan bir ``"warmup"`` listesi eklenir (gostergelerin pencerenin
@@ -238,29 +284,42 @@ async def get_ticker_history(ticker: str, period: str = "1ay", warmup: int = 0) 
     """
     try:
         spec = resolve_period(period)
-        (bars, before, reference), parts = await _with_optional_parts(
-            get_chart_window_parts(ticker, spec),
+        chart, parts = await _with_optional_parts(
+            market_service.get_chart_window(ticker, spec, warmup=warmup),
             {
-                "quote": get_quotes((ticker,)),
+                "quote": market_service.get_cached_quotes((ticker,)),
                 "company_metrics": get_company_metrics(ticker),
-                "daily_bars": get_daily_bars(ticker),
+                "daily_bars": market_service.get_daily_bars(ticker),
+                "official": market_service.get_official_quote(ticker),
+                "paid_in": market_service.get_paid_in_capitals(),
             },
             ticker,
         )
-        quotes, daily = parts["quote"] or {}, parts["daily_bars"]
-        stats = daily_stats(daily if isinstance(daily, pd.DataFrame) else pd.DataFrame())
-        result = {
+        quotes, daily, official = parts["quote"], parts["daily_bars"], parts["official"]
+        frame = daily.frame if daily is not None else pd.DataFrame()
+        stats = daily_stats(frame if isinstance(frame, pd.DataFrame) else pd.DataFrame())
+        info = _ticker_info(
+            quotes.quotes.get(ticker) if quotes else None,
+            parts["company_metrics"],
+            stats,
+            official=official,
+            capital=market_service.company_capital(ticker, official),
+            stored_capital=(parts["paid_in"] or {}).get(ticker),
+        )
+        quote_meta = market_service.with_official_provenance(
+            quotes.meta if quotes else None, {k: info.get(k) for k in ("volume_source", "shares_source")}
+        )
+        return {
             "ticker": ticker,
             "source": SOURCE,
             "period": period,
             "interval": spec.interval,
-            "info": _ticker_info(quotes.get(ticker), parts["company_metrics"], stats),
-            **reference,
-            "data": bars_to_records(bars),
+            "info": info,
+            **chart.reference,
+            "data": bars_to_records(chart.bars),
+            **_warmup_bars(chart.before, warmup),
+            **_metas(chart.meta, quote_meta),
         }
-        if warmup > 0:
-            result["warmup"] = bars_to_records(before.tail(warmup))
-        return result
     except Exception as e:
         logger.error("ticker_history_error", ticker=ticker, period=period, error=str(e))
         return {"ticker": ticker, "period": period, "data": [], **error_payload(e, "Fiyat geçmişi alınamadı")}

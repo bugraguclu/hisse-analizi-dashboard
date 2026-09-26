@@ -13,14 +13,13 @@ from src.api.dependencies import require_admin, validate_ticker
 from src.api.limiter import limiter
 from src.core.config import settings
 from src.core.enums import EventType, PriceInterval, parse_event_category, parse_severity
+from src.core.meta import DataMeta
 from src.core.time import to_utc, utcnow
 from src.db.models import Company
 from src.db.repository import (
     CompanyRepository,
     EventFilters,
     EventSort,
-    FinancialRatioRepository,
-    FinancialStatementRepository,
     NormalizedEventRepository,
     NotificationRepository,
     NotificationRuleRepository,
@@ -31,6 +30,7 @@ from src.db.repository import (
     StatsRepository,
 )
 from src.db.session import check_database, get_db
+from src.services import market_service
 from src.schemas.events import (
     BackfillAcceptedOut,
     BackfillRequest,
@@ -61,6 +61,8 @@ from src.schemas.events import (
 )
 
 DB = Annotated[AsyncSession, Depends(get_db)]
+logger = structlog.get_logger(__name__)
+
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
@@ -134,8 +136,14 @@ async def get_stats(db: DB) -> StatsOut:
 # --- Public Endpoints ---
 
 @router.get("/companies", response_model=list[CompanyOut])
-async def list_companies(db: DB):
-    return await CompanyRepository(db).get_all()
+async def list_companies(
+    db: DB,
+    tier: Annotated[
+        str, Query(pattern="^(core|universe|all)$", description="core (BIST 100, varsayılan), universe veya all")
+    ] = "core",
+    include_inactive: Annotated[bool, Query(description="Borsadan çıkarılmış/askıya alınmış şirketleri de listele")] = False,
+):
+    return await CompanyRepository(db).get_all(None if tier == "all" else tier, include_inactive=include_inactive)
 
 
 @router.get("/companies/{ticker}", response_model=CompanyOut)
@@ -356,48 +364,123 @@ async def get_event_content(request: Request, event_id: uuid.UUID, db: DB):
     return _content_out(event_id, event.event_url, payload, fetched_at)
 
 
+class PriceLatestOut(PriceOut):
+    """``/prices/latest`` row + the additive provenance block (docs/data-platform.md §4.2)."""
+
+    meta: dict[str, Any] | None = None
+
+
+async def _refresh_daily_store(symbol: str, interval: PriceInterval) -> DataMeta | None:
+    """Store-first: make sure the stored daily series is current (live top-up + write-through).
+
+    Failures never break the endpoint — it keeps answering from whatever is stored.
+    """
+    if interval != PriceInterval.ONE_DAY:
+        return None  # intraday bars are not stored (always empty unless legacy rows exist)
+    try:
+        return (await market_service.get_daily_bars(symbol)).meta
+    except Exception as e:  # provider down and nothing stored, unknown symbol, ...
+        logger.warning("prices_store_refresh_failed", ticker=symbol, error=f"{type(e).__name__}: {e}"[:200])
+        return None
+
+
+def _meta_headers(response: Response, meta: DataMeta | None) -> None:
+    """List responses cannot carry a ``meta`` object without breaking their shape: use headers."""
+    if meta is None:
+        return
+    response.headers["X-Data-Source"] = meta.source
+    response.headers["X-Data-Served-From"] = meta.served_from
+    response.headers["X-Data-Stale"] = "true" if meta.stale else "false"
+    if meta.as_of:
+        response.headers["X-Data-As-Of"] = meta.as_of
+    if meta.delay_seconds is not None:
+        response.headers["X-Data-Delay-Seconds"] = str(meta.delay_seconds)
+
+
 @router.get("/prices", response_model=list[PriceOut])
 async def list_prices(
     db: DB,
+    response: Response,
     ticker: str = "THYAO",
     since: date | None = None,
     until: date | None = None,
     interval: PriceInterval = PriceInterval.ONE_DAY,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ):
-    """Stored OHLCV rows, newest first, one row per trading date."""
+    """Stored OHLCV rows (market store), newest first, one row per trading date.
+
+    Daily bars are store-first: a stale or missing series is topped up from
+    TradingView before answering. Provenance is in the ``X-Data-*`` headers.
+    """
     company = await _company_or_404(db, ticker)
     if since and until and since > until:
         raise _bad_request("'since' değeri 'until' değerinden sonra olamaz.")
+    _meta_headers(response, await _refresh_daily_store(company.ticker, interval))
     return await PriceDataRepository(db).get_list(
         ticker=company.ticker, since=since, until=until, interval=interval, limit=limit
     )
 
 
-@router.get("/prices/latest", response_model=PriceOut | None)
-async def latest_price(db: DB, ticker: str = "THYAO", interval: PriceInterval = PriceInterval.ONE_DAY):
-    """Latest stored row; ``null`` when the company has no price data yet."""
+@router.get("/prices/latest", response_model=PriceLatestOut | None)
+async def latest_price(
+    db: DB, response: Response, ticker: str = "THYAO", interval: PriceInterval = PriceInterval.ONE_DAY
+):
+    """Latest stored row (store-first, + ``meta``); ``null`` when the company has no price data yet."""
     company = await _company_or_404(db, ticker)
-    return await PriceDataRepository(db).get_latest(company.ticker, interval=interval)
+    meta = await _refresh_daily_store(company.ticker, interval)
+    _meta_headers(response, meta)
+    row = await PriceDataRepository(db).get_latest(company.ticker, interval=interval)
+    if row is None:
+        return None
+    payload = PriceLatestOut.model_validate(row)
+    payload.meta = meta.to_dict() if meta is not None else None
+    return payload
 
 
 @router.get("/financials", response_model=list[FinancialStatementOut])
 async def list_financials(
     db: DB,
+    response: Response,
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
     statement_type: StatementType | None = Query(None, description="balance_sheet | income_stmt | cash_flow"),
+    source: str | None = Query(
+        None, pattern="^(kap|isyatirim)$", description="kap (ilk açıklanan) | isyatirim (boşsa ikisi)"
+    ),
 ):
+    """Stored statements, newest period first: KAP (first published) and İş Yatırım rows.
+
+    Store-first: refreshed from the providers when older than
+    ``FUNDAMENTALS_MAX_AGE_STATEMENTS_HOURS``; the stored rows are returned when the
+    providers fail. Provenance/freshness (``meta``) is in the ``X-Data-Meta`` header
+    (the body stays a list).
+    """
+    from src.services.fundamentals_service import DATA_META_HEADER, meta_header, statements_for_api
+
     company = await _company_or_404(db, ticker)
-    return await FinancialStatementRepository(db).get_for_company(company.id, statement_type=statement_type)
+    rows, meta = await statements_for_api(db, company, statement_type=statement_type, source=source)
+    response.headers[DATA_META_HEADER] = meta_header(meta)
+    return rows
 
 
 @router.get("/financials/ratios", response_model=list[FinancialRatioOut])
 async def list_ratios(
     db: DB,
+    response: Response,
     ticker: str = Query(..., description="Hisse kodu (orn: THYAO)"),
+    basis: str | None = Query(None, pattern="^(ttm|annual)$", description="ttm | annual (boşsa ikisi)"),
 ):
+    """Stored ratios per period: ``basis=ttm`` (last four quarters) and ``annual`` (fiscal years).
+
+    Valuation multiples use the latest price and only appear on the newest row of
+    each basis. Recomputed when older than ``FUNDAMENTALS_MAX_AGE_RATIOS_HOURS``;
+    ``meta`` is in the ``X-Data-Meta`` header.
+    """
+    from src.services.fundamentals_service import DATA_META_HEADER, meta_header, ratios_for_api
+
     company = await _company_or_404(db, ticker)
-    return await FinancialRatioRepository(db).get_for_company(company.id)
+    rows, meta = await ratios_for_api(db, company, basis=basis)
+    response.headers[DATA_META_HEADER] = meta_header(meta)
+    return rows
 
 
 @router.get("/notifications", response_model=list[NotificationOut], dependencies=[Depends(require_admin)])
@@ -484,10 +567,52 @@ async def reclassify_events(request: Request, db: DB, body: ReclassifyRequest | 
 @admin_router.post("/financials/recompute-ratios", response_model=RecomputeRatiosOut)
 @limiter.limit(lambda: settings.rate_limit_admin)
 async def recompute_ratios(request: Request, db: DB, body: RecomputeRatiosRequest | None = None):
-    """Recompute ``financial_ratios`` from the stored statements (idempotent, no network)."""
+    """Recompute ``financial_ratios`` from the stored facts (idempotent; no statement fetch,
+    one TradingView scanner request for the prices)."""
     from src.services.event_service import recompute_financial_ratios
 
     ticker = body.ticker if body is not None else None
     if ticker is not None:
         await _company_or_404(db, ticker)
     return await recompute_financial_ratios(db, ticker=ticker)
+
+
+@admin_router.post("/financials/refresh", status_code=status.HTTP_202_ACCEPTED, response_model=TaskAcceptedOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def refresh_financials(
+    request: Request, db: DB, background_tasks: BackgroundTasks, body: RecomputeRatiosRequest | None = None
+):
+    """Run the fundamentals jobs in the background: statements (KAP + İş Yatırım) → facts → ratios.
+
+    With ``ticker`` that company is refreshed now; without it, the next batch of due
+    companies (``FUNDAMENTALS_BATCH_SIZE``; KAP pages are rate limited).
+    """
+    from src.workers.fundamentals_worker import run_fundamentals_once
+
+    ticker = body.ticker if body is not None else None
+    if ticker is not None:
+        await _company_or_404(db, ticker)
+        background_tasks.add_task(run_fundamentals_once, [ticker])
+    else:
+        background_tasks.add_task(run_fundamentals_once, None, limit=max(1, settings.fundamentals_batch_size))
+    return TaskAcceptedOut()
+
+
+@admin_router.post("/financials/rebuild", status_code=status.HTTP_202_ACCEPTED, response_model=TaskAcceptedOut)
+@limiter.limit(lambda: settings.rate_limit_admin)
+async def rebuild_financials(
+    request: Request, db: DB, background_tasks: BackgroundTasks, body: RecomputeRatiosRequest | None = None
+):
+    """Re-derive facts and ratios offline from the stored statements (no provider calls).
+
+    Use after a mapping/restatement rule change; with ``ticker`` only that company.
+    """
+    from src.services.fundamentals_service import rebuild_all_from_store
+
+    ticker = body.ticker if body is not None else None
+    if ticker is not None:
+        await _company_or_404(db, ticker)
+        background_tasks.add_task(rebuild_all_from_store, [ticker])
+    else:
+        background_tasks.add_task(rebuild_all_from_store, None)
+    return TaskAcceptedOut()

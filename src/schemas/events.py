@@ -37,6 +37,19 @@ class CompanyOut(BaseModel):
     isin: str | None = None
     exchange: str | None = None
     is_active: bool
+    # --- reference data (data platform, additive) ---
+    tracking_tier: str | None = None  # "core" (BIST 100, polled per company) | "universe"
+    listing_status: str | None = None  # "listed" | "suspended" | "delisted"
+    security_type: str | None = None  # "stock" | "closed_end_fund"
+    sector: str | None = None  # KAP sector
+    industry: str | None = None  # TradingView industry (tr)
+    market_segment: str | None = None  # KAP "pazar" (YILDIZ PAZAR, ANA PAZAR, ...)
+    website: str | None = None
+    kap_member_oid: str | None = None
+    free_float_pct: float | None = None  # % (KAP/MKK for core companies, TradingView otherwise)
+    foreign_ratio_pct: float | None = None  # % (İş Yatırım)
+    last_seen_at: datetime | None = None
+    reference_updated_at: datetime | None = None
     model_config = {"from_attributes": True}
 
 
@@ -149,6 +162,11 @@ class PriceOut(BaseModel):
     trading_date: date
     interval: PriceInterval
     fetched_at: datetime
+    # --- market store (data platform, additive) ---
+    turnover: Decimal | None = None  # TL (İş Yatırım official daily turnover)
+    vwap: Decimal | None = None  # session VWAP on the stored (split-adjusted) price basis
+    adjusted: bool | None = None  # split/bonus-issue adjusted series (TradingView)
+    is_final: bool | None = None  # false only for the running session's bar
     model_config = {"from_attributes": True}
 
 
@@ -305,6 +323,8 @@ class HealthOut(BaseModel):
 
 
 class FinancialStatementOut(BaseModel):
+    """One stored statement; ``data_json`` is the ``{label: value}`` view of ``items_json``."""
+
     id: UUID
     period: str
     statement_type: str
@@ -312,6 +332,17 @@ class FinancialStatementOut(BaseModel):
     currency: str
     data_json: dict
     fetched_at: datetime
+    # add-only (data platform)
+    source: str | None = None
+    months: int | None = None
+    template: str | None = None
+    restated: bool | None = None
+    restatement_factor: float | None = None  # KAP ÷ İş Yatırım for IAS 29 re-expressed columns
+    fiscal_year_end_month: int | None = None
+    consolidation: str | None = None
+    presentation_unit: str | None = None
+    published_at: date | None = None
+    source_url: str | None = None
     model_config = {"from_attributes": True}
 
     @field_validator("currency", mode="before")
@@ -323,6 +354,13 @@ class FinancialStatementOut(BaseModel):
 class FinancialRatioOut(BaseModel):
     id: UUID
     period: str
+    # add-only (data platform): "ttm" (flows = last four quarters) or "annual"
+    basis: str | None = None
+    operating_margin: float | None = None
+    ev_ebitda: float | None = None
+    revenue_growth_yoy: float | None = None
+    net_income_growth_yoy: float | None = None
+    market_cap: float | None = None
     roe: float | None = None
     roa: float | None = None
     net_margin: float | None = None
@@ -335,4 +373,9 @@ class FinancialRatioOut(BaseModel):
     current_ratio: float | None = None
     net_debt_ebitda: float | None = None
     calculated_at: datetime
+    # add-only (data platform): valuation inputs of the newest row per basis
+    price: float | None = None
+    shares_outstanding: float | None = None
+    shares_source: str | None = None
+    ttm_quarters: list[str] | None = None
     model_config = {"from_attributes": True}

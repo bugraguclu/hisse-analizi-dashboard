@@ -52,8 +52,11 @@ def exclusion_names(companies: list[tuple[str, str]]) -> dict[str, list[str]]:
 
 async def _poll_once() -> int:
     async with async_session_factory() as session:
+        # Haber taraması yalnızca çekirdek (BIST 100) şirketler için; evren ~600 şirkete büyüdü.
         companies = list(
-            (await session.execute(select(Company).where(Company.is_active.is_(True)))).scalars().all()
+            (await session.execute(select(Company).where(Company.is_active.is_(True), Company.tracking_tier == "core")))
+            .scalars()
+            .all()
         )
     excluded = exclusion_names([(str(c.ticker), str(c.display_name or c.ticker)) for c in companies])
 

@@ -1,4 +1,4 @@
-"""Worker entrypoint: polling, notification and news loops.
+"""Worker entrypoint: polling, notification, news and data-platform loops.
 
 Run with: python -m src.workers.run_workers
 
@@ -6,20 +6,31 @@ CONCURRENCY SAFETY:
 - Source polling is serialized per source by PostgreSQL advisory locks (also against
   the API's admin poll/backfill triggers); outbox entries are claimed with
   SELECT ... FOR UPDATE SKIP LOCKED and notifications are deduplicated by a unique
-  constraint. The news worker is not replica-aware, so run exactly
+  constraint. The news and data-platform loops are not replica-aware, so run exactly
   ONE worker replica (WORKER_SINGLE_REPLICA=true, docker-compose replicas: 1).
 
+DATA-PLATFORM LOOPS (docs/data-platform.md):
+- market_loop (quotes, daily bars, reconciliation, backfill), fundamentals_loop
+  (statements → facts → ratios), reference_loop (universe sync, dividends, holders,
+  targets, KAP calendar), macro_loop (TCMB rates, inflation, FX bulletins) and
+  quality_loop (cross-source checks, freshness). Each lives in its own module and
+  is optional: a missing module is logged and skipped, so the worker keeps running
+  during partial deployments.
+
 SHUTDOWN:
-- SIGTERM/SIGINT stop the polling and notification loops cooperatively (the current
-  company poll / outbox entry finishes; nothing new starts), waiting at most
+- SIGTERM/SIGINT stop the cooperative loops (the current company poll / outbox
+  entry / job finishes; nothing new starts), waiting at most
   WORKER_SHUTDOWN_TIMEOUT_SECONDS. The news loop is cancelled. Finally the
   shared HTTP client and the DB connection pool are closed.
 - Exit code 0 on a requested shutdown, 1 if a loop crashed.
 """
 
 import asyncio
+import importlib
 import signal
 import sys
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import structlog
 
@@ -32,6 +43,31 @@ from src.workers.notification_worker import notification_loop
 from src.workers.polling_worker import polling_loop
 
 logger = structlog.get_logger(__name__)
+
+# (task name, module, loop function) — every loop takes the shared stop event.
+DATA_PLATFORM_LOOPS: tuple[tuple[str, str, str], ...] = (
+    ("market", "src.workers.market_worker", "market_loop"),
+    ("fundamentals", "src.workers.fundamentals_worker", "fundamentals_loop"),
+    ("reference", "src.workers.reference_worker", "reference_loop"),
+    ("macro", "src.workers.macro_worker", "macro_loop"),
+    ("quality", "src.workers.quality_worker", "quality_loop"),
+)
+
+LoopFactory = Callable[[asyncio.Event], Coroutine[Any, Any, None]]
+
+
+def load_data_platform_loops() -> list[tuple[str, LoopFactory]]:
+    """Resolve the optional data-platform loops; missing modules are skipped."""
+    loops: list[tuple[str, LoopFactory]] = []
+    for name, module_name, attribute in DATA_PLATFORM_LOOPS:
+        try:
+            module = importlib.import_module(module_name)
+            loop = getattr(module, attribute)
+        except (ImportError, AttributeError) as e:
+            logger.warning("data_platform_loop_unavailable", loop=name, module=module_name, error=str(e))
+            continue
+        loops.append((name, loop))
+    return loops
 
 
 def _install_signal_handlers(stop: asyncio.Event) -> None:
@@ -67,12 +103,18 @@ async def main() -> int:
         asyncio.create_task(polling_loop(stop), name="polling"),
         asyncio.create_task(notification_loop(stop), name="notifications"),
     ]
+    for name, loop_factory in load_data_platform_loops():
+        cooperative.append(asyncio.create_task(loop_factory(stop), name=name))
     cancellable = [
         asyncio.create_task(news_loop(), name="news"),
     ]
     for task in (*cooperative, *cancellable):
         task.add_done_callback(_on_done)
-    logger.info("worker_started", single_replica=settings.worker_single_replica)
+    logger.info(
+        "worker_started",
+        single_replica=settings.worker_single_replica,
+        loops=[task.get_name() for task in (*cooperative, *cancellable)],
+    )
 
     await stop.wait()
 

@@ -2,27 +2,34 @@
 
 Sources:
 
+* **Market store daily bars** (``market_service``; the market worker keeps the
+  TradingView daily series current, core companies with 5 years of history) —
+  when the stored series is fresh, daily indicators are computed from it with
+  the Pine Script definitions: RSI, MACD, Bollinger, Stochastic, SMA/EMA,
+  SuperTrend(10,3), classic pivots and golden/death crosses. On TradingView's own
+  bars these reproduce the scanner's values to floating-point precision (measured
+  2026-09-23 on 10 symbols: |Δ| ≤ 1e-11; EMA needs ~6 × period bars to converge,
+  so EMA200 on a 2-year universe series falls back to TradingView's value).
 * **TradingView scanner** — one request returns oscillator / moving-average
   inputs for all nine timeframes plus TradingView's official technical rating
-  (``Recommend.All`` / ``Recommend.MA`` / ``Recommend.Other``). RSI(14),
-  MACD(12,26,9), Bollinger(20,2σ), Stochastic(14,3,3) and SMA/EMA
-  (5,10,20,30,50,100,200) are TradingView's full-history values.
-* **Daily bars** (``price.get_daily_bars``, one cached ~730-bar frame per
-  ticker) — SuperTrend(10,3), classic pivots, golden/death cross events and
-  periods TradingView does not publish (e.g. RSI(7), SMA(21)) are computed
-  locally with the Pine Script definitions. The same bars back the TradingView
-  values when the scanner is unreachable.
+  (``Recommend.All`` / ``Recommend.MA`` / ``Recommend.Other``). Used for the
+  ratings, the intraday timeframes and whenever the store is not fresh.
+* **Live daily bars** (``market_service.get_daily_bars`` falls back to one cached
+  ~730-bar TradingView frame, written through to the store) when the scanner is
+  unreachable or for periods TradingView does not publish (e.g. RSI(7), SMA(21)).
+
+Every payload carries an additive ``meta`` block (source, served_from, delay).
 """
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 import structlog
 
-from src.adapters.price import get_daily_bars, is_session_final
+from src.adapters.price import is_session_final
 from src.adapters.utils import (
     TTL_TECHNICAL,
     MarketDataError,
@@ -32,6 +39,8 @@ from src.adapters.utils import (
     finite_float,
     tradingview_scan,
 )
+from src.core.meta import DataMeta
+from src.services import market_service
 
 logger = structlog.get_logger(__name__)
 
@@ -282,16 +291,43 @@ def build_signals(symbol: str, interval: str, raw: dict[str, Any]) -> dict[str, 
 
 
 @cached(TTL_TECHNICAL, "tech")
-async def _get_ta_bundle(ticker: str) -> dict[str, dict[str, Any]]:
-    """Raw TradingView technical columns for every timeframe (one HTTP request)."""
+async def _get_ta_bundle_at(ticker: str) -> tuple[dict[str, dict[str, Any]], datetime]:
+    """Raw TradingView technical columns for every timeframe (one HTTP request) + fetch time."""
     columns = [f"{column}{suffix}" for suffix in TA_INTERVALS.values() for column in _TA_COLUMNS]
     row = (await tradingview_scan([ticker], columns)).get(ticker)
     if row is None:
         raise SymbolNotFoundError(ticker)
-    return {
+    bundle = {
         interval: {column: row.get(f"{column}{suffix}") for column in _TA_COLUMNS}
         for interval, suffix in TA_INTERVALS.items()
     }
+    return bundle, datetime.now(UTC)
+
+
+async def _get_ta_bundle(ticker: str) -> dict[str, dict[str, Any]]:
+    return (await _get_ta_bundle_at(ticker))[0]
+
+
+def _tv_meta(ticker: str, fetched_at: datetime | None = None) -> DataMeta:
+    """TradingView scanner values: always live (15 minute delayed feed)."""
+    return market_service.build_meta(
+        source=market_service.TV_SOURCE, fetched_at=fetched_at, served_from="live", symbol=ticker
+    )
+
+
+async def load_daily(ticker: str) -> market_service.DailyBars:
+    """Store-first daily frame + meta (live TradingView frame when the store misses)."""
+    return await market_service.get_daily_bars(ticker)
+
+
+async def load_stored_daily(ticker: str) -> market_service.DailyBars | None:
+    """The stored daily frame when it is fresh (no network), else ``None``."""
+    return await market_service.get_stored_daily_bars(ticker)
+
+
+async def get_daily_bars(ticker: str) -> pd.DataFrame:
+    """Store-first daily frame (backwards-compatible accessor)."""
+    return (await load_daily(ticker)).frame
 
 
 # ---------------------------------------------------------------------------
@@ -472,28 +508,53 @@ def last_ma_cross(close: pd.Series, fast: int = 50, slow: int = 200) -> dict[str
 
 async def _tv_daily_values(ticker: str) -> dict[str, Any] | None:
     """TradingView daily columns; ``None`` when the scanner is unavailable (404 propagates)."""
+    return (await _tv_daily_values_at(ticker))[0]
+
+
+async def _tv_daily_values_at(ticker: str) -> tuple[dict[str, Any] | None, datetime | None]:
     try:
-        return (await _get_ta_bundle(ticker))["1d"]
+        bundle, fetched_at = await _get_ta_bundle_at(ticker)
+        return bundle["1d"], fetched_at
     except SymbolNotFoundError:
         raise
     except MarketDataError as e:
         logger.warning("technical_scanner_unavailable_using_bars", ticker=ticker, error=e.message)
-        return None
+        return None, None
+
+
+# Bars needed before a locally computed value equals TradingView's full-history value.
+def ema_min_bars(period: int) -> int:
+    return 6 * period
+
+
+def rsi_min_bars(period: int) -> int:
+    return 10 * period + 1
+
+
+MACD_MIN_BARS = ema_min_bars(26) + 9
+STOCH_MIN_BARS = 14 + 3 + 3
 
 
 async def _resolve(
     ticker: str,
     from_tradingview: Callable[[dict[str, Any]], Any] | None,
     from_bars: Callable[[pd.DataFrame], Any],
-) -> tuple[Any, str]:
+    min_bars: int = 0,
+) -> tuple[Any, str, DataMeta | None]:
+    """Stored bars when fresh and long enough → TradingView scanner → live daily bars."""
+    stored = await load_stored_daily(ticker)
+    if stored is not None and len(stored.frame) >= min_bars:
+        value = from_bars(stored.frame)
+        if value is not None:
+            return value, SOURCE_LOCAL, stored.meta
     if from_tradingview is not None:
-        raw = await _tv_daily_values(ticker)
+        raw, fetched_at = await _tv_daily_values_at(ticker)
         if raw is not None:
             value = from_tradingview(raw)
             if value is not None:
-                return value, SOURCE_TRADINGVIEW
-    bars = await get_daily_bars(ticker)
-    return from_bars(bars), SOURCE_LOCAL
+                return value, SOURCE_TRADINGVIEW, _tv_meta(ticker, fetched_at)
+    daily = await load_daily(ticker)
+    return from_bars(daily.frame), SOURCE_LOCAL, daily.meta
 
 
 def _tv_number(key: str) -> Callable[[dict[str, Any]], float | None]:
@@ -508,16 +569,21 @@ def _round_values(values: dict[str, Any] | None) -> dict[str, Any]:
 # Public adapter API
 # ---------------------------------------------------------------------------
 
+def _meta(meta: DataMeta | None) -> dict[str, Any]:
+    return market_service.meta_dict(meta)
+
+
 @cached(TTL_TECHNICAL, "tech")
 async def get_rsi(ticker: str, period: int = 14) -> dict:
     base = {"ticker": ticker, "indicator": "RSI", "period": period, "interval": "1d"}
     try:
-        value, source = await _resolve(
+        value, source, meta = await _resolve(
             ticker,
             _tv_number("RSI") if period == 14 else None,
             lambda bars: rsi_last(bars["Close"], period),
+            rsi_min_bars(period),
         )
-        return {**base, "value": _round(value), "source": source}
+        return {**base, "value": _round(value), "source": source, **_meta(meta)}
     except Exception as e:
         logger.error("technical_rsi_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "RSI hesaplanamadı")}
@@ -534,8 +600,8 @@ def _tv_macd(raw: dict[str, Any]) -> dict[str, float] | None:
 async def get_macd(ticker: str) -> dict:
     base = {"ticker": ticker, "indicator": "MACD", "params": {"fast": 12, "slow": 26, "signal": 9}}
     try:
-        values, source = await _resolve(ticker, _tv_macd, lambda bars: macd_last(bars["Close"]))
-        return {**base, "data": _round_values(values), "source": source}
+        values, source, meta = await _resolve(ticker, _tv_macd, lambda bars: macd_last(bars["Close"]), MACD_MIN_BARS)
+        return {**base, "data": _round_values(values), "source": source, **_meta(meta)}
     except Exception as e:
         logger.error("technical_macd_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "MACD hesaplanamadı")}
@@ -553,12 +619,13 @@ def _tv_bollinger(raw: dict[str, Any]) -> dict[str, float] | None:
 async def get_bollinger(ticker: str, period: int = 20) -> dict:
     base = {"ticker": ticker, "indicator": "BOLLINGER", "period": period, "std_dev": 2}
     try:
-        values, source = await _resolve(
+        values, source, meta = await _resolve(
             ticker,
             _tv_bollinger if period == 20 else None,
             lambda bars: bollinger_last(bars["Close"], period),
+            period,
         )
-        return {**base, "data": _round_values(values), "source": source}
+        return {**base, "data": _round_values(values), "source": source, **_meta(meta)}
     except Exception as e:
         logger.error("technical_bollinger_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "Bollinger bantları hesaplanamadı")}
@@ -568,12 +635,13 @@ async def get_bollinger(ticker: str, period: int = 20) -> dict:
 async def get_sma(ticker: str, period: int = 20) -> dict:
     base = {"ticker": ticker, "indicator": "SMA", "period": period, "interval": "1d"}
     try:
-        value, source = await _resolve(
+        value, source, meta = await _resolve(
             ticker,
             _tv_number(f"SMA{period}") if period in TV_MA_PERIODS else None,
             lambda bars: sma_last(bars["Close"], period),
+            period,
         )
-        return {**base, "value": _round(value), "source": source}
+        return {**base, "value": _round(value), "source": source, **_meta(meta)}
     except Exception as e:
         logger.error("technical_sma_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "SMA hesaplanamadı")}
@@ -583,12 +651,13 @@ async def get_sma(ticker: str, period: int = 20) -> dict:
 async def get_ema(ticker: str, period: int = 20) -> dict:
     base = {"ticker": ticker, "indicator": "EMA", "period": period, "interval": "1d"}
     try:
-        value, source = await _resolve(
+        value, source, meta = await _resolve(
             ticker,
             _tv_number(f"EMA{period}") if period in TV_MA_PERIODS else None,
             lambda bars: ema_last(bars["Close"], period),
+            ema_min_bars(period),
         )
-        return {**base, "value": _round(value), "source": source}
+        return {**base, "value": _round(value), "source": source, **_meta(meta)}
     except Exception as e:
         logger.error("technical_ema_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "EMA hesaplanamadı")}
@@ -598,11 +667,12 @@ async def get_ema(ticker: str, period: int = 20) -> dict:
 async def get_supertrend(ticker: str) -> dict:
     base = {"ticker": ticker, "indicator": "SUPERTREND", "params": {"atr_period": 10, "multiplier": 3}}
     try:
-        result = supertrend_last(await get_daily_bars(ticker))
+        daily = await load_daily(ticker)
+        result = supertrend_last(daily.frame)
         if result is None:
-            return {**base, "data": {}}
+            return {**base, "data": {}, **_meta(daily.meta)}
         data = {**_round_values({k: result[k] for k in ("value", "upper", "lower")}), "direction": result["direction"]}
-        return {**base, "data": data, "source": SOURCE_LOCAL}
+        return {**base, "data": data, "source": SOURCE_LOCAL, **_meta(daily.meta)}
     except Exception as e:
         logger.error("technical_supertrend_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "SuperTrend hesaplanamadı")}
@@ -617,8 +687,8 @@ def _tv_stochastic(raw: dict[str, Any]) -> dict[str, float] | None:
 async def get_stochastic(ticker: str) -> dict:
     base = {"ticker": ticker, "indicator": "STOCHASTIC", "params": {"k": 14, "smooth_k": 3, "d": 3}}
     try:
-        values, source = await _resolve(ticker, _tv_stochastic, stochastic_last)
-        return {**base, "data": _round_values(values), "source": source}
+        values, source, meta = await _resolve(ticker, _tv_stochastic, stochastic_last, STOCH_MIN_BARS)
+        return {**base, "data": _round_values(values), "source": source, **_meta(meta)}
     except Exception as e:
         logger.error("technical_stochastic_error", ticker=ticker, error=str(e))
         return {**base, **error_payload(e, "Stokastik hesaplanamadı")}
@@ -628,9 +698,9 @@ async def get_stochastic(ticker: str) -> dict:
 async def get_ta_signals(ticker: str) -> dict:
     """Gunluk TradingView teknik derecelendirmesi (AL/SAT/NÖTR ozeti + gostergeler)."""
     try:
-        bundle = await _get_ta_bundle(ticker)
+        bundle, fetched_at = await _get_ta_bundle_at(ticker)
         signals = build_signals(ticker, "1d", bundle["1d"])
-        return {"ticker": ticker, "signals": {} if "error" in signals else signals}
+        return {"ticker": ticker, "signals": {} if "error" in signals else signals, **_meta(_tv_meta(ticker, fetched_at))}
     except Exception as e:
         logger.error("technical_ta_signals_error", ticker=ticker, error=str(e))
         return {"ticker": ticker, "signals": {}, **error_payload(e, "Teknik sinyaller alınamadı")}
@@ -640,10 +710,11 @@ async def get_ta_signals(ticker: str) -> dict:
 async def get_ta_signals_all_timeframes(ticker: str) -> dict:
     """Dokuz zaman dilimi (1m … 1M) icin derecelendirme — tek TradingView istegi."""
     try:
-        bundle = await _get_ta_bundle(ticker)
+        bundle, fetched_at = await _get_ta_bundle_at(ticker)
         return {
             "ticker": ticker,
             "timeframes": {interval: build_signals(ticker, interval, raw) for interval, raw in bundle.items()},
+            **_meta(_tv_meta(ticker, fetched_at)),
         }
     except Exception as e:
         logger.error("technical_ta_all_tf_error", ticker=ticker, error=str(e))
@@ -655,38 +726,65 @@ async def get_moving_averages(ticker: str) -> dict:
     """SMA/EMA 10, 20, 50, 100, 200 and the SMA50/SMA200 regime.
 
     ``golden_cross`` is the regime (True while SMA50 > SMA200, False while
-    below); ``last_cross`` is the most recent actual crossover event.
+    below); ``last_cross`` is the most recent actual crossover event. With a fresh
+    store every average comes from the stored bars (an EMA only when the series
+    is long enough to converge — otherwise TradingView's value is used).
     """
     try:
-        raw, bars = await asyncio.gather(_tv_daily_values(ticker), get_daily_bars(ticker), return_exceptions=True)
-        if isinstance(raw, BaseException):
-            raise raw
-        if isinstance(bars, BaseException):
-            logger.warning("moving_average_bars_unavailable", ticker=ticker, error=str(bars))
-            if raw is None:
-                raise bars
-            bars = None
+        stored = await load_stored_daily(ticker)
+        raw: dict[str, Any] | None = None
+        raw_at: datetime | None = None
+        daily: market_service.DailyBars | None = stored
+        if stored is None:
+            tv_result, daily_result = await asyncio.gather(
+                _tv_daily_values_at(ticker), load_daily(ticker), return_exceptions=True
+            )
+            if isinstance(tv_result, BaseException):
+                raise tv_result
+            raw, raw_at = tv_result
+            if isinstance(daily_result, BaseException):
+                logger.warning("moving_average_bars_unavailable", ticker=ticker, error=str(daily_result))
+                if raw is None:
+                    raise daily_result
+                daily = None
+            else:
+                daily = daily_result
+        bars = daily.frame if daily is not None else None
+        closes = bars["Close"] if bars is not None else None
+
+        def local(kind: str, period: int) -> float | None:
+            if closes is None or stored is None:
+                return None
+            if kind == "SMA":
+                return sma_last(closes, period)
+            return ema_last(closes, period) if len(closes.dropna()) >= ema_min_bars(period) else None
 
         sma_vals: dict[str, float | None] = {}
         ema_vals: dict[str, float | None] = {}
+        used_tv = False
         for period in DASHBOARD_MA_PERIODS:
-            sma = finite_float(raw.get(f"SMA{period}")) if raw else None
-            ema = finite_float(raw.get(f"EMA{period}")) if raw else None
-            if sma is None and bars is not None:
-                sma = sma_last(bars["Close"], period)
-            if ema is None and bars is not None:
-                ema = ema_last(bars["Close"], period)
-            sma_vals[f"sma_{period}"] = _round(sma)
-            ema_vals[f"ema_{period}"] = _round(ema)
+            for kind, target in (("SMA", sma_vals), ("EMA", ema_vals)):
+                value = local(kind, period)
+                if value is None and raw is None and stored is not None and raw_at is None:
+                    raw, raw_at = await _tv_daily_values_at(ticker)
+                    raw_at = raw_at or datetime.now(UTC)  # asked once, even when unavailable
+                if value is None and raw:
+                    value = finite_float(raw.get(f"{kind}{period}"))
+                    used_tv = used_tv or value is not None
+                if value is None and closes is not None:
+                    value = sma_last(closes, period) if kind == "SMA" else ema_last(closes, period)
+                target[f"{kind.lower()}_{period}"] = _round(value)
 
         sma50, sma200 = sma_vals["sma_50"], sma_vals["sma_200"]
+        metas = [m for m in (daily.meta if daily is not None else None, _tv_meta(ticker, raw_at) if used_tv else None) if m]
         return {
             "ticker": ticker,
             "sma": sma_vals,
             "ema": ema_vals,
             "golden_cross": (sma50 > sma200) if sma50 is not None and sma200 is not None else None,
-            "last_cross": last_ma_cross(bars["Close"]) if bars is not None else None,
-            "source": SOURCE_TRADINGVIEW if raw else SOURCE_LOCAL,
+            "last_cross": last_ma_cross(closes) if closes is not None else None,
+            "source": SOURCE_TRADINGVIEW if used_tv else SOURCE_LOCAL,
+            **_meta(market_service.combine_meta(metas)),
         }
     except Exception as e:
         logger.error("technical_moving_averages_error", ticker=ticker, error=str(e))
@@ -703,9 +801,10 @@ async def get_moving_averages(ticker: str) -> dict:
 async def get_pivot_points(ticker: str) -> dict:
     """Classic pivot points (P, R1-R3, S1-S3) from the previous completed session's H/L/C."""
     try:
-        source = pivot_source_bar(await get_daily_bars(ticker))
+        daily = await load_daily(ticker)
+        source = pivot_source_bar(daily.frame)
         if source is None:
-            return {"ticker": ticker, "pivots": None}
+            return {"ticker": ticker, "pivots": None, **_meta(daily.meta)}
         timestamp, bar = source
         high, low, close = float(bar["High"]), float(bar["Low"]), float(bar["Close"])
         return {
@@ -714,6 +813,7 @@ async def get_pivot_points(ticker: str) -> dict:
             "session_date": timestamp.date().isoformat(),
             "session": {"high": _round(high), "low": _round(low), "close": _round(close)},
             "pivots": _round_values(classic_pivots(high, low, close)),
+            **_meta(daily.meta),
         }
     except Exception as e:
         logger.error("technical_pivot_points_error", ticker=ticker, error=str(e))

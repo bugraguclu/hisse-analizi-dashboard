@@ -7,10 +7,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.adapters import index_adapter, price
+from src.adapters import index_adapter, isyatirim_prices, price
 from src.adapters.price import MAX_CHART_WARMUP_BARS, clean_bars
 from src.adapters.utils import ISTANBUL_TZ, adapter_cache
 from src.api import routers_market
+from src.core.config import settings
 
 NOW = datetime(2026, 9, 22, 14, 55, tzinfo=ISTANBUL_TZ)  # Tuesday, session in progress
 
@@ -35,26 +36,27 @@ def _daily_frame(start, end):
     return clean_bars(_bars(days, [float(i + 1) for i in range(len(days))]))
 
 
-async def _no_quotes(symbols):
-    return {}
-
-
-async def _no_metrics(symbol):
-    return {}
-
-
 def _patch_daily_source(monkeypatch, frame):
     """Serve ``frame`` as the daily bars for both the chart window and the (unused) daily
-    stats part, and stub out quote/company-card parts, so only warmup slicing is exercised.
+    stats part — with the market store off, so the live path is exercised — and stub out
+    the quote, official-quote and company-card parts, so only warmup slicing is exercised.
     """
     async def fake_daily(symbol):
         return frame
 
+    async def nothing(*args, **kwargs):
+        return {}
+
+    async def no_official(symbol):
+        raise isyatirim_prices.MarketDataError("İş Yatırım verisine ulaşılamadı", status_code=503)
+
+    monkeypatch.setattr(settings, "market_store_enabled", False)
     monkeypatch.setattr(price, "now_istanbul", lambda: NOW)
     monkeypatch.setattr(price, "get_daily_bars", fake_daily)
-    monkeypatch.setattr(index_adapter, "get_daily_bars", fake_daily)
-    monkeypatch.setattr(index_adapter, "get_quotes", _no_quotes)
-    monkeypatch.setattr(index_adapter, "get_company_metrics", _no_metrics)
+    monkeypatch.setattr(price, "get_quotes", nothing)
+    monkeypatch.setattr(isyatirim_prices, "fetch_isyatirim_quotes", nothing)
+    monkeypatch.setattr(isyatirim_prices, "fetch_quote", no_official)
+    monkeypatch.setattr(index_adapter, "get_company_metrics", nothing)
 
 
 # --- adapter behaviour ----------------------------------------------------------

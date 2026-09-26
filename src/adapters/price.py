@@ -1,6 +1,9 @@
 """Fiyat verisi — canli grafik barlari, kotasyonlar ve DB'ye yazilan gunluk barlar.
 
-Live primitives shared by the index, technical and snapshot adapters:
+This is the **live** layer (TradingView). Reads go store-first through
+:mod:`src.services.market_service`, which falls back to these functions and
+writes their results through to ``quotes`` / ``price_bars``; the market worker
+(:mod:`src.workers.market_worker`) keeps the store current. Live primitives:
 
 * :func:`get_daily_bars` — one cached ~3-year daily frame per symbol. Chart
   periods up to 1 year, technical indicators (SuperTrend, pivots, custom
@@ -41,8 +44,11 @@ logger = structlog.get_logger(__name__)
 
 OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 
-# BIST continuous trading ends 18:00, the closing auction ~18:10 and the free
-# TradingView feed is 15 min delayed: a daily bar is final after ~18:30.
+# BIST continuous trading ends 18:00; the closing auction and the trades at the
+# closing price ("kapanış fiyatından işlemler") end at 18:10 — İş Yatırım's
+# OneEndeks ``updateDate`` of a finished session is 18:09:5x. The free TradingView
+# feed is 15 min delayed: a daily bar is final after ~18:30.
+SESSION_CLOSE_TIME = dtime(18, 10)
 SESSION_FINAL_TIME = dtime(18, 30)
 
 NAN = float("nan")
@@ -73,7 +79,11 @@ _QUOTE_COLUMNS = (
     "type",
     "currency",
     "update_time",
+    "update_mode",
+    "time",
 )
+
+TRADINGVIEW_SOURCE = "tradingview"
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +100,53 @@ def is_session_final(bar_date: date, now: datetime | None = None) -> bool:
     if bar_date < current.date():
         return True
     return bar_date == current.date() and current.time() >= SESSION_FINAL_TIME
+
+
+SESSION_OPEN = "open"
+SESSION_CLOSED = "closed"
+
+
+def session_state(session_date: date | None, now: datetime | None = None) -> str | None:
+    """``"closed"`` once the session's daily bar is final (:func:`is_session_final`), else ``"open"``."""
+    if not isinstance(session_date, date):
+        return None
+    return SESSION_CLOSED if is_session_final(session_date, now) else SESSION_OPEN
+
+
+def session_close_epoch(session_date: date) -> int:
+    return int(datetime.combine(session_date, SESSION_CLOSE_TIME, tzinfo=ISTANBUL_TZ).timestamp())
+
+
+def cap_to_session_close(timestamp: Any, session_date: date | None) -> int | None:
+    """Provider time capped at the session's close (18:10 Istanbul).
+
+    TradingView's ``update_time`` keeps advancing after the close (post-close
+    refreshes at ~19:20) although the data is the 18:10 state; the payloads show
+    the close instead.
+    """
+    epoch = finite_float(timestamp)
+    if epoch is None or epoch <= 0:
+        return None
+    seconds = int(epoch)
+    day = session_date if isinstance(session_date, date) else datetime.fromtimestamp(seconds, ISTANBUL_TZ).date()
+    return min(seconds, session_close_epoch(day))
+
+
+def with_session_view(quote: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+    """Copy of a canonical quote for API payloads: ``timestamp``/``updated_at`` capped at the
+    session close (:func:`cap_to_session_close`) and the additive ``session_state``
+    (``"open"`` | ``"closed"``, ``None`` when the session day is unknown)."""
+    view = dict(quote)
+    session_date = quote.get("session_date")
+    day = session_date if isinstance(session_date, date) else None
+    timestamp = cap_to_session_close(quote.get("timestamp"), day)
+    if timestamp is not None:
+        view["timestamp"] = timestamp
+        view["updated_at"] = _epoch_to_iso(timestamp)
+    if day is None and timestamp is not None:
+        day = datetime.fromtimestamp(timestamp, ISTANBUL_TZ).date()
+    view["session_state"] = session_state(day, now)
+    return view
 
 
 # ---------------------------------------------------------------------------
@@ -349,14 +406,38 @@ def build_quote(
     }
 
 
+def delay_from_update_mode(value: Any) -> int | None:
+    """``"delayed_streaming_900"`` → 900, ``"streaming"`` → 0 (seconds of provider delay)."""
+    if not isinstance(value, str) or not value:
+        return None
+    tail = value.rsplit("_", 1)[-1]
+    if tail.isdigit():
+        return int(tail)
+    return 0 if value in ("streaming", "realtime") else None
+
+
+def session_date_from_epoch(value: Any) -> date | None:
+    """Istanbul trading day of a TradingView bar time (``time`` = the daily bar's open)."""
+    seconds = finite_float(value)
+    if seconds is None or seconds <= 0:
+        return None
+    return datetime.fromtimestamp(seconds, ISTANBUL_TZ).date()
+
+
 def quote_from_scan(symbol: str, row: dict[str, Any]) -> dict[str, Any] | None:
-    """Quote from a TradingView scanner row (``change_abs`` is today's move vs previous close)."""
+    """Quote from a TradingView scanner row (``change_abs`` is today's move vs previous close).
+
+    Store fields (additive): ``session_date`` (Istanbul day of the daily bar the
+    quote belongs to), ``delay_seconds`` (feed delay), ``prev_bar_close`` (close
+    of the previous daily bar, ``close[1]``) and ``source``.
+    """
     last = _positive(row.get("close"))
-    prev_close = _positive(row.get("close[1]"))
+    prev_bar_close = _positive(row.get("close[1]"))
+    prev_close = prev_bar_close
     change_abs = finite_float(row.get("change_abs"))
     if last is not None and change_abs is not None and last - change_abs > 0:
         prev_close = last - change_abs
-    return build_quote(
+    quote = build_quote(
         symbol,
         last=last,
         prev_close=prev_close,
@@ -371,6 +452,18 @@ def quote_from_scan(symbol: str, row: dict[str, Any]) -> dict[str, Any] | None:
         currency=row.get("currency"),
         timestamp=row.get("update_time"),
     )
+    if quote is None:
+        return None
+    session_date = session_date_from_epoch(row.get("time"))
+    if session_date is None and quote["timestamp"] is not None:
+        session_date = session_date_from_epoch(quote["timestamp"])
+    quote.update(
+        session_date=session_date,
+        delay_seconds=delay_from_update_mode(row.get("update_mode")),
+        prev_bar_close=prev_bar_close,
+        source=TRADINGVIEW_SOURCE,
+    )
+    return quote
 
 
 def _known_index(symbol: str) -> bool:
@@ -407,6 +500,12 @@ async def _websocket_index_quote(symbol: str, semaphore: asyncio.Semaphore) -> d
                     timestamp=info.get("timestamp"),
                 )
                 if quote is not None:
+                    quote.update(
+                        session_date=session_date_from_epoch(quote["timestamp"]),
+                        delay_seconds=None,
+                        prev_bar_close=None,
+                        source=TRADINGVIEW_SOURCE,
+                    )
                     return quote
             except Exception as e:
                 if attempt == 2:
@@ -474,7 +573,12 @@ def _opt_float(value: Any) -> float | None:
 
 
 class PriceAdapter(BasePriceAdapter):
-    """Fiyat verisi: borsapy birincil, yfinance yedek.
+    """Legacy per-company price poll (``polling_worker`` source ``price``): borsapy birincil, yfinance yedek.
+
+    Superseded by ``market.bars.daily`` (one scanner request for the whole universe);
+    kept until the ``price`` source leaves ``POLL_SOURCES``. Writes go through the
+    market store's precedence rules (``PriceService``), so these rows never override
+    a canonical TradingView bar.
 
     Only completed sessions are emitted, so a stored ``close`` is always a real
     session close. The price repository upserts changed values, so later

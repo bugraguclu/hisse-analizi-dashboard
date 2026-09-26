@@ -5,7 +5,6 @@ from datetime import date, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 from sqlalchemy import (
-    Boolean,
     ColumnElement,
     Row,
     Select,
@@ -17,7 +16,6 @@ from sqlalchemy import (
     distinct,
     exists,
     func,
-    literal_column,
     or_,
     select,
     update,
@@ -48,7 +46,7 @@ from src.db.models import (
     Notification,
     NotificationRule,
     PollingState,
-    PriceData,
+    PriceBar,
     RawEvent,
     Source,
 )
@@ -77,8 +75,14 @@ class CompanyRepository:
         result = await self.session.execute(select(Company).where(Company.ticker == ticker))
         return result.scalar_one_or_none()
 
-    async def get_all(self) -> Sequence[Company]:
-        result = await self.session.execute(select(Company).where(Company.is_active.is_(True)).order_by(Company.ticker))
+    async def get_all(self, tier: str | None = "core", *, include_inactive: bool = False) -> Sequence[Company]:
+        """Companies ordered by ticker; ``tier`` ``core`` (default, BIST 100) / ``universe`` / ``None`` = all tiers."""
+        q = select(Company).order_by(Company.ticker)
+        if not include_inactive:
+            q = q.where(Company.is_active.is_(True))
+        if tier:
+            q = q.where(Company.tracking_tier == tier)
+        result = await self.session.execute(q)
         return result.scalars().all()
 
     async def upsert(self, **kwargs: Any) -> Company:
@@ -549,50 +553,52 @@ class NormalizedEventRepository:
 
 
 PriceUpsertOutcome = Literal["inserted", "updated", "unchanged"]
-_PRICE_VALUE_COLUMNS = ("open", "high", "low", "close", "adjusted_close", "volume")
-# One row per trading date in API responses: prefer the primary provider when the
-# yfinance fallback stored the same day too.
-_PRICE_SOURCE_PRIORITY = case((PriceData.source == "borsapy", 0), else_=1)
+
+
+def _interval_value(interval: PriceInterval | str) -> str:
+    return interval.value if isinstance(interval, PriceInterval) else str(interval)
 
 
 class PriceDataRepository:
+    """``price_bars``: one series per symbol — unique on (symbol, interval, bar_date).
+
+    Writes go through :func:`src.db.repositories.market.upsert_bars`, which applies
+    the provider precedence of the market store (TradingView > İş Yatırım > Yahoo;
+    a running-session bar never replaces a final one).
+    """
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def insert_if_not_exists(self, **kwargs: Any) -> PriceData | None:
-        """Atomic dedup insert using ON CONFLICT DO NOTHING on (company_id, trading_date, interval, source)."""
+    async def insert_if_not_exists(self, **kwargs: Any) -> PriceBar | None:
+        """Atomic dedup insert using ON CONFLICT DO NOTHING on (symbol, interval, bar_date)."""
         stmt = (
-            pg_insert(PriceData)
+            pg_insert(PriceBar)
             .values(**kwargs)
-            .on_conflict_do_nothing(constraint="uq_price_data_unique")
-            .returning(PriceData)
+            .on_conflict_do_nothing(constraint="uq_price_bars_symbol_interval_date")
+            .returning(PriceBar)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def upsert(self, **kwargs: Any) -> PriceUpsertOutcome:
-        """Insert a bar or refresh its OHLCV values when they changed (the running
-        session's bar keeps moving until the close). Unchanged rows are not rewritten."""
-        insert_stmt = pg_insert(PriceData).values(**kwargs)
-        excluded = insert_stmt.excluded
-        table = PriceData.__table__.c
-        stmt = insert_stmt.on_conflict_do_update(
-            constraint="uq_price_data_unique",
-            set_={**{col: excluded[col] for col in _PRICE_VALUE_COLUMNS}, "fetched_at": func.now()},
-            # Postgres: xmax = 0 only for a freshly inserted row version.
-            where=or_(*(table[col].is_distinct_from(excluded[col]) for col in _PRICE_VALUE_COLUMNS)),
-        ).returning(literal_column("(xmax = 0)", Boolean).label("inserted"))
-        row = (await self.session.execute(stmt)).first()
-        if row is None:
-            return "unchanged"
-        return "inserted" if row[0] else "updated"
+        """Insert a bar or refresh its values when they changed (the running session's
+        bar keeps moving until the close). Unchanged rows are not rewritten; columns
+        not passed keep their stored values."""
+        from src.db.repositories.market import upsert_bars
 
-    def _one_row_per_date(self, ticker: str, interval: PriceInterval) -> Select[tuple[PriceData]]:
+        values = {"interval": "1d", **kwargs}
+        values["interval"] = _interval_value(values["interval"])
+        stats = await upsert_bars(self.session, [values])
+        if stats.inserted:
+            return "inserted"
+        return "updated" if stats.updated else "unchanged"
+
+    def _bars(self, symbol: str, interval: PriceInterval | str) -> Select[tuple[PriceBar]]:
         return (
-            select(PriceData)
-            .where(PriceData.ticker == ticker, PriceData.interval == interval)
-            .distinct(PriceData.trading_date)
-            .order_by(PriceData.trading_date.desc(), _PRICE_SOURCE_PRIORITY, PriceData.fetched_at.desc())
+            select(PriceBar)
+            .where(PriceBar.symbol == symbol, PriceBar.interval == _interval_value(interval))
+            .order_by(PriceBar.bar_date.desc())
         )
 
     async def get_list(
@@ -600,20 +606,23 @@ class PriceDataRepository:
         ticker: str,
         since: date | None = None,
         until: date | None = None,
-        interval: PriceInterval = PriceInterval.ONE_DAY,
+        interval: PriceInterval | str = PriceInterval.ONE_DAY,
         limit: int = 100,
-    ) -> Sequence[PriceData]:
-        q = self._one_row_per_date(ticker, interval)
+    ) -> Sequence[PriceBar]:
+        q = self._bars(ticker, interval)
         if since is not None:
-            q = q.where(PriceData.trading_date >= since)
+            q = q.where(PriceBar.bar_date >= since)
         if until is not None:
-            q = q.where(PriceData.trading_date <= until)
+            q = q.where(PriceBar.bar_date <= until)
         result = await self.session.execute(q.limit(limit))
         return result.scalars().all()
 
-    async def get_latest(self, ticker: str, interval: PriceInterval = PriceInterval.ONE_DAY) -> PriceData | None:
-        result = await self.session.execute(self._one_row_per_date(ticker, interval).limit(1))
+    async def get_latest(self, ticker: str, interval: PriceInterval | str = PriceInterval.ONE_DAY) -> PriceBar | None:
+        result = await self.session.execute(self._bars(ticker, interval).limit(1))
         return result.scalar_one_or_none()
+
+
+PriceBarRepository = PriceDataRepository
 
 
 @dataclass(frozen=True)
@@ -950,25 +959,28 @@ class FinancialStatementRepository:
         self.session = session
 
     async def upsert(self, **kwargs: Any) -> FinancialStatement:
-        """Atomic upsert using ON CONFLICT on (company_id, period, statement_type)."""
-        set_fields = {k: v for k, v in kwargs.items() if k not in ("company_id", "period", "statement_type")}
+        """Atomic upsert using ON CONFLICT on (company_id, source, period, statement_type)."""
+        key = ("company_id", "source", "period", "statement_type")
+        set_fields = {k: v for k, v in kwargs.items() if k not in key}
         set_fields["fetched_at"] = func.now()
         stmt = (
             pg_insert(FinancialStatement)
             .values(**kwargs)
-            .on_conflict_do_update(constraint="uq_financial_statements_period", set_=set_fields)
+            .on_conflict_do_update(constraint="uq_financial_statements_key", set_=set_fields)
             .returning(FinancialStatement)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
     async def get_for_company(
-        self, company_id: uuid.UUID, statement_type: str | None = None
+        self, company_id: uuid.UUID, statement_type: str | None = None, source: str | None = None
     ) -> Sequence[FinancialStatement]:
         q = select(FinancialStatement).where(FinancialStatement.company_id == company_id)
         if statement_type:
             q = q.where(FinancialStatement.statement_type == statement_type)
-        q = q.order_by(FinancialStatement.period.desc(), FinancialStatement.statement_type)
+        if source:
+            q = q.where(FinancialStatement.source == source)
+        q = q.order_by(FinancialStatement.period.desc(), FinancialStatement.source, FinancialStatement.statement_type)
         result = await self.session.execute(q)
         return result.scalars().all()
 
@@ -978,24 +990,24 @@ class FinancialRatioRepository:
         self.session = session
 
     async def upsert(self, **kwargs: Any) -> FinancialRatio:
-        """Atomic upsert using ON CONFLICT on (company_id, period)."""
-        set_fields = {k: v for k, v in kwargs.items() if k not in ("company_id", "period")}
+        """Atomic upsert using ON CONFLICT on (company_id, period, basis); ``basis`` defaults to annual."""
+        values = {"basis": "annual", **kwargs}
+        set_fields = {k: v for k, v in values.items() if k not in ("company_id", "period", "basis")}
         set_fields["calculated_at"] = func.now()
         stmt = (
             pg_insert(FinancialRatio)
-            .values(**kwargs)
-            .on_conflict_do_update(constraint="uq_financial_ratios_period", set_=set_fields)
+            .values(**values)
+            .on_conflict_do_update(constraint="uq_financial_ratios_period_basis", set_=set_fields)
             .returning(FinancialRatio)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
-    async def get_for_company(self, company_id: uuid.UUID) -> Sequence[FinancialRatio]:
-        result = await self.session.execute(
-            select(FinancialRatio)
-            .where(FinancialRatio.company_id == company_id)
-            .order_by(FinancialRatio.period.desc())
-        )
+    async def get_for_company(self, company_id: uuid.UUID, basis: str | None = None) -> Sequence[FinancialRatio]:
+        q = select(FinancialRatio).where(FinancialRatio.company_id == company_id)
+        if basis:
+            q = q.where(FinancialRatio.basis == basis)
+        result = await self.session.execute(q.order_by(FinancialRatio.period.desc(), FinancialRatio.basis))
         return result.scalars().all()
 
 
@@ -1012,7 +1024,7 @@ class StatsRepository:
         stmt = select(
             count(RawEvent).label("total_raw_events"),
             count(NormalizedEvent).label("total_normalized_events"),
-            count(PriceData).label("total_price_records"),
+            count(PriceBar).label("total_price_records"),
             count(Notification).label("total_notifications"),
             count(FinancialStatement).label("total_financial_records"),
             count(EventOutbox, EventOutbox.status == OutboxStatus.PENDING).label("pending_outbox"),

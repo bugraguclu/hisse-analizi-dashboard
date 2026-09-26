@@ -151,7 +151,7 @@ async def ticker_history(
     period: str = Query(default="1ay", max_length=10),
     warmup: int = Query(default=0, ge=0, le=MAX_CHART_WARMUP_BARS),
 ):
-    """Hisse fiyat gecmisi (canli). period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max.
+    """Hisse fiyat gecmisi (depo oncelikli). period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max.
 
     warmup: pencereden onceki en fazla N bar'i "warmup" alaninda ekler (gosterge
     hesaplari ve sola kaydirma icin); 0 (varsayilan) iken alan hic donmez.
