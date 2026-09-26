@@ -48,8 +48,7 @@ function TechnicalSignal({ ticker }: { ticker: string }) {
     >
       <p className="mb-1.5 text-[13px] font-semibold text-foreground">{t("header.signalInfoTitle")}</p>
       <p className="mb-3 text-muted-foreground">{t("header.signalInfoBody")}</p>
-      <VoteBar buy={summary.buy} neutral={summary.neutral} sell={summary.sell} className="mb-3" />
-      <p className="text-[11px] text-muted-foreground">{t("common.notAdvice")}</p>
+      <VoteBar buy={summary.buy} neutral={summary.neutral} sell={summary.sell} />
     </InfoPopover>
   );
 }

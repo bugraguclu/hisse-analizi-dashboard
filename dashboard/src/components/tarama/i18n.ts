@@ -318,7 +318,6 @@ const dict = {
   "status.updated": { tr: "Güncelleme {time}", en: "Updated {time}", fr: "Mis à jour {time}" },
   "status.delayed": { tr: "Fiyatlar {minutes} dk gecikmeli", en: "Prices delayed {minutes} min", fr: "Cours différés de {minutes} min" },
   "status.sources": { tr: "Kaynak: TradingView, İş Yatırım, Borsa İstanbul", en: "Sources: TradingView, İş Yatırım, Borsa Istanbul", fr: "Sources : TradingView, İş Yatırım, Borsa Istanbul" },
-  "status.notAdvice": { tr: "Yatırım tavsiyesi değildir.", en: "Not investment advice.", fr: "Ceci n'est pas un conseil en investissement." },
   "warn.analyst": {
     tr: "İş Yatırım analist verileri şu an alınamıyor; öneri, hedef fiyat ve yabancı oranı eksik olabilir.",
     en: "İş Yatırım analyst data is unavailable right now; ratings, targets and foreign ownership may be missing.",

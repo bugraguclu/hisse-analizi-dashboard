@@ -137,6 +137,12 @@
     @apply font-sans;
     text-rendering: optimizeLegibility;
   }
+  /* An open <dialog> (the legal notice) holds the page still; the kept gutter stops a layout jump.
+     Not `dialog:modal`: Next's CSS pipeline drops rules with that pseudo-class. */
+  html:has(dialog[open]) {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
   /* Page titles are set in the display serif; everything else stays in Plex Sans. */
   h1 {
     font-family: var(--font-display);

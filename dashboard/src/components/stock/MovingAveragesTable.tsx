@@ -179,11 +179,7 @@ export function PivotsCard({ ticker }: { ticker: string }) {
   return (
     <SectionCard
       title={t("pivots.title")}
-      footer={
-        pivots?.sessionDate
-          ? `${t("pivots.session", { date: formatDay(pivots.sessionDate) })} ${t("pivots.footer")}`
-          : t("pivots.footer")
-      }
+      footer={pivots?.sessionDate ? t("pivots.session", { date: formatDay(pivots.sessionDate) }) : undefined}
     >
       {pivotsQ.isPending ? (
         <SectionSkeleton rows={4} />

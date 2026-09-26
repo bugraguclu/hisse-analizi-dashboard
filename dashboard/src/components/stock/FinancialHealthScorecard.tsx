@@ -172,7 +172,7 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
           </span>
         ) : null
       }
-      footer={t("score.disclaimer")}
+      footer={t("score.footer")}
     >
       {pending ? (
         <SectionSkeleton rows={5} />

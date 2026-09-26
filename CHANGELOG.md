@@ -74,6 +74,11 @@ Mimari sözleşme ve ölçülen kaynak gerçekleri [docs/data-platform.md](./doc
 - `ACME_EMAIL` kaldırıldı: Caddy sertifika hesabını iletişim adresi olmadan açar (Let's Encrypt süre dolum e-postası göndermiyor, yenileme otomatik).
 - Worker konteyneri imajdaki API sağlık kontrolünü devralıp hep “unhealthy” görünüyordu; worker için kapatıldı.
 
+### Tek yasal uyarı
+
+- Sitenin ilk açılışında bir kez “Yasal uyarı” penceresi çıkar: sitedeki hiçbir içerik yatırım tavsiyesi değildir; fiyatlar, grafikler, sinyaller ve analizler bilgilendirme amaçlıdır, veriler gecikmeli ya da hatalı olabilir. “Anladım” ya da Esc ile kapanır, seçim tarayıcıda hatırlanır (`hisse.legalNotice.v1`). Metin esaslı biçimde değişirse anahtarın sürümü artırılıp uyarı yeniden gösterilir. Sayfa altındaki “Yasal uyarı” bağlantısı pencereyi yeniden açar (`dashboard/src/components/layout/LegalNotice.tsx`).
+- Kart ve satır altlarındaki tekrar eden “Yatırım tavsiyesi değildir” / “bilgilendirme amaçlıdır” notları kaldırıldı. Kaldırılan yerler: sayfa altı, hisse başlığındaki teknik sinyal açıklaması, finansal sağlık karnesi, analist önerileri, zaman dilimi sinyalleri, teknik özet, pivot seviyeleri ve Hisse Tarama kaynak satırı. Kaynak ve yöntem açıklamaları yerinde duruyor.
+
 ## 1.0.0 — 22 Eylül 2026
 
 İlk üretim sürümü: veri doğruluğu, güvenlik, performans ve işletim tarafı baştan sona gözden geçirildi.

@@ -20,7 +20,6 @@ const dict = {
   "error.unavailable": { tr: "Servis şu anda kullanılamıyor", en: "The service is currently unavailable", fr: "Le service est actuellement indisponible" },
   "error.upstream": { tr: "Veri sağlayıcısından yanıt alınamadı", en: "The data provider did not respond", fr: "Le fournisseur de données n'a pas répondu" },
   "common.close": { tr: "Kapat", en: "Close", fr: "Fermer" },
-  "common.notAdvice": { tr: "Yatırım tavsiyesi değildir.", en: "Not investment advice.", fr: "Ceci n'est pas un conseil en investissement." },
   "common.opensInNewTab": { tr: "(yeni sekmede açılır)", en: "(opens in a new tab)", fr: "(s'ouvre dans un nouvel onglet)" },
   "common.showAllCount": { tr: "Tümünü göster ({count})", en: "Show all ({count})", fr: "Tout afficher ({count})" },
   "common.showLess": { tr: "Daha az göster", en: "Show less", fr: "Afficher moins" },
@@ -172,10 +171,10 @@ const dict = {
   "score.points": { tr: "Puan", en: "Points", fr: "Points" },
   "score.thresholds": { tr: "Eşikler (puan: koşul)", en: "Thresholds (points: rule)", fr: "Seuils (points : règle)" },
   "score.technicalRule": { tr: "Güçlü al 5 · Al 4 · Nötr 3 · Sat 2 · Güçlü sat 1", en: "Strong buy 5 · Buy 4 · Neutral 3 · Sell 2 · Strong sell 1", fr: "Achat fort 5 · Achat 4 · Neutre 3 · Vente 2 · Vente forte 1" },
-  "score.disclaimer": {
-    tr: "Karne, açıklanan finansal tablolar ve piyasa verilerinden basit kurallarla üretilen bilgilendirme amaçlı bir özettir; yatırım tavsiyesi değildir.",
-    en: "This scorecard is an informational summary built with simple rules from filed statements and market data; it is not investment advice.",
-    fr: "Ce bulletin est un résumé informatif fondé sur des règles simples ; ce n'est pas un conseil en investissement.",
+  "score.footer": {
+    tr: "Karne, açıklanan finansal tablolar ve piyasa verilerinden basit kurallarla üretilen bir özettir.",
+    en: "This scorecard is a summary built with simple rules from filed statements and market data.",
+    fr: "Ce bulletin est un résumé fondé sur des règles simples, à partir des états financiers publiés et des données de marché.",
   },
 
   // Signals
@@ -225,21 +224,16 @@ const dict = {
   "analyst.high": { tr: "En yüksek", en: "High", fr: "Haut" },
   "analyst.currentPrice": { tr: "Güncel fiyat", en: "Current price", fr: "Cours actuel" },
   "analyst.empty": { tr: "Analist verisi bulunamadı", en: "No analyst data available", fr: "Aucune donnée d'analyste" },
-  "analyst.footer": {
-    tr: "Kaynak: İş Yatırım. Potansiyel = hedef fiyat ÷ güncel fiyat − 1. Yatırım tavsiyesi değildir.",
-    en: "Source: İş Yatırım. Upside = target ÷ current price − 1. Not investment advice.",
-    fr: "Source : İş Yatırım. Potentiel = objectif ÷ cours actuel − 1. Pas un conseil.",
-  },
   "analyst.footerSources": {
-    tr: "Kaynak: İş Yatırım (öneri ve hedef fiyat), hedeffiyat.com.tr (konsensüs). Potansiyel = hedef fiyat ÷ güncel fiyat − 1. Yatırım tavsiyesi değildir.",
-    en: "Sources: İş Yatırım (rating and target), hedeffiyat.com.tr (consensus). Upside = target ÷ current price − 1. Not investment advice.",
-    fr: "Sources : İş Yatırım (recommandation et objectif), hedeffiyat.com.tr (consensus). Potentiel = objectif ÷ cours actuel − 1. Pas un conseil.",
+    tr: "Kaynak: İş Yatırım (öneri ve hedef fiyat), hedeffiyat.com.tr (konsensüs). Potansiyel = hedef fiyat ÷ güncel fiyat − 1.",
+    en: "Sources: İş Yatırım (rating and target), hedeffiyat.com.tr (consensus). Upside = target ÷ current price − 1.",
+    fr: "Sources : İş Yatırım (recommandation et objectif), hedeffiyat.com.tr (consensus). Potentiel = objectif ÷ cours actuel − 1.",
   },
 
   // Timeframes
   "tf.title": { tr: "Zaman dilimlerine göre sinyaller", en: "Signals by timeframe", fr: "Signaux par horizon" },
   "tf.empty": { tr: "Zaman dilimi sinyali bulunamadı", en: "No timeframe signals available", fr: "Aucun signal disponible" },
-  "tf.footer": { tr: "TradingView teknik özeti (al · nötr · sat oyları). Yatırım tavsiyesi değildir.", en: "TradingView technical summary (buy · neutral · sell votes). Not investment advice.", fr: "Résumé technique TradingView (votes achat · neutre · vente). Pas un conseil." },
+  "tf.footer": { tr: "TradingView teknik özeti (al · nötr · sat oyları).", en: "TradingView technical summary (buy · neutral · sell votes).", fr: "Résumé technique TradingView (votes achat · neutre · vente)." },
   "tf.1m": { tr: "1 dakika", en: "1 minute", fr: "1 minute" },
   "tf.5m": { tr: "5 dakika", en: "5 minutes", fr: "5 minutes" },
   "tf.15m": { tr: "15 dakika", en: "15 minutes", fr: "15 minutes" },
@@ -339,7 +333,7 @@ const dict = {
   "tech.movingAveragesHint": { tr: "SMA/EMA 5–200, Ichimoku…", en: "SMA/EMA 5–200, Ichimoku…", fr: "SMA/EMA 5–200, Ichimoku…" },
   "tech.noGroup": { tr: "Bu grup için veri yok", en: "No data for this group", fr: "Pas de données" },
   "tech.empty": { tr: "Teknik sinyal verisi alınamadı", en: "No technical signal data", fr: "Aucune donnée de signal" },
-  "tech.summaryFooter": { tr: "TradingView teknik analiz özeti. Yatırım tavsiyesi değildir.", en: "TradingView technical analysis summary. Not investment advice.", fr: "Résumé d'analyse technique TradingView. Pas un conseil." },
+  "tech.summaryFooter": { tr: "TradingView teknik analiz özeti.", en: "TradingView technical analysis summary.", fr: "Résumé d'analyse technique TradingView." },
   "tech.indicatorsTitle": { tr: "Göstergeler", en: "Indicators", fr: "Indicateurs" },
   "tech.indicatorsFooter": {
     tr: "Günlük verilerle hesaplanır. RSI 70/30 ve Stokastik 80/20 aşırı alım/satım eşikleridir.",
@@ -392,7 +386,6 @@ const dict = {
   "pivots.resistance": { tr: "Direnç", en: "Resistance", fr: "Résistance" },
   "pivots.support": { tr: "Destek", en: "Support", fr: "Support" },
   "pivots.empty": { tr: "Pivot verisi bulunamadı", en: "No pivot data", fr: "Aucune donnée pivot" },
-  "pivots.footer": { tr: "Destek ve direnç seviyeleri bilgilendirme amaçlıdır.", en: "Support and resistance levels are for information only.", fr: "Supports et résistances à titre informatif." },
 
   // Additions for backend contract updates
   "quote.amount": { tr: "İşlem hacmi (TL)", en: "Turnover (TRY)", fr: "Capitaux échangés (TRY)" },

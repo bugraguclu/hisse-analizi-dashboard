@@ -131,11 +131,14 @@ const translations = {
   "nav.short.combined": { tr: "Kombine", en: "Combined", fr: "Combinée" },
   "nav.short.macro": { tr: "Makro", en: "Macro", fr: "Macro" },
   "nav.short.screening": { tr: "Tarama", en: "Screener", fr: "Filtrage" },
-  "footer.disclaimer": {
-    tr: "Veriler bilgilendirme amaçlıdır ve gecikmeli olabilir; yatırım tavsiyesi değildir.",
-    en: "Data is for information only and may be delayed; it is not investment advice.",
-    fr: "Données fournies à titre informatif, éventuellement différées ; ceci n'est pas un conseil en investissement.",
+  // The one site-wide disclaimer (components/layout/LegalNotice.tsx); cards carry none of their own.
+  "legal.title": { tr: "Yasal uyarı", en: "Legal notice", fr: "Avertissement" },
+  "legal.body": {
+    tr: "Bu sitedeki hiçbir içerik yatırım tavsiyesi değildir. Fiyatlar, grafikler, sinyaller ve analizler yalnızca bilgilendirme amaçlıdır; veriler gecikmeli veya hatalı olabilir.",
+    en: "Nothing on this site is investment advice. Prices, charts, signals and analyses are for information only; data may be delayed or inaccurate.",
+    fr: "Rien sur ce site ne constitue un conseil en investissement. Les cours, graphiques, signaux et analyses sont fournis à titre informatif ; les données peuvent être différées ou inexactes.",
   },
+  "legal.accept": { tr: "Anladım", en: "I understand", fr: "J'ai compris" },
   "footer.sources": { tr: "Kaynaklar: KAP, TCMB, İş Yatırım, TradingView", en: "Sources: KAP, CBRT, İş Yatırım, TradingView", fr: "Sources : KAP, BCRT, İş Yatırım, TradingView" },
   "theme.toLight": { tr: "Açık temaya geç", en: "Switch to light theme", fr: "Passer au thème clair" },
   "theme.toDark": { tr: "Koyu temaya geç", en: "Switch to dark theme", fr: "Passer au thème sombre" },

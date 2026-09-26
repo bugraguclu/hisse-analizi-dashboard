@@ -198,7 +198,7 @@ function Screener() {
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {t("status.sources")} · {t("status.notAdvice")}
+        {t("status.sources")}
       </p>
     </div>
   );

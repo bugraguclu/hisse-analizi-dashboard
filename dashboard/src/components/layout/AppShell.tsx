@@ -1,13 +1,17 @@
 "use client";
 
 import { useLocale } from "@/lib/locale-context";
+import { LegalNotice } from "./LegalNotice";
 import { MarketStrip } from "./MarketStrip";
 import { MobileNav } from "./MobileNav";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
 import { ShellProvider } from "./shell-context";
 
-/** Scroll-linked top navigation + market strip above the page, site footer below; drawer menu on small screens. */
+/**
+ * Scroll-linked top navigation + market strip above the page, site footer below; drawer menu on
+ * small screens; the legal notice on a visitor's first page view.
+ */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useLocale();
   return (
@@ -27,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SiteFooter />
       </div>
       <MobileNav />
+      <LegalNotice />
     </ShellProvider>
   );
 }

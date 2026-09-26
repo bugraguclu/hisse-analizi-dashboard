@@ -9,6 +9,8 @@ interface ShellContextValue {
   closeMobileNav: () => void;
   /** The hamburger button; focus returns to it when the drawer closes. */
   mobileNavTriggerRef: RefObject<HTMLButtonElement | null>;
+  /** The legal notice dialog (LegalNotice.tsx), reopened from the footer link. */
+  legalNoticeRef: RefObject<HTMLDialogElement | null>;
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
@@ -19,11 +21,12 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   // (link, back/forward) closes it without an effect.
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
+  const legalNoticeRef = useRef<HTMLDialogElement>(null);
   const openMobileNav = useCallback(() => setOpenedOn(pathname), [pathname]);
   const closeMobileNav = useCallback(() => setOpenedOn(null), []);
   const mobileNavOpen = openedOn !== null && openedOn === pathname;
   const value = useMemo(
-    () => ({ mobileNavOpen, openMobileNav, closeMobileNav, mobileNavTriggerRef }),
+    () => ({ mobileNavOpen, openMobileNav, closeMobileNav, mobileNavTriggerRef, legalNoticeRef }),
     [mobileNavOpen, openMobileNav, closeMobileNav],
   );
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
