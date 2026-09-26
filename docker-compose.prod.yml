@@ -1,8 +1,7 @@
 # Production overlay — layer this on top of the dev compose file:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Requires POSTGRES_PASSWORD, ADMIN_API_KEY, CORS_ORIGINS, DOMAIN and ACME_EMAIL
-# to be set (in the shell environment or in .env) — the merged config refuses to
+# Requires POSTGRES_PASSWORD, ADMIN_API_KEY, CORS_ORIGINS and DOMAIN to be set (in the shell environment or in .env) — the merged config refuses to
 # start without them. Caddy is the only published service
 # (80/443); db, app and dashboard are reachable on the compose network only.
 
@@ -87,7 +86,6 @@ services:
     image: caddy:2-alpine
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN must be set in production (e.g. hisse.example.com)}
-      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set in production (Let's Encrypt contact address)}
     ports:
       - "80:80"
       - "443:443"

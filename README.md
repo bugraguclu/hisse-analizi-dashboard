@@ -77,7 +77,7 @@ Mail testi için: `docker compose --profile mail up -d mailhog` (arayüz: http:/
 
 ```bash
 # .env içinde en az: POSTGRES_PASSWORD, ADMIN_API_KEY (≥ 24 karakter; örn. `openssl rand -hex 32`), CORS_ORIGINS=https://<DOMAIN>,
-# DOMAIN, ACME_EMAIL, APP_ENV=production
+# DOMAIN, APP_ENV=production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec app python scripts/seed.py
 ```

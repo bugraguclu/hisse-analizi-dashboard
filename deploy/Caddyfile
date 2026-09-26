@@ -1,13 +1,9 @@
 # Production front proxy. Terminates TLS (automatic HTTPS via Let's Encrypt)
 # and forwards everything to the "dashboard" service on the compose network.
 #
-# Required: DOMAIN (e.g. hisse.example.com) and ACME_EMAIL (Let's Encrypt
-# contact address for expiry/problem notices). Both are enforced by
-# docker-compose.prod.yml — an empty ACME_EMAIL would leave the global
-# `email` option without an argument and Caddy would refuse the config.
-{
-	email {$ACME_EMAIL}
-}
+# Required: DOMAIN (e.g. hisse.example.com), enforced by docker-compose.prod.yml.
+# The ACME account is registered without a contact address: Let's Encrypt no
+# longer sends expiry e-mails and Caddy renews certificates on its own.
 
 {$DOMAIN} {
 	# Security headers Next.js does not already set itself (see

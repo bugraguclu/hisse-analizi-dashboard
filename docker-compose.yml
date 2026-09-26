@@ -75,6 +75,10 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # The image's HEALTHCHECK probes the API on :8000, which the worker does not
+    # serve — it would always report "unhealthy".
+    healthcheck:
+      disable: true
     restart: unless-stopped
     deploy:
       replicas: 1

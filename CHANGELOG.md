@@ -68,6 +68,12 @@ Mimari sözleşme ve ölçülen kaynak gerçekleri [docs/data-platform.md](./doc
 - **Küçük grafikler** (`dashboard/src/components/charts/mini`): piyasa genişliği, al / nötr / sat oyları, ortaklık yapısı (ilk 4 ortak renkli, kalanlar gri), RSI / Stokastik / %B göstergeleri, finansal oran çubukları ve analist hedef fiyat aralığı; hepsinde fare, klavye ve dokunmayla açılan ipuçları.
 - **Telefon:** dokunmatik ekranlarda hareket ipuçları (iki parmakla yakınlaştırma, yana kaydırma). Hareketli ortalamalar ve temettü tabloları 375 px ekranda sayfayı yana taşırıyordu; düzeltildi.
 
+### Canlı ortam
+
+- `deploy/setup-oracle.sh <alan-adı> [duckdns-token]`: boş bir Ubuntu sunucuya (Oracle Cloud Always Free Ampere A1 ile denendi) tek komutla kurulum. Docker, 80/443 için güvenlik duvarı (Oracle imajının `/etc/iptables/rules.v4` dosyasına yazılır, yeniden başlatmada korunur), İstanbul saat dilimi, `.env` (rastgele veritabanı şifresi ve `ADMIN_API_KEY`), prod yığını, seed, 5 dakikada bir DuckDNS güncellemesi ve her gece 04:30'da 14 gün saklanan veritabanı yedeği. Yeniden çalıştırılabilir; güncelleme için aynı komut.
+- `ACME_EMAIL` kaldırıldı: Caddy sertifika hesabını iletişim adresi olmadan açar (Let's Encrypt süre dolum e-postası göndermiyor, yenileme otomatik).
+- Worker konteyneri imajdaki API sağlık kontrolünü devralıp hep “unhealthy” görünüyordu; worker için kapatıldı.
+
 ## 1.0.0 — 22 Eylül 2026
 
 İlk üretim sürümü: veri doğruluğu, güvenlik, performans ve işletim tarafı baştan sona gözden geçirildi.
