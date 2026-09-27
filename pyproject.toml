@@ -90,3 +90,9 @@ warn_unused_configs = true
 module = ["borsapy", "borsapy.*", "yfinance", "pandas", "aiosmtplib", "pytz", "dateutil"]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# Reached through limits (slowapi); Deprecated 3.x uses Python 3.12 `type` statements,
+# which mypy cannot parse with python_version = "3.11".
+[[tool.mypy.overrides]]
+module = ["deprecated", "deprecated.*"]
+follow_imports = "skip"
