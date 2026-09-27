@@ -1,10 +1,12 @@
 # BIST Hisse Analizi Platformu — Yönetici Özeti
 
-**Son güncelleme:** 22 Eylül 2026
+**Son güncelleme:** 26 Eylül 2026
 
 **Uygulama sürümü:** 1.0.0
 
-**Durum:** Üretime hazır. Uygulama, `docker-compose.prod.yml` ile otomatik HTTPS (Caddy), otomatik veritabanı migration’ı, yedekleme betikleri ve sağlık kontrolleriyle tek komutla yayına alınabilir.
+**Canlı sürüm:** [hisse-analizi.duckdns.org](https://hisse-analizi.duckdns.org)
+
+**Durum:** Yayında. Uygulama Oracle Cloud Always Free sunucusunda `docker-compose.prod.yml` ile çalışır: otomatik HTTPS (Caddy), otomatik veritabanı migration’ı, gece yedeği ve sağlık kontrolleri. Boş bir Ubuntu sunucuya `deploy/setup-oracle.sh` ile tek komutla kurulur.
 
 ## Ürün ne sunuyor?
 
@@ -20,7 +22,7 @@ Hedef kullanıcılar; BIST’i takip eden bireysel yatırımcılar, araştırma 
 | Hisse sayfası | Günlük fiyat ve değişim, grafik, piyasa istatistikleri, son 12 ay finansal oranları, analiz karnesi, KAP bildirimleri, haberler, analist hedefleri, finansal tablolar, temettü |
 | Teknik / Temel / Kombine | Aynı hisse sayfasında sekmeler: göstergeler ve dokuz zaman dilimi özeti; şirket profili, değerleme ve ortaklık yapısı; ikisinin karşılaştırması |
 | Makro Ekonomi | TCMB politika faizi ve koridor, TÜFE, USD/EUR/GBP kurları, önem ve ülke filtreli ekonomik takvim |
-| Hisse Tarama | 600+ işlem gören BIST payı, 15 hazır şablon, gelişmiş filtreler, sıralanabilir tablo, teknik sinyal taraması |
+| Hisse Tarama | ~630 işlem gören BIST payı, 26 hazır tarama, gelişmiş filtreler, sıralanabilir tablo, teknik sinyal taraması |
 | Olaylar & KAP | Kaynak, kategori, önem, tarih ve hisse filtreli KAP/haber arşivi; sunucu tarafı sayfalama |
 
 ## Veri kaynakları ve doğruluk yaklaşımı
@@ -58,13 +60,12 @@ kaynak yanıt vermezse son iyi kopya "son kayıtlı veri" uyarısıyla gösteril
 
 ## Yayına alma
 
-1. Sunucuda `.env` dosyasına production değerleri girilir: veritabanı parolası, yönetim anahtarı, alan adı, Let’s Encrypt e-postası, CORS adresi.
-2. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` ile servisler başlatılır; migration’lar otomatik çalışır, sertifika otomatik alınır.
-3. Şirket listesi `scripts/seed.py` ile yüklenir; `/health/ready` ve ana sayfalar kontrol edilir.
-4. `scripts/backup.sh` günlük çalışacak şekilde zamanlanır.
+1. Bulut güvenlik duvarında 80/443 portları açılır; alan adı sunucuyu gösterir (DuckDNS token'ı verilirse betik bunu kendisi yapar).
+2. Sunucuda `bash setup.sh <alan-adı> [duckdns-token]` çalıştırılır ([`deploy/setup-oracle.sh`](./deploy/setup-oracle.sh)). Betik Docker'ı ve güvenlik duvarı kurallarını kurar, `.env` dosyasını rastgele veritabanı parolası ve yönetim anahtarıyla oluşturur, servisleri başlatır, şirket listesini yükler ve gece yedeğini zamanlar. Migration'lar ve sertifika otomatiktir.
+3. `https://<alan-adı>/api/health/ready` ve ana sayfalar kontrol edilir. Güncelleme için aynı betik yeniden çalıştırılır; elle kurulum README'de anlatılır.
 
 ## Bilinen sınırlar
 
 - Piyasa verileri ücretsiz kaynaklardan geldiği için gecikmeli olabilir (arayüzde belirtilir).
 - Kullanıcı hesabı yoktur; platform herkese açık, salt okunur bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur.
-- Docker imajları bu geliştirme makinesinde (Docker Hub erişimi olmadığından) derlenemedi; CI her değişiklikte iki imajı da derler.
+- Docker imajları bu geliştirme makinesinde (Docker Hub erişimi olmadığından) derlenemiyor; CI her değişiklikte iki imajı da derler, canlı sunucu kendi imajlarını derler.

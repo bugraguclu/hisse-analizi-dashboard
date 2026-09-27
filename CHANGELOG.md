@@ -93,9 +93,15 @@ Mimari sözleşme ve ölçülen kaynak gerçekleri [docs/data-platform.md](./doc
 
 ### Canlı ortam
 
+- Uygulama [hisse-analizi.duckdns.org](https://hisse-analizi.duckdns.org) adresinde yayında: Oracle Cloud Always Free (Ampere A1) sunucusu, DuckDNS alan adı, Caddy ile Let's Encrypt sertifikası ve gece veritabanı yedeği.
 - `deploy/setup-oracle.sh <alan-adı> [duckdns-token]`: boş bir Ubuntu sunucuya (Oracle Cloud Always Free Ampere A1 ile denendi) tek komutla kurulum. Docker, 80/443 için güvenlik duvarı (Oracle imajının `/etc/iptables/rules.v4` dosyasına yazılır, yeniden başlatmada korunur), İstanbul saat dilimi, `.env` (rastgele veritabanı şifresi ve `ADMIN_API_KEY`), prod yığını, seed, 5 dakikada bir DuckDNS güncellemesi ve her gece 04:30'da 14 gün saklanan veritabanı yedeği. Yeniden çalıştırılabilir; güncelleme için aynı komut.
 - `ACME_EMAIL` kaldırıldı: Caddy sertifika hesabını iletişim adresi olmadan açar (Let's Encrypt süre dolum e-postası göndermiyor, yenileme otomatik).
 - Worker konteyneri imajdaki API sağlık kontrolünü devralıp hep “unhealthy” görünüyordu; worker için kapatıldı.
+
+### Dokümantasyon
+
+- README yeniden yazıldı: canlı site bağlantısı, canlı siteden alınmış ekran görüntüleri (açık ve koyu tema; masaüstü ve telefon), güncellenmiş özellik ve veri kaynağı tabloları, mimari diyagramı, tek komutla sunucu kurulumu, teknolojiler ve proje yapısı. Veri kaynakları bölümündeki iki hata düzeltildi: nakit akışı İş Yatırım'dan gelir; `meta` bloğu yalnızca depo öncelikli uçlardadır.
+- `PROJE_OZETI.md`: canlı sürüm bağlantısı, kurulum betiğiyle yayına alma adımları (ACME e-postası artık gerekmiyor), tarama şablonu sayısı (26).
 
 ### Tek yasal uyarı
 
