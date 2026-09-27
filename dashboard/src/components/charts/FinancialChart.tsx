@@ -63,6 +63,7 @@ import type {
 } from "./types";
 import { newDrawingId, useDrawingLayer } from "./drawings";
 import { DEFAULT_COLOR } from "./drawings/model";
+import { DrawingPrimitive } from "./drawings/primitive";
 import type { Drawing, DrawingTool } from "./drawings/types";
 import { isApplePlatform, useCoarsePointer } from "./use-coarse-pointer";
 
@@ -72,6 +73,11 @@ type AnySeries = ISeriesApi<SeriesType>;
 interface Engine {
   lib: Lib;
   chart: IChartApi;
+}
+
+interface AttachedPrimitive {
+  series: AnySeries;
+  primitive: ISeriesPrimitive<Time>;
 }
 
 export interface FinancialChartHandle {
@@ -403,6 +409,16 @@ function lineStyleOf(lib: Lib, style: "solid" | "dashed" | "dotted" | undefined)
   return style === "dashed" ? lib.LineStyle.Dashed : style === "dotted" ? lib.LineStyle.Dotted : lib.LineStyle.Solid;
 }
 
+function detachAll(attached: readonly AttachedPrimitive[]) {
+  for (const { series, primitive } of attached) {
+    try {
+      series.detachPrimitive(primitive);
+    } catch {
+      // The owner series is already gone.
+    }
+  }
+}
+
 /**
  * Price/index chart in seven styles with volume, any number of configurable
  * indicators (overlays and panes), multi-symbol comparison, event badges, a
@@ -453,7 +469,7 @@ export function FinancialChart({
   const plotRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef(new Map<string, AnySeries>());
-  const primitivesRef = useRef<Array<{ series: AnySeries; primitive: ISeriesPrimitive<Time> }>>([]);
+  const primitivesRef = useRef<AttachedPrimitive[]>([]);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const eventsRef = useRef<EventBadgesPrimitive | null>(null);
   const watermarkRef = useRef<ITextWatermarkPluginApi<Time> | null>(null);
@@ -465,6 +481,7 @@ export function FinancialChart({
   const announceTimerRef = useRef<number | undefined>(undefined);
 
   const [engine, setEngine] = useState<Engine | null>(null);
+  const [drawingPrimitive] = useState(() => new DrawingPrimitive());
   // The main series and palette of the latest rebuild, for layers that draw with them (drawings).
   const [mainSeries, setMainSeries] = useState<AnySeries | null>(null);
   const [chartPalette, setChartPalette] = useState<ChartPalette | null>(null);
@@ -539,6 +556,10 @@ export function FinancialChart({
       stopTheme();
       cancelAnimationFrame(zoomFrameRef.current);
       window.clearTimeout(announceTimerRef.current);
+      // Primitives go while the chart lives: cleanups after this one (the drawing layer dropping a
+      // gesture) still call them, and a call reaching a removed chart schedules a paint of disposed
+      // canvases ("Object is disposed"). The removal cancels the repaint the detaching asks for.
+      detachAll(primitivesRef.current);
       markersRef.current = null;
       eventsRef.current = null;
       watermarkRef.current = null;
@@ -644,13 +665,7 @@ export function FinancialChart({
 
     markersRef.current?.detach();
     markersRef.current = null;
-    for (const { series: owner, primitive } of primitivesRef.current) {
-      try {
-        owner.detachPrimitive(primitive);
-      } catch {
-        // The owner series is already gone.
-      }
-    }
+    detachAll(primitivesRef.current);
     primitivesRef.current = [];
     eventsRef.current = null;
     watermarkRef.current?.detach();
@@ -975,6 +990,8 @@ export function FinancialChart({
     }
 
     if (extremes) markersRef.current = lib.createSeriesMarkers(main, []);
+    // Last: drawings sit above the event badges.
+    attach(main, drawingPrimitive);
 
     // Period window by default; keep the user's zoom/pan across refetches of the same data.
     const defaultRange = { from: series.windowStart - 0.5, to: bars.length - 1 + padTimes.length + 0.5 };
@@ -1024,6 +1041,7 @@ export function FinancialChart({
     paneHeight,
     themeVersion,
     t,
+    drawingPrimitive,
   ]);
 
   // Crosshair → legend / header scrub, event badges; double click on the plot resets the view.
@@ -1220,6 +1238,7 @@ export function FinancialChart({
   // handler above (which claims Shift + drag and the measure tool by calling preventDefault).
   const drawingLayer = useDrawingLayer({
     chart: engine?.chart ?? null,
+    primitive: drawingPrimitive,
     mainSeries,
     plotRef,
     bars,

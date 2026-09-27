@@ -2,9 +2,10 @@
  * Contract between the drawing tools (this folder) and FinancialChart.
  *
  * FinancialChart owns the lightweight-charts instance and rebuilds every
- * series when data/structure change; the drawing layer attaches ONE series
- * primitive to the current main series (re-attaching when `mainSeries`
- * changes) and handles its own pointer gestures on the plot element.
+ * series when data/structure change. It attaches the drawing layer's ONE
+ * series primitive to each new main series, with its own primitives, and
+ * detaches it before removing the chart; the drawing layer feeds that
+ * primitive state and handles its own pointer gestures on the plot element.
  */
 
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
@@ -12,6 +13,7 @@ import type { IChartApi, ISeriesApi, SeriesType, UTCTimestamp } from "lightweigh
 import type { Locale } from "@/lib/i18n";
 import type { ChartPalette } from "../colors";
 import type { ChartBar, IntervalKind } from "../types";
+import type { DrawingPrimitive } from "./primitive";
 
 /** Shapes a viewer can draw. */
 export type DrawingKind = "trend" | "ray" | "hline" | "vline" | "rect" | "fib";
@@ -37,7 +39,9 @@ export interface Drawing {
 
 export interface DrawingLayerOptions {
   chart: IChartApi | null;
-  /** Main price series; the primitive is re-attached whenever this object changes. */
+  /** Renders the drawings; the chart attaches it to its main series (the layer never does). */
+  primitive: DrawingPrimitive;
+  /** Main price series `primitive` is attached to; null until the first build. */
   mainSeries: ISeriesApi<SeriesType> | null;
   /** The chart's focusable plot wrapper: pointer listeners go here (capture phase). */
   plotRef: RefObject<HTMLDivElement | null>;

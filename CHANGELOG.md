@@ -19,11 +19,12 @@ Hisse ve BIST 100 grafikleri TradingView ayarında bir çalışma alanına dön�
 - **Tam ekran:** tarayıcının gerçek tam ekranı (Fullscreen API; iPhone Safari'de sayfa içi katman). Sembol, anlık fiyat ve dönem seçici üstte, çizim araçları solda, piyasa durumu ve İstanbul saati altta. Kartta yazılı "Tam ekran" düğmesi ve `F` tuşu; Esc ile çıkılır.
 - **Grafik tipleri:** alan (veriye göre solan dolgu), çizgi, taban çizgisi, mum, içi boş mum, Heikin Ashi, çubuk (OHLC).
 - **Göstergeler:** aranabilir menü (`/`), 17 gösterge, her birinden birden çok örnek: SMA, EMA, Bollinger (bant dolgulu), VWAP, Supertrend, Parabolik SAR, RSI, MACD, Stokastik, Stokastik RSI, CCI, Williams %R, DMI/ADX, ATR, OBV, MFI, ROC. Parametre, renk, gizle ve kaldır lejanttan açılır. Formüller TradingView tanımları; THYAO'da TradingView/arka uç değerleriyle birebir doğrulandı.
-- **Çizim araçları:** trend, ışın, yatay/dikey çizgi, dikdörtgen, Fibonacci, ölçüm; mıknatıs, sürükleyerek düzenleme, renk/kesikli, silme, geri alma (⌘/Ctrl+Z). Hisse başına tarayıcıda saklanır.
+- **Çizim araçları:** trend, ışın, yatay/dikey çizgi, dikdörtgen, Fibonacci, ölçüm; mıknatıs, sürükleyerek düzenleme, renk/kesikli, silme, geri alma (⌘/Ctrl+Z). Hisse başına tarayıcıda saklanır. Fibonacci seviye etiketleri ("0,618 (331,32)") TradingView'daki gibi düzeltmenin solunda, çizgisinin hizasındadır. Solda yer yoksa sağda, iki yanda da yer yoksa içeride çizginin üstünde (en üstteki çizginin altında) dururlar. Seviyeler sıkışınca önce 0, 1 ve 0,5 kalır.
 - **Karşılaştırma:** 8 BIST endeksi ya da herhangi bir hisseyle, en çok 4 sembol, yüzde getiri olarak.
 - **Olaylar:** temettü, finansal rapor, sermaye artırımı ve önemli KAP bildirimleri zaman ekseninde rozet; üzerine gelince ayrıntı, tıklayınca KAP bağlantısı.
 - **Diğer:** log ve yüzde ölçek (Alt+L / Alt+P), sembol filigranı, başlık ve gösterge etiketli PNG indirme / panoya kopyalama (Alt+S), sağ tık menüsü (görünümü sıfırla, bu fiyata yatay çizgi ekle), kısayol penceresi (`?`), ayarlar menüsü, 5G grafikte seans ayraçları, "son bara git" düğmesi.
 - Tercihler `hisse.chart.*.v2` anahtarlarında; eski gösterge seçimleri otomatik taşınır.
+- Düzeltme: grafik kapanırken konsola "Object is disposed" hatası düşüyordu. Karttan tam ekrana geçişte ve dönüşte, sekme değişiminde ve başka sayfaya geçişte oluyordu. Çizim katmanı, kaldırılmış grafikten yeniden çizim istiyordu. Artık grafiğe eklenen her katman (primitive) grafik kaldırılmadan önce ayrılıyor.
 
 ### Veri altyapısı: depo öncelikli veri platformu (data-infra)
 

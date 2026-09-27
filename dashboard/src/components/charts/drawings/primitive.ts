@@ -895,8 +895,8 @@ export class DrawingPrimitive implements ISeriesPrimitive<Time> {
   /**
    * "0,618 (301,25)" per level, centred on its line left of the retracement
    * (TradingView's default); on the right when the left edge is too close,
-   * above the lines inside when neither side has room. Crowded levels keep the
-   * most telling ratios.
+   * above the lines inside when neither side has room (below a line at the top
+   * edge). Crowded levels keep the most telling ratios.
    */
   private fibLabels(
     levels: readonly { level: number; y: number; price: number }[],
@@ -931,12 +931,17 @@ export class DrawingPrimitive implements ISeriesPrimitive<Time> {
       .map((entry, i) => ({ ...entry, text: texts[i] }))
       .sort((p, q) => FIB_LABEL_PRIORITY.indexOf(p.level) - FIB_LABEL_PRIORITY.indexOf(q.level));
     for (const { y, text } of order) {
-      const at = y - lift;
-      const centre = baseline === "middle" ? at : at - half;
+      let at = y - lift;
+      let labelBaseline: CanvasTextBaseline = baseline;
+      if (baseline === "bottom" && at - LABEL_FONT_SIZE < 1) {
+        at = y + lift;
+        labelBaseline = "top";
+      }
+      const centre = labelBaseline === "middle" ? at : labelBaseline === "bottom" ? at - half : at + half;
       if (centre < half + 1 || centre > height - half - 1) continue;
       if (taken.some((other) => Math.abs(other - centre) < LABEL_MIN_GAP)) continue;
       taken.push(centre);
-      placed.push({ x, y: at, text, align, baseline });
+      placed.push({ x, y: at, text, align, baseline: labelBaseline });
     }
     return placed;
   }

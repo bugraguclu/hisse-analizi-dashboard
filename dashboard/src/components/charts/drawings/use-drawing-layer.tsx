@@ -12,7 +12,7 @@ import { useCoarsePointer } from "../use-coarse-pointer";
 import { DrawingOverlay, OVERLAY_SELECTOR } from "./DrawingOverlay";
 import { useDrawingI18n } from "./i18n";
 import { DEFAULT_COLOR, drawingsEqual, isPlacementTool, MAX_DRAWINGS, moveHandle, pointCount } from "./model";
-import { DrawingPrimitive, HIT_RADIUS, type DrawingAnchor, type DrawingInteraction, type ProjectedPoint } from "./primitive";
+import { HIT_RADIUS, type DrawingAnchor, type DrawingInteraction, type ProjectedPoint } from "./primitive";
 import { newDrawingId } from "./store";
 import type { Drawing, DrawingKind, DrawingLayer, DrawingLayerOptions, DrawingPoint } from "./types";
 
@@ -101,8 +101,9 @@ function snapWanted(magnet: boolean, event: { ctrlKey: boolean; metaKey: boolean
 
 /**
  * TradingView-style drawing tools on a FinancialChart: renders the drawings
- * through one series primitive, places new ones with the active tool, selects,
- * drags and edits them with the cursor, and handles Delete / Escape / ⌘Z.
+ * through one series primitive (attached by the chart), places new ones with
+ * the active tool, selects, drags and edits them with the cursor, and handles
+ * Delete / Escape / ⌘Z.
  *
  * Pointer events are taken on the plot element in the capture phase, after
  * FinancialChart's measure handler (which marks its events `defaultPrevented`);
@@ -112,6 +113,7 @@ function snapWanted(magnet: boolean, event: { ctrlKey: boolean; metaKey: boolean
  */
 export function useDrawingLayer(options: DrawingLayerOptions): DrawingLayerControls {
   const {
+    primitive,
     mainSeries,
     plotRef,
     bars,
@@ -131,7 +133,6 @@ export function useDrawingLayer(options: DrawingLayerOptions): DrawingLayerContr
   } = options;
   const { t } = useDrawingI18n();
   const coarse = useCoarsePointer();
-  const [primitive] = useState(() => new DrawingPrimitive());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -167,20 +168,8 @@ export function useDrawingLayer(options: DrawingLayerOptions): DrawingLayerContr
   );
 
   // ---------------------------------------------------------------------------
-  // Primitive: attach to the current main series, feed it state
+  // Primitive: feed it state (FinancialChart attaches it to the main series)
   // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (!mainSeries) return;
-    mainSeries.attachPrimitive(primitive);
-    return () => {
-      try {
-        mainSeries.detachPrimitive(primitive);
-      } catch {
-        // The chart was disposed with the series.
-      }
-    };
-  }, [mainSeries, primitive]);
 
   useEffect(() => {
     workingRef.current = drawings;
