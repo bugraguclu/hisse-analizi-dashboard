@@ -2,6 +2,16 @@
 
 ## Yayımlanmamış
 
+### Sektör ortalamaları (API)
+
+Hisseyi KAP sektöründeki şirketlerle karşılaştırmak için arka uç (`src/services/sector_service.py`); arayüz sonraki adımda eklenecek.
+
+- **`GET /fundamentals/{ticker}/sector`:** hissenin KAP sektörü, her göstergenin sektör medyanı ve çeyrekleri (`p25`/`p75`), hissenin değeri ve sektördeki yeri (`below`/`above`: değeri daha düşük/yüksek şirket sayısı), piyasa değerine göre sıralı emsaller. **`GET /sectors`:** 48 KAP sektörü (623 hisse), şirket sayısı, toplam piyasa değeri ve medyanlar.
+- **Sektör = KAP sektörü** (Bankalar, GYO, Gıda, İçecek ve Tütün…). TradingView'ın sektörü karşılaştırma için fazla geniş: "Finance" bankaları, GYO'ları ve holdingleri birlikte tutuyor (138 şirket).
+- **Ortalama = medyan:** F/K 400 ya da −%900 marj gibi uç değerler aritmetik ortalamayı bozuyor. En az 3 şirketin değeri yoksa medyan verilmez. Çarpanlarda (F/K, PD/DD, F/S, FD/FAVÖK) ve cari oranda yalnızca pozitif değerler sayılır, borç/özkaynakta negatif özkaynaklı şirketler dışarıda kalır; temettü veriminin medyanı temettü ödeyenlerden alınır (sayılan `count`, değeri olan `reported`).
+- **Kaynaklar sayfalarla aynı:** F/K, PD/DD, temettü verimi, getiriler ve yabancı payı tarama evreninden (TradingView, 15 dk gecikmeli); marjlar, ROE/ROA, borçluluk ve büyüme `financial_ratios` deposundan, Finansal oranlar kartıyla aynı dönem seçimiyle (bankalarda akımlar son yıllık rapordan, bilanço kalemleri en yeni dönemden).
+- `/market/screener/universe` satırları `kap_sector`, yanıt `kap_sectors` listesini taşır (Hisse Tarama'nın sektör filtresi için). Depo okunamazsa tarama aynen döner ve `warnings` listesine `sectors` eklenir.
+
 ### Fiyat grafiği: profesyonel araç seti
 
 Hisse ve BIST 100 grafikleri TradingView ayarında bir çalışma alanına dönüştü (`dashboard/src/components/charts/`).

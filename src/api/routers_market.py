@@ -12,6 +12,7 @@ from src.adapters.screener_universe import get_screener_universe
 from src.adapters.search_adapter import list_companies, normalize_query, search_symbol
 from src.adapters.stream_adapter import get_snapshot
 from src.adapters.utils import MarketDataError, normalize_symbol, resolve_period, upstream_failure
+from src.services.sector_service import annotate_universe
 
 market_router = APIRouter(prefix="/market", tags=["market"])
 
@@ -78,7 +79,8 @@ async def screener_universe():
 
     Dashboard'un /tarama sayfasi filtreleme/siralamayi bu tablo uzerinde tarayicida yapar.
     """
-    return _ok(await get_screener_universe())
+    # Rows carry their KAP sector (``kap_sector``) for the SEKTÖR filter and sector medians.
+    return await annotate_universe(_ok(await get_screener_universe()))
 
 
 # --- Scanner ---

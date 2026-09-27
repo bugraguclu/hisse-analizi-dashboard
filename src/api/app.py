@@ -19,6 +19,7 @@ from src.api.routers_fundamentals import fundamentals_router
 from src.api.routers_macro import macro_router
 from src.api.routers_market import market_router
 from src.api.routers_news import news_router
+from src.api.routers_sectors import sectors_router
 from src.api.routers_technical import technical_router
 from src.core.config import settings
 from src.core.logging import setup_logging
@@ -127,6 +128,7 @@ app.include_router(macro_router)
 app.include_router(market_router)
 app.include_router(news_router)
 app.include_router(data_router)
+app.include_router(sectors_router)
 
 
 @app.get("/", include_in_schema=False)
