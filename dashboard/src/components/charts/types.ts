@@ -1,13 +1,49 @@
 import type { ChartPeriod } from "@/types";
 
 /** How the main series is drawn. */
-export type ChartType = "area" | "line" | "candles";
+export type ChartType = "area" | "line" | "candles" | "hollow" | "bars" | "heikin" | "baseline";
 
-/** Price overlays drawn on the main pane. */
+/** Legacy (prefs v1) price overlays; migrated to `IndicatorConfig` in prefs v2. */
 export type OverlayKey = "ma20" | "ma50" | "ma200" | "bb";
 
-/** Indicator panes stacked under the main pane. */
+/** Legacy (prefs v1) indicator panes; migrated to `IndicatorConfig` in prefs v2. */
 export type PaneKey = "rsi" | "macd" | "stoch";
+
+/** Every indicator the kit can compute (see indicator-catalog.ts). */
+export type IndicatorKind =
+  | "sma"
+  | "ema"
+  | "bb"
+  | "vwap"
+  | "psar"
+  | "supertrend"
+  | "rsi"
+  | "macd"
+  | "stoch"
+  | "stochrsi"
+  | "cci"
+  | "willr"
+  | "atr"
+  | "adx"
+  | "obv"
+  | "mfi"
+  | "roc";
+
+/** One indicator on a chart; a kind can appear several times (SMA 20 + SMA 50). */
+export interface IndicatorConfig {
+  /** Stable instance id, unique within a chart (e.g. "sma-k3f9"). */
+  id: string;
+  kind: IndicatorKind;
+  /** Parameter values keyed like the catalog's `params` (sanitized). */
+  params: Record<string, number>;
+  /** Categorical palette slot (0–4) of the first line; further lines take the next slots. */
+  color: number;
+  /** Kept in the legend but not drawn. */
+  hidden?: boolean;
+}
+
+/** Price axis of the main pane. */
+export type PriceScaleKind = "normal" | "log" | "percent";
 
 /** Bar size of a series; decides axis/legend date formats. */
 export type IntervalKind = "intraday" | "daily" | "weekly" | "monthly";
@@ -46,4 +82,27 @@ export interface ChartView {
   to: number;
   /** True while the view is the untouched default window of the period. */
   isDefault: boolean;
+}
+
+/** A symbol drawn next to the main series as % return (comparison mode). */
+export interface CompareSeries {
+  symbol: string;
+  label: string;
+  series: ChartSeries;
+  /** Categorical palette slot (0–4). */
+  color: number;
+}
+
+/** Corporate / disclosure event pinned to the time axis. */
+export type ChartEventKind = "dividend" | "earnings" | "capital" | "disclosure";
+
+export interface ChartEvent {
+  id: string;
+  kind: ChartEventKind;
+  /** Epoch ms of the event (ex-date, publication time...). */
+  time: number;
+  title: string;
+  /** Second line of the tooltip (amount, summary). */
+  detail: string | null;
+  url: string | null;
 }

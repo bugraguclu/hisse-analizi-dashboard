@@ -1,11 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { X } from "lucide-react";
 import { formatChangePercent, formatCompact, formatSigned, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useChartI18n, type ChartKey } from "./i18n";
+import { IndicatorSettingsPopover } from "./IndicatorSettings";
+import { lineCss, localize, toneCss, type IndicatorView } from "./indicator-view";
 import { barLabelStyle, formatBarTime } from "./time";
-import type { ChartBar, ChartSeries, OverlayKey } from "./types";
+import type { ChartBar, ChartSeries, IndicatorConfig } from "./types";
 
 /** Short coloured stroke that keys a value to its line on the canvas. */
 export function LineKey({ color, dashed = false, className }: { color: string; dashed?: boolean; className?: string }) {
@@ -27,24 +30,114 @@ function Item({ label, value, className }: { label: ReactNode; value: ReactNode;
   );
 }
 
-export interface LegendOverlayValue {
-  key: OverlayKey | "bbUpper" | "bbLower";
-  label: string;
-  color: string;
-  dashed?: boolean;
-  value: number | null;
-}
-
-export interface LegendCompare {
-  label: string;
-  color: string;
-  mainPercent: number | null;
-  comparePercent: number | null;
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="inline-flex h-4 w-4 items-center justify-center self-center rounded-sm text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover:opacity-100 pointer-coarse:opacity-100"
+    >
+      <X className="h-3 w-3" />
+    </button>
+  );
 }
 
 /**
- * One-line OHLC readout above the canvas (TradingView-style legend): follows the
- * crosshair, falls back to the latest bar. Values lead, labels are muted.
+ * Legend entry of one indicator instance: its label opens the settings
+ * (parameters, colour, hide, remove), values follow the crosshair, and a quiet
+ * × removes it — TradingView's legend row, in the kit's type scale.
+ */
+export function IndicatorLegendItem({
+  view,
+  index,
+  onChange,
+  onRemove,
+}: {
+  view: IndicatorView;
+  index: number;
+  onChange?: (next: IndicatorConfig) => void;
+  onRemove?: () => void;
+}) {
+  const { t, locale } = useChartI18n();
+  const { output, config } = view;
+  const firstLine = view.def.placement === "overlay" ? output?.lines[0] : undefined;
+  const values: ReactNode[] = [];
+  if (output) {
+    const lines = output.lines.filter((line) => line.values[index] !== null && line.values[index] !== undefined);
+    const multi = output.lines.length > 1;
+    for (const line of lines.length > 0 ? lines : output.lines.slice(0, 1)) {
+      const value = line.values[index];
+      const tone = line.tones?.[index] ?? null;
+      const color = tone ? toneCss(tone) : lineCss(config, line);
+      values.push(
+        <span key={line.key} className="inline-flex items-baseline gap-1">
+          {multi ? <LineKey color={color} dashed={line.style === "dashed"} className="w-2" /> : null}
+          <span className="font-medium text-foreground" title={localize(line.label, locale) ?? undefined}>
+            {value === null || value === undefined ? "—" : view.format(value)}
+          </span>
+        </span>,
+      );
+    }
+    const histogram = output.histogram?.values[index];
+    if (output.histogram && histogram !== null && histogram !== undefined) {
+      values.push(
+        <span key="hist" className={cn("font-medium", TREND_TEXT_CLASS[trendTone(histogram)])}>
+          {view.format(histogram)}
+        </span>,
+      );
+    }
+  }
+  const note =
+    view.status === "hidden"
+      ? t("ind.hidden")
+      : view.status === "needsIntraday"
+        ? t("ind.needsIntraday")
+        : view.status === "needsVolume"
+          ? t("ind.needsVolume")
+          : view.status === "suspended"
+            ? t("ind.suspended")
+            : null;
+  const keyColor = firstLine ? lineCss(config, firstLine) : lineCss(config, { colorOffset: 0 });
+  const label = (
+    <>
+      {view.def.placement === "overlay" ? <LineKey color={keyColor} dashed={firstLine?.style === "dashed"} /> : null}
+      <span className={cn("text-muted-foreground", view.status !== "ok" && "line-through decoration-muted-foreground/50")}>{view.label}</span>
+    </>
+  );
+  return (
+    <span className={cn("group inline-flex items-baseline gap-1.5 whitespace-nowrap", view.status !== "ok" && "opacity-70")}>
+      {onChange && onRemove ? (
+        <IndicatorSettingsPopover view={view} onChange={onChange} onRemove={onRemove}>
+          {label}
+        </IndicatorSettingsPopover>
+      ) : (
+        <span className="inline-flex items-baseline gap-1">{label}</span>
+      )}
+      {note ? <span className="text-[10px] text-muted-foreground" title={note}>{view.status === "hidden" ? note : "—"}</span> : values}
+      {onRemove ? <RemoveButton label={t("ind.removeNamed", { name: view.label })} onClick={onRemove} /> : null}
+    </span>
+  );
+}
+
+export interface LegendCompareItem {
+  symbol: string;
+  label: string;
+  color: string;
+  percent: number | null;
+}
+
+export interface LegendCompare {
+  mainPercent: number | null;
+  items: LegendCompareItem[];
+  onRemove?: (symbol: string) => void;
+}
+
+/**
+ * OHLC readout above the canvas (TradingView-style legend): follows the
+ * crosshair, falls back to the latest bar. Values lead, labels are muted. The
+ * second row keys comparison symbols and price overlays to their lines.
  */
 export function ChartLegend({
   series,
@@ -55,6 +148,8 @@ export function ChartLegend({
   showOhlc,
   showVolume,
   overlays,
+  onIndicatorChange,
+  onIndicatorRemove,
   baseline,
   compare,
   hovering,
@@ -66,7 +161,9 @@ export function ChartLegend({
   format: (value: number) => string;
   showOhlc: boolean;
   showVolume: boolean;
-  overlays: LegendOverlayValue[];
+  overlays: readonly IndicatorView[];
+  onIndicatorChange?: (next: IndicatorConfig) => void;
+  onIndicatorRemove?: (id: string) => void;
   baseline: { label: string; price: number } | null;
   compare: LegendCompare | null;
   hovering: boolean;
@@ -86,8 +183,8 @@ export function ChartLegend({
   ];
 
   return (
-    <div className="min-h-9 space-y-0.5 font-mono text-[11px] leading-4 tabular-nums" aria-hidden>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+    <div className="min-h-9 space-y-0.5 font-mono text-[11px] leading-4 tabular-nums">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5" aria-hidden>
         <span className={cn("whitespace-nowrap font-sans font-semibold", hovering ? "text-foreground" : "text-muted-foreground")}>
           {formatBarTime(bar.time, barLabelStyle(series.interval))}
         </span>
@@ -114,24 +211,29 @@ export function ChartLegend({
                 <span className="text-muted-foreground">{symbol}</span>
                 <span className={cn("font-medium", TREND_TEXT_CLASS[trendTone(compare.mainPercent)])}>{formatChangePercent(compare.mainPercent)}</span>
               </span>
-              <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                <LineKey color={compare.color} />
-                <span className="text-muted-foreground">{compare.label}</span>
-                <span className={cn("font-medium", TREND_TEXT_CLASS[trendTone(compare.comparePercent)])}>
-                  {formatChangePercent(compare.comparePercent)}
+              {compare.items.map((item) => (
+                <span key={item.symbol} className="group inline-flex items-baseline gap-1 whitespace-nowrap">
+                  <LineKey color={item.color} />
+                  <span className="text-muted-foreground">{item.label}</span>
+                  <span className={cn("font-medium", TREND_TEXT_CLASS[trendTone(item.percent)])}>{formatChangePercent(item.percent)}</span>
+                  {compare.onRemove ? (
+                    <RemoveButton label={t("compare.remove", { symbol: item.label })} onClick={() => compare.onRemove?.(item.symbol)} />
+                  ) : null}
                 </span>
-              </span>
+              ))}
             </>
           ) : null}
-          {overlays.map((overlay) => (
-            <span key={overlay.key} className="inline-flex items-baseline gap-1 whitespace-nowrap">
-              <LineKey color={overlay.color} dashed={overlay.dashed} />
-              <span className="text-muted-foreground">{overlay.label}</span>
-              <span className="font-medium text-foreground">{overlay.value === null ? "—" : format(overlay.value)}</span>
-            </span>
+          {overlays.map((view) => (
+            <IndicatorLegendItem
+              key={view.config.id}
+              view={view}
+              index={index}
+              onChange={onIndicatorChange}
+              onRemove={onIndicatorRemove ? () => onIndicatorRemove(view.config.id) : undefined}
+            />
           ))}
-          {baseline ? (
-            <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+          {baseline && !compare ? (
+            <span className="inline-flex items-baseline gap-1 whitespace-nowrap" aria-hidden>
               <LineKey color="var(--muted-foreground)" dashed />
               <span className="text-muted-foreground">{baseline.label}</span>
               <span className="font-medium text-foreground">{format(baseline.price)}</span>

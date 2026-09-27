@@ -53,10 +53,21 @@ const PERIOD_DESCRIPTION: Record<ChartPeriod, TranslationKey> = {
   max: "index.allTime",
 };
 
-const INDEX_DEFAULTS: ChartPrefs = { type: "area", volume: false, overlays: [], panes: [] };
-/** The home card stays compact; full screen brings every indicator along. */
-const CARD_FEATURES = { volume: false, overlays: false, panes: false, compare: false };
-const FULLSCREEN_FEATURES = { volume: true, overlays: true, panes: true, compare: false };
+const INDEX_DEFAULTS: ChartPrefs = {
+  type: "area",
+  volume: false,
+  indicators: [],
+  scale: "normal",
+  events: false,
+  extremes: true,
+  watermark: true,
+  grid: true,
+  magnet: true,
+  drawingsHidden: false,
+};
+/** The home card stays compact; full screen brings indicators, comparison and drawings along. */
+const CARD_FEATURES = { indicators: false, compare: false, drawings: false, events: false };
+const FULLSCREEN_FEATURES = { indicators: true, compare: true, drawings: true, events: false };
 
 type LiveQuote = Pick<IndexQuote, "last" | "change" | "change_percent" | "open" | "high" | "low" | "prev_close" | "timestamp">;
 
@@ -80,7 +91,7 @@ export function IndexChartCard({ className }: { className?: string }) {
   const { t: tc } = useChartI18n();
   const [period, setPeriod] = useState<ChartPeriod>("1d");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [prefs, setPrefs] = useChartPrefs("hisse.chart.index.v1", INDEX_DEFAULTS);
+  const [prefs, setPrefs] = useChartPrefs("hisse.chart.index.v2", INDEX_DEFAULTS);
   const historyQ = useChartHistory("index", SYMBOL, period);
   const prefetchPeriods = usePrefetchChartPeriods("index", SYMBOL);
   const quotesQ = useIndexQuotes();
@@ -195,6 +206,8 @@ export function IndexChartCard({ className }: { className?: string }) {
         <ChartWorkspace
           title="BIST 100"
           symbol={SYMBOL}
+          name="BIST 100"
+          kind="index"
           ariaLabel={ariaLabel}
           series={series}
           status={{
@@ -209,6 +222,7 @@ export function IndexChartCard({ className }: { className?: string }) {
           onPeriodChange={setPeriod}
           prefs={prefs}
           onPrefsChange={setPrefs}
+          defaults={INDEX_DEFAULTS}
           features={CARD_FEATURES}
           fullscreenFeatures={FULLSCREEN_FEATURES}
           baseline={baseline}
@@ -216,6 +230,15 @@ export function IndexChartCard({ className }: { className?: string }) {
           padToSessionEnd={live}
           height={240}
           onHoverChange={setHoverIndex}
+          headline={
+            level !== null ? (
+              <span className="inline-flex items-baseline gap-2 font-mono tabular-nums">
+                <span className="text-[15px] font-semibold text-foreground">{formatNumber(level)}</span>
+                <ChangeLine change={headerChange} percent={headerPercent} />
+                {live && !hovered ? <LiveBadge label={tc("chart.live")} /> : null}
+              </span>
+            ) : null
+          }
           emptyMessage={t("dashboard.chartNoData")}
           errorMessage={t("chart.loadError")}
           downloadName={`BIST100-${shownPeriod}`}

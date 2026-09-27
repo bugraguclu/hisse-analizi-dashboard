@@ -2,6 +2,19 @@
 
 ## Yayımlanmamış
 
+### Fiyat grafiği: profesyonel araç seti
+
+Hisse ve BIST 100 grafikleri TradingView ayarında bir çalışma alanına dönüştü (`dashboard/src/components/charts/`).
+
+- **Tam ekran:** tarayıcının gerçek tam ekranı (Fullscreen API; iPhone Safari'de sayfa içi katman). Sembol, anlık fiyat ve dönem seçici üstte, çizim araçları solda, piyasa durumu ve İstanbul saati altta. Kartta yazılı "Tam ekran" düğmesi ve `F` tuşu; Esc ile çıkılır.
+- **Grafik tipleri:** alan (veriye göre solan dolgu), çizgi, taban çizgisi, mum, içi boş mum, Heikin Ashi, çubuk (OHLC).
+- **Göstergeler:** aranabilir menü (`/`), 17 gösterge, her birinden birden çok örnek: SMA, EMA, Bollinger (bant dolgulu), VWAP, Supertrend, Parabolik SAR, RSI, MACD, Stokastik, Stokastik RSI, CCI, Williams %R, DMI/ADX, ATR, OBV, MFI, ROC. Parametre, renk, gizle ve kaldır lejanttan açılır. Formüller TradingView tanımları; THYAO'da TradingView/arka uç değerleriyle birebir doğrulandı.
+- **Çizim araçları:** trend, ışın, yatay/dikey çizgi, dikdörtgen, Fibonacci, ölçüm; mıknatıs, sürükleyerek düzenleme, renk/kesikli, silme, geri alma (⌘/Ctrl+Z). Hisse başına tarayıcıda saklanır.
+- **Karşılaştırma:** 8 BIST endeksi ya da herhangi bir hisseyle, en çok 4 sembol, yüzde getiri olarak.
+- **Olaylar:** temettü, finansal rapor, sermaye artırımı ve önemli KAP bildirimleri zaman ekseninde rozet; üzerine gelince ayrıntı, tıklayınca KAP bağlantısı.
+- **Diğer:** log ve yüzde ölçek (Alt+L / Alt+P), sembol filigranı, başlık ve gösterge etiketli PNG indirme / panoya kopyalama (Alt+S), sağ tık menüsü (görünümü sıfırla, bu fiyata yatay çizgi ekle), kısayol penceresi (`?`), ayarlar menüsü, 5G grafikte seans ayraçları, "son bara git" düğmesi.
+- Tercihler `hisse.chart.*.v2` anahtarlarında; eski gösterge seçimleri otomatik taşınır.
+
 ### Veri altyapısı: depo öncelikli veri platformu (data-infra)
 
 Veri altyapısı baştan kuruldu: her veri kümesi kanonik biçimde, köken bilgisiyle PostgreSQL'de saklanır ve

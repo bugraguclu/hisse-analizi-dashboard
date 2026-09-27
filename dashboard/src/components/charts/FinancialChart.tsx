@@ -15,9 +15,7 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
   type Ref,
 } from "react";
 import type {
@@ -27,6 +25,8 @@ import type {
   IChartApi,
   ISeriesApi,
   ISeriesMarkersPluginApi,
+  ISeriesPrimitive,
+  ITextWatermarkPluginApi,
   Logical,
   MouseEventParams,
   SeriesMarker,
@@ -34,27 +34,37 @@ import type {
   Time,
   UTCTimestamp,
 } from "lightweight-charts";
+import { Menu } from "@base-ui/react/menu";
+import { ChevronsRight, Copy, Download, ExternalLink, Minus, RotateCcw, X } from "lucide-react";
 import { useMotionAllowed } from "@/hooks/use-motion-allowed";
-import { formatChangePercent, formatNumber, formatSigned, getIntlLocale, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
-import type { Locale } from "@/lib/i18n";
+import { formatChangePercent, formatNumber, formatSigned, getIntlLocale, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { ChartLegend, type LegendCompare, type LegendOverlayValue } from "./ChartLegend";
+import { ChartLegend, IndicatorLegendItem, type LegendCompare } from "./ChartLegend";
 import { observeTheme, readChartPalette, rgba, SERIES_CSS_VAR, type ChartPalette, type Rgb } from "./colors";
-import { formatChartPrice, formatSpan, formatTicks, priceDecimals } from "./format";
+import { CheckMark, MENU_ITEM_CLASS, POPUP_CLASS } from "./controls";
+import { formatChartPrice, formatTicks } from "./format";
 import { useChartI18n, type ChartKey } from "./i18n";
-import {
-  bollinger,
-  macd as macdSeries,
-  rsi as rsiSeries,
-  sma,
-  stochastic as stochasticSeries,
-  type BollingerBands,
-  type IndicatorSeries,
-  type MacdSeries,
-  type StochasticSeries,
-} from "./indicators";
+import { buildIndicatorInput } from "./indicator-catalog";
+import { buildIndicatorView, lineRgb, toneRgb, type IndicatorView } from "./indicator-view";
+import { describeMeasure, measureGeometry, MeasureOverlay, type MeasureGeometry, type MeasureState } from "./measure";
+import { BandFillPrimitive, EventBadgesPrimitive, SessionBreaksPrimitive, type EventBadge } from "./primitives";
+import { composeSnapshot, type SnapshotHeader, type SnapshotLabel } from "./snapshot";
 import { barLabelStyle, formatBarTime, formatWallTime, SESSION_END_MINUTES, tickLabel, toChartTime, wallMinutes } from "./time";
-import type { ChartBar, ChartSeries, ChartType, ChartView, OverlayKey, PaneKey } from "./types";
+import type {
+  ChartBar,
+  ChartEvent,
+  ChartEventKind,
+  ChartSeries,
+  ChartType,
+  ChartView,
+  CompareSeries,
+  IndicatorConfig,
+  PriceScaleKind,
+} from "./types";
+import { newDrawingId, useDrawingLayer } from "./drawings";
+import { DEFAULT_COLOR } from "./drawings/model";
+import type { Drawing, DrawingTool } from "./drawings/types";
+import { isApplePlatform, useCoarsePointer } from "./use-coarse-pointer";
 
 type Lib = typeof import("lightweight-charts");
 type AnySeries = ISeriesApi<SeriesType>;
@@ -68,18 +78,26 @@ export interface FinancialChartHandle {
   zoomIn(): void;
   zoomOut(): void;
   reset(): void;
-  download(filename: string): void;
+  scrollToLatest(): void;
+  /** Framed PNG (header, chart, attribution); null before the chart is drawn. */
+  snapshot(): Promise<Blob | null>;
   focus(): void;
+  /** Undo the last drawing change of this page view. */
+  undoDrawing(): void;
+  /** Remove every drawing (undoable). */
+  clearDrawings(): void;
 }
 
 export interface FinancialChartProps {
   series: ChartSeries;
   type: ChartType;
-  overlays?: readonly OverlayKey[];
-  panes?: readonly PaneKey[];
+  indicators?: readonly IndicatorConfig[];
+  /** Legend actions (settings, hide, remove); omit for a read-only legend. */
+  onIndicatorsChange?: (next: IndicatorConfig[]) => void;
   volume?: boolean;
-  /** Benchmark drawn with the main series as % return from the first visible bar. */
-  compare?: { label: string; series: ChartSeries } | null;
+  /** Symbols drawn with the main series as % return from the first visible bar. */
+  compare?: readonly CompareSeries[];
+  onCompareRemove?: (symbol: string) => void;
   /** Dashed reference line (previous close / period start) with its axis label. */
   baseline?: { price: number; label: string } | null;
   /** Colour of the area/line series; defaults to the window's direction. */
@@ -94,77 +112,85 @@ export interface FinancialChartProps {
   live?: boolean;
   /** Label the high/low of the visible range. */
   extremes?: boolean;
-  measureMode?: boolean;
-  onMeasureModeChange?: (on: boolean) => void;
+  scale?: PriceScaleKind;
+  onScaleChange?: (scale: PriceScaleKind) => void;
+  /** Faint symbol text behind the series. */
+  watermark?: { title: string; subtitle?: string } | null;
+  grid?: boolean;
+  /** Dividends, reports and disclosures as badges along the time axis. */
+  events?: readonly ChartEvent[];
+  tool?: DrawingTool;
+  onToolChange?: (tool: DrawingTool) => void;
+  /** Trend lines, levels, Fibonacci… of this symbol (drawings/store). */
+  drawings?: readonly Drawing[];
+  onDrawingsChange?: (next: Drawing[]) => void;
+  drawingsVisible?: boolean;
+  /** Drawing points snap to open/high/low/close. */
+  magnet?: boolean;
+  /** Whether `undoDrawing()` has anything to undo (for a toolbar button). */
+  onUndoStateChange?: (canUndo: boolean) => void;
   onHoverChange?: (index: number | null) => void;
   onViewChange?: (view: ChartView) => void;
   /** "modifier": vertical wheel scrolls the page, Ctrl/⌘ + wheel zooms; "always": wheel zooms. */
   wheelZoom?: "modifier" | "always";
   ariaLabel: string;
   symbol: string;
+  /** Title/subtitle of the PNG snapshot header. */
+  snapshotTitle?: { title: string; subtitle: string };
+  /** Context-menu snapshot actions (the workspace owns file names and toasts). */
+  onSnapshot?: (action: "download" | "copy") => void;
   /** Must be stable (module-level or memoized): changing it rebuilds the chart. */
   valueFormatter?: (value: number) => string;
   handleRef?: Ref<FinancialChartHandle>;
   className?: string;
 }
 
-interface MeasureState {
-  start: number;
-  end: number;
-  dragging: boolean;
-}
-
-interface MeasureGeometry {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+interface AxisBox {
+  priceWidth: number;
+  timeHeight: number;
   plotWidth: number;
-  plotHeight: number;
 }
 
-interface IndicatorData {
-  ma20?: IndicatorSeries;
-  ma50?: IndicatorSeries;
-  ma200?: IndicatorSeries;
-  bb?: BollingerBands;
-  rsi?: IndicatorSeries;
-  macd?: MacdSeries;
-  stoch?: StochasticSeries;
+interface ContextMenuState {
+  x: number;
+  y: number;
+  /** Price and bar under the pointer (main pane only), for "add horizontal line". */
+  price: number | null;
+  time: number | null;
 }
 
-const OVERLAY_ORDER: readonly OverlayKey[] = ["ma20", "ma50", "ma200", "bb"];
-const PANE_ORDER: readonly PaneKey[] = ["rsi", "macd", "stoch"];
-/** Fixed categorical slot per overlay (never cycled): chart-1 ink blue, 2 ochre, 3 plum, 4 teal. */
-const OVERLAY_SLOT: Record<OverlayKey, number> = { ma20: 0, ma50: 1, ma200: 2, bb: 3 };
-const OVERLAY_LABEL: Record<OverlayKey, ChartKey> = { ma20: "ind.ma20", ma50: "ind.ma50", ma200: "ind.ma200", bb: "ind.bb" };
-/** The benchmark uses slot 1; overlays are off while comparing, so it never collides. */
-const COMPARE_SLOT = 0;
+interface EventTip {
+  id: string;
+  x: number;
+  y: number;
+  pinned: boolean;
+}
+
+const CANDLE_TYPES: ReadonlySet<ChartType> = new Set(["candles", "hollow", "heikin", "bars"]);
 const ZOOM_STEP = 0.7;
 /** Canvas text size (price/time axes, marker labels), in px. */
 const CHART_FONT_SIZE = 11;
 /** Widest bar spacing, in px: short periods on wide plots show extra bars instead of fat ones. */
 const MAX_BAR_SPACING = 48;
+const NO_DRAWINGS: readonly Drawing[] = [];
+const ignoreDrawings = () => {};
+
+const EVENT_SLOT: Record<ChartEventKind, number | null> = { earnings: 0, dividend: 1, capital: 2, disclosure: null };
+const EVENT_LABEL: Record<ChartEventKind, ChartKey> = {
+  dividend: "event.dividend",
+  earnings: "event.earnings",
+  capital: "event.capital",
+  disclosure: "event.disclosure",
+};
+const EVENT_LETTER: Record<ChartEventKind, ChartKey> = {
+  dividend: "event.letter.dividend",
+  earnings: "event.letter.earnings",
+  capital: "event.letter.capital",
+  disclosure: "event.letter.disclosure",
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
-}
-
-function computeIndicators(bars: readonly ChartBar[], overlays: readonly OverlayKey[], panes: readonly PaneKey[]): IndicatorData {
-  const closes = bars.map((bar) => bar.close);
-  const data: IndicatorData = {};
-  if (overlays.includes("ma20")) data.ma20 = sma(closes, 20);
-  if (overlays.includes("ma50")) data.ma50 = sma(closes, 50);
-  if (overlays.includes("ma200")) data.ma200 = sma(closes, 200);
-  if (overlays.includes("bb")) data.bb = bollinger(closes, 20, 2);
-  if (panes.includes("rsi")) data.rsi = rsiSeries(closes, 14);
-  if (panes.includes("macd")) data.macd = macdSeries(closes, 12, 26, 9);
-  if (panes.includes("stoch")) {
-    const highs = bars.map((bar) => bar.high ?? bar.close);
-    const lows = bars.map((bar) => bar.low ?? bar.close);
-    data.stoch = stochasticSeries(highs, lows, closes, 14, 3, 3);
-  }
-  return data;
 }
 
 function barIsUp(bars: readonly ChartBar[], index: number): boolean {
@@ -172,10 +198,6 @@ function barIsUp(bars: readonly ChartBar[], index: number): boolean {
   if (bar.open !== null && bar.open !== bar.close) return bar.close > bar.open;
   const previous = bars[index - 1];
   return !previous || bar.close >= previous.close;
-}
-
-function lineData(times: readonly UTCTimestamp[], values: IndicatorSeries) {
-  return values.map((value, i) => (value === null ? { time: times[i] } : { time: times[i], value }));
 }
 
 /** Empty 15/30-minute slots from the last bar up to 18:00, so 1D shows the whole session. */
@@ -207,9 +229,42 @@ function barAtOrBefore(bars: readonly ChartBar[], time: number): number {
   return found;
 }
 
-function formatIndicator(value: number | null | undefined, decimals?: number): string {
-  if (value === null || value === undefined) return "—";
-  return formatNumber(value, decimals ?? priceDecimals(value));
+/**
+ * Bar an event badge sits on: the bar whose session contains it. A date-only
+ * event (dividend: Istanbul midnight) on intraday bars belongs to that day's
+ * first bar, not to the previous evening's last one.
+ */
+function eventBarIndex(bars: readonly ChartBar[], time: number, interval: ChartSeries["interval"]): number {
+  const index = barAtOrBefore(bars, time);
+  if (interval !== "intraday" || wallMinutes(toChartTime(time)) !== 0) return index;
+  const next = index + 1;
+  if (next >= bars.length) return -1;
+  const day = (ms: number) => Math.floor(toChartTime(ms) / 86_400);
+  return day(bars[next].time) === day(time) ? next : -1;
+}
+
+/** OHLC of a bar with the feed's gaps filled (open = previous close, high/low = body). */
+function ohlcOf(bars: readonly ChartBar[], i: number) {
+  const bar = bars[i];
+  const open = bar.open ?? (i > 0 ? bars[i - 1].close : bar.close);
+  return {
+    open,
+    high: bar.high ?? Math.max(open, bar.close),
+    low: bar.low ?? Math.min(open, bar.close),
+    close: bar.close,
+  };
+}
+
+/** Heikin Ashi candles: averaged bodies that smooth noise out of a trend. */
+function heikinAshi(bars: readonly ChartBar[]) {
+  const out: Array<{ open: number; high: number; low: number; close: number }> = [];
+  for (let i = 0; i < bars.length; i += 1) {
+    const { open, high, low, close } = ohlcOf(bars, i);
+    const haClose = (open + high + low + close) / 4;
+    const haOpen = i === 0 ? (open + close) / 2 : (out[i - 1].open + out[i - 1].close) / 2;
+    out.push({ open: haOpen, high: Math.max(high, haOpen, haClose), low: Math.min(low, haOpen, haClose), close: haClose });
+  }
+  return out;
 }
 
 function chartOptions(
@@ -218,6 +273,8 @@ function chartOptions(
   series: ChartSeries,
   format: (value: number) => string,
   padded: boolean,
+  type: ChartType,
+  grid: boolean,
 ): DeepPartial<ChartOptions> {
   const muted = rgba(palette.muted);
   const firstWindowBar = series.windowStart > 0 ? series.bars[series.windowStart] : undefined;
@@ -234,7 +291,7 @@ function chartOptions(
     },
     grid: {
       vertLines: { visible: false },
-      horzLines: { color: rgba(palette.grid), style: lib.LineStyle.Solid },
+      horzLines: { visible: grid, color: rgba(palette.grid), style: lib.LineStyle.Solid },
     },
     rightPriceScale: { borderVisible: false, entireTextOnly: true, minimumWidth: 64 },
     leftPriceScale: { visible: false },
@@ -261,7 +318,8 @@ function chartOptions(
       },
     },
     crosshair: {
-      mode: lib.CrosshairMode.Magnet,
+      // Candles snap to the nearest of open/high/low/close, lines to the close (TradingView's magnet).
+      mode: CANDLE_TYPES.has(type) ? lib.CrosshairMode.MagnetOHLC : lib.CrosshairMode.Magnet,
       vertLine: { color: rgba(palette.muted, 0.6), width: 1, style: lib.LineStyle.Dashed, labelBackgroundColor: rgba(palette.foreground) },
       horzLine: { color: rgba(palette.muted, 0.6), width: 1, style: lib.LineStyle.Dashed, labelBackgroundColor: rgba(palette.foreground) },
     },
@@ -324,8 +382,9 @@ function extremeMarkers(
   place: (index: number, label: string) => string,
 ): SeriesMarker<Time>[] {
   if (to - from < 3) return [];
-  const high = (i: number) => (type === "candles" ? (bars[i].high ?? bars[i].close) : bars[i].close);
-  const low = (i: number) => (type === "candles" ? (bars[i].low ?? bars[i].close) : bars[i].close);
+  const wicks = CANDLE_TYPES.has(type);
+  const high = (i: number) => (wicks ? (bars[i].high ?? bars[i].close) : bars[i].close);
+  const low = (i: number) => (wicks ? (bars[i].low ?? bars[i].close) : bars[i].close);
   let hi = from;
   let lo = from;
   for (let i = from; i <= to; i += 1) {
@@ -340,18 +399,24 @@ function extremeMarkers(
   return markers.sort((a, b) => Number(a.time) - Number(b.time));
 }
 
+function lineStyleOf(lib: Lib, style: "solid" | "dashed" | "dotted" | undefined) {
+  return style === "dashed" ? lib.LineStyle.Dashed : style === "dotted" ? lib.LineStyle.Dotted : lib.LineStyle.Solid;
+}
+
 /**
- * Candlestick / line / area chart with volume, SMA and Bollinger overlays,
- * RSI / MACD / stochastic panes, benchmark comparison, a crosshair legend,
- * wheel/pinch zoom, drag pan, drag-to-measure and keyboard navigation.
+ * Price/index chart in seven styles with volume, any number of configurable
+ * indicators (overlays and panes), multi-symbol comparison, event badges, a
+ * crosshair legend, log/percent scales, wheel/pinch zoom, drag pan,
+ * drag-to-measure, keyboard navigation and PNG snapshots.
  */
 export function FinancialChart({
   series,
   type,
-  overlays = [],
-  panes = [],
+  indicators = [],
+  onIndicatorsChange,
   volume = false,
-  compare = null,
+  compare = [],
+  onCompareRemove,
   baseline = null,
   tone,
   height,
@@ -359,13 +424,25 @@ export function FinancialChart({
   padToSessionEnd = false,
   live = false,
   extremes = true,
-  measureMode = false,
-  onMeasureModeChange,
+  scale = "normal",
+  onScaleChange,
+  watermark = null,
+  grid = true,
+  events = [],
+  tool = "cursor",
+  onToolChange,
+  drawings = NO_DRAWINGS,
+  onDrawingsChange,
+  drawingsVisible = true,
+  magnet = true,
+  onUndoStateChange,
   onHoverChange,
   onViewChange,
   wheelZoom = "modifier",
   ariaLabel,
   symbol,
+  snapshotTitle,
+  onSnapshot,
   valueFormatter = formatChartPrice,
   handleRef,
   className,
@@ -376,7 +453,10 @@ export function FinancialChart({
   const plotRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef(new Map<string, AnySeries>());
+  const primitivesRef = useRef<Array<{ series: AnySeries; primitive: ISeriesPrimitive<Time> }>>([]);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const eventsRef = useRef<EventBadgesPrimitive | null>(null);
+  const watermarkRef = useRef<ITextWatermarkPluginApi<Time> | null>(null);
   const paletteRef = useRef<ChartPalette | null>(null);
   const defaultRangeRef = useRef<{ from: number; to: number } | null>(null);
   const shownKeyRef = useRef<string | null>(null);
@@ -385,6 +465,9 @@ export function FinancialChart({
   const announceTimerRef = useRef<number | undefined>(undefined);
 
   const [engine, setEngine] = useState<Engine | null>(null);
+  // The main series and palette of the latest rebuild, for layers that draw with them (drawings).
+  const [mainSeries, setMainSeries] = useState<AnySeries | null>(null);
+  const [chartPalette, setChartPalette] = useState<ChartPalette | null>(null);
   const [themeVersion, setThemeVersion] = useState(0);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [view, setView] = useState<ChartView | null>(null);
@@ -392,27 +475,38 @@ export function FinancialChart({
   const [measure, setMeasure] = useState<MeasureState | null>(null);
   const [geometry, setGeometry] = useState<MeasureGeometry | null>(null);
   const [gestureHint, setGestureHint] = useState(false);
+  const [axisBox, setAxisBox] = useState<AxisBox | null>(null);
+  const [scrolledBack, setScrolledBack] = useState(false);
+  const [manualScale, setManualScale] = useState(false);
+  const [eventTip, setEventTip] = useState<EventTip | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const coarsePointer = useCoarsePointer();
   const [announcement, setAnnouncement] = useState("");
 
   const bars = series.bars;
-  const compareSeries = compare && compare.series.bars.length > 0 ? compare.series : null;
-  const compareLabel = compare?.label ?? "";
-  const compareActive = compareSeries !== null;
+  const compareList = useMemo(() => compare.filter((item) => item.series.bars.length > 0), [compare]);
+  const compareActive = compareList.length > 0;
+  const percentScale = compareActive || scale === "percent";
   const baselinePrice = baseline && !compareActive ? baseline.price : null;
-  // String keys keep derived arrays stable when parents pass fresh array literals.
-  const overlaysKey = compareActive ? "" : OVERLAY_ORDER.filter((key) => overlays.includes(key)).join(",");
-  const panesKey = PANE_ORDER.filter((key) => panes.includes(key)).join(",");
-  const activeOverlays = useMemo(() => (overlaysKey ? (overlaysKey.split(",") as OverlayKey[]) : []), [overlaysKey]);
-  const activePanes = useMemo(() => (panesKey ? (panesKey.split(",") as PaneKey[]) : []), [panesKey]);
   const times = useMemo(() => bars.map((bar) => toChartTime(bar.time)), [bars]);
-  const indicators = useMemo(() => computeIndicators(bars, activeOverlays, activePanes), [bars, activeOverlays, activePanes]);
-  const macdDecimals = useMemo(() => {
-    let peak = 0;
-    for (const value of indicators.macd?.macd ?? []) if (value !== null) peak = Math.max(peak, Math.abs(value));
-    return peak > 0 ? priceDecimals(peak) : 2;
-  }, [indicators]);
   const padTimes = useMemo(() => (padToSessionEnd ? sessionPadTimes(series, times) : []), [padToSessionEnd, series, times]);
+  const hasVolume = useMemo(() => bars.some((bar) => bar.volume !== null && bar.volume > 0), [bars]);
+  const indicatorInput = useMemo(() => buildIndicatorInput(bars, series.interval), [bars, series.interval]);
+  // A string key keeps the computed views stable when parents pass fresh arrays with the same content.
+  const indicatorsKey = JSON.stringify(indicators);
+  const indicatorViews = useMemo<IndicatorView[]>(
+    () =>
+      (JSON.parse(indicatorsKey) as IndicatorConfig[]).map((config) =>
+        buildIndicatorView(config, { input: indicatorInput, hasVolume, overlaysSuspended: percentScale, priceFormat: valueFormatter }),
+      ),
+    [indicatorsKey, indicatorInput, hasVolume, percentScale, valueFormatter],
+  );
+  const drawnPanes = useMemo(() => indicatorViews.filter((item) => item.def.placement === "pane" && item.status === "ok"), [indicatorViews]);
+  const legendRow = useMemo(
+    () => indicatorViews.filter((item) => item.def.placement === "overlay" || item.status !== "ok"),
+    [indicatorViews],
+  );
+  const eventsKey = events.map((event) => event.id).join("|");
 
   const windowBase =
     series.referenceClose ?? (series.windowStart > 0 ? bars[series.windowStart - 1]?.close : bars[series.windowStart]?.close) ?? null;
@@ -446,6 +540,9 @@ export function FinancialChart({
       cancelAnimationFrame(zoomFrameRef.current);
       window.clearTimeout(announceTimerRef.current);
       markersRef.current = null;
+      eventsRef.current = null;
+      watermarkRef.current = null;
+      primitivesRef.current = [];
       registry.clear();
       chart?.remove();
     };
@@ -453,8 +550,13 @@ export function FinancialChart({
 
   const shouldAnimate = useEffectEvent(() => motionAllowed);
 
+  const publishBuild = useEffectEvent((main: AnySeries | null, palette: ChartPalette) => {
+    setMainSeries(main);
+    setChartPalette(palette);
+  });
+
   const refreshMeasureGeometry = useEffectEvent(() => {
-    setGeometry(engine && measure ? measureGeometry(engine, seriesRef.current.get("main"), measure, bars) : null);
+    setGeometry(engine && measure ? measureGeometry(engine.chart, seriesRef.current.get("main"), measure, bars) : null);
   });
 
   const refreshPaneTops = useEffectEvent(() => {
@@ -470,6 +572,19 @@ export function FinancialChart({
       });
     setPaneTops((previous) =>
       previous.length === tops.length && previous.every((top, i) => Math.abs(top - tops[i]) < 0.5) ? previous : tops,
+    );
+  });
+
+  const refreshScaleState = useEffectEvent(() => {
+    if (!engine) return;
+    const priceScale = engine.chart.priceScale("right");
+    setManualScale(priceScale.options().autoScale === false);
+    const timeScale = engine.chart.timeScale();
+    const next = { priceWidth: priceScale.width(), timeHeight: timeScale.height(), plotWidth: timeScale.width() };
+    setAxisBox((previous) =>
+      previous && previous.priceWidth === next.priceWidth && previous.timeHeight === next.timeHeight && previous.plotWidth === next.plotWidth
+        ? previous
+        : next,
     );
   });
 
@@ -495,6 +610,7 @@ export function FinancialChart({
       previous && previous.from === from && previous.to === to && previous.isDefault === isDefault ? previous : next,
     );
     onViewChange?.(next);
+    setScrolledBack(range.to < last - 1);
     if (markersRef.current && paletteRef.current) {
       const timeScale = engine.chart.timeScale();
       const width = timeScale.width();
@@ -503,12 +619,18 @@ export function FinancialChart({
         edgeSafeLabel(label, timeScale.logicalToCoordinate(index as Logical), width, charWidth);
       markersRef.current.setMarkers(extremeMarkers(type, bars, times, from, to, rgba(paletteRef.current.muted), valueFormatter, place));
     }
+    setEventTip((current) => {
+      if (!current) return current;
+      const position = eventsRef.current?.positionOf(current.id);
+      return position ? { ...current, x: position.x, y: position.y } : null;
+    });
     refreshMeasureGeometry();
     refreshPaneTops();
+    refreshScaleState();
   });
 
   // Build every series from scratch whenever data, structure, theme or locale change.
-  // Rebuilding ~10 series of ≤1k points takes a few ms and keeps pane order trivial.
+  // Rebuilding a dozen series of ≤1.5k points takes a few ms and keeps pane order trivial.
   useEffect(() => {
     const host = hostRef.current;
     if (!engine || !host) return;
@@ -522,43 +644,87 @@ export function FinancialChart({
 
     markersRef.current?.detach();
     markersRef.current = null;
+    for (const { series: owner, primitive } of primitivesRef.current) {
+      try {
+        owner.detachPrimitive(primitive);
+      } catch {
+        // The owner series is already gone.
+      }
+    }
+    primitivesRef.current = [];
+    eventsRef.current = null;
+    watermarkRef.current?.detach();
+    watermarkRef.current = null;
     for (const api of registry.values()) chart.removeSeries(api);
     registry.clear();
     for (let i = chart.panes().length - 1; i > 0; i -= 1) chart.removePane(i);
 
-    chart.applyOptions(chartOptions(lib, palette, series, valueFormatter, padTimes.length > 0));
-    if (bars.length === 0) return;
+    chart.applyOptions(chartOptions(lib, palette, series, valueFormatter, padTimes.length > 0, type, grid));
+    if (bars.length === 0) {
+      publishBuild(null, palette);
+      return;
+    }
 
+    const up = rgba(palette.up);
+    const down = rgba(palette.down);
     const mainRgb: Rgb = mainTone === "up" ? palette.up : mainTone === "down" ? palette.down : palette.primary;
     const ring = rgba(palette.card);
     const priceFormat = { type: "custom" as const, formatter: (price: BarPrice) => valueFormatter(price), minMove: 0.01 };
-    const indicatorFormat = { type: "custom" as const, formatter: (value: BarPrice) => formatIndicator(value), minMove: 0.0001 };
+    const pad = padTimes.map((time) => ({ time }));
+    const attach = (owner: AnySeries, primitive: ISeriesPrimitive<Time>) => {
+      owner.attachPrimitive(primitive);
+      primitivesRef.current.push({ series: owner, primitive });
+    };
 
     // Main series ------------------------------------------------------------
     let main: AnySeries;
-    if (type === "candles") {
+    if (type === "candles" || type === "hollow" || type === "heikin") {
       main = chart.addSeries(lib.CandlestickSeries, {
         priceFormat,
         priceLineStyle: lib.LineStyle.Dotted,
-        upColor: rgba(palette.up),
-        downColor: rgba(palette.down),
-        wickUpColor: rgba(palette.up),
-        wickDownColor: rgba(palette.down),
-        borderVisible: false,
+        upColor: up,
+        downColor: down,
+        wickUpColor: up,
+        wickDownColor: down,
+        borderUpColor: up,
+        borderDownColor: down,
+        borderVisible: type === "hollow",
+        // Heikin Ashi closes are averages: the real last price gets its own line below.
+        lastValueVisible: type !== "heikin",
+        priceLineVisible: type !== "heikin",
       });
-      main.setData([
-        ...bars.map((bar, i) => {
-          const open = bar.open ?? (i > 0 ? bars[i - 1].close : bar.close);
-          return {
-            time: times[i],
-            open,
-            high: bar.high ?? Math.max(open, bar.close),
-            low: bar.low ?? Math.min(open, bar.close),
-            close: bar.close,
-          };
-        }),
-        ...padTimes.map((time) => ({ time })),
-      ]);
+      if (type === "heikin") {
+        const ha = heikinAshi(bars);
+        main.setData([...ha.map((bar, i) => ({ time: times[i], ...bar })), ...pad]);
+        if (lastClose !== null) {
+          const lastUp = barIsUp(bars, bars.length - 1);
+          main.createPriceLine({
+            price: lastClose,
+            color: rgba(lastUp ? palette.up : palette.down, 0.9),
+            lineWidth: 1,
+            lineStyle: lib.LineStyle.Dotted,
+            axisLabelVisible: true,
+            title: "",
+          });
+        }
+      } else if (type === "hollow") {
+        // TradingView hollow candles: colour by close vs previous close, body filled when close < open.
+        const hollowFill = rgba(palette.card);
+        main.setData([
+          ...bars.map((bar, i) => {
+            const candle = ohlcOf(bars, i);
+            const previous = i > 0 ? bars[i - 1].close : candle.open;
+            const color = candle.close >= previous ? up : down;
+            return { time: times[i], ...candle, color: candle.close < candle.open ? color : hollowFill, borderColor: color, wickColor: color };
+          }),
+          ...pad,
+        ]);
+      } else {
+        main.setData([...bars.map((_, i) => ({ time: times[i], ...ohlcOf(bars, i) })), ...pad]);
+      }
+    } else if (type === "bars") {
+      main = chart.addSeries(lib.BarSeries, { priceFormat, priceLineStyle: lib.LineStyle.Dotted, upColor: up, downColor: down, openVisible: true, thinBars: false });
+      main.setData([...bars.map((_, i) => ({ time: times[i], ...ohlcOf(bars, i) })), ...pad]);
     } else {
       const lineOptions = {
         priceFormat,
@@ -567,27 +733,51 @@ export function FinancialChart({
         crosshairMarkerRadius: 4,
         crosshairMarkerBorderWidth: 2,
         crosshairMarkerBorderColor: ring,
-        crosshairMarkerBackgroundColor: rgba(mainRgb),
         lastPriceAnimation: live ? lib.LastPriceAnimationMode.Continuous : lib.LastPriceAnimationMode.Disabled,
       };
-      const wash = rgba(mainRgb, palette.dark ? 0.14 : 0.1);
-      main =
-        type === "area"
-          ? chart.addSeries(lib.AreaSeries, { ...lineOptions, lineColor: rgba(mainRgb), topColor: wash, bottomColor: wash })
-          : chart.addSeries(lib.LineSeries, { ...lineOptions, color: rgba(mainRgb) });
-      main.setData([...bars.map((bar, i) => ({ time: times[i], value: bar.close })), ...padTimes.map((time) => ({ time }))]);
+      const values = [...bars.map((bar, i) => ({ time: times[i], value: bar.close })), ...pad];
+      if (type === "baseline") {
+        const base = baselinePrice ?? windowBase ?? bars[0].close;
+        const alpha = palette.dark ? 0.26 : 0.2;
+        main = chart.addSeries(lib.BaselineSeries, {
+          ...lineOptions,
+          baseValue: { type: "price" as const, price: base },
+          relativeGradient: true,
+          topLineColor: up,
+          topFillColor1: rgba(palette.up, alpha),
+          topFillColor2: rgba(palette.up, 0.02),
+          bottomLineColor: down,
+          bottomFillColor1: rgba(palette.down, 0.02),
+          bottomFillColor2: rgba(palette.down, alpha),
+        });
+      } else if (type === "area") {
+        main = chart.addSeries(lib.AreaSeries, {
+          ...lineOptions,
+          crosshairMarkerBackgroundColor: rgba(mainRgb),
+          lineColor: rgba(mainRgb),
+          // Strongest under the line, fading to nothing at the bottom of the visible range (relative to
+          // the data, not the pane), like every pro area chart: the volume and the grid stay readable.
+          topColor: rgba(mainRgb, palette.dark ? 0.28 : 0.24),
+          bottomColor: rgba(mainRgb, 0),
+          relativeGradient: true,
+        });
+      } else {
+        main = chart.addSeries(lib.LineSeries, { ...lineOptions, crosshairMarkerBackgroundColor: rgba(mainRgb), color: rgba(mainRgb) });
+      }
+      main.setData(values);
     }
     registry.set("main", main);
     // In comparison (%) mode the 0 % base line is the shared reference: quiet and dashed.
     main.applyOptions({
-      baseLineVisible: compareActive,
+      baseLineVisible: percentScale,
       baseLineColor: rgba(palette.muted, 0.7),
       baseLineStyle: lib.LineStyle.Dashed,
       baseLineWidth: 1,
     });
+    const eventsShown = events.length > 0;
     chart.priceScale("right", 0).applyOptions({
-      mode: compareActive ? lib.PriceScaleMode.Percentage : lib.PriceScaleMode.Normal,
-      scaleMargins: { top: 0.12, bottom: volume ? 0.24 : 0.08 },
+      mode: percentScale ? lib.PriceScaleMode.Percentage : scale === "log" ? lib.PriceScaleMode.Logarithmic : lib.PriceScaleMode.Normal,
+      scaleMargins: { top: 0.1, bottom: (volume && hasVolume ? 0.22 : 0.08) + (eventsShown ? 0.05 : 0) },
     });
 
     if (baselinePrice !== null) {
@@ -604,14 +794,14 @@ export function FinancialChart({
     }
 
     // Volume: histogram along the bottom fifth of the main pane --------------
-    if (volume && bars.some((bar) => bar.volume !== null && bar.volume > 0)) {
+    if (volume && hasVolume) {
       const volumeSeries = chart.addSeries(lib.HistogramSeries, {
         priceScaleId: "volume",
         priceFormat: { type: "volume" },
         lastValueVisible: false,
         priceLineVisible: false,
       });
-      const alpha = palette.dark ? 0.42 : 0.3;
+      const alpha = palette.dark ? 0.34 : 0.26;
       const upColor = rgba(palette.up, alpha);
       const downColor = rgba(palette.down, alpha);
       volumeSeries.setData(
@@ -623,37 +813,76 @@ export function FinancialChart({
       registry.set("volume", volumeSeries);
     }
 
-    // Overlays ------------------------------------------------------------------
-    const overlayLine = (key: string, values: IndicatorSeries, color: Rgb, dashed = false) => {
-      const line = chart.addSeries(lib.LineSeries, {
-        color: rgba(color),
-        lineWidth: 1,
-        lineStyle: dashed ? lib.LineStyle.Dashed : lib.LineStyle.Solid,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        priceFormat,
-      });
-      line.setData(lineData(times, values));
-      registry.set(key, line);
-    };
-    for (const key of activeOverlays) {
-      const color = palette.series[OVERLAY_SLOT[key]];
-      if (key === "bb") {
-        if (!indicators.bb) continue;
-        overlayLine("bb.upper", indicators.bb.upper, color);
-        overlayLine("bb.middle", indicators.bb.middle, color, true);
-        overlayLine("bb.lower", indicators.bb.lower, color);
-      } else {
-        const values = indicators[key];
-        if (values) overlayLine(key, values, color);
+    // Indicators -----------------------------------------------------------------
+    const addLines = (item: IndicatorView, paneIndex: number): AnySeries[] => {
+      const output = item.output;
+      if (!output) return [];
+      const format = { type: "custom" as const, formatter: (value: BarPrice) => item.format(value), minMove: item.minMove };
+      const created: AnySeries[] = [];
+      if (output.histogram) {
+        const histogram = chart.addSeries(lib.HistogramSeries, { priceLineVisible: false, lastValueVisible: false, priceFormat: format }, paneIndex);
+        const values = output.histogram.values;
+        const strength = output.histogram.colorMode === "sign-strength";
+        histogram.setData(
+          values.map((value, j) => {
+            if (value === null) return { time: times[j] };
+            const previous = values[j - 1] ?? value;
+            const strong = !strength || Math.abs(value) >= Math.abs(previous);
+            return { time: times[j], value, color: rgba(value >= 0 ? palette.up : palette.down, strong ? 0.7 : 0.35) };
+          }),
+        );
+        registry.set(`${item.config.id}:${output.histogram.key}`, histogram);
+        created.push(histogram);
       }
+      for (const line of output.lines) {
+        const dots = line.shape === "dots";
+        const lineSeries = chart.addSeries(
+          lib.LineSeries,
+          {
+            color: rgba(lineRgb(palette, item.config, line)),
+            lineWidth: line.width ?? 1,
+            lineStyle: lineStyleOf(lib, line.style),
+            lineVisible: !dots,
+            pointMarkersVisible: dots,
+            pointMarkersRadius: dots ? 1.5 : undefined,
+            priceLineVisible: false,
+            lastValueVisible: paneIndex > 0,
+            crosshairMarkerVisible: paneIndex > 0 && !dots,
+            crosshairMarkerRadius: 3,
+            crosshairMarkerBorderColor: ring,
+            priceFormat: format,
+          },
+          paneIndex,
+        );
+        lineSeries.setData(
+          line.values.map((value, j) => {
+            if (value === null) return { time: times[j] };
+            const pointTone = line.tones?.[j];
+            return pointTone ? { time: times[j], value, color: rgba(toneRgb(palette, pointTone)) } : { time: times[j], value };
+          }),
+        );
+        registry.set(`${item.config.id}:${line.key}`, lineSeries);
+        created.push(lineSeries);
+      }
+      if (output.band) {
+        const upper = output.lines.find((line) => line.key === output.band?.upper);
+        const lower = output.lines.find((line) => line.key === output.band?.lower);
+        const owner = registry.get(`${item.config.id}:${output.band.upper}`);
+        if (upper && lower && owner) {
+          attach(owner, new BandFillPrimitive(upper.values, lower.values, rgba(lineRgb(palette, item.config, upper), palette.dark ? 0.08 : 0.06)));
+        }
+      }
+      return created;
+    };
+
+    for (const item of indicatorViews) {
+      if (item.def.placement === "overlay" && item.status === "ok") addLines(item, 0);
     }
 
-    // Benchmark -----------------------------------------------------------------
-    if (compareSeries) {
+    // Benchmarks -----------------------------------------------------------------
+    for (const item of compareList) {
       const benchmark = chart.addSeries(lib.LineSeries, {
-        color: rgba(palette.series[COMPARE_SLOT]),
+        color: rgba(palette.series[item.color % 5]),
         lineWidth: 2,
         baseLineVisible: false,
         priceLineVisible: false,
@@ -662,83 +891,36 @@ export function FinancialChart({
         crosshairMarkerBorderColor: ring,
         priceFormat,
       });
-      benchmark.setData(compareSeries.bars.map((bar) => ({ time: toChartTime(bar.time), value: bar.close })));
-      registry.set("compare", benchmark);
+      benchmark.setData(item.series.bars.map((bar) => ({ time: toChartTime(bar.time), value: bar.close })));
+      registry.set(`compare:${item.symbol}`, benchmark);
     }
 
     // Indicator panes -------------------------------------------------------------
-    const level = (target: AnySeries, price: number, color: string, style: number = lib.LineStyle.Dashed) =>
-      target.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: false, title: "" });
-    const fixedRange = () => ({ priceRange: { minValue: 0, maxValue: 100 } });
-    activePanes.forEach((key, i) => {
+    drawnPanes.forEach((item, i) => {
       const paneIndex = i + 1;
-      const paneLine = (values: IndicatorSeries, color: Rgb) => {
-        const line = chart.addSeries(
-          lib.LineSeries,
-          {
-            color: rgba(color),
+      const created = addLines(item, paneIndex);
+      const range = item.def.range;
+      if (range) {
+        for (const owner of created) owner.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue: range.min, maxValue: range.max } }) });
+      }
+      const anchor = created[created.length - 1];
+      if (anchor) {
+        for (const level of item.def.levels ?? []) {
+          anchor.createPriceLine({
+            price: level.value,
+            color: rgba(toneRgb(palette, level.tone), level.tone === "muted" ? 0.4 : 0.55),
             lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: true,
-            crosshairMarkerRadius: 3,
-            crosshairMarkerBorderColor: ring,
-            priceFormat: indicatorFormat,
-          },
-          paneIndex,
-        );
-        line.setData(lineData(times, values));
-        return line;
-      };
-      if (key === "rsi" && indicators.rsi) {
-        const line = paneLine(indicators.rsi, palette.series[0]);
-        line.applyOptions({ autoscaleInfoProvider: fixedRange });
-        level(line, 70, rgba(palette.down, 0.55));
-        level(line, 30, rgba(palette.up, 0.55));
-        level(line, 50, rgba(palette.muted, 0.35), lib.LineStyle.Dotted);
-        registry.set("rsi", line);
-      } else if (key === "macd" && indicators.macd) {
-        const macdFormat = {
-          type: "custom" as const,
-          formatter: (value: BarPrice) => formatIndicator(value, macdDecimals),
-          minMove: 10 ** -macdDecimals,
-        };
-        const histogram = chart.addSeries(
-          lib.HistogramSeries,
-          { priceLineVisible: false, lastValueVisible: false, priceFormat: macdFormat },
-          paneIndex,
-        );
-        const values = indicators.macd.histogram;
-        histogram.setData(
-          values.map((value, j) => {
-            if (value === null) return { time: times[j] };
-            const previous = values[j - 1] ?? value;
-            const strengthening = Math.abs(value) >= Math.abs(previous);
-            return { time: times[j], value, color: rgba(value >= 0 ? palette.up : palette.down, strengthening ? 0.7 : 0.35) };
-          }),
-        );
-        registry.set("macd.hist", histogram);
-        const macdLine = paneLine(indicators.macd.macd, palette.series[0]);
-        macdLine.applyOptions({ priceFormat: macdFormat });
-        registry.set("macd.line", macdLine);
-        const signal = paneLine(indicators.macd.signal, palette.series[1]);
-        signal.applyOptions({ priceFormat: macdFormat });
-        level(signal, 0, rgba(palette.muted, 0.4), lib.LineStyle.Dotted);
-        registry.set("macd.signal", signal);
-      } else if (key === "stoch" && indicators.stoch) {
-        const k = paneLine(indicators.stoch.k, palette.series[0]);
-        k.applyOptions({ autoscaleInfoProvider: fixedRange });
-        level(k, 80, rgba(palette.down, 0.55));
-        level(k, 20, rgba(palette.up, 0.55));
-        registry.set("stoch.k", k);
-        const d = paneLine(indicators.stoch.d, palette.series[1]);
-        d.applyOptions({ autoscaleInfoProvider: fixedRange });
-        registry.set("stoch.d", d);
+            lineStyle: level.tone === "muted" ? lib.LineStyle.Dotted : lib.LineStyle.Dashed,
+            axisLabelVisible: false,
+            title: "",
+          });
+        }
       }
     });
 
     // Indicator panes always read in their own units, also while the main pane shows %.
     for (let paneIndex = 1; paneIndex < chart.panes().length; paneIndex += 1) {
-      chart.priceScale("right", paneIndex).applyOptions({ mode: lib.PriceScaleMode.Normal, scaleMargins: { top: 0.12, bottom: 0.08 } });
+      chart.priceScale("right", paneIndex).applyOptions({ mode: lib.PriceScaleMode.Normal, scaleMargins: { top: 0.14, bottom: 0.08 } });
     }
 
     // The main pane keeps whatever the indicator panes leave.
@@ -749,12 +931,56 @@ export function FinancialChart({
       for (const pane of paneList.slice(1)) pane.setStretchFactor(paneHeight);
     }
 
+    // Decorations -----------------------------------------------------------------
+    if (watermark) {
+      const size = clamp(Math.round((host.clientWidth || 640) / 11), 26, 68);
+      watermarkRef.current = lib.createTextWatermark(chart.panes()[0], {
+        horzAlign: "center",
+        vertAlign: "center",
+        lines: [
+          { text: watermark.title, color: rgba(palette.foreground, palette.dark ? 0.075 : 0.06), fontSize: size, fontFamily: palette.fontFamily, fontStyle: "600" },
+          ...(watermark.subtitle
+            ? [{ text: watermark.subtitle, color: rgba(palette.foreground, palette.dark ? 0.1 : 0.08), fontSize: clamp(Math.round(size / 4), 11, 15), fontFamily: palette.fontFamily, fontStyle: "" }]
+            : []),
+        ],
+      });
+    }
+
+    if (series.interval === "intraday") {
+      const starts: number[] = [];
+      for (let i = 1; i < indicatorInput.sessions.length; i += 1) {
+        if (indicatorInput.sessions[i] !== indicatorInput.sessions[i - 1]) starts.push(i);
+      }
+      if (starts.length > 0) attach(main, new SessionBreaksPrimitive(starts, rgba(palette.muted, 0.28)));
+    }
+
+    if (eventsShown) {
+      const badges: EventBadge[] = [];
+      for (const event of events) {
+        const index = eventBarIndex(bars, event.time, series.interval);
+        if (index < 0) continue;
+        const slot = EVENT_SLOT[event.kind];
+        badges.push({
+          id: event.id,
+          kind: event.kind,
+          index,
+          letter: t(EVENT_LETTER[event.kind]),
+          color: rgba(slot === null ? palette.muted : palette.series[slot]),
+        });
+      }
+      const primitive = new EventBadgesPrimitive({ card: rgba(palette.card), font: palette.fontFamily });
+      attach(main, primitive);
+      primitive.setBadges(badges);
+      eventsRef.current = primitive;
+    }
+
     if (extremes) markersRef.current = lib.createSeriesMarkers(main, []);
 
     // Period window by default; keep the user's zoom/pan across refetches of the same data.
     const defaultRange = { from: series.windowStart - 0.5, to: bars.length - 1 + padTimes.length + 0.5 };
     defaultRangeRef.current = defaultRange;
     timeScale.setVisibleLogicalRange(keepView && previousRange ? previousRange : defaultRange);
+    publishBuild(main, palette);
 
     // The drawing reveal plays for the first data only: a new period, type or comparison swaps in place.
     const firstShow = shownKeyRef.current === null;
@@ -765,47 +991,79 @@ export function FinancialChart({
       cancelAnimationFrame(frame);
       cancelReveal?.();
     };
+    // `eventsKey` stands for `events`, the watermark texts for `watermark` (parents pass fresh objects).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     engine,
     series,
     bars,
     times,
     padTimes,
-    indicators,
-    activeOverlays,
-    activePanes,
+    indicatorViews,
+    drawnPanes,
+    indicatorInput,
     type,
     volume,
-    compareSeries,
-    compareActive,
+    hasVolume,
+    compareList,
+    percentScale,
+    scale,
     baselinePrice,
+    windowBase,
+    lastClose,
     mainTone,
     live,
     extremes,
+    grid,
+    watermark?.title,
+    watermark?.subtitle,
+    eventsKey,
     dataKey,
     valueFormatter,
     height,
     paneHeight,
-    macdDecimals,
     themeVersion,
-    locale,
+    t,
   ]);
 
-  // Crosshair → legend / header scrub; double click on the plot resets the view.
+  // Crosshair → legend / header scrub, event badges; double click on the plot resets the view.
   const onCrosshair = useEffectEvent((param: MouseEventParams<Time>) => {
     const index = param.point && param.logical !== undefined ? clamp(Math.round(param.logical), 0, Math.max(bars.length - 1, 0)) : null;
     setHoverIndex((previous) => (previous === index ? previous : index));
     onHoverChange?.(index);
+    const objectId = param.hoveredInfo?.objectId;
+    const eventId = typeof objectId === "string" && objectId.startsWith("event:") ? objectId.slice(6) : null;
+    eventsRef.current?.setActive(eventId);
+    setEventTip((current) => {
+      if (current?.pinned) return current;
+      if (!eventId) return null;
+      if (current?.id === eventId) return current;
+      const position = eventsRef.current?.positionOf(eventId);
+      return position ? { id: eventId, x: position.x, y: position.y, pinned: false } : null;
+    });
+  });
+  const onClick = useEffectEvent((param: MouseEventParams<Time>) => {
+    const objectId = param.hoveredInfo?.objectId;
+    const eventId = typeof objectId === "string" && objectId.startsWith("event:") ? objectId.slice(6) : null;
+    if (!eventId) {
+      setEventTip((current) => (current?.pinned ? null : current));
+      return;
+    }
+    const position = eventsRef.current?.positionOf(eventId);
+    if (position) setEventTip({ id: eventId, x: position.x, y: position.y, pinned: true });
   });
   const onDoubleClick = useEffectEvent(() => resetView());
   useEffect(() => {
     if (!engine) return;
     const move = (param: MouseEventParams<Time>) => onCrosshair(param);
+    const click = (param: MouseEventParams<Time>) => onClick(param);
     const dblClick = () => onDoubleClick();
     engine.chart.subscribeCrosshairMove(move);
+    engine.chart.subscribeClick(click);
     engine.chart.subscribeDblClick(dblClick);
     return () => {
       engine.chart.unsubscribeCrosshairMove(move);
+      engine.chart.unsubscribeClick(click);
       engine.chart.unsubscribeDblClick(dblClick);
     };
   }, [engine]);
@@ -828,13 +1086,17 @@ export function FinancialChart({
     };
   }, [engine]);
 
-  // Pane legends follow pane resizes (separator drag, container resize).
+  // Pane legends follow pane resizes (separator drag, container resize); a price-axis drag leaves auto scale.
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !engine) return;
     const observer = new ResizeObserver(() => refreshPaneTops());
     observer.observe(host);
-    const onPointerUp = () => requestAnimationFrame(() => refreshPaneTops());
+    const onPointerUp = () =>
+      requestAnimationFrame(() => {
+        refreshPaneTops();
+        refreshScaleState();
+      });
     host.addEventListener("pointerup", onPointerUp);
     return () => {
       observer.disconnect();
@@ -883,7 +1145,7 @@ export function FinancialChart({
     };
   }, [wheelZoom]);
 
-  // Drag-to-measure: measure mode, or Shift + drag anywhere on the main pane.
+  // Drag-to-measure: the measure tool, or Shift + drag anywhere on the main pane.
   const indexAt = useEffectEvent((clientX: number, clientY: number | null): number | null => {
     const host = hostRef.current;
     if (!engine || !host || bars.length === 0) return null;
@@ -897,7 +1159,7 @@ export function FinancialChart({
     const logical = engine.chart.timeScale().coordinateToLogical(x);
     return logical === null ? null : clamp(Math.round(logical), 0, bars.length - 1);
   });
-  const measureWanted = useEffectEvent((event: PointerEvent) => measureMode || event.shiftKey);
+  const measureWanted = useEffectEvent((event: PointerEvent) => tool === "measure" || (tool === "cursor" && event.shiftKey));
   const commitMeasure = useEffectEvent((next: MeasureState | null) => {
     setMeasure(next);
     const main = seriesRef.current.get("main");
@@ -954,11 +1216,74 @@ export function FinancialChart({
     };
   }, []);
 
+  // Drawings: one series primitive on the main series, gestures in the capture phase after the measure
+  // handler above (which claims Shift + drag and the measure tool by calling preventDefault).
+  const drawingLayer = useDrawingLayer({
+    chart: engine?.chart ?? null,
+    mainSeries,
+    plotRef,
+    bars,
+    times,
+    interval: series.interval,
+    intervalMinutes: series.intervalMinutes,
+    palette: chartPalette,
+    locale,
+    drawings,
+    onDrawingsChange: onDrawingsChange ?? ignoreDrawings,
+    tool,
+    onToolChange: onToolChange ?? ignoreDrawings,
+    visible: drawingsVisible,
+    magnet,
+    format: valueFormatter,
+    onHoverIndex: (index) => {
+      setHoverIndex(index);
+      onHoverChange?.(index);
+    },
+  });
+
+  useEffect(() => {
+    onUndoStateChange?.(drawingLayer.canUndo);
+  }, [drawingLayer.canUndo, onUndoStateChange]);
+
+  // Right click: TradingView-style chart menu. On touch a long press is the chart's crosshair, so it stays that.
+  const openContextMenu = useEffectEvent((clientX: number, clientY: number) => {
+    const host = hostRef.current;
+    const main = seriesRef.current.get("main");
+    if (!engine || !host || !main) return;
+    const rect = host.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const inMain = x >= 0 && x <= engine.chart.timeScale().width() && y >= 0 && y <= (engine.chart.panes()[0]?.getHeight() ?? 0);
+    const price = inMain ? main.coordinateToPrice(y) : null;
+    const logical = inMain ? engine.chart.timeScale().coordinateToLogical(x) : null;
+    const index = logical === null ? null : clamp(Math.round(logical), 0, bars.length - 1);
+    setContextMenu({ x: clientX, y: clientY, price: price === null || !Number.isFinite(price) ? null : price, time: index === null ? null : bars[index].time });
+  });
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    let lastPointer = "mouse";
+    const onPointerDown = (event: PointerEvent) => {
+      lastPointer = event.pointerType;
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      if (lastPointer === "touch") return;
+      event.preventDefault();
+      openContextMenu(event.clientX, event.clientY);
+    };
+    plot.addEventListener("pointerdown", onPointerDown, { capture: true, passive: true });
+    plot.addEventListener("contextmenu", onContextMenu);
+    return () => {
+      plot.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      plot.removeEventListener("contextmenu", onContextMenu);
+    };
+  }, []);
+
   // Leaving measure mode drops a finished measurement.
   const dropMeasure = useEffectEvent(() => setMeasure((current) => (current && !current.dragging ? null : current)));
   useEffect(() => {
-    if (!measureMode) dropMeasure();
-  }, [measureMode]);
+    if (tool !== "measure") dropMeasure();
+  }, [tool]);
 
   // ---------------------------------------------------------------------------
   // Commands (toolbar, keyboard, double click)
@@ -1012,38 +1337,59 @@ export function FinancialChart({
   }
 
   function resetView() {
+    engine?.chart.priceScale("right").setAutoScale(true);
+    setManualScale(false);
     if (defaultRangeRef.current) animateTo(defaultRangeRef.current);
   }
 
-  function download(filename: string) {
-    const host = hostRef.current;
-    if (!engine || !host) return;
-    const shot = engine.chart.takeScreenshot(true, false);
-    const canvas = document.createElement("canvas");
-    canvas.width = shot.width;
-    canvas.height = shot.height;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.fillStyle = rgba(readChartPalette(host).card);
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(shot, 0, 0);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }, "image/png");
+  function scrollToLatest() {
+    if (!engine) return;
+    const range = engine.chart.timeScale().getVisibleLogicalRange();
+    if (!range) return;
+    const to = bars.length - 1 + padTimes.length + 0.5;
+    animateTo({ from: to - (range.to - range.from), to });
+  }
+
+  function snapshotLabels(palette: ChartPalette, item: IndicatorView, index: number): SnapshotLabel[] {
+    const output = item.output;
+    if (!output) return [];
+    const values = output.lines
+      .map((line) => line.values[index])
+      .filter((value): value is number => value !== null && value !== undefined)
+      .map((value) => item.format(value));
+    const histogram = output.histogram?.values[index];
+    if (histogram !== null && histogram !== undefined) values.push(item.format(histogram));
+    const first = output.lines[0];
+    return [{ color: rgba(first ? lineRgb(palette, item.config, first) : palette.muted), label: item.label, value: values.join(" ") || "—" }];
+  }
+
+  function snapshot(): Promise<Blob | null> {
+    const palette = paletteRef.current;
+    if (!engine || !palette || lastClose === null) return Promise.resolve(null);
+    const change = windowBase !== null ? lastClose - windowBase : null;
+    const last = bars.length - 1;
+    const header: SnapshotHeader = {
+      title: snapshotTitle?.title ?? symbol,
+      subtitle: snapshotTitle?.subtitle ?? formatBarTime(bars[bars.length - 1].time, barLabelStyle(series.interval)),
+      value: valueFormatter(lastClose),
+      change: change !== null && windowBase ? `${formatChangePercent((change / windowBase) * 100)} (${formatSigned(change)})` : "",
+      tone: trendTone(change),
+      footer: t("snapshot.footer"),
+      overlays: legendRow.filter((item) => item.status === "ok").flatMap((item) => snapshotLabels(palette, item, last)),
+      panes: drawnPanes.flatMap((item, i) => (paneTops[i] === undefined ? [] : [{ top: paneTops[i], items: snapshotLabels(palette, item, last) }])),
+    };
+    return composeSnapshot(engine.chart, palette, header);
   }
 
   useImperativeHandle(handleRef, () => ({
     zoomIn: () => zoom(ZOOM_STEP),
     zoomOut: () => zoom(1 / ZOOM_STEP),
     reset: resetView,
-    download,
+    scrollToLatest,
+    snapshot,
     focus: () => plotRef.current?.focus(),
+    undoDrawing: drawingLayer.undo,
+    clearDrawings: drawingLayer.clearAll,
   }));
 
   function focusBar(index: number) {
@@ -1070,8 +1416,27 @@ export function FinancialChart({
     }, 250);
   }
 
+  function toggleScale(next: PriceScaleKind) {
+    if (compareActive || !onScaleChange) return;
+    onScaleChange(scale === next ? "normal" : next);
+  }
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!engine || bars.length === 0) return;
+    if (drawingLayer.onKeyDown(event)) {
+      event.preventDefault();
+      return;
+    }
+    if (event.altKey && !event.metaKey && !event.ctrlKey) {
+      // Alt shortcuts by physical key: Alt+L types "¬" on a Mac.
+      if (event.code === "KeyR") resetView();
+      else if (event.code === "KeyL") toggleScale("log");
+      else if (event.code === "KeyP") toggleScale("percent");
+      else return;
+      event.preventDefault();
+      return;
+    }
+    if (event.metaKey || event.ctrlKey) return;
     const last = bars.length - 1;
     const current = hoverIndex ?? view?.to ?? last;
     const step = event.shiftKey ? 10 : 1;
@@ -1100,12 +1465,13 @@ export function FinancialChart({
         resetView();
         break;
       case "Escape": {
-        const cleared = hoverIndex !== null || measure !== null || measureMode;
+        const cleared = hoverIndex !== null || measure !== null || tool !== "cursor" || eventTip !== null;
         engine.chart.clearCrosshairPosition();
         setHoverIndex(null);
         onHoverChange?.(null);
         setMeasure(null);
-        if (measureMode) onMeasureModeChange?.(false);
+        setEventTip(null);
+        if (tool !== "cursor") onToolChange?.("cursor");
         // Nothing to clear: let the Escape reach the full-screen dialog.
         if (!cleared) return;
         break;
@@ -1123,6 +1489,10 @@ export function FinancialChart({
     onHoverChange?.(null);
   }
 
+  const changeIndicator = (next: IndicatorConfig) =>
+    onIndicatorsChange?.(indicators.map((config) => (config.id === next.id ? next : config)));
+  const removeIndicator = (id: string) => onIndicatorsChange?.(indicators.filter((config) => config.id !== id));
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -1131,79 +1501,55 @@ export function FinancialChart({
   const legendIndex = hoverIndex !== null ? clamp(hoverIndex, 0, Math.max(lastIndex, 0)) : lastIndex;
   const visibleFrom = view?.from ?? series.windowStart;
 
-  const overlayValues: LegendOverlayValue[] = [];
-  for (const key of activeOverlays) {
-    const color = SERIES_CSS_VAR[OVERLAY_SLOT[key]];
-    if (key === "bb") {
-      const bands = indicators.bb;
-      overlayValues.push({ key: "bbUpper", label: `${t("ind.bb")} ${t("legend.bbUpper")}`, color, value: bands?.upper[legendIndex] ?? null });
-      overlayValues.push({ key: "bb", label: t("legend.bbMiddle"), color, dashed: true, value: bands?.middle[legendIndex] ?? null });
-      overlayValues.push({ key: "bbLower", label: t("legend.bbLower"), color, value: bands?.lower[legendIndex] ?? null });
-    } else {
-      overlayValues.push({ key, label: t(OVERLAY_LABEL[key]), color, value: indicators[key]?.[legendIndex] ?? null });
-    }
-  }
-
   let legendCompare: LegendCompare | null = null;
   const baseBar = bars[visibleFrom];
   const legendBar = bars[legendIndex];
-  if (compareSeries && baseBar && legendBar) {
-    const compareBars = compareSeries.bars;
-    const baseAt = barAtOrBefore(compareBars, baseBar.time);
-    const at = barAtOrBefore(compareBars, legendBar.time);
+  if (compareActive && baseBar && legendBar) {
     legendCompare = {
-      label: compareLabel,
-      color: SERIES_CSS_VAR[COMPARE_SLOT],
       mainPercent: ((legendBar.close - baseBar.close) / baseBar.close) * 100,
-      comparePercent:
-        baseAt >= 0 && at >= 0 ? ((compareBars[at].close - compareBars[baseAt].close) / compareBars[baseAt].close) * 100 : null,
+      items: compareList.map((item) => {
+        const compareBars = item.series.bars;
+        const baseAt = barAtOrBefore(compareBars, baseBar.time);
+        const at = barAtOrBefore(compareBars, legendBar.time);
+        return {
+          symbol: item.symbol,
+          label: item.label,
+          color: SERIES_CSS_VAR[item.color % 5],
+          percent: baseAt >= 0 && at >= 0 ? ((compareBars[at].close - compareBars[baseAt].close) / compareBars[baseAt].close) * 100 : null,
+        };
+      }),
+      onRemove: onCompareRemove,
     };
   }
 
-  const paneLegends = activePanes.map((key, i) => {
+  const paneLegends = drawnPanes.map((item, i) => {
     const top = paneTops[i];
     if (top === undefined) return null;
-    let content: ReactNode;
-    if (key === "rsi") {
-      content = (
-        <>
-          <span className="text-muted-foreground">RSI 14</span>
-          <PaneValue color={SERIES_CSS_VAR[0]} value={formatIndicator(indicators.rsi?.[legendIndex], 2)} />
-        </>
-      );
-    } else if (key === "macd") {
-      const histogram = indicators.macd?.histogram[legendIndex] ?? null;
-      content = (
-        <>
-          <span className="text-muted-foreground">MACD 12 26 9</span>
-          <PaneValue color={SERIES_CSS_VAR[0]} value={formatIndicator(indicators.macd?.macd[legendIndex], macdDecimals)} />
-          <PaneValue color={SERIES_CSS_VAR[1]} value={formatIndicator(indicators.macd?.signal[legendIndex], macdDecimals)} />
-          <span className={cn("font-medium", TREND_TEXT_CLASS[trendTone(histogram)])}>{formatIndicator(histogram, macdDecimals)}</span>
-        </>
-      );
-    } else {
-      content = (
-        <>
-          <span className="text-muted-foreground">{t("ind.stoch")} 14 3 3</span>
-          <PaneValue color={SERIES_CSS_VAR[0]} value={`%K ${formatIndicator(indicators.stoch?.k[legendIndex], 2)}`} />
-          <PaneValue color={SERIES_CSS_VAR[1]} value={`%D ${formatIndicator(indicators.stoch?.d[legendIndex], 2)}`} />
-        </>
-      );
-    }
     return (
       <div
-        key={key}
-        aria-hidden
-        className="pointer-events-none absolute left-2 z-[1] flex items-baseline gap-2 rounded-sm bg-card/85 px-1 font-mono text-[10px] leading-4 tabular-nums"
+        key={item.config.id}
+        className="pointer-events-none absolute left-2 z-[4] flex max-w-[calc(100%-5rem)] items-baseline rounded-sm bg-card/85 px-1 font-mono text-[10px] leading-4 tabular-nums [&_button]:pointer-events-auto"
         style={{ top: top + 4 }}
       >
-        {content}
+        <IndicatorLegendItem
+          view={item}
+          index={legendIndex}
+          onChange={onIndicatorsChange ? changeIndicator : undefined}
+          onRemove={onIndicatorsChange ? () => removeIndicator(item.config.id) : undefined}
+        />
       </div>
     );
   });
 
   const measureInfo = measure ? describeMeasure(measure, bars, series, locale) : null;
-  const showMeasureHint = measureMode && !measure;
+  const showMeasureHint = tool === "measure" && !measure;
+  const drawingTool = tool !== "cursor";
+
+  const tipEvents = eventTip
+    ? (eventsRef.current?.groupOf(eventTip.id) ?? [eventTip.id])
+        .map((id) => events.find((event) => event.id === id))
+        .filter((event): event is ChartEvent => event !== undefined)
+    : [];
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", height === "fill" && "min-h-0 flex-1", className)}>
@@ -1215,7 +1561,9 @@ export function FinancialChart({
         format={valueFormatter}
         showOhlc={bars.some((bar) => bar.open !== null)}
         showVolume={volume}
-        overlays={overlayValues}
+        overlays={legendRow}
+        onIndicatorChange={onIndicatorsChange ? changeIndicator : undefined}
+        onIndicatorRemove={onIndicatorsChange ? removeIndicator : undefined}
         baseline={baseline && !compareActive ? baseline : null}
         compare={legendCompare}
         hovering={hoverIndex !== null}
@@ -1231,7 +1579,7 @@ export function FinancialChart({
         onBlur={onBlur}
         className={cn(
           "relative isolate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-          measureMode ? "cursor-crosshair touch-none" : "touch-pan-y",
+          drawingTool ? "cursor-crosshair touch-none" : "touch-pan-y",
           height === "fill" && "min-h-0 flex-1",
         )}
         style={height === "fill" ? undefined : { height }}
@@ -1239,9 +1587,55 @@ export function FinancialChart({
         <div ref={hostRef} className="absolute inset-0" />
         {paneLegends}
         {geometry && measureInfo ? <MeasureOverlay geometry={geometry} info={measureInfo} /> : null}
+        {drawingLayer.overlay}
+        {eventTip && tipEvents.length > 0 ? (
+          <EventTooltip
+            tip={eventTip}
+            events={tipEvents}
+            plotWidth={axisBox?.plotWidth ?? 0}
+            interval={series.interval}
+            onClose={() => setEventTip(null)}
+          />
+        ) : null}
+        {axisBox && scrolledBack && bars.length > 0 ? (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            title={t("action.latest")}
+            aria-label={t("action.latest")}
+            className="absolute z-[4] inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+            style={{ right: axisBox.priceWidth + 8, bottom: axisBox.timeHeight + 8 + (events.length > 0 ? 24 : 0) }}
+          >
+            <ChevronsRight className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {axisBox && onScaleChange ? (
+          <div
+            className="absolute bottom-0 right-0 z-[4] flex items-center justify-center gap-0.5"
+            style={{ width: axisBox.priceWidth, height: axisBox.timeHeight }}
+          >
+            {manualScale ? (
+              <ScaleButton label={t("scale.autoShort")} title={t("scale.autoTitle")} pressed={false} onClick={resetView} />
+            ) : null}
+            <ScaleButton
+              label={t("scale.logShort")}
+              title={compareActive ? t("scale.compareLocked") : t("scale.logTitle")}
+              pressed={scale === "log" && !compareActive}
+              disabled={compareActive}
+              onClick={() => toggleScale("log")}
+            />
+            <ScaleButton
+              label={t("scale.percentShort")}
+              title={compareActive ? t("scale.compareLocked") : t("scale.percentTitle")}
+              pressed={percentScale}
+              disabled={compareActive}
+              onClick={() => toggleScale("percent")}
+            />
+          </div>
+        ) : null}
         {gestureHint || showMeasureHint ? (
           // Over the time axis, not the plot: the top of the plot is where the period high and its label sit.
-          <div className="pointer-events-none absolute inset-x-0 bottom-0.5 z-[3] flex justify-center px-2">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0.5 z-[5] flex justify-center px-2">
             <span className="animate-fade rounded-md border border-border bg-popover px-2.5 py-1 text-center text-[11px] font-medium leading-4 text-popover-foreground">
               {showMeasureHint
                 ? t(coarsePointer ? "hint.measureTouch" : "hint.measure")
@@ -1258,121 +1652,179 @@ export function FinancialChart({
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {announcement}
       </div>
+      <Menu.Root open={contextMenu !== null} onOpenChange={(open) => (open ? undefined : setContextMenu(null))}>
+        <Menu.Portal>
+          <Menu.Positioner
+            anchor={contextMenu ? { getBoundingClientRect: () => DOMRect.fromRect({ x: contextMenu.x, y: contextMenu.y, width: 0, height: 0 }) } : null}
+            side="bottom"
+            align="start"
+            sideOffset={2}
+            collisionPadding={12}
+            className="z-[90]"
+          >
+            <Menu.Popup aria-label={t("ctx.label")} className={cn(POPUP_CLASS, "min-w-56 p-1")}>
+              <Menu.Item className={MENU_ITEM_CLASS} onClick={resetView}>
+                <RotateCcw aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="flex-1">{t("ctx.reset")}</span>
+                <kbd className="font-mono text-[10px] text-muted-foreground">Alt+R</kbd>
+              </Menu.Item>
+              {scrolledBack ? (
+                <Menu.Item className={MENU_ITEM_CLASS} onClick={scrollToLatest}>
+                  <ChevronsRight aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="flex-1">{t("ctx.latest")}</span>
+                </Menu.Item>
+              ) : null}
+              {onDrawingsChange && drawingsVisible && contextMenu?.price != null && contextMenu.time != null && !percentScale ? (
+                <Menu.Item
+                  className={MENU_ITEM_CLASS}
+                  onClick={() => {
+                    if (contextMenu?.price == null || contextMenu.time == null) return;
+                    onDrawingsChange([
+                      ...drawings,
+                      { id: newDrawingId(), kind: "hline", points: [{ time: contextMenu.time, price: contextMenu.price }], color: DEFAULT_COLOR.hline },
+                    ]);
+                  }}
+                >
+                  <Minus aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="flex-1">{t("ctx.addLevel", { price: valueFormatter(contextMenu.price) })}</span>
+                </Menu.Item>
+              ) : null}
+              {onScaleChange ? (
+                <>
+                  <Menu.Separator className="my-1 h-px bg-border" />
+                  <Menu.CheckboxItem className={MENU_ITEM_CLASS} checked={scale === "log" && !compareActive} disabled={compareActive} onCheckedChange={() => toggleScale("log")}>
+                    <CheckMark checked={scale === "log" && !compareActive} />
+                    <span className="flex-1">{t("scale.log")}</span>
+                    <kbd className="font-mono text-[10px] text-muted-foreground">Alt+L</kbd>
+                  </Menu.CheckboxItem>
+                  <Menu.CheckboxItem className={MENU_ITEM_CLASS} checked={percentScale} disabled={compareActive} onCheckedChange={() => toggleScale("percent")}>
+                    <CheckMark checked={percentScale} />
+                    <span className="flex-1">{t("scale.percent")}</span>
+                    <kbd className="font-mono text-[10px] text-muted-foreground">Alt+P</kbd>
+                  </Menu.CheckboxItem>
+                </>
+              ) : null}
+              {onSnapshot ? (
+                <>
+                  <Menu.Separator className="my-1 h-px bg-border" />
+                  <Menu.Item className={MENU_ITEM_CLASS} onClick={() => onSnapshot("copy")}>
+                    <Copy aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="flex-1">{t("snapshot.copy")}</span>
+                  </Menu.Item>
+                  <Menu.Item className={MENU_ITEM_CLASS} onClick={() => onSnapshot("download")}>
+                    <Download aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="flex-1">{t("snapshot.download")}</span>
+                    <kbd className="font-mono text-[10px] text-muted-foreground">Alt+S</kbd>
+                  </Menu.Item>
+                </>
+              ) : null}
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     </div>
   );
 }
 
-function PaneValue({ color, value }: { color: string; value: string }) {
+function ScaleButton({
+  label,
+  title,
+  pressed,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  pressed: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <span className="inline-flex items-baseline gap-1 font-medium text-foreground">
-      <span aria-hidden className="inline-block h-0 w-2.5 border-t-2 align-middle" style={{ borderColor: color }} />
-      {value}
-    </span>
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-mono text-[10px] leading-none outline-none transition-colors",
+        "focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default",
+        pressed ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 
-function isApplePlatform(): boolean {
-  return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
-}
-
-const COARSE_POINTER_QUERY = "(pointer: coarse)";
-
-function subscribeCoarsePointer(onChange: () => void): () => void {
-  const query = window.matchMedia(COARSE_POINTER_QUERY);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
-/** Primary input is touch: gesture hints talk about pinching instead of Ctrl + wheel and Esc. */
-function useCoarsePointer(): boolean {
-  return useSyncExternalStore(
-    subscribeCoarsePointer,
-    () => window.matchMedia(COARSE_POINTER_QUERY).matches,
-    () => false,
-  );
-}
-
-function measureGeometry(engine: Engine, main: AnySeries | undefined, measure: MeasureState, bars: readonly ChartBar[]): MeasureGeometry | null {
-  const start = bars[measure.start];
-  const end = bars[measure.end];
-  if (!main || !start || !end) return null;
-  const timeScale = engine.chart.timeScale();
-  const x1 = timeScale.logicalToCoordinate(measure.start as Logical);
-  const x2 = timeScale.logicalToCoordinate(measure.end as Logical);
-  const y1 = main.priceToCoordinate(start.close);
-  const y2 = main.priceToCoordinate(end.close);
-  if (x1 === null || x2 === null || y1 === null || y2 === null) return null;
-  return { x1, y1, x2, y2, plotWidth: timeScale.width(), plotHeight: engine.chart.panes()[0]?.getHeight() ?? 0 };
-}
-
-interface MeasureInfo {
-  change: number;
-  percent: number;
-  bars: number;
-  span: string;
-  from: string;
-  to: string;
-}
-
-function describeMeasure(measure: MeasureState, bars: readonly ChartBar[], series: ChartSeries, locale: Locale): MeasureInfo | null {
-  const a = Math.min(measure.start, measure.end);
-  const b = Math.max(measure.start, measure.end);
-  const first = bars[a];
-  const last = bars[b];
-  if (!first || !last) return null;
-  // Direction follows the drag: dragging right-to-left measures backwards in time.
-  const [origin, target] = measure.end >= measure.start ? [first, last] : [last, first];
-  const change = target.close - origin.close;
-  const style = series.interval === "intraday" ? "dayMonthTime" : series.interval === "monthly" ? "monthYear" : "date";
-  return {
-    change,
-    percent: (change / origin.close) * 100,
-    bars: b - a,
-    span: formatSpan(first.time, last.time, series.interval, locale),
-    from: formatBarTime(origin.time, style),
-    to: formatBarTime(target.time, style),
-  };
-}
-
-function MeasureOverlay({ geometry, info }: { geometry: MeasureGeometry; info: MeasureInfo }) {
+function EventTooltip({
+  tip,
+  events,
+  plotWidth,
+  interval,
+  onClose,
+}: {
+  tip: EventTip;
+  events: readonly ChartEvent[];
+  plotWidth: number;
+  interval: ChartSeries["interval"];
+  onClose: () => void;
+}) {
   const { t } = useChartI18n();
-  const { x1, y1, x2, y2, plotWidth, plotHeight } = geometry;
-  const tone = trendTone(info.change);
-  const color = tone === "up" ? "var(--up)" : tone === "down" ? "var(--down)" : "var(--muted-foreground)";
-  const left = Math.min(x1, x2);
-  const width = Math.abs(x2 - x1);
-  const topY = Math.min(y1, y2);
-  const placeBelow = topY < 72;
-  const towardsLeft = x2 > plotWidth / 2;
+  const style = interval === "intraday" ? "dayMonthTime" : "date";
+  const width = 272;
+  const left = clamp(tip.x - width / 2, 4, Math.max(4, plotWidth - width - 4));
   return (
-    <>
-      <svg aria-hidden className="pointer-events-none absolute inset-0 z-[2] overflow-visible" width="100%" height="100%">
-        <rect x={left} y={0} width={Math.max(width, 1)} height={plotHeight} fill={color} fillOpacity={0.08} />
-        <line x1={x1} x2={x1} y1={0} y2={plotHeight} stroke={color} strokeOpacity={0.4} strokeWidth={1} />
-        <line x1={x2} x2={x2} y1={0} y2={plotHeight} stroke={color} strokeOpacity={0.4} strokeWidth={1} />
-        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={1.5} strokeDasharray="4 3" />
-        <circle cx={x1} cy={y1} r={4} fill={color} stroke="var(--card)" strokeWidth={2} />
-        <circle cx={x2} cy={y2} r={4} fill={color} stroke="var(--card)" strokeWidth={2} />
-      </svg>
-      <div
-        className="pointer-events-none absolute z-[3] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5 font-mono text-[11px] leading-4 tabular-nums text-popover-foreground"
-        style={{
-          left: clamp(x2, 4, Math.max(4, plotWidth - 4)),
-          top: placeBelow ? Math.max(y1, y2) + 12 : topY - 12,
-          transform: `translate(${towardsLeft ? "calc(-100% - 8px)" : "8px"}, ${placeBelow ? "0" : "-100%"})`,
-        }}
-      >
-        <div className={cn("text-xs font-semibold", TREND_TEXT_CLASS[tone])}>
-          {formatSigned(info.change)} ({formatChangePercent(info.percent)})
-        </div>
-        <div className="text-muted-foreground">
-          {t("measure.bars", { n: info.bars })} · {info.span}
-        </div>
-        <div className="font-sans text-muted-foreground">
-          {info.from} → {info.to}
-        </div>
-      </div>
-    </>
+    <div
+      role={tip.pinned ? "dialog" : "tooltip"}
+      aria-label={tip.pinned ? t("event.count", { n: events.length }) : undefined}
+      className={cn(
+        "absolute z-[6] rounded-md border border-border bg-popover p-2.5 text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]",
+        tip.pinned ? "pointer-events-auto" : "pointer-events-none",
+      )}
+      style={{ left, top: tip.y - 14, width, transform: "translateY(-100%)" }}
+    >
+      {tip.pinned ? (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("event.close")}
+          className="absolute right-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      ) : null}
+      <ul className="max-h-60 space-y-2 overflow-y-auto pr-4 scrollbar-thin">
+        {events.slice(0, 6).map((event) => {
+          const slot = EVENT_SLOT[event.kind];
+          const color = slot === null ? "var(--muted-foreground)" : SERIES_CSS_VAR[slot];
+          return (
+            <li key={event.id} className="text-xs leading-4">
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-medium" style={{ color }}>
+                  {t(EVENT_LABEL[event.kind])}
+                </span>
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{formatBarTime(event.time, style)}</span>
+              </div>
+              <p className="mt-0.5 font-medium text-foreground">{event.title}</p>
+              {event.detail ? <p className="mt-0.5 text-muted-foreground">{event.detail}</p> : null}
+              {event.url && tip.pinned ? (
+                <a
+                  href={event.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  {t("event.open")}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

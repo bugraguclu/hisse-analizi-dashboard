@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { parseDate, toFiniteNumber } from "@/lib/format";
 import { STALE_TIME } from "@/lib/queryClient";
@@ -90,7 +90,7 @@ interface RawChartHistory {
   payload: ChartHistoryOut;
 }
 
-type ChartKind = "ticker" | "index";
+export type ChartKind = "ticker" | "index";
 
 function chartHistoryOptions(kind: ChartKind, symbol: string, period: ChartPeriod) {
   return queryOptions({
@@ -124,6 +124,44 @@ export function useChartHistory(
     placeholderData: (previous) => (previous?.symbol === symbol ? previous : undefined),
     enabled: enabled && symbol.length > 0,
   });
+}
+
+/**
+ * Bars of the symbols a chart compares against, one query each (cached like any
+ * chart). Only series of the requested period come back: a benchmark still on
+ * its previous period would stretch the shared time axis.
+ */
+export function useCompareSeries(
+  items: ReadonlyArray<{ symbol: string; kind: ChartKind }>,
+  period: ChartPeriod,
+): CompareQueries {
+  const combined = useQueries({
+    queries: items.map((item) => ({ ...chartHistoryOptions(item.kind, item.symbol, period), select: selectChartHistory })),
+    combine: combineCompare,
+  });
+  // `combine` output is structurally shared: the array keeps its identity until a series changes.
+  return useMemo(
+    () => ({ ...combined, series: combined.series.map((series) => (series && series.period === period ? series : undefined)) }),
+    [combined, period],
+  );
+}
+
+interface CompareQueries {
+  series: Array<ChartSeries | undefined>;
+  pending: boolean;
+  failed: boolean[];
+}
+
+function selectChartHistory(raw: RawChartHistory): ChartSeries {
+  return parseChartHistory(raw.payload, raw.symbol, raw.period);
+}
+
+function combineCompare(results: Array<{ data?: ChartSeries; isPending: boolean; isFetching: boolean; isError: boolean }>): CompareQueries {
+  return {
+    series: results.map((result) => result.data),
+    pending: results.some((result) => result.isPending || result.isFetching),
+    failed: results.map((result) => result.isError && !result.data),
+  };
 }
 
 /** Hovering back and forth over a chart warms its periods at most this often. */
