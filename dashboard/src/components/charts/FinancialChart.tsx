@@ -37,12 +37,12 @@ import type {
 import { Menu } from "@base-ui/react/menu";
 import { ChevronsRight, Copy, Download, ExternalLink, Minus, RotateCcw, X } from "lucide-react";
 import { useMotionAllowed } from "@/hooks/use-motion-allowed";
-import { formatChangePercent, formatNumber, formatSigned, getIntlLocale, trendTone } from "@/lib/format";
+import { formatChangePercent, formatNumber, getIntlLocale, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChartLegend, IndicatorLegendItem, type LegendCompare } from "./ChartLegend";
 import { observeTheme, readChartPalette, rgba, SERIES_CSS_VAR, type ChartPalette, type Rgb } from "./colors";
 import { CheckMark, MENU_ITEM_CLASS, POPUP_CLASS } from "./controls";
-import { formatChartPrice, formatTicks } from "./format";
+import { chartMinMove, formatChartChange, formatChartPrice, formatTicks } from "./format";
 import { useChartI18n, type ChartKey } from "./i18n";
 import { buildIndicatorInput } from "./indicator-catalog";
 import { buildIndicatorView, lineRgb, toneRgb, type IndicatorView } from "./indicator-view";
@@ -684,7 +684,7 @@ export function FinancialChart({
     const down = rgba(palette.down);
     const mainRgb: Rgb = mainTone === "up" ? palette.up : mainTone === "down" ? palette.down : palette.primary;
     const ring = rgba(palette.card);
-    const priceFormat = { type: "custom" as const, formatter: (price: BarPrice) => valueFormatter(price), minMove: 0.01 };
+    const priceFormat = { type: "custom" as const, formatter: (price: BarPrice) => valueFormatter(price), minMove: chartMinMove(bars, series.currency) };
     const pad = padTimes.map((time) => ({ time }));
     const attach = (owner: AnySeries, primitive: ISeriesPrimitive<Time>) => {
       owner.attachPrimitive(primitive);
@@ -1391,7 +1391,7 @@ export function FinancialChart({
       title: snapshotTitle?.title ?? symbol,
       subtitle: snapshotTitle?.subtitle ?? formatBarTime(bars[bars.length - 1].time, barLabelStyle(series.interval)),
       value: valueFormatter(lastClose),
-      change: change !== null && windowBase ? `${formatChangePercent((change / windowBase) * 100)} (${formatSigned(change)})` : "",
+      change: change !== null && windowBase ? `${formatChangePercent((change / windowBase) * 100)} (${formatChartChange(change, lastClose, series.currency)})` : "",
       tone: trendTone(change),
       footer: t("snapshot.footer"),
       overlays: legendRow.filter((item) => item.status === "ok").flatMap((item) => snapshotLabels(palette, item, last)),

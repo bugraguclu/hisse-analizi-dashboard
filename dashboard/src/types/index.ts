@@ -484,5 +484,9 @@ export type ChartHistoryOut = {
   /** Last close strictly before the window (null for "max"). */
   reference_close?: number | null;
   reference_date?: string | null;
+  /** Currency of the bar prices; "USD": every bar divided by its own USD/TRY close. */
+  currency?: "TRY" | "USD";
+  /** USD only: the newest USD/TRY close (what the latest bar is divided by). */
+  fx?: { pair: string; source: string; rate: number | null; bar_time: string };
   error?: string;
 };

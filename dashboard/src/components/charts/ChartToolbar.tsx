@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  DollarSign,
   Download,
   Keyboard,
   Maximize2,
@@ -135,9 +136,9 @@ export interface ChartToolbarProps {
 }
 
 /**
- * The chart's tool row: style, indicators, comparison, drawing and events on
- * the left (the things that change what is drawn), view commands, snapshot,
- * settings and full screen on the right. Wraps into two rows on phones.
+ * The chart's tool row: style, currency, indicators, comparison, drawing and
+ * events on the left (the things that change what is drawn), view commands,
+ * snapshot, settings and full screen on the right. Wraps into two rows on phones.
  */
 export function ChartToolbar({
   mode,
@@ -175,6 +176,15 @@ export function ChartToolbar({
   return (
     <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex flex-wrap items-center gap-x-1 gap-y-1.5", className)}>
       <TypeMenu value={prefs.type} onChange={(type) => set("type", type)} compact={compact} />
+      <ChipButton
+        pressed={prefs.currency === "USD"}
+        onClick={() => set("currency", prefs.currency === "USD" ? "TRY" : "USD")}
+        title={t("currency.title")}
+        aria-label={compact ? t("currency.button") : undefined}
+      >
+        <DollarSign />
+        {compact ? null : t("currency.button")}
+      </ChipButton>
       {features.indicators ? (
         <IndicatorMenu
           indicators={prefs.indicators}

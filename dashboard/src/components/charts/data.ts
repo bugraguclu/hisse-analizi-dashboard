@@ -8,7 +8,7 @@ import { STALE_TIME } from "@/lib/queryClient";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
 import type { ChartHistoryOut, ChartPeriod, OhlcvBar } from "@/types";
 import { toChartTime } from "./time";
-import type { ChartBar, ChartSeries, ChartView, IntervalKind } from "./types";
+import type { ChartBar, ChartCurrency, ChartSeries, ChartView, IntervalKind } from "./types";
 
 /** Bars requested before each window: enough for SMA 200 and a settled Wilder RSI. */
 export const CHART_WARMUP_BARS = 250;
@@ -81,6 +81,8 @@ export function parseChartHistory(payload: ChartHistoryOut, symbol: string, peri
     windowStart,
     referenceClose: reference ?? (windowStart > 0 ? bars[windowStart - 1].close : null),
     info: payload.info && typeof payload.info === "object" ? payload.info : null,
+    currency: payload.currency === "USD" ? "USD" : "TRY",
+    fxRate: payload.currency === "USD" ? positive(payload.fx?.rate) : null,
   };
 }
 
@@ -92,33 +94,34 @@ interface RawChartHistory {
 
 export type ChartKind = "ticker" | "index";
 
-function chartHistoryOptions(kind: ChartKind, symbol: string, period: ChartPeriod) {
+function chartHistoryOptions(kind: ChartKind, symbol: string, period: ChartPeriod, currency: ChartCurrency) {
   return queryOptions({
-    queryKey: ["chartHistory", kind, symbol, period, CHART_WARMUP_BARS],
+    queryKey: ["chartHistory", kind, symbol, period, CHART_WARMUP_BARS, currency],
     queryFn: async ({ signal }): Promise<RawChartHistory> => ({
       symbol,
       period,
-      payload: await api.chartHistory(kind, symbol, period, CHART_WARMUP_BARS, signal),
+      payload: await api.chartHistory(kind, symbol, period, CHART_WARMUP_BARS, currency, signal),
     }),
     staleTime: isIntradayPeriod(period) ? STALE_TIME.market : STALE_TIME.analysis,
   });
 }
 
 /**
- * Chart bars (window + warmup) for a stock ("ticker") or an index. While a new
- * period loads the previous period stays on screen (placeholder data, same
- * symbol only); `data.period` tells which period is actually shown.
+ * Chart bars (window + warmup) for a stock ("ticker") or an index, in lira or
+ * dollars. While a new period or currency loads, the previous series stays on
+ * screen (placeholder data, same symbol only); `data.period` and `data.currency`
+ * tell what is actually shown.
  */
 export function useChartHistory(
   kind: ChartKind,
   symbol: string,
   period: ChartPeriod,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, currency = "TRY" }: { enabled?: boolean; currency?: ChartCurrency } = {},
 ) {
   const liveInterval = useLiveRefetchInterval(60_000);
   const select = useCallback((raw: RawChartHistory) => parseChartHistory(raw.payload, raw.symbol, raw.period), []);
   return useQuery({
-    ...chartHistoryOptions(kind, symbol, period),
+    ...chartHistoryOptions(kind, symbol, period, currency),
     select,
     refetchInterval: period === "1d" ? liveInterval : false,
     placeholderData: (previous) => (previous?.symbol === symbol ? previous : undefined),
@@ -128,21 +131,26 @@ export function useChartHistory(
 
 /**
  * Bars of the symbols a chart compares against, one query each (cached like any
- * chart). Only series of the requested period come back: a benchmark still on
- * its previous period would stretch the shared time axis.
+ * chart), in the chart's currency. Only series of the requested period and
+ * currency come back: a benchmark still on its previous period would stretch the
+ * shared time axis.
  */
 export function useCompareSeries(
   items: ReadonlyArray<{ symbol: string; kind: ChartKind }>,
   period: ChartPeriod,
+  currency: ChartCurrency = "TRY",
 ): CompareQueries {
   const combined = useQueries({
-    queries: items.map((item) => ({ ...chartHistoryOptions(item.kind, item.symbol, period), select: selectChartHistory })),
+    queries: items.map((item) => ({ ...chartHistoryOptions(item.kind, item.symbol, period, currency), select: selectChartHistory })),
     combine: combineCompare,
   });
   // `combine` output is structurally shared: the array keeps its identity until a series changes.
   return useMemo(
-    () => ({ ...combined, series: combined.series.map((series) => (series && series.period === period ? series : undefined)) }),
-    [combined, period],
+    () => ({
+      ...combined,
+      series: combined.series.map((series) => (series && series.period === period && series.currency === currency ? series : undefined)),
+    }),
+    [combined, period, currency],
   );
 }
 
@@ -173,17 +181,17 @@ const PREFETCH_INTERVAL_MS = 30_000;
  * switch paints from cache instead of waiting for the backend. React Query
  * skips periods that are already cached and fresh.
  */
-export function usePrefetchChartPeriods(kind: ChartKind, symbol: string): () => void {
+export function usePrefetchChartPeriods(kind: ChartKind, symbol: string, currency: ChartCurrency = "TRY"): () => void {
   const queryClient = useQueryClient();
   const lastRef = useRef<{ key: string; at: number } | null>(null);
   return useCallback(() => {
     if (!symbol) return;
-    const key = `${kind}:${symbol}`;
+    const key = `${kind}:${symbol}:${currency}`;
     const now = Date.now();
     if (lastRef.current?.key === key && now - lastRef.current.at < PREFETCH_INTERVAL_MS) return;
     lastRef.current = { key, at: now };
-    for (const period of CHART_PERIODS) void queryClient.prefetchQuery(chartHistoryOptions(kind, symbol, period));
-  }, [kind, symbol, queryClient]);
+    for (const period of CHART_PERIODS) void queryClient.prefetchQuery(chartHistoryOptions(kind, symbol, period, currency));
+  }, [kind, symbol, currency, queryClient]);
 }
 
 /** Whether instant `at` (epoch ms) falls inside `bar`'s Istanbul session: its intraday slot, day, week or month. */
@@ -233,6 +241,15 @@ export function withLiveQuote(
     low: bar.low === null ? null : Math.min(bar.low, last),
   };
   return { ...series, bars };
+}
+
+/**
+ * A lira quote in the series' currency: USD series divide it by their newest
+ * USD/TRY close (what the latest bar is divided by); null when that is unknown.
+ */
+export function quoteInSeriesCurrency(series: ChartSeries | undefined, last: number | null | undefined): number | null | undefined {
+  if (!series || series.currency === "TRY" || last == null) return last;
+  return series.fxRate ? last / series.fxRate : null;
 }
 
 /** `withLiveQuote`, memoized: the merged series keeps its identity until the history or the quote changes. */

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChartAttribution, ChartWorkspace } from "@/components/charts/ChartWorkspace";
 import {
   CHART_PERIODS,
+  quoteInSeriesCurrency,
   rangeStats,
   useChartHistory,
   useLiveSeries,
@@ -64,6 +65,7 @@ const INDEX_DEFAULTS: ChartPrefs = {
   grid: true,
   magnet: true,
   drawingsHidden: false,
+  currency: "TRY",
 };
 /** The home card stays compact; full screen brings indicators, comparison and drawings along. */
 const CARD_FEATURES = { indicators: false, compare: false, drawings: false, events: false };
@@ -92,22 +94,32 @@ export function IndexChartCard({ className }: { className?: string }) {
   const [period, setPeriod] = useState<ChartPeriod>("1d");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [prefs, setPrefs] = useChartPrefs("hisse.chart.index.v2", INDEX_DEFAULTS);
-  const historyQ = useChartHistory("index", SYMBOL, period);
-  const prefetchPeriods = usePrefetchChartPeriods("index", SYMBOL);
+  const historyQ = useChartHistory("index", SYMBOL, period, { currency: prefs.currency });
+  const prefetchPeriods = usePrefetchChartPeriods("index", SYMBOL, prefs.currency);
   const quotesQ = useIndexQuotes();
   const now = useNow();
 
   const history = historyQ.data;
   const quote = mergeQuote(findQuote(quotesQ.data?.quotes, SYMBOL), (history?.info ?? undefined) as Partial<IndexQuote> | undefined);
   const quoteTime = quoteTimeMs(quote);
-  // The last bar follows the live level, so the chart ends where the header does.
-  const series = useLiveSeries(history, quote.last, quoteTime, true);
+  // The last bar follows the live level, so the chart ends where the header does (in dollars:
+  // the level over the latest USD/TRY close). The quote's other fields stay in lira.
+  const liveLevel = quoteInSeriesCurrency(history, quote.last) ?? null;
+  const series = useLiveSeries(history, liveLevel, quoteTime, true);
   const shownPeriod = series?.period ?? period;
   const intraday = shownPeriod === "1d";
   const market = useMarketStatus(quoteTime);
   const live = intraday && market?.isOpen === true;
+  const usd = series?.currency === "USD";
 
-  const prevClose = typeof quote.prev_close === "number" && quote.prev_close > 0 ? quote.prev_close : null;
+  // In dollars 1D's reference is the previous session's close from the series, not the lira quote's.
+  const prevClose = usd
+    ? intraday
+      ? (series?.referenceClose ?? null)
+      : null
+    : typeof quote.prev_close === "number" && quote.prev_close > 0
+      ? quote.prev_close
+      : null;
   const periodWindow = series && series.bars.length > 0 ? windowView(series) : null;
   const stats = series && periodWindow ? rangeStats(series, periodWindow, intraday ? prevClose : null) : null;
   const baselinePrice = intraday ? (prevClose ?? stats?.base ?? null) : (stats?.base ?? null);
@@ -116,19 +128,19 @@ export function IndexChartCard({ className }: { className?: string }) {
 
   // Header: live level and daily/period move, or the hovered bar when scrubbing the chart.
   const hovered = hoverIndex !== null && series ? series.bars[hoverIndex] : undefined;
-  const level = hovered?.close ?? quote.last ?? stats?.last.close ?? null;
+  const level = hovered?.close ?? liveLevel ?? stats?.last.close ?? null;
   const headerChange = hovered
     ? baselinePrice !== null
       ? hovered.close - baselinePrice
       : null
-    : intraday
+    : intraday && !usd
       ? (quote.change ?? stats?.change ?? null)
       : (stats?.change ?? null);
   const headerPercent = hovered
     ? baselinePrice
       ? ((hovered.close - baselinePrice) / baselinePrice) * 100
       : null
-    : intraday
+    : intraday && !usd
       ? (quote.change_percent ?? stats?.changePercent ?? null)
       : (stats?.changePercent ?? null);
 
@@ -140,9 +152,9 @@ export function IndexChartCard({ className }: { className?: string }) {
 
   const statItems: Array<[string, number | null | undefined]> = intraday
     ? [
-        [t("index.open"), quote.open ?? stats?.first.open],
-        [t("index.high"), quote.high ?? stats?.high],
-        [t("index.low"), quote.low ?? stats?.low],
+        [t("index.open"), (usd ? null : quote.open) ?? stats?.first.open],
+        [t("index.high"), (usd ? null : quote.high) ?? stats?.high],
+        [t("index.low"), (usd ? null : quote.low) ?? stats?.low],
         [t("index.prevClose"), prevClose],
       ]
     : [
@@ -154,8 +166,13 @@ export function IndexChartCard({ className }: { className?: string }) {
   const periodOptions = CHART_PERIODS.map((value) => ({ value, label: t(PERIOD_LABEL[value]), title: t(PERIOD_DESCRIPTION[value]) }));
   const ariaLabel =
     stats && level !== null
-      ? `${t("chart.ariaLabel")} · ${t(PERIOD_DESCRIPTION[shownPeriod])}: ${formatNumber(stats.first.close)} → ${formatNumber(stats.last.close)} (${formatChangePercent(stats.changePercent)})`
+      ? `${t("chart.ariaLabel")}${usd ? ` · ${tc("currency.label")}` : ""} · ${t(PERIOD_DESCRIPTION[shownPeriod])}: ${formatNumber(stats.first.close)} → ${formatNumber(stats.last.close)} (${formatChangePercent(stats.changePercent)})`
       : t("chart.ariaLabel");
+  const usdTag = usd ? (
+    <span className="text-xs font-medium text-muted-foreground" title={tc("currency.label")}>
+      USD
+    </span>
+  ) : null;
 
   return (
     <DashboardCard labelledBy={HEADING_ID} className={className}>
@@ -170,6 +187,7 @@ export function IndexChartCard({ className }: { className?: string }) {
             ) : (
               <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{formatNumber(level)}</span>
+                {usdTag}
                 <ChangeLine change={headerChange} percent={headerPercent} />
                 <span className="text-xs text-muted-foreground">
                   {hoverLabel ?? (showsPastSession && stats ? formatMarketDate(stats.last.time, "dayMonth") : t(PERIOD_DESCRIPTION[shownPeriod]))}
@@ -234,6 +252,7 @@ export function IndexChartCard({ className }: { className?: string }) {
             level !== null ? (
               <span className="inline-flex items-baseline gap-2 font-mono tabular-nums">
                 <span className="text-[15px] font-semibold text-foreground">{formatNumber(level)}</span>
+                {usdTag}
                 <ChangeLine change={headerChange} percent={headerPercent} />
                 {live && !hovered ? <LiveBadge label={tc("chart.live")} /> : null}
               </span>

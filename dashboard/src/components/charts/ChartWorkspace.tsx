@@ -21,7 +21,7 @@ import type { DrawingTool } from "./drawings/types";
 import { useChartEvents } from "./events";
 import { INDICATORS } from "./indicator-catalog";
 import { FinancialChart, type FinancialChartHandle } from "./FinancialChart";
-import { formatChartPrice } from "./format";
+import { formatChartPrice, formatUsdChartPrice } from "./format";
 import { useChartI18n } from "./i18n";
 import type { ChartPrefs } from "./prefs";
 import { ShortcutsDialog } from "./ShortcutsDialog";
@@ -152,13 +152,18 @@ export function ChartWorkspace({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [compareItems, setCompareItems] = useState<CompareItem[]>([]);
   const [canUndo, setCanUndo] = useState(false);
-  const [drawings, setDrawings] = useDrawings(symbol);
+  // What is on screen decides the unit: a lira series stays labelled lira while its dollar twin loads.
+  const currency = series?.currency ?? prefs.currency;
+  const usd = currency === "USD";
+  const formatter = usd ? formatUsdChartPrice : valueFormatter;
+  // Prices of a drawing only mean something in one currency: dollar charts keep their own set.
+  const [drawings, setDrawings] = useDrawings(usd ? `${symbol}@USD` : symbol);
   const narrow = useMediaQuery("(max-width: 639px)");
   // Landscape phones: every row above the plot costs chart height.
   const short = useMediaQuery("(max-height: 520px)");
 
   const activeFeatures = fullscreen ? fullscreenFeatures : features;
-  const compareQ = useCompareSeries(activeFeatures.compare ? compareItems : [], period);
+  const compareQ = useCompareSeries(activeFeatures.compare ? compareItems : [], period, prefs.currency);
   const compareSeries = useMemo<CompareSeries[]>(
     () =>
       compareItems.flatMap((item, i) => {
@@ -259,7 +264,7 @@ export function ChartWorkspace({
       void copyPng(handle.snapshot()).then((ok) => (ok ? toast.success(t("snapshot.copied")) : toast.error(t("snapshot.copyFailed"))));
     } else {
       void handle.snapshot().then((blob) => {
-        if (blob) downloadBlob(blob, `${downloadName}.png`);
+        if (blob) downloadBlob(blob, `${downloadName}${usd ? "-USD" : ""}.png`);
       });
     }
   };
@@ -283,6 +288,8 @@ export function ChartWorkspace({
     if (event.altKey) {
       if (event.code === "KeyS") {
         snapshotAction("download");
+      } else if (event.code === "KeyU") {
+        onPrefsChange({ ...prefs, currency: prefs.currency === "USD" ? "TRY" : "USD" });
       } else {
         const next = DRAWING_SHORTCUTS[event.code];
         if (!next) return;
@@ -351,7 +358,7 @@ export function ChartWorkspace({
             extremes={prefs.extremes}
             scale={prefs.scale}
             onScaleChange={(scale) => onPrefsChange({ ...prefs, scale })}
-            watermark={prefs.watermark ? { title: symbol, subtitle: [name, periodText].filter(Boolean).join(" · ") } : null}
+            watermark={prefs.watermark ? { title: symbol, subtitle: [name, periodText, usd ? "USD" : null].filter(Boolean).join(" · ") } : null}
             grid={prefs.grid}
             events={chartEvents}
             tool={tool}
@@ -366,8 +373,13 @@ export function ChartWorkspace({
             wheelZoom={mode === "fullscreen" ? "always" : "modifier"}
             ariaLabel={ariaLabel}
             symbol={symbol}
-            snapshotTitle={{ title: name ? `${symbol} · ${name}` : symbol, subtitle: [periodText, clock ? t("chart.istanbulTime", { time: clock }) : null].filter(Boolean).join(" · ") }}
-            valueFormatter={valueFormatter}
+            snapshotTitle={{
+              title: name ? `${symbol} · ${name}` : symbol,
+              subtitle: [periodText, usd ? t("currency.label") : null, clock ? t("chart.istanbulTime", { time: clock }) : null]
+                .filter(Boolean)
+                .join(" · "),
+            }}
+            valueFormatter={formatter}
             onSnapshot={snapshotAction}
           />
         </div>
@@ -459,14 +471,14 @@ export function ChartWorkspace({
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
               {renderChart(mode)}
               {tableOn && series && series.bars.length > 0 ? (
-                <ChartDataTable series={series} view={view} symbol={symbol} format={valueFormatter} className="max-h-56 shrink-0" />
+                <ChartDataTable series={series} view={view} symbol={symbol} format={formatter} className="max-h-56 shrink-0" />
               ) : null}
             </div>
           </div>
         ) : (
           <>
             {renderChart(mode)}
-            {tableOn && series && series.bars.length > 0 ? <ChartDataTable series={series} view={view} symbol={symbol} format={valueFormatter} /> : null}
+            {tableOn && series && series.bars.length > 0 ? <ChartDataTable series={series} view={view} symbol={symbol} format={formatter} /> : null}
           </>
         )}
       </>

@@ -1,7 +1,7 @@
-import { formatNumber, formatPrice } from "@/lib/format";
+import { formatNumber, formatPrice, formatSigned } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import { chartText } from "./i18n";
-import type { IntervalKind } from "./types";
+import type { ChartCurrency, IntervalKind } from "./types";
 
 /** Decimals needed to print `step` exactly (0–4), e.g. 25 → 0, 2.5 → 1, 0.25 → 2. */
 export function decimalsForStep(step: number): number {
@@ -43,6 +43,43 @@ export function formatChartPrice(value: number): string {
   if (!Number.isFinite(abs) || abs === 0 || abs >= 0.1) return formatPrice(value);
   return formatNumber(value, Math.min(6, 1 - Math.floor(Math.log10(abs))));
 }
+
+/**
+ * Decimals of a price in `currency`. Lira keeps the quotes' 2; dollar prices of BIST
+ * shares run from cents to tens of dollars, so they keep 4 significant digits
+ * (5,942 · 0,4127), and index levels in the hundreds 2.
+ */
+export function chartPriceDecimals(value: number, currency: ChartCurrency): number {
+  const abs = Math.abs(value);
+  if (currency === "TRY" || !Number.isFinite(abs) || abs === 0 || abs >= 100) return 2;
+  if (abs >= 1) return 3;
+  return Math.min(6, 3 - Math.floor(Math.log10(abs)));
+}
+
+/** Bar price in dollars (see `chartPriceDecimals`). */
+export function formatUsdChartPrice(value: number): string {
+  return formatNumber(value, chartPriceDecimals(value, "USD"));
+}
+
+/** A currency's bar price formatter; module-level functions, so stable enough for a chart `valueFormatter`. */
+export function chartPriceFormatter(currency: ChartCurrency): (value: number) => string {
+  return currency === "USD" ? formatUsdChartPrice : formatChartPrice;
+}
+
+/** Signed change with the decimals of the price it moves (`level`): "+2,25" for a lira quote, "+0,043" for a 5,94 $ share. */
+export function formatChartChange(change: number | null | undefined, level: number, currency: ChartCurrency): string {
+  return formatSigned(change, chartPriceDecimals(level, currency));
+}
+
+/** Price step of a series' scale: dollar prices tick below a cent. */
+export function chartMinMove(bars: readonly { close: number }[], currency: ChartCurrency): number {
+  if (currency === "TRY") return 0.01;
+  const top = bars.reduce((max, bar) => Math.max(max, Math.abs(bar.close)), 0);
+  return 10 ** -chartPriceDecimals(top, "USD");
+}
+
+/** Unit written after amounts. */
+export const CURRENCY_UNIT: Readonly<Record<ChartCurrency, string>> = { TRY: "TL", USD: "USD" };
 
 /** Human span between two bar instants, e.g. "3 sa 30 dk", "26 gün", "1,4 yıl". */
 export function formatSpan(fromMs: number, toMs: number, interval: IntervalKind, locale: Locale): string {

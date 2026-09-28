@@ -19,6 +19,7 @@ from typing import Any, TypeVar
 import pandas as pd
 import structlog
 
+from src.adapters import chart_currency
 from src.adapters.price import (
     MAX_CHART_WARMUP_BARS,
     bars_to_records,
@@ -27,6 +28,7 @@ from src.adapters.price import (
 )
 from src.adapters.utils import (
     TTL_QUOTE,
+    ChartPeriod,
     SymbolNotFoundError,
     cached,
     error_payload,
@@ -138,8 +140,20 @@ def _metas(*metas: Any) -> dict[str, Any]:
     return market_service.meta_dict(market_service.combine_meta([m for m in metas if m is not None]))
 
 
+async def _chart_window(
+    symbol: str, spec: ChartPeriod, warmup: int, currency: chart_currency.Currency
+) -> tuple[market_service.ChartWindow, dict[str, Any]]:
+    """The period's bars in ``currency`` and the payload fields naming it (``currency``, USD: ``fx``)."""
+    if currency == "USD":
+        chart, fx = await chart_currency.usd_chart_window(symbol, spec, warmup=warmup)
+        return chart, {"currency": "USD", "fx": fx}
+    return await market_service.get_chart_window(symbol, spec, warmup=warmup), {"currency": "TRY"}
+
+
 @cached(TTL_QUOTE, "index")
-async def get_index_data(symbol: str = "XU100", period: str = "1ay", warmup: int = 0) -> dict:
+async def get_index_data(
+    symbol: str = "XU100", period: str = "1ay", warmup: int = 0, currency: chart_currency.Currency = "TRY"
+) -> dict:
     """Endeks fiyat verisi (XU100, XU030, vb.) + kotasyon (depo öncelikli).
 
     ``info`` onceki kapanis ve gunluk degisimi tasir; grafik barlari
@@ -148,11 +162,14 @@ async def get_index_data(symbol: str = "XU100", period: str = "1ay", warmup: int
     ``warmup`` > 0: yanita, pencereden hemen once gelen en fazla ``warmup``
     bar'i tasiyan bir ``"warmup"`` listesi eklenir (gostergelerin pencerenin
     sol ucunda da dogru hesaplanmasi icin); ``warmup=0`` iken anahtar hic yok.
+    ``currency="USD"``: barlar ve ``reference_close`` dolar bazinda (her bar
+    kendi USD/TRY kapanisina bolunur, ``fx`` blogu son kuru tasir); ``info``
+    kotasyonu TL kalir.
     """
     try:
         spec = resolve_period(period)
-        chart, parts = await _with_optional_parts(
-            market_service.get_chart_window(symbol, spec, warmup=warmup),
+        (chart, currency_fields), parts = await _with_optional_parts(
+            _chart_window(symbol, spec, warmup, currency),
             {"quote": market_service.get_cached_quotes((symbol,))},
             symbol,
         )
@@ -164,6 +181,7 @@ async def get_index_data(symbol: str = "XU100", period: str = "1ay", warmup: int
             "interval": spec.interval,
             "source": SOURCE,
             "info": _index_quote_payload(quote) if quote else {},
+            **currency_fields,
             **chart.reference,
             "data": bars_to_records(chart.bars),
             **_warmup_bars(chart.before, warmup),
@@ -271,7 +289,9 @@ def _ticker_info(
 
 
 @cached(TTL_QUOTE, "ticker_history")
-async def get_ticker_history(ticker: str, period: str = "1ay", warmup: int = 0) -> dict:
+async def get_ticker_history(
+    ticker: str, period: str = "1ay", warmup: int = 0, currency: chart_currency.Currency = "TRY"
+) -> dict:
     """Hisse fiyat gecmisi + temel istatistikler (depo öncelikli, TradingView).
 
     Grafik barlari, kotasyon, sirket karti ve gunluk bar istatistikleri
@@ -281,11 +301,14 @@ async def get_ticker_history(ticker: str, period: str = "1ay", warmup: int = 0) 
     ``warmup`` > 0: yanita, pencereden hemen once gelen en fazla ``warmup``
     bar'i tasiyan bir ``"warmup"`` listesi eklenir (gostergelerin pencerenin
     sol ucunda da dogru hesaplanmasi icin); ``warmup=0`` iken anahtar hic yok.
+    ``currency="USD"``: barlar ve ``reference_close`` dolar bazinda (her bar
+    kendi USD/TRY kapanisina bolunur, ``fx`` blogu son kuru tasir); ``info``
+    (kotasyon, piyasa degeri, oranlar) TL kalir.
     """
     try:
         spec = resolve_period(period)
-        chart, parts = await _with_optional_parts(
-            market_service.get_chart_window(ticker, spec, warmup=warmup),
+        (chart, currency_fields), parts = await _with_optional_parts(
+            _chart_window(ticker, spec, warmup, currency),
             {
                 "quote": market_service.get_cached_quotes((ticker,)),
                 "company_metrics": get_company_metrics(ticker),
@@ -315,6 +338,7 @@ async def get_ticker_history(ticker: str, period: str = "1ay", warmup: int = 0) 
             "period": period,
             "interval": spec.interval,
             "info": info,
+            **currency_fields,
             **chart.reference,
             "data": bars_to_records(chart.bars),
             **_warmup_bars(chart.before, warmup),

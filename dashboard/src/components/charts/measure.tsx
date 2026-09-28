@@ -1,10 +1,10 @@
 "use client";
 
 import type { IChartApi, ISeriesApi, Logical, SeriesType } from "lightweight-charts";
-import { formatChangePercent, formatSigned, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
+import { formatChangePercent, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { formatSpan } from "./format";
+import { formatChartChange, formatSpan } from "./format";
 import { useChartI18n } from "./i18n";
 import { formatBarTime } from "./time";
 import type { ChartBar, ChartSeries } from "./types";
@@ -27,6 +27,8 @@ export interface MeasureGeometry {
 
 export interface MeasureInfo {
   change: number;
+  /** `change` signed, with the decimals of the series' prices. */
+  changeText: string;
   percent: number;
   bars: number;
   span: string;
@@ -68,6 +70,7 @@ export function describeMeasure(measure: MeasureState, bars: readonly ChartBar[]
   const style = series.interval === "intraday" ? "dayMonthTime" : series.interval === "monthly" ? "monthYear" : "date";
   return {
     change,
+    changeText: formatChartChange(change, origin.close, series.currency),
     percent: (change / origin.close) * 100,
     bars: b - a,
     span: formatSpan(first.time, last.time, series.interval, locale),
@@ -105,7 +108,7 @@ export function MeasureOverlay({ geometry, info }: { geometry: MeasureGeometry; 
         }}
       >
         <div className={cn("text-xs font-semibold", TREND_TEXT_CLASS[tone])}>
-          {formatSigned(info.change)} ({formatChangePercent(info.percent)})
+          {info.changeText} ({formatChangePercent(info.percent)})
         </div>
         <div className="text-muted-foreground">
           {t("measure.bars", { n: info.bars })} · {info.span}

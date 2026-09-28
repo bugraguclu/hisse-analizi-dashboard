@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from src.adapters.chart_currency import Currency
 from src.adapters.index_adapter import get_index_data, get_index_info, get_ticker_history, list_indices
 from src.adapters.price import MAX_CHART_WARMUP_BARS
 from src.adapters.scanner_adapter import resolve_condition, scan_signals
@@ -40,6 +41,16 @@ def _period(raw: str) -> str:
     except MarketDataError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message) from e
     return raw.strip().lower()
+
+
+def _chart_options(warmup: int, currency: Currency) -> dict[str, Any]:
+    """Only non-default options reach the adapter: default calls (and their cache keys) stay as they were."""
+    options: dict[str, Any] = {}
+    if warmup:
+        options["warmup"] = warmup
+    if currency != "TRY":
+        options["currency"] = currency
+    return options
 
 
 # --- Screener ---
@@ -109,16 +120,17 @@ async def index_data(
     symbol: str,
     period: str = Query(default="1ay", max_length=10),
     warmup: int = Query(default=0, ge=0, le=MAX_CHART_WARMUP_BARS),
+    currency: Currency = Query(default="TRY"),
 ):
     """Endeks fiyat verisi. period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max.
 
     warmup: pencereden onceki en fazla N bar'i "warmup" alaninda ekler (gosterge
     hesaplari ve sola kaydirma icin); 0 (varsayilan) iken alan hic donmez.
+    currency: TRY (varsayilan) ya da USD; USD'de her bar kendi USD/TRY
+    kapanisina bolunur ve yanit son kuru "fx" alaninda tasir.
     """
     normalized_symbol, normalized_period = _symbol(symbol), _period(period)
-    if warmup:
-        return _ok(await get_index_data(normalized_symbol, period=normalized_period, warmup=warmup))
-    return _ok(await get_index_data(normalized_symbol, period=normalized_period))
+    return _ok(await get_index_data(normalized_symbol, period=normalized_period, **_chart_options(warmup, currency)))
 
 
 @market_router.get("/index/{symbol}/info")
@@ -152,16 +164,17 @@ async def ticker_history(
     ticker: str,
     period: str = Query(default="1ay", max_length=10),
     warmup: int = Query(default=0, ge=0, le=MAX_CHART_WARMUP_BARS),
+    currency: Currency = Query(default="TRY"),
 ):
     """Hisse fiyat gecmisi (depo oncelikli). period: 1g, 5g, 1ay, 3ay, 6ay, ytd, 1y, 2y, 5y, max.
 
     warmup: pencereden onceki en fazla N bar'i "warmup" alaninda ekler (gosterge
     hesaplari ve sola kaydirma icin); 0 (varsayilan) iken alan hic donmez.
+    currency: TRY (varsayilan) ya da USD; USD'de her bar kendi USD/TRY
+    kapanisina bolunur ve yanit son kuru "fx" alaninda tasir.
     """
     normalized_ticker, normalized_period = _symbol(ticker), _period(period)
-    if warmup:
-        return _ok(await get_ticker_history(normalized_ticker, period=normalized_period, warmup=warmup))
-    return _ok(await get_ticker_history(normalized_ticker, period=normalized_period))
+    return _ok(await get_ticker_history(normalized_ticker, period=normalized_period, **_chart_options(warmup, currency)))
 
 
 # --- Snapshot ---

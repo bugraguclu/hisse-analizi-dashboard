@@ -29,6 +29,7 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
         [["/"], "keys.indicators"],
         [["Alt+L"], "keys.log"],
         [["Alt+P"], "keys.percent"],
+        [["Alt+U"], "keys.currency"],
         [["Alt+S"], "keys.snapshot"],
         [["?"], "keys.help"],
       ],

@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { INDICATORS, sanitizeParams } from "./indicator-catalog";
-import type { ChartType, IndicatorConfig, IndicatorKind, OverlayKey, PaneKey, PriceScaleKind } from "./types";
+import type { ChartCurrency, ChartType, IndicatorConfig, IndicatorKind, OverlayKey, PaneKey, PriceScaleKind } from "./types";
 
 /** What a viewer set up on a chart; remembered per chart kind in localStorage. */
 export interface ChartPrefs {
@@ -20,6 +20,8 @@ export interface ChartPrefs {
   /** Drawing tools snap to open/high/low/close. */
   magnet: boolean;
   drawingsHidden: boolean;
+  /** Prices in lira or in US dollars (each bar divided by its USD/TRY close). */
+  currency: ChartCurrency;
 }
 
 export const CHART_TYPES: readonly ChartType[] = ["area", "line", "baseline", "candles", "hollow", "heikin", "bars"];
@@ -114,6 +116,7 @@ export function sanitizePrefs(raw: string | null, defaults: ChartPrefs): ChartPr
       grid: bool(parsed.grid, defaults.grid),
       magnet: bool(parsed.magnet, defaults.magnet),
       drawingsHidden: bool(parsed.drawingsHidden, defaults.drawingsHidden),
+      currency: parsed.currency === "USD" || parsed.currency === "TRY" ? parsed.currency : defaults.currency,
     };
   } catch {
     return defaults;

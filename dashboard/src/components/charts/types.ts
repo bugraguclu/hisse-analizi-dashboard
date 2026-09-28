@@ -72,9 +72,16 @@ export interface ChartSeries {
   windowStart: number;
   /** Close before the window (base of the period change); null when unknown. */
   referenceClose: number | null;
-  /** Live quote block of the response (index endpoint: prev_close, change, ...). */
+  /** Live quote block of the response (index endpoint: prev_close, change, ...); in lira even for USD series. */
   info: Record<string, unknown> | null;
+  /** Currency of the prices; "USD": each bar divided by its own USD/TRY close. */
+  currency: ChartCurrency;
+  /** USD series: the newest USD/TRY close, to bring lira quotes into dollars; null in lira. */
+  fxRate: number | null;
 }
+
+/** Currency a chart shows prices in. */
+export type ChartCurrency = "TRY" | "USD";
 
 /** Visible bar range of a chart, in `bars` indices (inclusive). */
 export interface ChartView {

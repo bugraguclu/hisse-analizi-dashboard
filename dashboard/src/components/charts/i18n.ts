@@ -66,6 +66,24 @@ const DICT = {
   "draw.button": { tr: "Çizim", en: "Draw", fr: "Dessin" },
   "draw.title": { tr: "Çizim araçları: trend, yatay çizgi, Fibonacci…", en: "Drawing tools: trend line, horizontal line, Fibonacci…", fr: "Outils de dessin : tendance, ligne horizontale, Fibonacci…" },
 
+  "currency.button": { tr: "USD", en: "USD", fr: "USD" },
+  "currency.label": { tr: "Dolar bazında", en: "In US dollars", fr: "En dollars US" },
+  "currency.title": {
+    tr: "Dolar bazında (Alt+U): her bar kendi USD/TRY kuruna bölünür",
+    en: "In US dollars (Alt+U): each bar is divided by its own USD/TRY rate",
+    fr: "En dollars US (Alt+U) : chaque barre est divisée par son propre cours USD/TRY",
+  },
+  "currency.ariaSummary": {
+    tr: "{ticker} fiyat grafiği, dolar bazında, {period}: son {price} USD, değişim {change}",
+    en: "{ticker} price chart in US dollars, {period}: last {price} USD, change {change}",
+    fr: "Graphique de {ticker} en dollars US, {period} : dernier {price} USD, variation {change}",
+  },
+  "currency.legend": {
+    tr: "Fiyatlar dolar bazında; son kur USD/TRY {rate}",
+    en: "Prices in US dollars; latest rate USD/TRY {rate}",
+    fr: "Prix en dollars US ; dernier cours USD/TRY {rate}",
+  },
+
   "events.button": { tr: "Olaylar", en: "Events", fr: "Événements" },
   "events.title": { tr: "Temettü, finansal rapor ve önemli KAP bildirimleri", en: "Dividends, financial reports and key KAP disclosures", fr: "Dividendes, rapports financiers et annonces KAP importantes" },
   "event.dividend": { tr: "Temettü", en: "Dividend", fr: "Dividende" },
@@ -172,6 +190,7 @@ const DICT = {
   "keys.indicators": { tr: "Gösterge menüsü", en: "Indicator menu", fr: "Menu des indicateurs" },
   "keys.log": { tr: "Logaritmik ölçek", en: "Logarithmic scale", fr: "Échelle logarithmique" },
   "keys.percent": { tr: "Yüzde ölçek", en: "Percent scale", fr: "Échelle en pourcentage" },
+  "keys.currency": { tr: "Dolar bazında / TL", en: "US dollars / lira", fr: "Dollars US / livres" },
   "keys.snapshot": { tr: "Görüntüyü PNG olarak indir", en: "Download the image as PNG", fr: "Télécharger l'image en PNG" },
   "keys.measure": { tr: "Ölçüm (veya Shift + sürükle)", en: "Measure (or Shift + drag)", fr: "Mesure (ou Maj + glisser)" },
   "keys.tools": { tr: "Trend / yatay / dikey çizgi, Fibonacci, dikdörtgen", en: "Trend / horizontal / vertical line, Fibonacci, rectangle", fr: "Tendance / ligne horizontale / verticale, Fibonacci, rectangle" },

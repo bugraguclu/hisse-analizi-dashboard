@@ -2,6 +2,17 @@
 
 ## Yayımlanmamış
 
+### Grafikler: dolar bazında görünüm
+
+Hisse ve BIST 100 grafikleri araç çubuğundaki **USD** düğmesiyle (ya da Alt+U) dolar bazında gösterilir. Seçim tarayıcıda hatırlanır.
+
+- Her barın açılış, yüksek, düşük ve kapanışı, aynı dönemin USD/TRY kapanışına bölünür. Kaynak TradingView FX_IDC:USDTRY, makro sayfasıyla aynı. 1G ve 5G'de aynı 15/30 dakikalık dilim, günlükte aynı gün, haftalık ve aylıkta aynı hafta ve ay kullanılır. Hacim lot olarak kalır. Günlük kapanışlar TradingView'daki THYAO/USDTRY grafiğiyle aynıdır.
+- Mumlar, göstergeler (ısınma barlarıyla), karşılaştırma, dönem değişimi, taban çizgisi, veri tablosu, ölçüm ve PNG görüntüsü dolar değerleriyle çalışır. 1G'de taban çizgisi önceki seansın dolar kapanışıdır. Canlı fiyat, son USD/TRY kuruna bölünerek son bara işlenir. Fiyatlar 4 anlamlı basamakla yazılır (5,942 USD).
+- Dolar grafiğinin çizimleri ayrı saklanır (`hisse.chart.drawings.v1:<SEMBOL>@USD`). TL fiyatlı bir çizim dolar ekseninde anlamsız olurdu.
+- TradingView'ın kendi para birimi dönüşümü kullanılmadı: kullandığı USD/TRY, FX_IDC'den sürekli yaklaşık %2 yüksek. Bölme sembolleri (THYAO/USDTRY) ise gün içi grafikte ücretli plan istiyor.
+- USD/TRY geçmişinden eski barlar gösterilmez: BIST 100'ün Kasım 1989 öncesi aylık barları.
+- API: `/market/ticker/{t}/history` ve `/market/index/{s}` uçlarına `currency=TRY|USD` parametresi eklendi (varsayılan TRY). USD yanıtı son kuru `fx` alanında taşır, `info` kotasyonu TL kalır. Kod: `src/adapters/chart_currency.py`.
+
 ### Sektör ortalamaları (arayüz)
 
 Hisse sayfaları ve Hisse Tarama, hisseyi KAP sektöründeki şirketlerle karşılaştırır (sektör = KAP sektörü, ortalama = medyan; arka uç aşağıdaki bölümde).

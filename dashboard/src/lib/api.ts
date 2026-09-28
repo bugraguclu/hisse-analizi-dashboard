@@ -398,22 +398,24 @@ export const api = {
   /**
    * Chart series for the interactive charts (components/charts): the period's
    * window in `data` plus up to `warmup` earlier bars (same interval) in `warmup`,
-   * so indicators are valid from the first visible bar.
+   * so indicators are valid from the first visible bar. `currency: "USD"`: prices
+   * in dollars (each bar divided by its USD/TRY close).
    */
   chartHistory: (
     kind: "ticker" | "index",
     symbol: string,
     period: ChartPeriod,
     warmup: number,
+    currency: "TRY" | "USD",
     signal?: AbortSignal,
-  ) =>
-    get<ChartHistoryOut>(
-      kind === "index"
-        ? `/market/index/${seg(symbol)}?period=${encodeURIComponent(period)}&warmup=${warmup}`
-        : `/market/ticker/${seg(symbol)}/history?period=${encodeURIComponent(period)}&warmup=${warmup}`,
+  ) => {
+    const query = `period=${encodeURIComponent(period)}&warmup=${warmup}${currency === "USD" ? "&currency=USD" : ""}`;
+    return get<ChartHistoryOut>(
+      kind === "index" ? `/market/index/${seg(symbol)}?${query}` : `/market/ticker/${seg(symbol)}/history?${query}`,
       "default",
       signal,
-    ),
+    );
+  },
 
   // Polling
   pollingState: (signal?: AbortSignal) => get<PollingStateOut[]>("/polling-state", "no-store", signal),

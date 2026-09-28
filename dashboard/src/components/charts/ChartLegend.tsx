@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
-import { formatChangePercent, formatCompact, formatSigned, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
+import { formatChangePercent, formatCompact, formatNumber, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { formatChartChange } from "./format";
 import { useChartI18n, type ChartKey } from "./i18n";
 import { IndicatorSettingsPopover } from "./IndicatorSettings";
 import { lineCss, localize, toneCss, type IndicatorView } from "./indicator-view";
@@ -188,6 +189,14 @@ export function ChartLegend({
         <span className={cn("whitespace-nowrap font-sans font-semibold", hovering ? "text-foreground" : "text-muted-foreground")}>
           {formatBarTime(bar.time, barLabelStyle(series.interval))}
         </span>
+        {series.currency === "USD" ? (
+          <span
+            className="self-center rounded-sm border border-border px-1 font-sans text-[10px] font-medium leading-4 text-muted-foreground"
+            title={series.fxRate ? t("currency.legend", { rate: formatNumber(series.fxRate, 4) }) : t("currency.label")}
+          >
+            USD
+          </span>
+        ) : null}
         {showOhlc && bar.open !== null ? (
           ohlc.map(([short, long, value]) => (
             <Item key={short} label={<abbr title={t(long)} className="no-underline">{t(short)}</abbr>} value={value === null ? "—" : format(value)} />
@@ -197,7 +206,7 @@ export function ChartLegend({
         )}
         {change !== null ? (
           <span className={cn("whitespace-nowrap font-medium", TREND_TEXT_CLASS[tone])}>
-            {formatSigned(change)} ({formatChangePercent(changePercent)})
+            {formatChartChange(change, bar.close, series.currency)} ({formatChangePercent(changePercent)})
           </span>
         ) : null}
         {showVolume && bar.volume !== null ? <Item label={t("legend.volume")} value={formatCompact(bar.volume)} /> : null}

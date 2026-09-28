@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChartAttribution, ChartWorkspace, type SummaryState } from "@/components/charts/ChartWorkspace";
 import {
   CHART_PERIODS,
+  quoteInSeriesCurrency,
   rangeStats,
   useChartHistory,
   useLiveSeries,
@@ -14,10 +15,10 @@ import { useChartI18n } from "@/components/charts/i18n";
 import { LiveBadge } from "@/components/charts/LiveBadge";
 import { ApiDataMeta } from "@/components/shared/DataMeta";
 import { presetIndicator, useChartPrefs, type ChartPrefs } from "@/components/charts/prefs";
-import { formatChartPrice } from "@/components/charts/format";
+import { chartPriceFormatter, CURRENCY_UNIT, formatChartChange, formatUsdChartPrice } from "@/components/charts/format";
 import { formatBarTime } from "@/components/charts/time";
 import { useMarketStatus } from "@/hooks/use-market-status";
-import { formatChangePercent, formatPrice, formatSigned, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
+import { formatChangePercent, formatNumber, formatPrice, formatSigned, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useQuote, useStockIdentity } from "./hooks";
 import { useStockI18n, type StockKey } from "./i18n";
@@ -36,7 +37,7 @@ const PERIOD_LABELS: Record<ChartPeriod, { short: StockKey; long: StockKey }> = 
   max: { short: "period.max", long: "period.max.long" },
 };
 
-const BASE_PREFS = { scale: "normal", events: true, extremes: true, watermark: true, grid: true, magnet: true, drawingsHidden: false } as const;
+const BASE_PREFS = { scale: "normal", events: true, extremes: true, watermark: true, grid: true, magnet: true, drawingsHidden: false, currency: "TRY" } as const;
 const OVERVIEW_DEFAULTS: ChartPrefs = { ...BASE_PREFS, type: "area", volume: true, indicators: [] };
 const TECHNICAL_DEFAULTS: ChartPrefs = {
   ...BASE_PREFS,
@@ -66,19 +67,24 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   const [period, setPeriod] = useState<ChartPeriod>(technical ? "6mo" : "3mo");
   const defaults = technical ? TECHNICAL_DEFAULTS : OVERVIEW_DEFAULTS;
   const [prefs, setPrefs] = useChartPrefs(technical ? "hisse.chart.technical.v2" : "hisse.chart.overview.v2", defaults);
-  const historyQ = useChartHistory("ticker", ticker, period);
-  const warmPeriods = usePrefetchChartPeriods("ticker", ticker);
+  const historyQ = useChartHistory("ticker", ticker, period, { currency: prefs.currency });
+  const warmPeriods = usePrefetchChartPeriods("ticker", ticker, prefs.currency);
   const { quote, updatedAt: quoteFetchedAt } = useQuote(ticker);
   const identity = useStockIdentity(ticker).identity;
   const market = useMarketStatus();
 
-  // The last bar follows the live quote, so the chart ends where the page header's price is.
+  // The last bar follows the live quote, so the chart ends where the page header's price is
+  // (in dollars: the quote over the latest USD/TRY close, what that bar is divided by).
   const quoteTime = quote?.updatedAt ?? null;
-  const series = useLiveSeries(historyQ.data, quote?.last, quoteTime ?? quoteFetchedAt, quoteTime !== null);
+  const liveLast = quoteInSeriesCurrency(historyQ.data, quote?.last);
+  const series = useLiveSeries(historyQ.data, liveLast, quoteTime ?? quoteFetchedAt, quoteTime !== null);
   const shownPeriod = series?.period ?? period;
   const intraday = shownPeriod === "1d";
   const live = intraday && market?.isOpen === true;
-  const prevClose = quote?.prevClose ?? null;
+  const usd = series?.currency === "USD";
+  const formatBarPrice = chartPriceFormatter(series?.currency ?? "TRY");
+  // The quote's previous close is in lira; in dollars 1D's reference is the previous session's close.
+  const prevClose = usd ? (intraday ? (series?.referenceClose ?? null) : null) : (quote?.prevClose ?? null);
   const baseline =
     intraday && prevClose
       ? { price: prevClose, label: tc("baseline.prevClose") }
@@ -116,13 +122,16 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
     return (
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs" aria-live="off">
         <span className={cn("font-mono text-sm font-semibold tabular-nums", TREND_TEXT_CLASS[tone])}>
-          {formatChangePercent(percent)} <span className="text-xs font-medium">({formatSigned(change)} TL)</span>
+          {formatChangePercent(percent)}{" "}
+          <span className="text-xs font-medium">
+            ({formatChartChange(change, stats.last.close, shown.currency)} {CURRENCY_UNIT[shown.currency]})
+          </span>
         </span>
         <span className="text-muted-foreground">{label}</span>
         <span className="text-muted-foreground">
           {t("chart.periodRange")}:{" "}
           <span className="font-mono tabular-nums text-foreground">
-            {formatChartPrice(stats.low)} – {formatChartPrice(stats.high)}
+            {chartPriceFormatter(shown.currency)(stats.low)} – {chartPriceFormatter(shown.currency)(stats.high)}
           </span>
         </span>
         {live ? <LiveBadge label={tc("chart.live")} /> : null}
@@ -131,17 +140,28 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   };
 
   const last = series?.bars[series.bars.length - 1];
-  const ariaLabel = last
-    ? t("chart.ariaSummary", {
+  const summaryVars = last
+    ? {
         ticker,
         period: t(PERIOD_LABELS[shownPeriod].long),
-        price: formatPrice(last.close),
+        price: usd ? formatBarPrice(last.close) : formatPrice(last.close),
         change: formatChangePercent(baseline ? ((last.close - baseline.price) / baseline.price) * 100 : null),
-      })
-    : t("chart.title");
+      }
+    : null;
+  const ariaLabel = summaryVars ? (usd ? tc("currency.ariaSummary", summaryVars) : t("chart.ariaSummary", summaryVars)) : t("chart.title");
 
   const quoteTone = trendTone(quote?.change ?? null);
-  const headline = quote ? (
+  const headline = usd ? (
+    last ? (
+      <span className="inline-flex items-baseline gap-2 font-mono tabular-nums">
+        <span className="text-[15px] font-semibold text-foreground">
+          {formatUsdChartPrice(last.close)} <span className="text-xs font-medium text-muted-foreground">USD</span>
+        </span>
+        {series?.fxRate ? <span className="text-xs text-muted-foreground">USD/TRY {formatNumber(series.fxRate, 4)}</span> : null}
+        {live ? <LiveBadge label={tc("chart.live")} /> : null}
+      </span>
+    ) : null
+  ) : quote ? (
     <span className="inline-flex items-baseline gap-2 font-mono tabular-nums">
       <span className="text-[15px] font-semibold text-foreground">{formatPrice(quote.last)}</span>
       {quote.change !== null ? (
