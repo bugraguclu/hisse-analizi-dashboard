@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import type { Locale } from "@/lib/i18n";
 import { useLocale } from "@/lib/locale-context";
+import { isKnownSector, sectorLabel as kapSectorLabel } from "@/lib/sectors";
 
 type Entry = { tr: string; en: string; fr: string };
 
@@ -118,8 +119,30 @@ const dict = {
     en: "Loss makers have no P/E, so this screen leaves them out.",
     fr: "Les sociétés déficitaires n'ont pas de PER : ce filtre les exclut.",
   },
+  "preset.pe_below_sector": { tr: "F/K sektör ortalamasının altında", en: "P/E below sector average", fr: "PER sous la moyenne du secteur" },
+  "preset.pe_below_sector.rule": {
+    tr: "F/K, kendi KAP sektörünün medyanından düşük",
+    en: "P/E below the median of its KAP sector",
+    fr: "PER inférieur à la médiane de son secteur KAP",
+  },
+  "preset.pe_below_sector.note": {
+    tr: "Sektör ortalaması: aynı KAP sektöründeki hisselerin medyan F/K'sı (en az 3 hisse; zarar edenler sayılmaz).",
+    en: "Sector average: the median P/E of the stocks in the same KAP sector (at least 3; loss makers don't count).",
+    fr: "Moyenne du secteur : PER médian des actions du même secteur KAP (au moins 3 ; les déficitaires ne comptent pas).",
+  },
   "preset.low_pb": { tr: "Düşük PD/DD", en: "Low P/B", fr: "C/VC faible" },
   "preset.low_pb.note": { tr: "Defter değerinin altında işlem gören hisseler", en: "Trading at or below book value", fr: "Cotées sous leur valeur comptable" },
+  "preset.pb_below_sector": { tr: "PD/DD sektör ortalamasının altında", en: "P/B below sector average", fr: "C/VC sous la moyenne du secteur" },
+  "preset.pb_below_sector.rule": {
+    tr: "PD/DD, kendi KAP sektörünün medyanından düşük",
+    en: "P/B below the median of its KAP sector",
+    fr: "C/VC inférieur à la médiane de son secteur KAP",
+  },
+  "preset.pb_below_sector.note": {
+    tr: "Sektör ortalaması: aynı KAP sektöründeki hisselerin medyan PD/DD'si (en az 3 hisse; negatif özkaynak sayılmaz).",
+    en: "Sector average: the median P/B of the stocks in the same KAP sector (at least 3; negative equity doesn't count).",
+    fr: "Moyenne du secteur : C/VC médian des actions du même secteur KAP (au moins 3 ; hors capitaux propres négatifs).",
+  },
   "preset.low_ev_ebitda": { tr: "Düşük FD/FAVÖK", en: "Low EV/EBITDA", fr: "VE/EBITDA faible" },
   "preset.low_ev_ebitda.note": {
     tr: "Firma değeri / son 12 ay FAVÖK; FAVÖK'ü negatif olanlarda oran yoktur.",
@@ -136,6 +159,17 @@ const dict = {
   },
   "preset.high_roe": { tr: "Yüksek ROE", en: "High ROE", fr: "ROE élevé" },
   "preset.high_roe.note": { tr: "Net kâr / özkaynak (son 12 ay)", en: "Net income / equity (trailing 12 months)", fr: "Résultat net / capitaux propres (12 mois)" },
+  "preset.roe_above_sector": { tr: "ROE sektör ortalamasının üstünde", en: "ROE above sector average", fr: "ROE au-dessus de la moyenne du secteur" },
+  "preset.roe_above_sector.rule": {
+    tr: "ROE, kendi KAP sektörünün medyanından yüksek",
+    en: "ROE above the median of its KAP sector",
+    fr: "ROE supérieur à la médiane de son secteur KAP",
+  },
+  "preset.roe_above_sector.note": {
+    tr: "Sektör ortalaması: aynı KAP sektöründeki hisselerin medyan ROE'si (en az 3 hisse).",
+    en: "Sector average: the median ROE of the stocks in the same KAP sector (at least 3).",
+    fr: "Moyenne du secteur : ROE médian des actions du même secteur KAP (au moins 3).",
+  },
   "preset.high_net_margin": { tr: "Yüksek net marj", en: "High net margin", fr: "Marge nette élevée" },
   "preset.high_net_margin.note": { tr: "Net kâr / hasılat (son 12 ay)", en: "Net income / revenue (trailing 12 months)", fr: "Résultat net / chiffre d'affaires (12 mois)" },
   "preset.large_cap": { tr: "Büyük ölçek", en: "Large cap", fr: "Grande capitalisation" },
@@ -206,6 +240,7 @@ const dict = {
   // Columns (header label; `.title` is the header tooltip)
   "col.symbol": { tr: "Hisse", en: "Stock", fr: "Action" },
   "col.sector": { tr: "Sektör", en: "Sector", fr: "Secteur" },
+  "col.sector.title": { tr: "KAP sektörü", en: "KAP sector", fr: "Secteur KAP" },
   "col.close": { tr: "Fiyat", en: "Price", fr: "Cours" },
   "col.close.title": { tr: "Son fiyat (₺, 15 dk gecikmeli)", en: "Last price (₺, 15-min delayed)", fr: "Dernier cours (₺, différé de 15 min)" },
   "col.change_pct": { tr: "Günlük", en: "Day", fr: "Jour" },
@@ -307,6 +342,15 @@ const dict = {
   "results.caption": { tr: "Hisse tarama sonuçları", en: "Stock screener results", fr: "Résultats du filtrage d'actions" },
   "results.refreshing": { tr: "Güncelleniyor…", en: "Updating…", fr: "Mise à jour…" },
 
+  // Sector average row (pinned on top while a sector is picked)
+  "median.label": { tr: "Sektör ortalaması", en: "Sector average", fr: "Moyenne du secteur" },
+  "median.detail": { tr: "Medyan · {count} hisse", en: "Median · {count} stocks", fr: "Médiane · {count} actions" },
+  "median.title": {
+    tr: "{sector}: sektördeki {count} hissenin medyanı, her sütunda değeri olan en az 3 hisseyle. F/K, PD/DD ve FD/FAVÖK'te yalnızca pozitif değerler, temettüde yalnızca ödeyenler sayılır. Fiyat, hedef fiyat ve teknik görünümün ortalaması verilmez.",
+    en: "{sector}: the median of the sector's {count} stocks, from at least 3 values per column. P/E, P/B and EV/EBITDA count positive values only, dividend yield counts payers only. Price, target price and technical rating have no average.",
+    fr: "{sector} : médiane des {count} actions du secteur, avec au moins 3 valeurs par colonne. PER, C/VC et VE/EBITDA ne comptent que les valeurs positives, le rendement que les sociétés qui versent. Pas de moyenne pour le cours, l'objectif ni la note technique.",
+  },
+
   // Favorites
   "watch.add": { tr: "{ticker} hissesini favorilere ekle", en: "Add {ticker} to favorites", fr: "Ajouter {ticker} aux favoris" },
   "watch.remove": { tr: "{ticker} hissesini favorilerden çıkar", en: "Remove {ticker} from favorites", fr: "Retirer {ticker} des favoris" },
@@ -318,6 +362,16 @@ const dict = {
   "status.updated": { tr: "Güncelleme {time}", en: "Updated {time}", fr: "Mis à jour {time}" },
   "status.delayed": { tr: "Fiyatlar {minutes} dk gecikmeli", en: "Prices delayed {minutes} min", fr: "Cours différés de {minutes} min" },
   "status.sources": { tr: "Kaynak: TradingView, İş Yatırım, Borsa İstanbul", en: "Sources: TradingView, İş Yatırım, Borsa Istanbul", fr: "Sources : TradingView, İş Yatırım, Borsa Istanbul" },
+  "warn.sectors": {
+    tr: "KAP sektörleri şu an alınamıyor; sektör filtresi ve sektöre göre taramalar geçici olarak çalışmıyor.",
+    en: "KAP sectors are unavailable right now; the sector filter and the sector screens are temporarily off.",
+    fr: "Les secteurs KAP sont indisponibles ; le filtre par secteur et les filtres sectoriels sont temporairement inactifs.",
+  },
+  "filters.sectorNote": {
+    tr: "KAP sektörleri. Bir sektör seçince tablonun en üstünde sektör ortalaması (medyan) görünür.",
+    en: "KAP sectors. Pick one and the table shows the sector average (median) on top.",
+    fr: "Secteurs KAP. Choisissez-en un : le tableau affiche la moyenne (médiane) du secteur en tête.",
+  },
   "warn.analyst": {
     tr: "İş Yatırım analist verileri şu an alınamıyor; öneri, hedef fiyat ve yabancı oranı eksik olabilir.",
     en: "İş Yatırım analyst data is unavailable right now; ratings, targets and foreign ownership may be missing.",
@@ -408,4 +462,19 @@ export function sectorLabel(key: string, locale: Locale, turkish: ReadonlyMap<st
   if (locale === "tr") return turkish.get(key) ?? key;
   if (locale === "fr") return SECTOR_FR[key] ?? key;
   return key;
+}
+
+/**
+ * A screener sector key in the UI language: a KAP sector (what the SEKTÖR filter and
+ * the column use; `kapNames` = KAP's own names from the payload) or, from an old link
+ * or a row without a KAP sector, a TradingView sector (`tvNames` = Turkish names).
+ */
+export function screenerSectorLabel(
+  key: string,
+  locale: Locale,
+  kapNames: ReadonlyMap<string, string>,
+  tvNames: ReadonlyMap<string, string>,
+): string {
+  if (isKnownSector(key) || kapNames.has(key)) return kapSectorLabel(key, locale, kapNames.get(key));
+  return sectorLabel(key, locale, tvNames);
 }

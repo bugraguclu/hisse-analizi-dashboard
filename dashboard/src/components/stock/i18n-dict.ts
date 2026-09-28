@@ -437,6 +437,83 @@ const dict = {
   "ma.goldenBadge": { tr: "Golden cross", en: "Golden cross", fr: "Golden cross" },
   "ma.deathBadge": { tr: "Death cross", en: "Death cross", fr: "Death cross" },
   "pivots.ladderLabel": { tr: "Güncel fiyat", en: "Current price", fr: "Cours actuel" },
+
+  // Sector comparison (KAP sector medians, GET /fundamentals/{t}/sector)
+  "sector.label": { tr: "Sektör", en: "Sector", fr: "Secteur" },
+  "sector.open": {
+    tr: "{sector} sektörünü Hisse Tarama'da aç",
+    en: "Open {sector} in the stock screener",
+    fr: "Ouvrir le secteur {sector} dans le filtre d'actions",
+  },
+  "sector.sub": { tr: "Sektör: {value}", en: "Sector: {value}", fr: "Secteur : {value}" },
+  "sector.subTitle": {
+    tr: "{sector} sektöründeki {count} şirketin medyanı",
+    en: "Median of the {count} companies in {sector}",
+    fr: "Médiane des {count} sociétés du secteur {sector}",
+  },
+  "sector.subTitlePayers": {
+    tr: "{sector} sektöründe temettü ödeyen {count} şirketin medyanı",
+    en: "Median of the {count} dividend payers in {sector}",
+    fr: "Médiane des {count} sociétés versant un dividende du secteur {sector}",
+  },
+  "sector.median": {
+    tr: "Sektör medyanı: {value} ({count} şirket)",
+    en: "Sector median: {value} ({count} companies)",
+    fr: "Médiane du secteur : {value} ({count} sociétés)",
+  },
+  "sector.noMedian": {
+    tr: "Sektör medyanı yok: en az {min} şirketin değeri gerekir",
+    en: "No sector median: it needs at least {min} companies with a value",
+    fr: "Pas de médiane sectorielle : il faut au moins {min} sociétés avec une valeur",
+  },
+  "sector.rank": {
+    tr: "Sektörde büyükten küçüğe {rank}. sırada ({total} şirket)",
+    en: "Ranks {rank} of {total} in the sector, high to low",
+    fr: "Rang {rank} sur {total} dans le secteur, du plus haut au plus bas",
+  },
+  "ratios.sectorColumn": { tr: "Sektör", en: "Sector", fr: "Secteur" },
+  "ratios.sectorFooter": {
+    tr: "Sektör sütunu: {sector} sektöründeki şirketlerin medyanı; çubuktaki çizgi medyanın yeri.",
+    en: "Sector column: the median of the companies in {sector}; the line on each bar marks it.",
+    fr: "Colonne secteur : la médiane des sociétés du secteur {sector} ; le trait sur chaque barre la situe.",
+  },
+  "profile.mainSector": { tr: "Ana sektör: {sector}", en: "Main sector: {sector}", fr: "Secteur principal : {sector}" },
+  "div.sectorMedian": {
+    tr: "Sektör medyanı {value} (temettü ödeyen {count}/{total} şirket)",
+    en: "Sector median {value} ({count} of {total} companies pay)",
+    fr: "Médiane du secteur {value} ({count} sociétés sur {total} versent un dividende)",
+  },
+  "div.sectorPayersOnly": {
+    tr: "Sektörde temettü ödeyen şirket: {count}/{total}",
+    en: "Dividend payers in the sector: {count} of {total}",
+    fr: "Sociétés du secteur versant un dividende : {count} sur {total}",
+  },
+  "peers.title": { tr: "Sektör karşılaştırması", en: "Sector comparison", fr: "Comparaison sectorielle" },
+  "peers.count": { tr: "{count} şirket", en: "{count} companies", fr: "{count} sociétés" },
+  "peers.openScreener": { tr: "Hisse Tarama'da aç", en: "Open in the screener", fr: "Ouvrir dans le filtre" },
+  "peers.caption": {
+    tr: "{ticker} ile {sector} sektöründeki şirketler ve sektör ortalaması",
+    en: "{ticker}, the companies in {sector} and the sector average",
+    fr: "{ticker}, les sociétés du secteur {sector} et la moyenne du secteur",
+  },
+  "peers.stock": { tr: "Hisse", en: "Stock", fr: "Action" },
+  "peers.thisStock": { tr: "(bu hisse)", en: "(this stock)", fr: "(cette action)" },
+  "peers.average": { tr: "Sektör ortalaması", en: "Sector average", fr: "Moyenne du secteur" },
+  "peers.averageDetail": { tr: "Medyan · {count} şirket", en: "Median · {count} companies", fr: "Médiane · {count} sociétés" },
+  "peers.noMedian": {
+    tr: "Sektörde {count} şirket var; ortalama (medyan) için en az {min} şirket gerekir.",
+    en: "The sector has {count} companies; an average (median) needs at least {min}.",
+    fr: "Le secteur compte {count} sociétés ; une moyenne (médiane) en demande au moins {min}.",
+  },
+  "peers.col.marketCap": { tr: "Piyasa değeri", en: "Market cap", fr: "Capitalisation" },
+  "peers.col.netMargin": { tr: "Net marj", en: "Net margin", fr: "Marge nette" },
+  "peers.col.roe": { tr: "ROE", en: "ROE", fr: "ROE" },
+  "peers.col.dividendYield": { tr: "Temettü verimi", en: "Div. yield", fr: "Rendement" },
+  "peers.footer": {
+    tr: "Sektör = KAP sektörü; ortalama = medyan, en az 3 şirketle. F/K, PD/DD ve FD/FAVÖK'te yalnızca pozitif değerler, temettü veriminde yalnızca ödeyenler sayılır. Piyasa değeri, F/K, PD/DD ve temettü verimi Hisse Tarama verisinden (15 dk gecikmeli); FD/FAVÖK, marj ve ROE son finansal tablolardan.",
+    en: "Sector = KAP sector; average = median, with at least 3 companies. P/E, P/B and EV/EBITDA count positive values only, dividend yield counts payers only. Market cap, P/E, P/B and dividend yield come from the screener data (15-min delay); EV/EBITDA, margin and ROE from the latest financial statements.",
+    fr: "Secteur = secteur KAP ; moyenne = médiane, avec au moins 3 sociétés. PER, C/VC et VE/EBITDA ne comptent que les valeurs positives, le rendement que les sociétés qui versent. Capitalisation, PER, C/VC et rendement viennent des données du filtre (différé 15 min) ; VE/EBITDA, marge et ROE des derniers états financiers.",
+  },
 } satisfies Record<string, Entry>;
 
 export type StockKey = keyof typeof dict;

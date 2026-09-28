@@ -368,6 +368,8 @@ export type ScreenerUniverseRow = {
   target_price?: number;
   upside?: number;
   foreign_ratio?: number;
+  /** KAP sector key (e.g. "bankalar", see lib/sectors.ts); absent for the few stocks KAP lists without one. */
+  kap_sector?: string;
 };
 
 /** GET /market/screener/universe — every BIST stock for client-side screening. */
@@ -383,9 +385,59 @@ export type ScreenerUniverseOut = {
   sectors: Array<{ key: string; name_tr: string; count: number }>;
   /** English industry key → Turkish label. */
   industries: Record<string, string>;
-  /** Degraded parts: "analyst" (İş Yatırım), "indices" (index membership). */
+  /** Degraded parts: "analyst" (İş Yatırım), "indices" (index membership), "sectors" (KAP sectors). */
   warnings: string[];
   rows: ScreenerUniverseRow[];
+  /** KAP sectors of the rows (KAP's name in capitals); absent with the "sectors" warning. */
+  kap_sectors?: Array<{ key: string; name: string; count: number }>;
+};
+
+/** Metrics compared within a KAP sector (GET /fundamentals/{ticker}/sector). */
+export type SectorMetricKey =
+  | "market_cap" | "pe" | "pb" | "dividend_yield" | "change_pct"
+  | "perf_1w" | "perf_1m" | "perf_3m" | "perf_ytd" | "perf_1y" | "foreign_ratio"
+  | "gross_margin" | "operating_margin" | "ebitda_margin" | "net_margin" | "roe" | "roa"
+  | "current_ratio" | "debt_to_equity" | "net_debt_ebitda" | "revenue_growth_yoy" | "net_income_growth_yoy"
+  | "ps_ratio" | "ev_ebitda";
+
+/**
+ * One metric in the stock's sector: `median`/`p25`/`p75` are null below
+ * `min_companies` counted companies; `count` = companies counted (dividend
+ * yield: payers only), `reported` = companies with a value; `below`/`above` =
+ * other companies with a lower/higher value (only when the stock's value counts).
+ */
+export type SectorMetricOut = {
+  median: number | null;
+  p25: number | null;
+  p75: number | null;
+  count: number;
+  reported: number;
+  value: number | null;
+  below?: number;
+  above?: number;
+};
+
+/** A company of the sector; metrics it has no value for are omitted. */
+export type SectorPeerOut = {
+  symbol: string;
+  name?: string | null;
+  /** Loss-making over the last 12 months (no P/E). */
+  loss?: true;
+  ratio_period?: string;
+} & Partial<Record<SectorMetricKey, number>>;
+
+/** GET /fundamentals/{ticker}/sector — `available: false` when KAP lists no sector for the stock. */
+export type CompanySectorOut = {
+  ticker: string;
+  method: string;
+  min_companies: number;
+  available: boolean;
+  sector: { key: string; name: string; count: number; market_cap: number | null; ratio_period: string | null } | null;
+  /** Results period of the stock's own ratios ("2026/06"). */
+  ratio_period?: string | null;
+  metrics: Partial<Record<SectorMetricKey, SectorMetricOut>>;
+  /** Every company of the sector, largest market cap first (the stock included). */
+  peers: SectorPeerOut[];
 };
 
 /** Result of GET /market/search */

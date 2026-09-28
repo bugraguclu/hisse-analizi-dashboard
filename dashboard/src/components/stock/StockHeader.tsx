@@ -17,8 +17,9 @@ import {
 import { ApiDataMeta } from "@/components/shared/DataMeta";
 import { sessionQuoteTime } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
-import { useQuote, useSignals, type IdentityState } from "./hooks";
+import { useCompanySector, useQuote, useSignals, type IdentityState } from "./hooks";
 import { useStockI18n } from "./i18n";
+import { SectorLink } from "./sector-ui";
 import { InfoPopover, SignalBadge, VoteBar } from "./ui";
 
 const TREND_ICON = { up: TrendingUp, down: TrendingDown, flat: Minus } as const;
@@ -54,13 +55,15 @@ function TechnicalSignal({ ticker }: { ticker: string }) {
 }
 
 /**
- * Stock masthead: exchange line, ticker + company name (serif h1 like every page
- * title) and the daily quote. Phones stack identity → quote → technical signal;
- * from md the quote sits on the right, spanning both rows.
+ * Stock masthead: exchange line (with the KAP sector, linking to Hisse Tarama),
+ * ticker + company name (serif h1 like every page title) and the daily quote.
+ * Phones stack identity → quote → technical signal; from md the quote sits on
+ * the right, spanning both rows.
  */
 export function StockHeader({ ticker, identity }: { ticker: string; identity: IdentityState }) {
   const { t } = useStockI18n();
   const { quote, isPending, isError, updatedAt, refetch } = useQuote(ticker);
+  const sector = useCompanySector(ticker).data ?? null;
   const market = useMarketStatus();
   const now = useNow();
   const tone = trendTone(quote?.change ?? null);
@@ -79,6 +82,12 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
         <p className="text-xs text-muted-foreground">
           {t("header.exchange")}
           {identity.status === "found" && !identity.identity.tracked ? ` · ${t("header.notTracked")}` : ""}
+          {sector ? (
+            <>
+              {SEPARATOR}
+              {t("sector.label")}: <SectorLink sector={sector} />
+            </>
+          ) : null}
         </p>
         <h1 className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[28px] font-semibold leading-tight text-foreground md:text-[32px]">
           <span>{ticker}</span>

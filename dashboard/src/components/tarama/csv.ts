@@ -47,7 +47,14 @@ export function buildCsvColumns(locale: Locale, sectorName: (key: string) => str
   return [
     { header: TEXT_HEADERS.symbol[locale], value: (row: Row) => row.symbol },
     { header: TEXT_HEADERS.name[locale], value: (row: Row) => row.name },
-    { header: TEXT_HEADERS.sector[locale], value: (row: Row) => (row.sector ? sectorName(row.sector) : undefined) },
+    {
+      // The KAP sector, as in the table (TradingView's for a stock KAP lists without one).
+      header: TEXT_HEADERS.sector[locale],
+      value: (row: Row) => {
+        const key = row.kap_sector ?? row.sector;
+        return key ? sectorName(key) : undefined;
+      },
+    },
     { header: TEXT_HEADERS.indices[locale], value: (row: Row) => row.indices?.join(" ") },
     ...NUMERIC_HEADERS.map(([field, header]) => ({ header: header[locale], value: (row: Row) => row[field] })),
     {

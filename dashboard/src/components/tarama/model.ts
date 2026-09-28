@@ -125,7 +125,7 @@ export interface ScreenerState {
   q: string;
   /** Index code ("" = every stock). */
   index: string;
-  /** TradingView sector key ("" = every sector). */
+  /** KAP sector key ("" = every sector; see lib/sectors.ts). An old link's TradingView sector key still matches. */
   sector: string;
   /** Quick screens (TARAMALAR), kept apart from the typed criteria so each panel clears only itself. */
   presets: PresetId[];
@@ -158,7 +158,8 @@ export const DEFAULT_STATE: ScreenerState = {
 
 export const MAX_QUERY_LENGTH = 40;
 const INDEX_CODE_RE = /^[A-Z0-9]{3,8}$/;
-const MAX_SECTOR_LENGTH = 60;
+/** The longest KAP sector key has 86 characters. */
+const MAX_SECTOR_LENGTH = 100;
 
 /**
  * Lenient decimal parser for typed bounds: accepts "1,5", "1.5", "-3", "%4",
@@ -398,8 +399,8 @@ export function hasFilters(state: ScreenerState): boolean {
 // ---------------------------------------------------------------------------
 
 export type PresetId =
-  | "low_pe" | "low_pb" | "low_ev_ebitda" | "high_dividend"
-  | "profitable" | "high_roe" | "high_net_margin"
+  | "low_pe" | "pe_below_sector" | "low_pb" | "pb_below_sector" | "low_ev_ebitda" | "high_dividend"
+  | "profitable" | "high_roe" | "roe_above_sector" | "high_net_margin"
   | "large_cap" | "mid_cap" | "small_cap" | "liquid"
   | "uptrend" | "golden_cross" | "death_cross" | "near_high" | "near_low" | "rsi_oversold" | "rsi_overbought" | "volume_spike"
   | "day_gainers" | "day_losers" | "week_gainers"
@@ -413,6 +414,8 @@ export interface PresetDef {
   rec?: Exclude<RecFilter, "">;
   /** Net profit over the last 12 months — the stocks whose P/E is defined. */
   profitable?: true;
+  /** The value against the median of the stock's own KAP sector (see sectorStats). */
+  relative?: RelativeRule;
   /** Column view and order that make the result readable right away. */
   view?: ViewKey;
   sort?: readonly [SortKey, SortDir];
@@ -431,11 +434,15 @@ export const VOLUME_SPIKE = 2;
  */
 export const PRESETS: readonly PresetDef[] = [
   { id: "low_pe", group: "valuation", ranges: { pe: { max: 10 } }, view: "fundamentals", sort: ["pe", "asc"] },
+  // Relative screens combine with the fixed ones on the same field (cheap outright and for the sector).
+  { id: "pe_below_sector", group: "valuation", relative: { key: "pe", op: "below" }, view: "fundamentals", sort: ["pe", "asc"] },
   { id: "low_pb", group: "valuation", ranges: { pb: { max: 1 } }, view: "fundamentals", sort: ["pb", "asc"] },
+  { id: "pb_below_sector", group: "valuation", relative: { key: "pb", op: "below" }, view: "fundamentals", sort: ["pb", "asc"] },
   { id: "low_ev_ebitda", group: "valuation", ranges: { evebitda: { max: 6 } }, view: "fundamentals", sort: ["ev_ebitda", "asc"] },
   { id: "high_dividend", group: "valuation", ranges: { dy: { min: 4 } }, view: "fundamentals", sort: ["dividend_yield", "desc"] },
   { id: "profitable", group: "profitability", profitable: true, view: "fundamentals" },
   { id: "high_roe", group: "profitability", ranges: { roe: { min: 25 } }, view: "fundamentals", sort: ["roe", "desc"] },
+  { id: "roe_above_sector", group: "profitability", relative: { key: "roe", op: "above" }, view: "fundamentals", sort: ["roe", "desc"] },
   { id: "high_net_margin", group: "profitability", ranges: { nm: { min: 20 } }, view: "fundamentals", sort: ["net_margin", "desc"] },
   { id: "large_cap", group: "scale", ranges: { mcap: { min: 100 } }, sort: ["market_cap", "desc"] },
   { id: "mid_cap", group: "scale", ranges: { mcap: { min: 20, max: 100 } }, sort: ["market_cap", "desc"] },
@@ -518,6 +525,10 @@ export function matchesQuery(row: Row, foldedQuery: string): boolean {
   return foldText(row.symbol).includes(foldedQuery) || (row.name ? foldText(row.name).includes(foldedQuery) : false);
 }
 
+/**
+ * Rows passing the state's filters. `rows` is the whole universe: relative screens
+ * compare each stock with the median of its sector across every listed stock.
+ */
 export function filterRows(rows: readonly Row[], state: ScreenerState): Row[] {
   const query = foldText(state.q.trim());
   // Quick screens and typed criteria both apply: on the same field the tighter bound wins.
@@ -532,9 +543,11 @@ export function filterRows(rows: readonly Row[], state: ScreenerState): Row[] {
   const crosses = [state.cross, ...presets.map((preset) => preset.cross ?? "")].filter(Boolean);
   const recs = [state.rec, ...presets.map((preset) => preset.rec ?? "")].filter(Boolean);
   const profitable = presets.some((preset) => preset.profitable);
+  const relatives = presets.flatMap((preset) => (preset.relative ? [preset.relative] : []));
+  const stats = relatives.length > 0 ? sectorStats(rows) : null;
   return rows.filter((row) => {
     if (state.index && !row.indices?.includes(state.index)) return false;
-    if (state.sector && row.sector !== state.sector) return false;
+    if (state.sector && row.kap_sector !== state.sector && row.sector !== state.sector) return false;
     if (crosses.some((cross) => row.cross !== cross)) return false;
     if (recs.some((rec) => row.recommendation !== rec)) return false;
     // A P/E exists only for a trailing net profit; no P/E and no loss flag means no data, not a profit.
@@ -546,6 +559,7 @@ export function filterRows(rows: readonly Row[], state: ScreenerState): Row[] {
       if (range.min !== undefined && value < range.min * range.scale) return false;
       if (range.max !== undefined && value > range.max * range.scale) return false;
     }
+    if (stats && relatives.some((relative) => !passesRelative(row, relative, stats))) return false;
     return matchesQuery(row, query);
   });
 }
@@ -556,8 +570,10 @@ export function sortValue(row: Row, key: SortKey, sectorName: (key: string) => s
   switch (key) {
     case "symbol":
       return row.symbol;
-    case "sector":
-      return row.sector ? sectorName(row.sector) : undefined;
+    case "sector": {
+      const key = row.kap_sector ?? row.sector;
+      return key ? sectorName(key) : undefined;
+    }
     case "recommendation":
       return row.recommendation ? REC_RANK[row.recommendation] : undefined;
     default:
@@ -622,6 +638,132 @@ export function pageList(current: number, count: number): Array<number | "gap"> 
     out.push(p);
   });
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Sector medians (KAP sectors)
+// ---------------------------------------------------------------------------
+
+/** A sector median needs this many companies with a value (backend MIN_COMPANIES). */
+export const MIN_SECTOR_COMPANIES = 3;
+
+/** Which values count toward a median: every one, positive ones, or ones not below zero. */
+export type MedianRule = "all" | "positive" | "nonNegative";
+
+/**
+ * Columns with a sector median and the values that count — the backend's rules
+ * (src/services/sector_service.py): multiples, sizes and dividend yield only when
+ * positive (a loss maker's P/E means nothing; the yield's median is the payers'),
+ * foreign ownership when not negative. Prices, target prices and the technical
+ * rating have no sector median.
+ */
+export const SECTOR_MEDIAN_RULES: Readonly<Partial<Record<NumericField, MedianRule>>> = {
+  change_pct: "all",
+  turnover: "positive",
+  avg_turnover: "positive",
+  market_cap: "positive",
+  pe: "positive",
+  pb: "positive",
+  ev_ebitda: "positive",
+  dividend_yield: "positive",
+  roe: "all",
+  net_margin: "all",
+  rsi: "all",
+  sma50_dist: "all",
+  sma200_dist: "all",
+  high_52w_dist: "all",
+  low_52w_dist: "all",
+  rel_volume: "positive",
+  perf_1w: "all",
+  perf_1m: "all",
+  perf_3m: "all",
+  perf_ytd: "all",
+  perf_1y: "all",
+  upside: "all",
+  foreign_ratio: "nonNegative",
+};
+
+/** Whether a table column has a sector median (the pinned average row leaves the others blank). */
+export function hasSectorMedian(key: string): key is NumericField {
+  return Object.prototype.hasOwnProperty.call(SECTOR_MEDIAN_RULES, key);
+}
+
+export function countsToward(rule: MedianRule, value: number): boolean {
+  if (rule === "positive") return value > 0;
+  if (rule === "nonNegative") return value >= 0;
+  return true;
+}
+
+/** Middle value (the mean of the two middle ones for an even count); null without values. */
+export function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+export interface SectorStats {
+  /** Stocks of the sector in the universe. */
+  size: number;
+  /** Each compared column's median; absent below MIN_SECTOR_COMPANIES counted values. */
+  medians: Partial<Record<NumericField, number>>;
+  /** Values counted toward each column's median. */
+  counts: Partial<Record<NumericField, number>>;
+}
+
+const statsCache = new WeakMap<readonly Row[], ReadonlyMap<string, SectorStats>>();
+
+/**
+ * Every KAP sector's medians over `rows` — the whole universe, never the filtered
+ * table, so a sector's average stays put while other filters change. Cached per
+ * rows array (the counts in the filter menus call this once per option).
+ */
+export function sectorStats(rows: readonly Row[]): ReadonlyMap<string, SectorStats> {
+  const cached = statsCache.get(rows);
+  if (cached) return cached;
+  const members = new Map<string, Row[]>();
+  for (const row of rows) {
+    if (!row.kap_sector) continue;
+    const list = members.get(row.kap_sector);
+    if (list) list.push(row);
+    else members.set(row.kap_sector, [row]);
+  }
+  const rules = Object.entries(SECTOR_MEDIAN_RULES) as Array<[NumericField, MedianRule]>;
+  const stats = new Map<string, SectorStats>();
+  for (const [key, list] of members) {
+    const medians: SectorStats["medians"] = {};
+    const counts: SectorStats["counts"] = {};
+    for (const [field, rule] of rules) {
+      const values: number[] = [];
+      for (const row of list) {
+        const value = row[field];
+        if (value !== undefined && Number.isFinite(value) && countsToward(rule, value)) values.push(value);
+      }
+      counts[field] = values.length;
+      const middle = values.length >= MIN_SECTOR_COMPANIES ? median(values) : null;
+      if (middle !== null) medians[field] = middle;
+    }
+    stats.set(key, { size: list.length, medians, counts });
+  }
+  statsCache.set(rows, stats);
+  return stats;
+}
+
+/** A relative screen: the stock's value against its own KAP sector's median. */
+export interface RelativeRule {
+  key: RangeKey;
+  op: "below" | "above";
+}
+
+/** A stock without a sector, a sector median or a value that counts cannot pass. */
+function passesRelative(row: Row, relative: RelativeRule, stats: ReadonlyMap<string, SectorStats>): boolean {
+  const field = RANGE_BY_KEY.get(relative.key)?.field;
+  if (!field || !row.kap_sector) return false;
+  const value = row[field];
+  const middle = stats.get(row.kap_sector)?.medians[field];
+  if (value === undefined || !Number.isFinite(value) || middle === undefined) return false;
+  if (!countsToward(SECTOR_MEDIAN_RULES[field] ?? "all", value)) return false;
+  return relative.op === "below" ? value < middle : value > middle;
 }
 
 // ---------------------------------------------------------------------------

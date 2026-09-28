@@ -2,9 +2,26 @@
 
 ## Yayımlanmamış
 
+### Sektör ortalamaları (arayüz)
+
+Hisse sayfaları ve Hisse Tarama, hisseyi KAP sektöründeki şirketlerle karşılaştırır (sektör = KAP sektörü, ortalama = medyan; arka uç aşağıdaki bölümde).
+
+- **Başlık:** "Borsa İstanbul · TRY · Sektör: Ulaştırma ve Depolama". Sektör adı, Hisse Tarama'yı o sektöre süzülmüş açar.
+- **Günlük işlem özeti:** F/K, PD/DD ve yabancı payının altında küçük bir "Sektör: 9,91" satırı; üzerine gelince kaç şirketin medyanı olduğu yazar.
+- **Finansal oranlar:** hissenin sütununun yanında sektör sütunu, her çubukta sektör medyanının yerini gösteren çizgi; ipucunda sektör medyanı ve hissenin sektördeki sırası. Telefonda çubuk satırın altına iner.
+- **Şirket profili:** sektör, karşılaştırmada kullanılan KAP sektörüdür ve Hisse Tarama'ya bağlanır; KAP künyesindeki ana sektör farklıysa altında yazar ("Bankalar" · "Ana sektör: Mali Kuruluşlar"). F/K, PD/DD, F/S, FD/FAVÖK ve yabancı payının altında sektör medyanı.
+- **Temettü geçmişi:** sektörde temettü ödeyenlerin medyan verimi ve kaç şirketin ödediği.
+- **Yeni "Sektör karşılaştırması" kartı:** Genel Bakış'ta oranlar ve sinyaller satırının altında, Temel Analiz'de ilk satırın altında, Kombine'de oranlar kartının altında (daha az sütunla). Hisse, sektör ortalaması (medyan) ve piyasa değerine göre ilk 8 şirket; "Tümünü göster" ve "Hisse Tarama'da aç". Değeri olmayan sütunlar gizlenir (bankalarda FD/FAVÖK ve marj yok). 3'ten az şirketli sektörde medyan yerine açıklama çıkar; KAP sektörü olmayan hissede kart gösterilmez. Renkler nötrdür: medyanın üstü ya da altı iyi veya kötü haber değildir.
+- **Hisse Tarama:**
+  - SEKTÖR filtresi KAP sektörlerine geçti (48 sektör, seçenek başına hisse sayısı). Tablodaki ve CSV'deki sektör sütunu da KAP sektörüdür. TradingView sektörlü eski bağlantılar çalışmaya devam eder.
+  - Bir sektör seçilince tablonun en üstünde sabit "Sektör ortalaması" satırı durur: her sütunun sektör medyanı, arka uçla aynı kurallarla (çarpanlarda yalnızca pozitif değerler, temettüde ödeyenler, en az 3 hisse). Sıralamaya ve sayfalamaya girmez; fiyat, hedef fiyat ve teknik görünüm sütunlarında boştur.
+  - TARAMALAR'a üç yeni tarama: **F/K sektör ortalamasının altında** ve **PD/DD sektör ortalamasının altında** (Değerleme), **ROE sektör ortalamasının üstünde** (Kârlılık). Her hisse kendi KAP sektörünün medyanıyla karşılaştırılır; medyan diğer filtrelerden bağımsız olarak tüm sektörden alınır. Sabit eşikli taramalarla birlikte seçilebilir (ör. Düşük F/K + F/K sektör ortalamasının altında).
+- **Birim testleri:** `npm test` (dashboard), Node'un yerleşik test çalıştırıcısıyla, ek bağımlılık olmadan (Node 24 TypeScript'i doğrudan çalıştırır). Sektör adları ve bağlantıları, tarayıcıdaki medyan kuralları, sektör filtresi, göreli taramalar ve API yanıtının ayrıştırılması (28 test).
+- Düzeltme: şirket profilindeki büyük harf dönüşümü "BIST"i "Bıst" yazıyordu.
+
 ### Sektör ortalamaları (API)
 
-Hisseyi KAP sektöründeki şirketlerle karşılaştırmak için arka uç (`src/services/sector_service.py`); arayüz sonraki adımda eklenecek.
+Hisseyi KAP sektöründeki şirketlerle karşılaştırmak için arka uç (`src/services/sector_service.py`); arayüzü yukarıdaki bölümde.
 
 - **`GET /fundamentals/{ticker}/sector`:** hissenin KAP sektörü, her göstergenin sektör medyanı ve çeyrekleri (`p25`/`p75`), hissenin değeri ve sektördeki yeri (`below`/`above`: değeri daha düşük/yüksek şirket sayısı), piyasa değerine göre sıralı emsaller. **`GET /sectors`:** 48 KAP sektörü (623 hisse), şirket sayısı, toplam piyasa değeri ve medyanlar.
 - **Sektör = KAP sektörü** (Bankalar, GYO, Gıda, İçecek ve Tütün…). TradingView'ın sektörü karşılaştırma için fazla geniş: "Finance" bankaları, GYO'ları ve holdingleri birlikte tutuyor (138 şirket).

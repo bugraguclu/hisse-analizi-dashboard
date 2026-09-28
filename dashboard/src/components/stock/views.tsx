@@ -17,6 +17,7 @@ import { NewsCard } from "./NewsCard";
 import { PriceChartCard } from "./PriceChartCard";
 import { QuoteStats } from "./QuoteStats";
 import { RatiosCard } from "./RatiosCard";
+import { SectorComparisonCard } from "./SectorComparisonCard";
 import { StockShell } from "./StockShell";
 import { TechnicalSummary } from "./TechnicalSummary";
 import { LazySection, SectionHeadingLevel } from "./ui";
@@ -45,9 +46,9 @@ const STACK_ITEM = "flex flex-col [&>*]:grow";
 
 /**
  * /hisse/[ticker] — overview: key figures and the chart, the verdicts
- * (scorecard, analysts), what is new (KAP, news), ratios and signals,
- * dividends and the report calendar, then the statements. Below-the-fold
- * sections mount when scrolled near.
+ * (scorecard, analysts), what is new (KAP, news), ratios and signals, the
+ * stock against its sector, dividends and the report calendar, then the
+ * statements. Below-the-fold sections mount when scrolled near.
  */
 export function StockOverviewView({ ticker }: { ticker: string }) {
   return (
@@ -70,6 +71,9 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
           <AllTimeframeSignals ticker={ticker} />
         </div>
       </LazySection>
+      <LazySection minHeight={420}>
+        <SectorComparisonCard ticker={ticker} />
+      </LazySection>
       <LazySection columns={2} minHeight={300}>
         <div className={PAIR}>
           <DividendHistory ticker={ticker} />
@@ -87,8 +91,8 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
  * /temel/[ticker] — fundamentals: the scorecard over the ratios behind it
  * beside the analysts' view over valuation and the company profile (two
  * columns that end on the same line, so a bank's short ratio list doesn't
- * leave one half-empty card), dividends beside ownership and the report
- * calendar, then the statements.
+ * leave one half-empty card), the stock against its sector, dividends beside
+ * ownership and the report calendar, then the statements.
  */
 export function StockFundamentalView({ ticker }: { ticker: string }) {
   return (
@@ -103,6 +107,9 @@ export function StockFundamentalView({ ticker }: { ticker: string }) {
           <CompanyProfileCard ticker={ticker} />
         </div>
       </div>
+      <LazySection minHeight={420}>
+        <SectorComparisonCard ticker={ticker} />
+      </LazySection>
       <LazySection columns={2} minHeight={440}>
         <div className={PAIR}>
           <DividendHistory ticker={ticker} />
@@ -169,6 +176,7 @@ export function StockCombinedView({ ticker }: { ticker: string }) {
           <FinancialHealthScorecard ticker={ticker} />
           <AnalystRecommendations ticker={ticker} />
           <RatiosCard ticker={ticker} />
+          <SectorComparisonCard ticker={ticker} compact />
           <CompanyProfileCard ticker={ticker} />
           <HoldersCard ticker={ticker} />
         </CombinedColumn>

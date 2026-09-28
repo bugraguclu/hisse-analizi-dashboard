@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useMarketStatus } from "@/hooks/use-market-status";
 import { formatCompact, formatNumber, formatPercent, formatPrice } from "@/lib/format";
-import { useFastInfo, useQuote } from "./hooks";
+import { useCompanySector, useFastInfo, useQuote } from "./hooks";
 import { useStockI18n } from "./i18n";
+import { SectorMedianSub } from "./sector-ui";
 import { SectionError, Stat } from "./ui";
 
 /** P/E and P/B are meaningless when ≤ 0 (losses / negative equity). */
@@ -17,6 +19,8 @@ interface StatItem {
   value: string;
   /** Still waiting for a source that can provide this value. */
   pending: boolean;
+  /** Small line under the value (the sector median). */
+  sub?: ReactNode;
 }
 
 /**
@@ -25,11 +29,23 @@ interface StatItem {
  */
 const GRID = "grid grid-cols-3 gap-x-3 gap-y-3.5 @lg:grid-cols-4 @lg:gap-x-5 @4xl:grid-cols-8";
 
+/**
+ * Values sit on the bottom line of their cell (labels may wrap). When some stats
+ * carry a sub line, the others get an empty one, so the values of a row stay level.
+ */
 function StatGrid({ items }: { items: StatItem[] }) {
+  const anySub = items.some((item) => item.sub !== undefined);
   return (
     <dl className={GRID}>
       {items.map((item) => (
-        <Stat key={item.key} label={item.label} value={item.value} pending={item.pending} wrapLabel />
+        <Stat
+          key={item.key}
+          label={item.label}
+          value={item.value}
+          pending={item.pending}
+          sub={item.sub ?? (anySub ? <span aria-hidden>{"\u00a0"}</span> : undefined)}
+          wrapLabel
+        />
       ))}
     </dl>
   );
@@ -45,6 +61,7 @@ export function QuoteStats({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
   const { quote, isPending: quotePending } = useQuote(ticker);
   const fastQ = useFastInfo(ticker);
+  const sectorQ = useCompanySector(ticker);
   const market = useMarketStatus();
   const fi = fastQ.data ?? null;
   const fastPending = fastQ.isPending;
@@ -71,11 +88,17 @@ export function QuoteStats({ ticker }: { ticker: string }) {
     item("mcap", t("stats.marketCap"), fi?.marketCap ?? quote?.marketCap, formatCompact, eitherPending),
   ];
 
+  // "Sektör: …" under the figures the sector is compared on, in the figure's own format
+  // (reserved while the sector loads; none when the sector is too small for a median).
+  const sectorSub = (metric: "pe" | "pb" | "foreign_ratio", format: (v: number) => string) =>
+    sectorQ.isPending || sectorQ.data?.metrics[metric]?.median != null ? (
+      <SectorMedianSub sector={sectorQ.data} metric={metric} format={format} pending={sectorQ.isPending} />
+    ) : undefined;
   const valuation: StatItem[] = [
-    item("pe", t("stats.pe"), positiveMultiple(fi?.pe), formatNumber, fastPending),
-    item("pb", t("stats.pb"), positiveMultiple(fi?.pb), formatNumber, fastPending),
+    { ...item("pe", t("stats.pe"), positiveMultiple(fi?.pe), formatNumber, fastPending), sub: sectorSub("pe", formatNumber) },
+    { ...item("pb", t("stats.pb"), positiveMultiple(fi?.pb), formatNumber, fastPending), sub: sectorSub("pb", formatNumber) },
     item("float", t("stats.freeFloat"), fi?.freeFloat, percent, fastPending),
-    item("foreign", t("stats.foreignRatio"), fi?.foreignRatio, percent2, fastPending),
+    { ...item("foreign", t("stats.foreignRatio"), fi?.foreignRatio, percent2, fastPending), sub: sectorSub("foreign_ratio", percent2) },
     item("hi52", t("stats.yearHigh"), fi?.yearHigh, formatPrice, fastPending),
     item("lo52", t("stats.yearLow"), fi?.yearLow, formatPrice, fastPending),
     item("avg50", t("stats.avg50"), fi?.avg50, formatPrice, fastPending),

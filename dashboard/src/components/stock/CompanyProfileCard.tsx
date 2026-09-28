@@ -1,9 +1,12 @@
 "use client";
 
 import { formatChangePercent, formatCompact, formatMultiple, formatNumber, formatPercent, formatPrice, EMPTY_VALUE } from "@/lib/format";
+import { titleCaseTr } from "@/lib/sectors";
 import { safeExternalUrl } from "@/lib/url";
-import { useCompanyProfile, useFastInfo, useQuote, useRatios } from "./hooks";
+import { useCompanyProfile, useCompanySector, useFastInfo, useQuote, useRatios } from "./hooks";
 import { useStockI18n } from "./i18n";
+import type { SectorMetricKey } from "./sector";
+import { SectorLink, SectorMedianSub } from "./sector-ui";
 import { useShellIdentity } from "./StockShell";
 import { SectionCard, SectionError, Stat } from "./ui";
 
@@ -15,30 +18,6 @@ function positive(value: number | null | undefined): number | null {
 const TEXT_ITEMS = new Set(["name", "legal", "sector", "market", "exchange", "website"]);
 /** Rows that come from the KAP company card (`/fundamentals/{t}/info`). */
 const PROFILE_ITEMS = new Set(["sector", "market", "website"]);
-
-/** A few abbreviations that should keep their canonical casing instead of being title-cased. */
-const KEEP_CASE_TR: Record<string, string> = { bist: "BIST", "a.o.": "A.O.", "a.ş.": "A.Ş.", "t.a.ş.": "T.A.Ş." };
-
-/** Conjunctions/particles that stay lower-case inside a title ("… ve Depolama"). */
-const LOWER_WORDS_TR = new Set(["ve", "ile", "veya", "ya", "da", "de", "ki", "için"]);
-
-/** "ULAŞTIRMA VE DEPOLAMA" → "Ulaştırma ve Depolama" (Turkish-aware; sector/market come from
- *  KAP in shouting uppercase). A couple of known abbreviations keep their canonical casing. */
-function titleCaseTr(raw: string): string {
-  return raw
-    .trim()
-    .toLocaleLowerCase("tr-TR")
-    .split(/\s+/)
-    .map(
-      (word, index) =>
-        KEEP_CASE_TR[word] ??
-        (index > 0 && LOWER_WORDS_TR.has(word)
-          ? word
-          : // First letter, even after an opening "(" or quote.
-            word.replace(/\p{L}/u, (letter) => letter.toLocaleUpperCase("tr-TR"))),
-    )
-    .join(" ");
-}
 
 /** Legal names arrive either properly cased or in KAP's all-caps form ("TÜRK HAVA YOLLARI A.O.");
  *  only the all-caps form is title-cased, so mixed-case names keep their own spelling. */
@@ -128,10 +107,18 @@ function YearRange({ low, high, current }: { low: number; high: number; current:
   );
 }
 
+/** Same KAP name, ignoring case and spacing ("MALİ KURULUŞLAR" vs "Mali Kuruluşlar"). */
+function sameName(a: string, b: string): boolean {
+  return a.trim().replace(/\s+/g, " ").toLocaleUpperCase("tr-TR") === b.trim().replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
+}
+
 /**
  * Company identity (KAP company card) + market/valuation snapshot. F/K and
  * PD/DD come from TradingView fast_info like everywhere else on the page
  * (computed ratios only as a fallback); F/S and FD/FAVÖK from KAP statements.
+ * The sector is the KAP sector the site compares with (it links to Hisse Tarama);
+ * the company card's broader main sector ("Mali Kuruluşlar" for a bank) sits
+ * under it. The multiples show their sector medians.
  */
 export function CompanyProfileCard({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
@@ -139,37 +126,59 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
   const fastQ = useFastInfo(ticker);
   const ratiosQ = useRatios(ticker);
   const profileQ = useCompanyProfile(ticker);
+  const sectorQ = useCompanySector(ticker);
   const { quote } = useQuote(ticker);
+  const sector = sectorQ.data ?? null;
   const fi = fastQ.data ?? null;
   const company = profileQ.data ?? null;
   const ratios = ratiosQ.data?.values ?? {};
   const pending = fastQ.isPending;
   const floatShares = fi?.shares != null && fi.freeFloat != null ? (fi.shares * fi.freeFloat) / 100 : null;
   const price = quote?.last ?? fi?.last ?? null;
+  // The sector median under a figure, in its format (none when the sector is too small for one).
+  const sectorSub = (metric: SectorMetricKey, format: (v: number) => string) =>
+    sectorQ.isPending || sector?.metrics[metric]?.median != null ? (
+      <SectorMedianSub sector={sector} metric={metric} format={format} pending={sectorQ.isPending} />
+    ) : undefined;
 
   const profile = [
     { key: "name", label: t("profile.name"), value: identity.identity?.name ?? ticker },
     { key: "legal", label: t("profile.legalName"), value: displayName(identity.identity?.legalName ?? company?.legalName) ?? EMPTY_VALUE },
-    { key: "sector", label: t("profile.sector"), value: company?.sector ? titleCaseTr(company.sector) : EMPTY_VALUE },
+    {
+      key: "sector",
+      label: t("profile.sector"),
+      value: sector ? <SectorLink sector={sector} /> : company?.sector ? titleCaseTr(company.sector) : EMPTY_VALUE,
+      sub:
+        sector && company?.sector && !sameName(company.sector, sector.kapName) ? (
+          <span title={titleCaseTr(company.sector)}>{t("profile.mainSector", { sector: titleCaseTr(company.sector) })}</span>
+        ) : undefined,
+    },
     { key: "market", label: t("profile.market"), value: company?.market ? titleCaseTr(company.market) : EMPTY_VALUE },
     { key: "exchange", label: t("profile.exchange"), value: [fi?.exchange ?? "BIST", fi?.currency].filter(Boolean).join(" · ") },
     { key: "shares", label: t("profile.shares"), value: formatCompact(fi?.shares) },
     { key: "floatShares", label: t("profile.floatShares"), value: formatCompact(floatShares) },
     { key: "freeFloat", label: t("stats.freeFloat"), value: formatPercent(fi?.freeFloat, 1) },
-    { key: "foreign", label: t("stats.foreignRatio"), value: formatPercent(fi?.foreignRatio, 1) },
+    { key: "foreign", label: t("stats.foreignRatio"), value: formatPercent(fi?.foreignRatio, 1), sub: sectorSub("foreign_ratio", (v) => formatPercent(v, 1)) },
     { key: "website", label: t("profile.website"), value: company?.website ? <WebsiteLinks raw={company.website} /> : EMPTY_VALUE },
   ];
   const itemPending = (key: string) => {
     if (key === "name") return identity.status === "loading";
+    // The comparison sector, else (no KAP sector) the company card's.
+    if (key === "sector") return sectorQ.isPending || (!sector && profileQ.isPending);
     if (key === "legal") return identity.status === "loading" || (!identity.identity?.legalName && profileQ.isPending);
     return PROFILE_ITEMS.has(key) ? profileQ.isPending : pending;
   };
   const valuation = [
     { key: "mcap", label: t("stats.marketCap"), value: formatCompact(fi?.marketCap ?? quote?.marketCap) },
-    { key: "pe", label: t("stats.pe"), value: formatNumber(positive(fi?.pe ?? ratios.pe_ratio)) },
-    { key: "pb", label: t("stats.pb"), value: formatNumber(positive(fi?.pb ?? ratios.pb_ratio)) },
-    { key: "ps", label: t("profile.ps"), value: formatMultiple(positive(ratios.ps_ratio)) },
-    { key: "evEbitda", label: t("profile.evEbitda"), value: formatMultiple(positive(ratios.ev_ebitda)) },
+    { key: "pe", label: t("stats.pe"), value: formatNumber(positive(fi?.pe ?? ratios.pe_ratio)), sub: sectorSub("pe", formatNumber) },
+    { key: "pb", label: t("stats.pb"), value: formatNumber(positive(fi?.pb ?? ratios.pb_ratio)), sub: sectorSub("pb", formatNumber) },
+    { key: "ps", label: t("profile.ps"), value: formatMultiple(positive(ratios.ps_ratio)), sub: sectorSub("ps_ratio", formatMultiple) },
+    {
+      key: "evEbitda",
+      label: t("profile.evEbitda"),
+      value: formatMultiple(positive(ratios.ev_ebitda)),
+      sub: sectorSub("ev_ebitda", formatMultiple),
+    },
     { key: "avg50", label: t("stats.avg50"), value: formatPrice(fi?.avg50) },
     { key: "avg200", label: t("stats.avg200"), value: formatPrice(fi?.avg200) },
   ];
@@ -186,6 +195,7 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
                 key={item.key}
                 label={item.label}
                 value={item.value}
+                sub={item.sub}
                 pending={itemPending(item.key)}
                 valueClassName={TEXT_ITEMS.has(item.key) ? "font-sans whitespace-normal break-words" : undefined}
               />
@@ -198,7 +208,15 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
                 // Computed ratios are needed for F/S, FD/FAVÖK and as the F/K–PD/DD fallback.
                 const needsRatios =
                   item.key === "ps" || item.key === "evEbitda" || (item.key === "pe" && fi?.pe == null) || (item.key === "pb" && fi?.pb == null);
-                return <Stat key={item.key} label={item.label} value={item.value} pending={pending || (needsRatios && ratiosQ.isPending)} />;
+                return (
+                  <Stat
+                    key={item.key}
+                    label={item.label}
+                    value={item.value}
+                    sub={item.sub}
+                    pending={pending || (needsRatios && ratiosQ.isPending)}
+                  />
+                );
               })}
             </dl>
           </div>

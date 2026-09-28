@@ -30,6 +30,7 @@ import {
   parseTimeframes,
   quoteFromFastInfo,
 } from "./parsers";
+import { parseCompanySector } from "./sector";
 import type { ChartPeriod, PriceHistory, StockIdentity } from "./types";
 
 /** All stock-page queries live under ["stock", TICKER, …] so they never collide with other pages. */
@@ -47,6 +48,7 @@ export const stockKeys = {
   movingAverages: (t: string) => ["stock", t, "movingAverages"] as const,
   liveRatios: (t: string) => ["stock", t, "liveRatios"] as const,
   dbRatios: (t: string) => ["stock", t, "dbRatios"] as const,
+  sector: (t: string) => ["stock", t, "sector"] as const,
   statement: (t: string, kind: StatementKind, quarterly: boolean) => ["stock", t, "statement", kind, quarterly] as const,
   dividends: (t: string) => ["stock", t, "dividends"] as const,
   holders: (t: string) => ["stock", t, "holders"] as const,
@@ -278,6 +280,19 @@ export function useRatios(ticker: string) {
       void dbQ.refetch();
     },
   };
+}
+
+/**
+ * The stock's KAP sector: every metric's sector median next to the stock's value,
+ * and the sector's companies. `data` is null when KAP lists no sector for it.
+ */
+export function useCompanySector(ticker: string) {
+  return useQuery({
+    queryKey: stockKeys.sector(ticker),
+    queryFn: ({ signal }) => api.companySector(ticker, signal),
+    select: parseCompanySector,
+    staleTime: STALE_TIME.analysis,
+  });
 }
 
 const STATEMENT_FETCHERS: Record<StatementKind, (ticker: string, quarterly: boolean) => Promise<unknown>> = {

@@ -15,14 +15,37 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useTaramaI18n, hasTaramaKey, type TaramaKey } from "./i18n";
-import { rowSignals, techRating, RSI_OVERBOUGHT, RSI_OVERSOLD, VOLUME_SPIKE, type ColumnKey, type Row, type RowSignal, type SortDir, type SortKey, type TechRating } from "./model";
+import {
+  hasSectorMedian,
+  rowSignals,
+  techRating,
+  RSI_OVERBOUGHT,
+  RSI_OVERSOLD,
+  VOLUME_SPIKE,
+  type ColumnKey,
+  type NumericField,
+  type Row,
+  type RowSignal,
+  type SortDir,
+  type SortKey,
+  type TechRating,
+} from "./model";
 
 type Translate = ReturnType<typeof useTaramaI18n>["t"];
 
 export interface TableContext {
   t: Translate;
+  /** KAP sector key (or, for a row without one, TradingView's) → name. */
   sectorName: (key: string) => string;
   industryName: (key: string) => string;
+}
+
+/** A summary row pinned above the stocks (the picked sector's medians). */
+export interface PinnedRow {
+  label: string;
+  detail: string;
+  title: string;
+  values: Partial<Record<NumericField, number>>;
 }
 
 interface ColumnSpec {
@@ -82,14 +105,17 @@ export const COLUMNS: Record<ColumnKey, ColumnSpec> = {
   sector: {
     align: "left",
     sortable: true,
-    render: (row, { sectorName, industryName }) =>
-      row.sector ? (
-        <span className="block max-w-[12rem] truncate font-sans text-muted-foreground xl:max-w-[16rem]" title={row.industry ? `${sectorName(row.sector)} · ${industryName(row.industry)}` : sectorName(row.sector)}>
-          {sectorName(row.sector)}
+    // The KAP sector (what SEKTÖR filters on); TradingView's for the few stocks KAP lists without one.
+    render: (row, { sectorName, industryName }) => {
+      const key = row.kap_sector ?? row.sector;
+      if (!key) return missing;
+      const name = sectorName(key);
+      return (
+        <span className="block max-w-[12rem] truncate font-sans text-muted-foreground xl:max-w-[16rem]" title={row.industry ? `${name} · ${industryName(row.industry)}` : name}>
+          {name}
         </span>
-      ) : (
-        missing
-      ),
+      );
+    },
   },
   close: { align: "right", sortable: true, render: (row) => num(row.close) },
   change_pct: { align: "right", sortable: true, render: (row) => <ChangePill value={row.change_pct} /> },
@@ -196,6 +222,47 @@ export function columnTitle(key: ColumnKey, t: Translate): string | undefined {
   return hasTaramaKey(titleKey) ? t(titleKey) : undefined;
 }
 
+/**
+ * The pinned summary row: the median in every column that has one, drawn by the
+ * column's own renderer, blank in the others (price, rating, signals). The label
+ * lines up with the tickers below (the star's width is kept free).
+ */
+function PinnedTableRow({ pinned, columns, context }: { pinned: PinnedRow; columns: readonly ColumnKey[]; context: TableContext }) {
+  const values: Row = { symbol: "", ...pinned.values };
+  return (
+    <tr>
+      <th
+        scope="row"
+        title={pinned.title}
+        className="sticky left-0 z-10 border-b border-border bg-surface py-2 pl-2 pr-3 text-left font-normal max-lg:border-r"
+      >
+        <div className="flex items-center gap-1.5">
+          <span aria-hidden className="w-[22px] shrink-0" />
+          <span className="min-w-0">
+            <span className="block text-[12px] font-semibold text-foreground">{pinned.label}</span>
+            <span className="block text-[11px] text-muted-foreground">{pinned.detail}</span>
+          </span>
+        </div>
+      </th>
+      {columns.map((key) => {
+        const spec = COLUMNS[key];
+        return (
+          <td
+            key={key}
+            className={cn(
+              "whitespace-nowrap border-b border-border bg-surface px-3 py-2 font-mono font-semibold tabular-nums text-foreground",
+              spec.align === "right" ? "text-right" : "text-left",
+              spec.className,
+            )}
+          >
+            {hasSectorMedian(key) ? spec.render(values, context) : null}
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) return <ChevronsUpDown className="h-3 w-3 opacity-40" aria-hidden="true" />;
   return dir === "asc" ? <ArrowUp className="h-3 w-3" aria-hidden="true" /> : <ArrowDown className="h-3 w-3" aria-hidden="true" />;
@@ -210,6 +277,7 @@ export function ScreenerTable({
   favorites,
   onToggleFavorite,
   context,
+  pinned,
 }: {
   rows: readonly Row[];
   columns: readonly ColumnKey[];
@@ -219,6 +287,8 @@ export function ScreenerTable({
   favorites: ReadonlySet<string>;
   onToggleFavorite: (ticker: string) => void;
   context: TableContext;
+  /** Stays on top of every page and out of the sort. */
+  pinned?: PinnedRow;
 }) {
   const { t } = context;
   const header = (key: ColumnKey, spec: ColumnSpec, sticky = false) => {
@@ -269,6 +339,7 @@ export function ScreenerTable({
           </tr>
         </thead>
         <tbody>
+          {pinned ? <PinnedTableRow pinned={pinned} columns={columns} context={context} /> : null}
           {rows.map((row) => {
             const favorite = favorites.has(row.symbol);
             return (

@@ -24,6 +24,7 @@ import type {
   PollingStateOut,
   EventFacetsOut,
   EventContentOut,
+  CompanySectorOut,
 } from "@/types";
 import { recordApiMeta } from "./api-meta";
 
@@ -334,6 +335,9 @@ export const api = {
     get(`/fundamentals/${ticker}/earnings-dates`),
   liveRatios: (ticker: string) =>
     get(`/fundamentals/${ticker}/live-ratios`),
+  /** The stock's KAP sector: each metric's sector median next to the stock's value, and the sector's companies. */
+  companySector: (ticker: string, signal?: AbortSignal) =>
+    get<CompanySectorOut>(`/fundamentals/${seg(ticker)}/sector`, "default", signal),
   liveNews: (ticker: string) =>
     get(`/fundamentals/${ticker}/live-news`),
   tickerNews: (ticker: string, hours = 48) =>

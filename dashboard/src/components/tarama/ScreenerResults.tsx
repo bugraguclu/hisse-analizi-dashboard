@@ -5,7 +5,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { RowSkeleton } from "@/components/dashboard/ui";
 import { ErrorState } from "@/components/shared/ErrorState";
 import type { ScreenerUniverseOut } from "@/types";
-import { columnLabel, ScreenerTable, type TableContext } from "./ScreenerTable";
+import { columnLabel, ScreenerTable, type PinnedRow, type TableContext } from "./ScreenerTable";
 import { Pagination } from "./Pagination";
 import { useTaramaI18n, type TaramaKey } from "./i18n";
 import { DEFAULT_STATE, VIEWS, VIEW_COLUMNS, type PageSlice, type Row, type ScreenerState, type SortKey, type ViewKey } from "./model";
@@ -24,6 +24,7 @@ export function ScreenerResults({
   hasFilters,
   favorites,
   context,
+  pinned,
   onView,
   onSort,
   onResetSort,
@@ -43,6 +44,8 @@ export function ScreenerResults({
   hasFilters: boolean;
   favorites: ReadonlySet<string>;
   context: TableContext;
+  /** The picked sector's medians, pinned above the stocks. */
+  pinned?: PinnedRow;
   onView: (view: ViewKey) => void;
   onSort: (key: SortKey) => void;
   onResetSort: () => void;
@@ -97,10 +100,10 @@ export function ScreenerResults({
       </div>
 
       {data?.warnings.map((warning) =>
-        warning === "analyst" || warning === "indices" ? (
+        warning === "analyst" || warning === "indices" || warning === "sectors" ? (
           <p key={warning} className="flex items-start gap-2 border-b border-border bg-surface px-4 py-2 text-[12px] text-warn">
             <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            {t(warning === "analyst" ? "warn.analyst" : "warn.indices")}
+            {t(warning === "analyst" ? "warn.analyst" : warning === "indices" ? "warn.indices" : "warn.sectors")}
           </p>
         ) : null,
       )}
@@ -149,6 +152,7 @@ export function ScreenerResults({
             favorites={favorites}
             onToggleFavorite={onToggleFavorite}
             context={context}
+            pinned={pinned}
           />
           <Pagination slice={slice} onPage={onPage} />
         </>

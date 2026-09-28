@@ -8,8 +8,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { RowSkeleton } from "@/components/dashboard/ui";
 import { ScreenerFilters, type StateUpdate } from "@/components/tarama/ScreenerFilters";
 import { ScreenerResults } from "@/components/tarama/ScreenerResults";
-import type { TableContext } from "@/components/tarama/ScreenerTable";
-import { sectorLabel, useTaramaI18n } from "@/components/tarama/i18n";
+import type { PinnedRow, TableContext } from "@/components/tarama/ScreenerTable";
+import { screenerSectorLabel, useTaramaI18n } from "@/components/tarama/i18n";
 import { buildCsvColumns, csvFileName } from "@/components/tarama/csv";
 import {
   DEFAULT_STATE,
@@ -21,6 +21,7 @@ import {
   hasLegacyParams,
   paginate,
   parseState,
+  sectorStats,
   serializeState,
   sortRows,
   toCsv,
@@ -105,13 +106,29 @@ function Screener() {
   const status = data ? "ready" : universeQ.isError ? "error" : "loading";
 
   const turkishSectors = useMemo(() => new Map((data?.sectors ?? []).map((sector) => [sector.key, sector.name_tr])), [data]);
-  const sectorName = useCallback((key: string) => sectorLabel(key, locale, turkishSectors), [locale, turkishSectors]);
+  const kapSectors = useMemo(() => new Map((data?.kap_sectors ?? []).map((sector) => [sector.key, sector.name])), [data]);
+  const sectorName = useCallback(
+    (key: string) => screenerSectorLabel(key, locale, kapSectors, turkishSectors),
+    [locale, kapSectors, turkishSectors],
+  );
   const industryName = useCallback((key: string) => (locale === "tr" ? (data?.industries[key] ?? key) : key), [locale, data]);
 
   const filtered = useMemo(() => (data ? filterRows(data.rows, state) : []), [data, state]);
   const sorted = useMemo(() => sortRows(filtered, state.sort, state.dir, sectorName), [filtered, state.sort, state.dir, sectorName]);
   const slice = useMemo(() => paginate(sorted, state.page, state.size), [sorted, state.page, state.size]);
   const counts = useMemo(() => breadth(filtered), [filtered]);
+
+  // A picked KAP sector opens with its medians on top (over the whole sector, whatever else is filtered).
+  const pinned = useMemo<PinnedRow | undefined>(() => {
+    const stats = state.sector && data ? sectorStats(data.rows).get(state.sector) : undefined;
+    if (!stats || Object.keys(stats.medians).length === 0) return undefined;
+    return {
+      label: t("median.label"),
+      detail: t("median.detail", { count: stats.size }),
+      title: t("median.title", { sector: sectorName(state.sector), count: stats.size }),
+      values: stats.medians,
+    };
+  }, [state.sector, data, sectorName, t]);
 
   const { lists, addTicker, removeTicker } = useWatchlists();
   const favoritesList = lists.find((list) => list.id === DEFAULT_WATCHLIST_ID) ?? lists[0];
@@ -180,6 +197,7 @@ function Screener() {
           hasFilters={hasFilters(state)}
           favorites={favorites}
           context={context}
+          pinned={pinned}
           onView={(view: ViewKey) => update((prev) => ({ ...prev, view }))}
           onSort={(key: SortKey) =>
             update((prev) => ({

@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ScreenerUniverseOut } from "@/types";
 import { boundInputText, presetRule, rangeChipLabel } from "./display";
-import { hasTaramaKey, indexLabel, sectorLabel, useTaramaI18n, type TaramaKey } from "./i18n";
+import { hasTaramaKey, indexLabel, screenerSectorLabel, useTaramaI18n, type TaramaKey } from "./i18n";
 import { ScreenerSortMenu } from "./SortMenu";
 import {
   CROSS_VALUES,
@@ -61,10 +61,10 @@ function criteriaCount(state: ScreenerState, group?: FilterGroup): number {
 }
 
 /**
- * Search row + the belif-style filter bar: ENDEKS, SEKTÖR, TARAMALAR (quick
- * screens), KRİTERLER (bounds) and SIRALA (order, page size) menus. Every pick applies at once; each
- * option shows how many stocks it would leave, and one that would leave none
- * is dimmed rather than hidden.
+ * Search row + the belif-style filter bar: ENDEKS, SEKTÖR (KAP sectors), TARAMALAR
+ * (quick screens), KRİTERLER (bounds) and SIRALA (order, page size) menus. Every pick
+ * applies at once; each option shows how many stocks it would leave, and one that
+ * would leave none is dimmed rather than hidden.
  */
 export function ScreenerFilters({
   state,
@@ -88,14 +88,17 @@ export function ScreenerFilters({
       current: count(state),
       index: new Map((data?.indices ?? []).map((option) => [option.code, count({ ...state, index: option.code })])),
       anyIndex: count({ ...state, index: "" }),
-      sector: new Map((data?.sectors ?? []).map((option) => [option.key, count({ ...state, sector: option.key })])),
+      sector: new Map((data?.kap_sectors ?? []).map((option) => [option.key, count({ ...state, sector: option.key })])),
       anySector: count({ ...state, sector: "" }),
       preset: new Map(PRESETS.map((preset) => [preset.id, count(isPresetActive(state, preset) ? state : togglePreset(state, preset))])),
     };
   }, [rows, data, state]);
 
   const turkishSectors = useMemo(() => new Map((data?.sectors ?? []).map((sector) => [sector.key, sector.name_tr])), [data]);
+  const kapSectors = useMemo(() => new Map((data?.kap_sectors ?? []).map((sector) => [sector.key, sector.name])), [data]);
+  const sectorName = (key: string) => screenerSectorLabel(key, locale, kapSectors, turkishSectors);
   const indicesDown = data?.warnings.includes("indices") ?? false;
+  const sectorsDown = data?.warnings.includes("sectors") ?? false;
 
   // ENDEKS ------------------------------------------------------------------
   const listedIndex = (data?.indices ?? []).some((option) => option.code === state.index);
@@ -111,18 +114,15 @@ export function ScreenerFilters({
     ...(state.index && !listedIndex ? [{ value: state.index, label: indexLabel(state.index, locale) }] : []),
   ];
 
-  // SEKTÖR ------------------------------------------------------------------
-  const listedSector = (data?.sectors ?? []).some((option) => option.key === state.sector);
+  // SEKTÖR (KAP sectors) ------------------------------------------------------
+  const listedSector = kapSectors.has(state.sector);
   const sectorOptions: FilterOption[] = [
     { value: "", label: t("filters.allSectors"), count: counts?.anySector ?? null },
-    ...(data?.sectors ?? [])
-      .map((sector) => ({
-        value: sector.key,
-        label: sectorLabel(sector.key, locale, turkishSectors),
-        count: counts?.sector.get(sector.key) ?? null,
-      }))
+    ...(data?.kap_sectors ?? [])
+      .map((sector) => ({ value: sector.key, label: sectorName(sector.key), count: counts?.sector.get(sector.key) ?? null }))
       .sort((a, b) => a.label.localeCompare(b.label, locale)),
-    ...(state.sector && !listedSector ? [{ value: state.sector, label: sectorLabel(state.sector, locale, turkishSectors) }] : []),
+    // A linked sector the data does not list (an old TradingView key, the store down) still shows as picked.
+    ...(state.sector && !listedSector ? [{ value: state.sector, label: sectorName(state.sector) }] : []),
   ];
 
   // TARAMALAR ---------------------------------------------------------------
@@ -221,8 +221,10 @@ export function ScreenerFilters({
 
         <FilterMenu
           label={t("filters.sector")}
-          value={state.sector ? sectorLabel(state.sector, locale, turkishSectors) : t("filters.all")}
+          value={state.sector ? sectorName(state.sector) : t("filters.all")}
           icon="list"
+          // KAP's sector names run long ("Metal Eşya, Makine, Elektrikli Cihazlar…").
+          panelClassName="sm:w-[max(100%,20rem)]"
         >
           <FilterChoiceList
             label={t("filters.sector")}
@@ -230,6 +232,9 @@ export function ScreenerFilters({
             options={sectorOptions}
             onChange={(sector) => onChange((prev) => withFilters(prev, { sector }))}
           />
+          <FilterPanelSection>
+            <p className="text-[11px] leading-snug text-muted-foreground">{t(sectorsDown ? "warn.sectors" : "filters.sectorNote")}</p>
+          </FilterPanelSection>
         </FilterMenu>
 
         <FilterGroupsMenu

@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
 import { formatCompact, formatDay, formatNumber, formatPercent } from "@/lib/format";
-import { useDividends, useQuote } from "./hooks";
+import { useCompanySector, useDividends, useQuote } from "./hooks";
 import { useStockI18n } from "./i18n";
 import { trailingDividendYield } from "./parsers";
+import { useSectorName } from "./sector-ui";
 import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
 
 const VISIBLE_ROWS = 8;
@@ -19,7 +20,8 @@ function perShare(value: number | null): string {
 /**
  * Cash dividends from İş Yatırım: gross/net TL per share, gross rate on
  * nominal value and total payout. Trailing yield = gross dividends paid in
- * the last 12 months / current price.
+ * the last 12 months / current price, next to the median yield of the KAP
+ * sector's dividend payers (Hisse Tarama data).
  */
 export function DividendHistory({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
@@ -27,10 +29,22 @@ export function DividendHistory({ ticker }: { ticker: string }) {
   const [expanded, setExpanded] = useState(false);
   const dividendsQ = useDividends(ticker);
   const { quote } = useQuote(ticker);
+  const sectorQ = useCompanySector(ticker);
+  const sectorName = useSectorName(sectorQ.data);
   const dividends = dividendsQ.data ?? [];
   const trailing = now !== null ? trailingDividendYield(dividends, quote?.last ?? null, now) : null;
   const lastPaid = now !== null ? (dividends.find((d) => d.time <= now) ?? null) : null;
   const visible = expanded ? dividends : dividends.slice(0, VISIBLE_ROWS);
+  // Payers only: in most sectors fewer than half the companies pay, zeros would pull the median to 0.
+  const sectorStat = sectorQ.data?.metrics.dividend_yield;
+  const sectorLine =
+    sectorName && sectorStat && sectorStat.reported > 0 ? (
+      <span title={sectorStat.median != null ? t("sector.subTitlePayers", { sector: sectorName, count: sectorStat.count }) : undefined}>
+        {sectorStat.median != null
+          ? t("div.sectorMedian", { value: formatPercent(sectorStat.median), count: sectorStat.count, total: sectorStat.reported })
+          : t("div.sectorPayersOnly", { count: sectorStat.count, total: sectorStat.reported })}
+      </span>
+    ) : null;
 
   return (
     <SectionCard title={t("div.title")} footer={t("div.footer")}>
@@ -39,7 +53,7 @@ export function DividendHistory({ ticker }: { ticker: string }) {
       ) : dividendsQ.isError ? (
         <SectionError error={dividendsQ.error} onRetry={() => void dividendsQ.refetch()} />
       ) : dividends.length === 0 ? (
-        <SectionEmpty message={t("div.empty")} />
+        <SectionEmpty message={t("div.empty")} hint={sectorLine ?? undefined} />
       ) : (
         <>
           {trailing && trailing.count > 0 ? (
@@ -47,11 +61,15 @@ export function DividendHistory({ ticker }: { ticker: string }) {
               <span className="text-muted-foreground">{t("div.trailingYield")}</span>
               <span className="font-mono text-sm font-bold tabular-nums text-foreground">{formatPercent(trailing.yieldPct)}</span>
               <span className="text-muted-foreground">{t("div.trailingPerShare", { amount: perShare(trailing.perShare) })}</span>
+              {sectorLine ? <span className="basis-full text-muted-foreground">{sectorLine}</span> : null}
             </div>
           ) : trailing ? (
-            <p className="mb-4 text-xs text-muted-foreground">
-              {lastPaid ? t("div.noTrailing", { date: formatDay(lastPaid.date) }) : t("div.noPaid")}
-            </p>
+            <div className="mb-4 space-y-1 text-xs text-muted-foreground">
+              <p>{lastPaid ? t("div.noTrailing", { date: formatDay(lastPaid.date) }) : t("div.noPaid")}</p>
+              {sectorLine ? <p>{sectorLine}</p> : null}
+            </div>
+          ) : sectorLine ? (
+            <p className="mb-4 text-xs text-muted-foreground">{sectorLine}</p>
           ) : null}
           <div className="relative -mx-4 overflow-x-auto scrollbar-thin sm:-mx-5">
             <table className="w-full min-w-[30rem] text-xs">
