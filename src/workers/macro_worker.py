@@ -145,6 +145,15 @@ async def run_macro_once(jobs: Sequence[str] = ("macro.rates", "macro.inflation"
 # Scheduled loops
 # ---------------------------------------------------------------------------
 
+async def _run_scheduled_job(job: str) -> None:
+    """``_execute_job`` for the loops: a failed run (DB or provider down) is logged, not
+    raised, so the job runs again at its next scheduled time instead of killing the worker."""
+    try:
+        await _execute_job(job)
+    except Exception as e:  # keep the loop alive across a bad run
+        logger.error("macro_scheduled_job_failed", job=job, error=f"{type(e).__name__}: {e}")
+
+
 async def _rates_loop(stop: asyncio.Event) -> None:
     while not stop.is_set():
         now = datetime.now(ISTANBUL_TZ)
@@ -152,7 +161,7 @@ async def _rates_loop(stop: asyncio.Event) -> None:
         await sleep_or_stop(stop, (target - now).total_seconds())
         if stop.is_set():
             break
-        await _execute_job("macro.rates")
+        await _run_scheduled_job("macro.rates")
 
 
 async def _inflation_loop(stop: asyncio.Event) -> None:
@@ -163,7 +172,7 @@ async def _inflation_loop(stop: asyncio.Event) -> None:
         await sleep_or_stop(stop, (target - now).total_seconds())
         if stop.is_set():
             break
-        await _execute_job("macro.inflation")
+        await _run_scheduled_job("macro.inflation")
 
 
 async def _fx_loop(stop: asyncio.Event) -> None:
@@ -173,20 +182,24 @@ async def _fx_loop(stop: asyncio.Event) -> None:
         await sleep_or_stop(stop, (target - now).total_seconds())
         if stop.is_set():
             break
-        await _execute_job("macro.fx")
+        await _run_scheduled_job("macro.fx")
         # Retry hourly until today's bulletin exists, or give up for the day (23:00).
         while not stop.is_set():
             now = datetime.now(ISTANBUL_TZ)
             if now.time() >= _FX_GIVE_UP_AT:
                 break
-            async with async_session_factory() as session:
-                published = await MacroRepository(session).has_fx_bulletin(now.date())
+            try:
+                async with async_session_factory() as session:
+                    published = await MacroRepository(session).has_fx_bulletin(now.date())
+            except Exception as e:  # DB down: treat as not yet published, check again next hour
+                logger.error("macro_fx_bulletin_check_failed", error=f"{type(e).__name__}: {e}")
+                published = False
             if published:
                 break
             await sleep_or_stop(stop, _FX_RETRY_EVERY_SECONDS)
             if stop.is_set():
                 break
-            await _execute_job("macro.fx")
+            await _run_scheduled_job("macro.fx")
 
 
 async def macro_loop(stop: asyncio.Event) -> None:
