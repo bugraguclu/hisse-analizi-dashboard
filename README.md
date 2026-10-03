@@ -39,6 +39,7 @@ Borsa İstanbul için piyasa takibi ve hisse analizi uygulaması: piyasa özeti,
 | **Ekonomik takvim** | Türkiye ve yurt dışı veri açıklamaları: gerçekleşen, tahmin ve önceki değer; önem, ülke ve konu filtreleri; arama; CSV ve `.ics` dışa aktarma |
 | **Hisse tarama** | ~630 BIST payı; değerleme, kârlılık, ölçek, teknik, performans ve analist kriterleri; 31 hazır tarama; endeks ve sektör filtreleri; beş sütun görünümü; sıralama ve CSV dışa aktarma |
 | **KAP haberleri** | Günlere göre gruplanan bildirim akışı; tarih, önem, kategori, hisse ve takip listesi filtreleri; arama ve dört sıralama; bildirimin tablolarıyla tam metni, `j`/`k` ile önceki ve sonraki bildirim |
+| **Sayfalarım ve düzenleme** | Her sayfa kişiselleştirilebilir: kartları sürükleyip taşıma, sütun genişliğini ve kart yüksekliğini kenarından ayarlama, kart gizleme ve 36 widget arasından ekleme, geri al ve varsayılana dön. "Sayfalarım"da boş sayfadan ya da şablondan kendi sayfalarınız; her kart ayrı bir hisseyi izleyebilir |
 | **Her sayfada** | Piyasa şeridi (BIST 100/30/Banka/Sınai, USD ve EUR, gram ve ons altın, Brent, 2 ve 10 yıllık tahvil faizi, seans durumu); `⌘K` ile hisse arama; Türkçe, İngilizce ve Fransızca; açık ve koyu tema; telefon uyumu; tarama, KAP ve takvim filtreleri URL'de saklanır ve bağlantıyla paylaşılabilir |
 
 Eksik veri hiçbir ekranda `0` olarak gösterilmez: değer yoksa `—` yazılır; yükleniyor, boş veri ve kaynak hatası durumları ayrı gösterilir.
@@ -359,7 +360,7 @@ OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/r
 ├── alembic/              veritabanı migration'ları
 ├── dashboard/            Next.js arayüzü
 │   ├── src/app/          sayfalar (App Router) ve /api proxy'si
-│   ├── src/components/   grafikler, hisse, makro, tarama ve KAP bileşenleri
+│   ├── src/components/   grafikler, hisse, makro, tarama, KAP ve widget (düzen) bileşenleri
 │   └── src/lib/          API istemcisi, i18n, biçimlendirme
 ├── tests/                birim ve entegrasyon testleri (pytest)
 ├── scripts/              seed, yedekleme, geri yükleme ve bakım betikleri
@@ -371,7 +372,7 @@ OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/r
 
 - Piyasa verileri ücretsiz kaynaklardan gelir ve 15 dakika gecikmelidir; arayüz gecikmeyi belirtir.
 - Haberler (Google News) yalnızca BIST 100 şirketleri için toplanır.
-- Kullanıcı hesabı yoktur: site herkese açık, salt okunur bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur; takip listeleri tarayıcıda saklanır.
+- Kullanıcı hesabı yoktur: site herkese açık, salt okunur bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur; takip listeleri, sayfa düzenleri ve "Sayfalarım" tarayıcıda saklanır (cihazlar arasında taşınmaz).
 - Worker tek replika çalışacak şekilde tasarlanmıştır (bkz. [Mimari](#mimari)).
 
 Değişiklik geçmişi [CHANGELOG.md](./CHANGELOG.md), yönetici özeti [PROJE_OZETI.md](./PROJE_OZETI.md), veri platformu ayrıntıları [docs/data-platform.md](./docs/data-platform.md) dosyasındadır.

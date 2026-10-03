@@ -31,6 +31,7 @@ import {
   Waves,
   type LucideIcon,
 } from "lucide-react";
+import { CARD_CHART_HEIGHT } from "@/components/charts/chart-height";
 import type { WidgetKey } from "./i18n-dict";
 import type { OptionValue } from "./model";
 
@@ -69,6 +70,12 @@ export interface WidgetMeta {
    * the stack can take it (the watchlist stays compact above market breadth).
    */
   grow?: number;
+  /**
+   * Chart cards: their plot height at the card's own size. Given a fixed
+   * height, the widget grows or shrinks the plot to fit instead of leaving
+   * space or scrolling.
+   */
+  plotHeight?: (options: Record<string, OptionValue>) => number;
   options?: readonly WidgetOption[];
 }
 
@@ -125,7 +132,10 @@ function plain(category: Exclude<WidgetCategory, "stock">, type: string, icon: L
 
 export const WIDGETS: readonly WidgetMeta[] = [
   stock("stock.quote", Gauge, 12, 140),
-  stock("stock.chart", ChartCandlestick, 12, 560, [VIEW_OPTION]),
+  {
+    ...stock("stock.chart", ChartCandlestick, 12, 560, [VIEW_OPTION]),
+    plotHeight: (options) => (options.view === "technical" ? CARD_CHART_HEIGHT.stockTechnical : CARD_CHART_HEIGHT.stock),
+  },
   stock("stock.scorecard", ClipboardCheck, 6, 420),
   stock("stock.analysts", Star, 6, 420),
   stock("stock.kap", Megaphone, 6, 560),
@@ -143,7 +153,7 @@ export const WIDGETS: readonly WidgetMeta[] = [
   stock("stock.indicators", ChartLine, 12, 420, [COMPACT_OPTION]),
   stock("stock.pivots", Crosshair, 12, 260),
 
-  plain("market", "market.index", TrendingUp, 8, 420),
+  { ...plain("market", "market.index", TrendingUp, 8, 420), plotHeight: () => CARD_CHART_HEIGHT.index },
   { ...plain("market", "market.watchlist", ListOrdered, 4, 360), grow: 0 },
   plain("market", "market.breadth", BarChart3, 4, 420),
   plain("market", "market.events", Newspaper, 8, 480),

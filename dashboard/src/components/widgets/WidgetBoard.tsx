@@ -14,6 +14,7 @@ import {
 } from "react";
 import { Inbox, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { ChartHeightContext, MIN_CARD_CHART_HEIGHT } from "@/components/charts/chart-height";
 import { useMediaQuery } from "@/components/charts/use-coarse-pointer";
 import { DEFAULT_TICKER } from "@/components/layout/nav";
 import { SectionHeadingLevel } from "@/components/stock/heading-level";
@@ -175,6 +176,35 @@ function LazyMount({ minHeight, children }: { minHeight: number; children: React
   return (
     <div ref={ref} className="flex min-w-0 grow flex-col [&>*]:grow">
       {visible ? children : <LazyPlaceholder minHeight={minHeight} />}
+    </div>
+  );
+}
+
+/**
+ * A chart card given a fixed height: measures the card at its current plot
+ * height, and sets the plot to what fills the height exactly (chrome = card −
+ * plot, so one step settles it). At the smallest plot the card scrolls.
+ */
+function FittedChart({ height, basePlot, inert, children }: { height: number; basePlot: number; inert: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [plot, setPlot] = useState<number | null>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      const natural = element.offsetHeight;
+      setPlot((current) => {
+        const shown = current ?? basePlot;
+        const next = Math.max(MIN_CARD_CHART_HEIGHT, Math.round(height - (natural - shown)));
+        return Math.abs(next - shown) <= 1 ? current : next;
+      });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [height, basePlot]);
+  return (
+    <div ref={ref} inert={inert} className="flex min-w-0 shrink-0 flex-col [&>*:last-child]:grow">
+      <ChartHeightContext.Provider value={plot}>{children}</ChartHeightContext.Provider>
     </div>
   );
 }
@@ -654,6 +684,14 @@ export function WidgetBoard({
                       const Icon = meta?.icon;
                       const body = <WidgetBody type={widget.type} ticker={ticker} options={widget.options} components={components} />;
                       const lazy = rowIndex >= lazyFromRow && !!meta && !isHeading;
+                      const content = (
+                        <>
+                          {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
+                            <p className="pb-1.5 font-mono text-[11px] font-semibold tracking-wide text-muted-foreground">{t("board.stockFor", { ticker })}</p>
+                          ) : null}
+                          <SectionHeadingLevel level={nested ? 3 : 2}>{lazy ? <LazyMount minHeight={meta.estimatedHeight}>{body}</LazyMount> : body}</SectionHeadingLevel>
+                        </>
+                      );
                       const share = weight(widget);
                       const grow = share === null ? 0 : anyGrows ? share : 1;
                       return (
@@ -661,15 +699,19 @@ export function WidgetBoard({
                           key={widget.id}
                           data-widget-id={widget.id}
                           style={fixed ? { height: widget.height } : { flexGrow: grow }}
-                          className="relative flex min-w-0 shrink-0 flex-col"
+                          // While editing, room for the toolbar even on a one-line heading.
+                          className={cn("relative flex min-w-0 shrink-0 flex-col", editing && "min-h-12 justify-end")}
                         >
                           <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto overscroll-contain rounded-2xl scrollbar-thin")}>
-                            <div inert={editing} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
-                              {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
-                                <p className="pb-1.5 font-mono text-[11px] font-semibold tracking-wide text-muted-foreground">{t("board.stockFor", { ticker })}</p>
-                              ) : null}
-                              <SectionHeadingLevel level={nested ? 3 : 2}>{lazy ? <LazyMount minHeight={meta.estimatedHeight}>{body}</LazyMount> : body}</SectionHeadingLevel>
-                            </div>
+                            {fixed && meta?.plotHeight ? (
+                              <FittedChart height={widget.height ?? 0} basePlot={meta.plotHeight(resolveOptions(meta, widget.options))} inert={editing}>
+                                {content}
+                              </FittedChart>
+                            ) : (
+                              <div inert={editing} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
+                                {content}
+                              </div>
+                            )}
                           </div>
 
                           {editing ? (

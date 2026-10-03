@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CARD_CHART_HEIGHT, useCardChartHeight } from "@/components/charts/chart-height";
 import { ChartAttribution, ChartWorkspace } from "@/components/charts/ChartWorkspace";
 import {
   CHART_PERIODS,
@@ -98,6 +99,7 @@ export function IndexChartCard({ className }: { className?: string }) {
   const [period, setPeriod] = useState<ChartPeriod>("1d");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [prefs, setPrefs] = useChartPrefs("hisse.chart.index.v2", INDEX_DEFAULTS);
+  const plotHeight = useCardChartHeight(CARD_CHART_HEIGHT.index);
   const { unit: chosenUnit, pending: conversionPending, error: conversionError, retry: retryConversion, convert } = useUnitConversion(prefs.unit, period);
   const currency = requestCurrency(chosenUnit);
   const historyQ = useChartHistory("index", SYMBOL, period, { currency });
@@ -262,7 +264,7 @@ export function IndexChartCard({ className }: { className?: string }) {
           baseline={baseline}
           live={live}
           padToSessionEnd={live}
-          height={240}
+          height={plotHeight}
           onHoverChange={setHoverIndex}
           headline={
             level !== null ? (

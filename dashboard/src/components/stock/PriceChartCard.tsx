@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { CARD_CHART_HEIGHT, useCardChartHeight } from "@/components/charts/chart-height";
 import { ChartAttribution, ChartWorkspace, type SummaryState } from "@/components/charts/ChartWorkspace";
 import { LineKey } from "@/components/charts/ChartLegend";
 import type { CompareSuggestion } from "@/components/charts/ComparePicker";
@@ -129,6 +130,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   const { t } = useStockI18n();
   const { t: tc } = useChartI18n();
   const technical = variant === "technical";
+  const plotHeight = useCardChartHeight(technical ? CARD_CHART_HEIGHT.stockTechnical : CARD_CHART_HEIGHT.stock);
   const [period, setPeriod] = useState<ChartPeriod>(technical ? "6mo" : "3mo");
   const defaults = technical ? TECHNICAL_DEFAULTS : OVERVIEW_DEFAULTS;
   const [prefs, setPrefs] = useChartPrefs(technical ? "hisse.chart.technical.v2" : "hisse.chart.overview.v2", defaults);
@@ -461,7 +463,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
         baseline={baseline}
         live={live}
         padToSessionEnd={live}
-        height={technical ? 340 : 300}
+        height={plotHeight}
         summary={summary}
         headline={headline}
         emptyMessage={t("chart.empty")}
