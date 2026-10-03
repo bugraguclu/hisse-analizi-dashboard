@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, createElement, useContext, useMemo, type ReactNode } from "react";
 import type { BuiltInPage } from "./defaults";
 import { CUSTOM_LAYOUTS_COOKIE, parseCustomLayoutsCookie } from "./custom-layouts-cookie";
 
@@ -20,7 +20,7 @@ export function CustomLayoutsProvider({
     return new Set<BuiltInPage>(customLayouts ?? []);
   }, [customLayouts]);
 
-  return <CustomLayoutsContext.Provider value={value}>{children}</CustomLayoutsContext.Provider>;
+  return createElement(CustomLayoutsContext.Provider, { value }, children);
 }
 
 export function useCustomLayouts(): ReadonlySet<BuiltInPage> {
