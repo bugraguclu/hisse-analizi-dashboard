@@ -26,13 +26,13 @@ export function HeadingWidget({ options }: { options: Record<string, OptionValue
   const anchor = text(options.anchor);
   if (options.style === "caps") {
     return (
-      <h2 id={anchor || undefined} className="scroll-mt-24 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <h2 id={anchor || undefined} className="scroll-mt-24 -mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </h2>
     );
   }
   return (
-    <h2 id={anchor || undefined} className="scroll-mt-24 pt-4 text-[15px] font-semibold tracking-tight text-foreground">
+    <h2 id={anchor || undefined} className="scroll-mt-24 pt-3 text-[15px] font-semibold tracking-tight text-foreground">
       {label}
     </h2>
   );

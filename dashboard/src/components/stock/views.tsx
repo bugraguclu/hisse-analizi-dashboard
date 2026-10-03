@@ -23,6 +23,7 @@ function StockBoardPage({
   page,
   lazyFromRow,
   stackBelow = "lg",
+  stackedGap,
 }: {
   ticker: string;
   view: StockView;
@@ -30,6 +31,7 @@ function StockBoardPage({
   /** First row whose cards wait until scrolled near (where the hand-built page started its LazySections). */
   lazyFromRow: number;
   stackBelow?: Breakpoint;
+  stackedGap?: number;
 }) {
   const editor = useSitePageEditor(page);
   return (
@@ -38,6 +40,7 @@ function StockBoardPage({
         editor={editor}
         context={{ ticker, tickerOverrides: true }}
         stackBelow={stackBelow}
+        stackedGap={stackedGap}
         lazyFromRow={lazyFromRow}
         galleryCategories={GALLERY_ORDER}
         components={STOCK_WIDGETS}
@@ -67,5 +70,5 @@ export function StockTechnicalView({ ticker }: { ticker: string }) {
  * squeezed into ~450px).
  */
 export function StockCombinedView({ ticker }: { ticker: string }) {
-  return <StockBoardPage ticker={ticker} view="combined" page="stock.combined" lazyFromRow={1} stackBelow="xl" />;
+  return <StockBoardPage ticker={ticker} view="combined" page="stock.combined" lazyFromRow={1} stackBelow="xl" stackedGap={32} />;
 }

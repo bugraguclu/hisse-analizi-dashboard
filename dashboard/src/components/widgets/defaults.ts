@@ -1,4 +1,4 @@
-import { buildLayout, row, type Layout } from "./model";
+import { buildLayout, railRow, row, type Layout } from "./model";
 
 /**
  * The site's own page layouts, as widget layouts. A visitor who never
@@ -17,10 +17,10 @@ const heading = (preset: string, anchor?: string, style?: "caps") => ({
 export const DEFAULT_LAYOUTS: Readonly<Record<BuiltInPage, Layout>> = {
   /**
    * Home: the BIST 100 with the latest KAP disclosures under it, beside the
-   * visitor's watchlist over market breadth (phones: chart, disclosures,
-   * watchlist, breadth).
+   * visitor's watchlist over market breadth (phones: chart, watchlist,
+   * breadth, disclosures).
    */
-  home: buildLayout("home", [row([8, "market.index", "market.events"], [4, "market.watchlist", "market.breadth"])]),
+  home: buildLayout("home", [railRow([8, "market.index", "market.events"], [4, "market.watchlist", "market.breadth"])]),
 
   /**
    * /hisse — key figures and the chart, the verdicts (scorecard, analysts),
@@ -72,7 +72,14 @@ export const DEFAULT_LAYOUTS: Readonly<Record<BuiltInPage, Layout>> = {
         "stock.profile",
         "stock.holders",
       ],
-      [6, heading("technical", undefined, "caps"), "stock.technicalSummary", "stock.signals", { type: "stock.indicators", options: { compact: true } }, "stock.pivots"],
+      [
+        6,
+        heading("technical", undefined, "caps"),
+        "stock.technicalSummary",
+        "stock.signals",
+        { type: "stock.indicators", options: { compact: true } },
+        { type: "stock.pivots", options: { lazy: true } },
+      ],
     ),
   ]),
 

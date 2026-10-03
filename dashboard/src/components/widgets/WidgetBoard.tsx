@@ -74,6 +74,26 @@ const SPAN_CLASS: Record<Breakpoint, string> = {
   lg: "lg:[grid-column:span_var(--span)/span_var(--span)]",
   xl: "xl:[grid-column:span_var(--span)/span_var(--span)]",
 };
+const RAIL_GRID_CLASS: Record<Breakpoint, string> = {
+  lg: "lg:grid-cols-12 lg:grid-rows-[auto_1fr]",
+  xl: "xl:grid-cols-12 xl:grid-rows-[auto_1fr]",
+};
+const RAIL_HEAD_CLASS: Record<Breakpoint, string> = {
+  lg: "lg:[grid-column:1/span_var(--span)] lg:row-start-1 lg:row-span-1",
+  xl: "xl:[grid-column:1/span_var(--span)] xl:row-start-1 xl:row-span-1",
+};
+const RAIL_SIDE_CLASS: Record<Breakpoint, string> = {
+  lg: "lg:[grid-column:var(--start)/span_var(--span)] lg:row-start-1 lg:row-span-2",
+  xl: "xl:[grid-column:var(--start)/span_var(--span)] xl:row-start-1 xl:row-span-2",
+};
+const RAIL_TAIL_CLASS: Record<Breakpoint, string> = {
+  lg: "lg:[grid-column:1/span_var(--span)] lg:row-start-2 lg:row-span-1 lg:self-start",
+  xl: "xl:[grid-column:1/span_var(--span)] xl:row-start-2 xl:row-span-1 xl:self-start",
+};
+const RAIL_FREE_CLASS: Record<Breakpoint, string> = {
+  lg: "lg:[grid-column:var(--start)/span_var(--span)] lg:row-start-1 lg:row-span-2",
+  xl: "xl:[grid-column:var(--start)/span_var(--span)] xl:row-start-1 xl:row-span-2",
+};
 const WIDE_QUERY: Record<Breakpoint, string> = { lg: "(min-width: 64rem)", xl: "(min-width: 80rem)" };
 
 export interface BoardContext {
@@ -269,18 +289,39 @@ function measure(board: HTMLElement): MeasuredBoard {
   };
   return {
     box: box(board),
-    rows: Array.from(board.querySelectorAll<HTMLElement>(":scope > [data-row-id]")).map((row) => ({
-      id: row.dataset.rowId ?? "",
-      box: box(row),
-      columns: Array.from(row.querySelectorAll<HTMLElement>(":scope > [data-col-id]")).map((column) => ({
+    rows: Array.from(board.querySelectorAll<HTMLElement>(":scope > [data-row-id]")).map((row) => {
+      const rawCols = Array.from(row.querySelectorAll<HTMLElement>(":scope > [data-col-id]")).map((column) => ({
         id: column.dataset.colId ?? "",
         box: box(column),
         widgets: Array.from(column.querySelectorAll<HTMLElement>(":scope > [data-widget-id]")).map((widget) => ({
           id: widget.dataset.widgetId ?? "",
           box: box(widget),
         })),
-      })),
-    })),
+      }));
+      const colMap = new Map<string, { id: string; box: ReturnType<typeof box>; widgets: { id: string; box: ReturnType<typeof box> }[] }>();
+      const columns: { id: string; box: ReturnType<typeof box>; widgets: { id: string; box: ReturnType<typeof box> }[] }[] = [];
+      for (const col of rawCols) {
+        const existing = colMap.get(col.id);
+        if (existing) {
+          existing.box = {
+            top: Math.min(existing.box.top, col.box.top),
+            bottom: Math.max(existing.box.bottom, col.box.bottom),
+            left: Math.min(existing.box.left, col.box.left),
+            right: Math.max(existing.box.right, col.box.right),
+          };
+          existing.widgets.push(...col.widgets);
+        } else {
+          const entry = { id: col.id, box: { ...col.box }, widgets: [...col.widgets] };
+          colMap.set(col.id, entry);
+          columns.push(entry);
+        }
+      }
+      return {
+        id: row.dataset.rowId ?? "",
+        box: box(row),
+        columns,
+      };
+    }),
   };
 }
 
@@ -315,6 +356,7 @@ export function WidgetBoard({
   context = {},
   stackBelow = "lg",
   lazyFromRow = 3,
+  stackedGap,
   galleryCategories,
   components,
   className,
@@ -329,6 +371,8 @@ export function WidgetBoard({
   stackBelow?: Breakpoint;
   /** Rows from this index mount their widgets when scrolled near. */
   lazyFromRow?: number;
+  /** Gap between columns when stacked below breakpoint (e.g. 32). */
+  stackedGap?: number;
   /** Gallery categories to list first (the page's own kind of widgets). */
   galleryCategories?: readonly WidgetCategory[];
   className?: string;
@@ -761,20 +805,223 @@ export function WidgetBoard({
   const settingsWidget = settingsFor ? (findWidget(layout, settingsFor)?.widget ?? null) : null;
   const total = widgetCount(shown);
 
+  const weight = (widget: WidgetInstance) => {
+    const meta = widgetMeta(widget.type);
+    return widget.height !== undefined || meta?.rigid ? null : (meta?.grow ?? 1);
+  };
+
+  const renderColHandle = (column: Column) => {
+    if (!interactive) return null;
+    return (
+      <>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          tabIndex={0}
+          aria-label={t("resize.width", { name: nameOf(column.widgets[0]) })}
+          aria-valuenow={column.width}
+          aria-valuemin={MIN_WIDTH}
+          aria-valuemax={GRID_COLUMNS}
+          aria-valuetext={t("width.value", { span: column.width })}
+          onPointerDown={(event) => startColumnResize(event, column)}
+          onKeyDown={(event) => onColumnKey(event, column)}
+          className="group/handle absolute -right-[14px] bottom-0 top-0 z-20 flex w-3 cursor-col-resize touch-none items-center justify-center outline-none"
+        >
+          <span className="h-12 w-1 rounded-full bg-primary/35 transition-[background-color,height] group-hover/handle:h-20 group-hover/handle:bg-primary group-focus-visible/handle:h-20 group-focus-visible/handle:bg-primary" />
+        </div>
+        {resize?.kind === "width" && resize.columnId === column.id ? (
+          <span className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2 rounded-md bg-foreground px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background">
+            {t("width.value", { span: resize.width })}
+          </span>
+        ) : null}
+      </>
+    );
+  };
+
+  const renderCard = (
+    widget: WidgetInstance,
+    grow: number,
+    column: Column,
+    nested: boolean,
+    rowIndex: number,
+  ) => {
+    const meta = widgetMeta(widget.type);
+    const isHeading = widget.type === "general.heading";
+    const ticker = (context.tickerOverrides ? widget.ticker : undefined) ?? pageTicker;
+    const fixed = widget.height !== undefined;
+    const name = nameOf(widget);
+    const Icon = meta?.icon;
+    const body = <WidgetBody type={widget.type} ticker={ticker} options={widget.options} components={components} />;
+    const eager = rowIndex < lazyFromRow && widget.options?.lazy !== true;
+    const inner = isHeading ? (
+      body
+    ) : (
+      <LazyMount eager={eager} minHeight={meta?.estimatedHeight ?? 240} emptyLabel={editing ? t("board.noData") : undefined}>
+        {body}
+      </LazyMount>
+    );
+    const content = <SectionHeadingLevel level={nested ? 3 : 2}>{inner}</SectionHeadingLevel>;
+    return (
+      <div
+        key={widget.id}
+        data-widget-id={widget.id}
+        style={fixed ? { height: widget.height } : { flexGrow: grow }}
+        // While editing, room for the toolbar even on a one-line heading.
+        className={cn(
+          "relative flex min-w-0 shrink-0 flex-col",
+          editing ? "min-h-12 justify-end" : "[&:has([data-widget-body]:empty)]:hidden",
+        )}
+      >
+        {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
+          <span className="pointer-events-none absolute left-3 top-0 z-[1] -translate-y-1/2 bg-background px-1 font-mono text-[10px] font-semibold tracking-wide text-muted-foreground">
+            {t("board.stockFor", { ticker })}
+          </span>
+        ) : null}
+        <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto rounded-2xl scrollbar-thin")}>
+          {meta?.plotHeight ? (
+            <FittedChart height={widget.height ?? null} basePlot={meta.plotHeight(resolveOptions(meta, widget.options))} inert={editing}>
+              {content}
+            </FittedChart>
+          ) : (
+            <div inert={editing} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
+              {content}
+            </div>
+          )}
+        </div>
+
+        {editing ? (
+          <WidgetFrame
+            widgetId={widget.id}
+            name={name}
+            icon={Icon ? <Icon /> : null}
+            columnWidth={column.width}
+            height={widget.height}
+            interactive={interactive}
+            dragging={drag?.widgetId === widget.id}
+            highlighted={highlight === widget.id}
+            canMove={(direction) => canMoveStep(layout, widget.id, direction)}
+            hasSettings={!!meta && ((meta.options?.length ?? 0) > 0 || (!!meta.stock && !!context.tickerOverrides))}
+            onPointerDownSurface={(event) => startDrag(event, widget.id, false)}
+            onPointerDownGrip={(event) => (interactive ? startDrag(event, widget.id, true) : undefined)}
+            onMove={(direction) => moveStep(widget.id, direction)}
+            onWidth={(width) => setWidth(widget.id, width)}
+            onHeight={(height) => setHeight(widget.id, height)}
+            onSettings={() => setSettingsFor(widget.id)}
+            onRemove={() => remove(widget.id)}
+          />
+        ) : highlight === widget.id ? (
+          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-primary" />
+        ) : null}
+
+        {interactive ? (
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            tabIndex={0}
+            aria-label={t("resize.height", { name })}
+            aria-valuetext={fixed ? t("height.px", { px: widget.height ?? 0 }) : t("height.autoShort")}
+            onPointerDown={(event) => startHeightResize(event, widget.id)}
+            onDoubleClick={() => setHeight(widget.id, null)}
+            onKeyDown={(event) => onHeightKey(event, widget)}
+            className="group/handle absolute inset-x-0 -bottom-[14px] z-20 flex h-3 cursor-row-resize touch-none items-center justify-center outline-none"
+          >
+            <span className="h-1 w-12 rounded-full bg-primary/35 transition-[background-color,width] group-hover/handle:w-20 group-hover/handle:bg-primary group-focus-visible/handle:w-20 group-focus-visible/handle:bg-primary" />
+            {resize?.kind === "height" && resize.widgetId === widget.id ? (
+              <span className="absolute -top-8 rounded-md bg-foreground px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background">
+                {t("height.px", { px: resize.height })}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <>
       <div ref={boardRef} className={cn("relative space-y-4", editing && "pb-28", className)} data-editing={editing ? "" : undefined}>
         {shown.rows.map((row, rowIndex) => {
           const free = freeWidth(row);
+          const isRail = !!row.rail && row.columns.length === 2 && row.columns[0].widgets.length >= 2;
+
+          if (isRail) {
+            const [main, rail] = row.columns;
+            let underHeadingRail = false;
+            const anyGrowsRail = rail.widgets.some((widget) => (weight(widget) ?? 0) > 0);
+            let underHeadingTail = main.widgets[0].type === "general.heading";
+            return (
+              <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1 gap-4", RAIL_GRID_CLASS[stackBelow])}>
+                <div
+                  key={`${main.id}-head`}
+                  data-col-id={main.id}
+                  style={spanStyle(main.width)}
+                  className={cn("relative flex min-w-0 flex-col gap-4", RAIL_HEAD_CLASS[stackBelow])}
+                >
+                  {renderCard(main.widgets[0], 0, main, false, rowIndex)}
+                  {renderColHandle(main)}
+                </div>
+
+                <div
+                  key={rail.id}
+                  data-col-id={rail.id}
+                  style={{ ...spanStyle(rail.width), "--start": main.width + 1 } as CSSProperties}
+                  className={cn("relative flex min-w-0 flex-col gap-4", RAIL_SIDE_CLASS[stackBelow])}
+                >
+                  {rail.widgets.map((widget) => {
+                    const isHeading = widget.type === "general.heading";
+                    const nested = underHeadingRail && !isHeading;
+                    if (isHeading) underHeadingRail = true;
+                    const share = weight(widget);
+                    const grow = share === null ? 0 : anyGrowsRail ? share : 1;
+                    return renderCard(widget, grow, rail, nested, rowIndex);
+                  })}
+                  {renderColHandle(rail)}
+                </div>
+
+                <div
+                  key={`${main.id}-tail`}
+                  data-col-id={main.id}
+                  style={spanStyle(main.width)}
+                  className={cn("relative flex min-w-0 flex-col gap-4", RAIL_TAIL_CLASS[stackBelow])}
+                >
+                  {main.widgets.slice(1).map((widget) => {
+                    const isHeading = widget.type === "general.heading";
+                    const nested = underHeadingTail && !isHeading;
+                    if (isHeading) underHeadingTail = true;
+                    return renderCard(widget, 0, main, nested, rowIndex);
+                  })}
+                  {renderColHandle(main)}
+                </div>
+
+                {interactive && free >= MIN_WIDTH ? (
+                  <button
+                    type="button"
+                    style={{ ...spanStyle(free), "--start": main.width + rail.width + 1 } as CSSProperties}
+                    onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
+                    className={cn(
+                      "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                      RAIL_FREE_CLASS[stackBelow],
+                    )}
+                  >
+                    <Plus aria-hidden className="size-4" />
+                    {t("slot.add")}
+                  </button>
+                ) : null}
+              </div>
+            );
+          }
+
+          const rowGapClass =
+            stackedGap === 32
+              ? stackBelow === "xl"
+                ? "gap-x-4 gap-y-8 xl:gap-y-4"
+                : "gap-x-4 gap-y-8 lg:gap-y-4"
+              : "gap-4";
+
           return (
-            <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1 gap-4", GRID_CLASS[stackBelow])}>
+            <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1", rowGapClass, GRID_CLASS[stackBelow])}>
               {row.columns.map((column) => {
                 let underHeading = false;
-                // Cards share the column's extra height by weight; if none may, all stretchable ones do.
-                const weight = (widget: WidgetInstance) => {
-                  const meta = widgetMeta(widget.type);
-                  return widget.height !== undefined || meta?.rigid ? null : (meta?.grow ?? 1);
-                };
                 const anyGrows = column.widgets.some((widget) => (weight(widget) ?? 0) > 0);
                 return (
                   <div
@@ -784,124 +1031,14 @@ export function WidgetBoard({
                     className={cn("relative flex min-w-0 flex-col gap-4", SPAN_CLASS[stackBelow])}
                   >
                     {column.widgets.map((widget) => {
-                      const meta = widgetMeta(widget.type);
                       const isHeading = widget.type === "general.heading";
                       const nested = underHeading && !isHeading;
                       if (isHeading) underHeading = true;
-                      const ticker = (context.tickerOverrides ? widget.ticker : undefined) ?? pageTicker;
-                      const fixed = widget.height !== undefined;
-                      const name = nameOf(widget);
-                      const Icon = meta?.icon;
-                      const body = <WidgetBody type={widget.type} ticker={ticker} options={widget.options} components={components} />;
-                      const eager = rowIndex < lazyFromRow && widget.options?.lazy !== true;
-                      const inner = isHeading ? (
-                        body
-                      ) : (
-                        <LazyMount eager={eager} minHeight={meta?.estimatedHeight ?? 240} emptyLabel={editing ? t("board.noData") : undefined}>
-                          {body}
-                        </LazyMount>
-                      );
-                      const content = <SectionHeadingLevel level={nested ? 3 : 2}>{inner}</SectionHeadingLevel>;
                       const share = weight(widget);
                       const grow = share === null ? 0 : anyGrows ? share : 1;
-                      return (
-                        <div
-                          key={widget.id}
-                          data-widget-id={widget.id}
-                          style={fixed ? { height: widget.height } : { flexGrow: grow }}
-                          // While editing, room for the toolbar even on a one-line heading.
-                          className={cn(
-                            "relative flex min-w-0 shrink-0 flex-col",
-                            editing ? "min-h-12 justify-end" : "[&:has([data-widget-body]:empty)]:hidden",
-                          )}
-                        >
-                          {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
-                            <span className="pointer-events-none absolute left-3 top-0 z-[1] -translate-y-1/2 bg-background px-1 font-mono text-[10px] font-semibold tracking-wide text-muted-foreground">
-                              {t("board.stockFor", { ticker })}
-                            </span>
-                          ) : null}
-                          <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto rounded-2xl scrollbar-thin")}>
-                            {meta?.plotHeight ? (
-                              <FittedChart height={widget.height ?? null} basePlot={meta.plotHeight(resolveOptions(meta, widget.options))} inert={editing}>
-                                {content}
-                              </FittedChart>
-                            ) : (
-                              <div inert={editing} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
-                                {content}
-                              </div>
-                            )}
-                          </div>
-
-                          {editing ? (
-                            <WidgetFrame
-                              widgetId={widget.id}
-                              name={name}
-                              icon={Icon ? <Icon /> : null}
-                              columnWidth={column.width}
-                              height={widget.height}
-                              interactive={interactive}
-                              dragging={drag?.widgetId === widget.id}
-                              highlighted={highlight === widget.id}
-                              canMove={(direction) => canMoveStep(layout, widget.id, direction)}
-                              hasSettings={!!meta && ((meta.options?.length ?? 0) > 0 || (!!meta.stock && !!context.tickerOverrides))}
-                              onPointerDownSurface={(event) => startDrag(event, widget.id, false)}
-                              onPointerDownGrip={(event) => (interactive ? startDrag(event, widget.id, true) : undefined)}
-                              onMove={(direction) => moveStep(widget.id, direction)}
-                              onWidth={(width) => setWidth(widget.id, width)}
-                              onHeight={(height) => setHeight(widget.id, height)}
-                              onSettings={() => setSettingsFor(widget.id)}
-                              onRemove={() => remove(widget.id)}
-                            />
-                          ) : highlight === widget.id ? (
-                            <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-primary" />
-                          ) : null}
-
-                          {interactive ? (
-                            <div
-                              role="separator"
-                              aria-orientation="horizontal"
-                              tabIndex={0}
-                              aria-label={t("resize.height", { name })}
-                              aria-valuetext={fixed ? t("height.px", { px: widget.height ?? 0 }) : t("height.autoShort")}
-                              onPointerDown={(event) => startHeightResize(event, widget.id)}
-                              onDoubleClick={() => setHeight(widget.id, null)}
-                              onKeyDown={(event) => onHeightKey(event, widget)}
-                              className="group/handle absolute inset-x-0 -bottom-[14px] z-20 flex h-3 cursor-row-resize touch-none items-center justify-center outline-none"
-                            >
-                              <span className="h-1 w-12 rounded-full bg-primary/35 transition-[background-color,width] group-hover/handle:w-20 group-hover/handle:bg-primary group-focus-visible/handle:w-20 group-focus-visible/handle:bg-primary" />
-                              {resize?.kind === "height" && resize.widgetId === widget.id ? (
-                                <span className="absolute -top-8 rounded-md bg-foreground px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background">
-                                  {t("height.px", { px: resize.height })}
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
+                      return renderCard(widget, grow, column, nested, rowIndex);
                     })}
-
-                    {interactive ? (
-                      <div
-                        role="separator"
-                        aria-orientation="vertical"
-                        tabIndex={0}
-                        aria-label={t("resize.width", { name: nameOf(column.widgets[0]) })}
-                        aria-valuenow={column.width}
-                        aria-valuemin={MIN_WIDTH}
-                        aria-valuemax={GRID_COLUMNS}
-                        aria-valuetext={t("width.value", { span: column.width })}
-                        onPointerDown={(event) => startColumnResize(event, column)}
-                        onKeyDown={(event) => onColumnKey(event, column)}
-                        className="group/handle absolute -right-[14px] bottom-0 top-0 z-20 flex w-3 cursor-col-resize touch-none items-center justify-center outline-none"
-                      >
-                        <span className="h-12 w-1 rounded-full bg-primary/35 transition-[background-color,height] group-hover/handle:h-20 group-hover/handle:bg-primary group-focus-visible/handle:h-20 group-focus-visible/handle:bg-primary" />
-                      </div>
-                    ) : null}
-                    {resize?.kind === "width" && resize.columnId === column.id ? (
-                      <span className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2 rounded-md bg-foreground px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background">
-                        {t("width.value", { span: resize.width })}
-                      </span>
-                    ) : null}
+                    {renderColHandle(column)}
                   </div>
                 );
               })}
