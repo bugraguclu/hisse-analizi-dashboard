@@ -1,12 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useLocale } from "@/lib/locale-context";
 import { formatMarketDate } from "@/lib/format";
 import { useNow } from "@/hooks/use-now";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 /** Home title with the Istanbul date (the session status lives in the market strip). */
-export function MarketHeader() {
+export function MarketHeader({ actions }: { actions?: ReactNode }) {
   const { t } = useLocale();
   const now = useNow();
   return (
@@ -19,6 +20,7 @@ export function MarketHeader() {
         )
       }
       title={t("dashboard.marketOverview")}
+      actions={actions}
     />
   );
 }

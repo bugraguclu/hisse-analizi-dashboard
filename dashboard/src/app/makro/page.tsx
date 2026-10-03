@@ -4,29 +4,18 @@ import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useMakroI18n, type MakroKey } from "@/components/makro/i18n";
+import { useMakroI18n } from "@/components/makro/i18n";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
-import { MacroSection } from "@/components/makro/ui";
-import { KpiStrip } from "@/components/makro/KpiStrip";
-import { CorridorPanel, PolicyInflationPanel } from "@/components/makro/MonetaryPolicy";
-import { InflationTiles, InflationTrendPanel, MonthlyCpiPanel } from "@/components/makro/InflationSection";
-import { ACTIVITY_KEYS, EXTERNAL_KEYS, IndicatorGrid } from "@/components/makro/IndicatorGrid";
-import { MarketsSection } from "@/components/makro/MarketsSection";
-import { EconomicCalendar } from "@/components/makro/EconomicCalendar";
+import { headingLabel } from "@/components/widgets/basic";
+import type { WidgetCategory } from "@/components/widgets/catalog";
+import { EditLayoutButton } from "@/components/widgets/EditBar";
+import { useWidgetI18n } from "@/components/widgets/i18n";
+import { widgetsInOrder, type Layout } from "@/components/widgets/model";
+import { useSitePageEditor } from "@/components/widgets/use-site-page";
+import { MACRO_WIDGETS } from "@/components/widgets/macro-widgets";
+import { WidgetBoard } from "@/components/widgets/WidgetBoard";
 
-/**
- * Page order, most important for an investor first: the policy rate and
- * inflation drive valuations, markets and the release calendar move every day,
- * growth and the external balance change slowly.
- */
-const SECTIONS: Array<{ id: string; title: MakroKey }> = [
-  { id: "para-politikasi", title: "section.monetary" },
-  { id: "enflasyon", title: "section.inflation" },
-  { id: "piyasalar", title: "section.markets" },
-  { id: "takvim", title: "section.calendar" },
-  { id: "buyume", title: "section.activity" },
-  { id: "dis-denge", title: "section.external" },
-];
+const GALLERY_ORDER: readonly WidgetCategory[] = ["macro", "market", "stock", "general"];
 
 function RefreshButton() {
   const { t } = useMakroI18n();
@@ -45,18 +34,25 @@ function RefreshButton() {
   );
 }
 
-function SectionNav() {
+/** In-page links to the layout's headings that carry an anchor (the default layout's sections). */
+function SectionNav({ layout }: { layout: Layout }) {
   const { t } = useMakroI18n();
+  const { t: tw } = useWidgetI18n();
+  const sections = widgetsInOrder(layout).flatMap((widget) => {
+    const anchor = widget.type === "general.heading" ? widget.options?.anchor : undefined;
+    return typeof anchor === "string" && anchor ? [{ id: anchor, title: headingLabel(widget.options, tw) }] : [];
+  });
+  if (sections.length === 0) return null;
   return (
     <nav aria-label={t("page.sections")} className="-mx-1 overflow-x-auto scrollbar-none">
       <ul className="flex w-max gap-1 px-1">
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <li key={section.id}>
             <a
               href={`#${section.id}`}
               className="inline-flex h-7 items-center rounded-sm px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
             >
-              {t(section.title)}
+              {section.title}
             </a>
           </li>
         ))}
@@ -65,49 +61,40 @@ function SectionNav() {
   );
 }
 
+/**
+ * Page order, most important for an investor first: the policy rate and
+ * inflation drive valuations, markets and the release calendar move every day,
+ * growth and the external balance change slowly (the default layout in
+ * components/widgets/defaults.ts; "Customize" makes it the visitor's own).
+ */
 export default function MakroPage() {
   const { t } = useMakroI18n();
+  const editor = useSitePageEditor("macro");
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-6">
+    <div className="mx-auto max-w-7xl space-y-6 pb-6">
       <div className="space-y-3">
-        <PageHeader eyebrow={t("page.eyebrow")} title={t("page.title")} actions={<RefreshButton />} />
-        <SectionNav />
+        <PageHeader
+          eyebrow={t("page.eyebrow")}
+          title={t("page.title")}
+          actions={
+            <>
+              <RefreshButton />
+              <EditLayoutButton editor={editor} />
+            </>
+          }
+        />
+        <SectionNav layout={editor.layout} />
       </div>
 
-      <KpiStrip />
-
-      <MacroSection id="para-politikasi" title={t("section.monetary")}>
-        {/* Panels stretch to one row height; the chart grows to fill it. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <CorridorPanel />
-          <PolicyInflationPanel className="lg:col-span-2" />
-        </div>
-      </MacroSection>
-
-      <MacroSection id="enflasyon" title={t("section.inflation")}>
-        <InflationTiles />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <InflationTrendPanel className="lg:col-span-2" />
-          <MonthlyCpiPanel />
-        </div>
-      </MacroSection>
-
-      <MacroSection id="piyasalar" title={t("section.markets")}>
-        <MarketsSection />
-      </MacroSection>
-
-      <MacroSection id="takvim" title={t("section.calendar")}>
-        <EconomicCalendar />
-      </MacroSection>
-
-      <MacroSection id="buyume" title={t("section.activity")}>
-        <IndicatorGrid keys={ACTIVITY_KEYS} label={t("section.activity")} />
-      </MacroSection>
-
-      <MacroSection id="dis-denge" title={t("section.external")}>
-        <IndicatorGrid keys={EXTERNAL_KEYS} label={t("section.external")} />
-      </MacroSection>
+      {/* Nothing waits to mount here: /makro?piyasa=… scrolls to the markets chart on arrival. */}
+      <WidgetBoard
+        editor={editor}
+        context={{ ticker: null, tickerOverrides: true }}
+        components={MACRO_WIDGETS}
+        galleryCategories={GALLERY_ORDER}
+        lazyFromRow={Infinity}
+      />
     </div>
   );
 }

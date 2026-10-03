@@ -1,11 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useStockIdentity, type IdentityState } from "./hooks";
+import { useStockIdentity } from "./hooks";
+import { StockIdentityContext, useShellIdentity } from "./identity-context";
 import { useStockI18n, type StockKey } from "./i18n";
 import { StockHeader } from "./StockHeader";
 
@@ -19,12 +20,7 @@ const TABS: Array<{ view: StockView; href: (ticker: string) => string; label: St
   { view: "combined", href: (t) => `/analiz/${t}`, label: "tabs.combined" },
 ];
 
-const StockIdentityContext = createContext<IdentityState>({ status: "loading", identity: null });
-
-/** Identity of the stock rendered by the surrounding StockShell. */
-export function useShellIdentity(): IdentityState {
-  return useContext(StockIdentityContext);
-}
+export { useShellIdentity };
 
 /**
  * Section tabs under the stock header. Plain links (the active one has
@@ -114,14 +110,28 @@ export function StockNotFound({ ticker }: { ticker: string | null }) {
  * quote, section tabs and a friendly not-found state. Sections mount right
  * away (they show their own skeletons) — nothing waits for slow endpoints.
  */
-export function StockShell({ ticker, view, children }: { ticker: string; view: StockView; children: ReactNode }) {
+export function StockShell({
+  ticker,
+  view,
+  actions,
+  children,
+}: {
+  ticker: string;
+  view: StockView;
+  /** Page controls at the end of the tab row ("Customize"). */
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   const identity = useStockIdentity(ticker);
   if (identity.status === "notFound") return <StockNotFound ticker={ticker} />;
   return (
     <div className="mx-auto max-w-7xl">
       <StockHeader ticker={ticker} identity={identity} />
-      <div className="mt-5">
-        <StockTabs ticker={ticker} active={view} />
+      <div className="mt-5 flex items-center gap-2">
+        <div className="min-w-0 grow">
+          <StockTabs ticker={ticker} active={view} />
+        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </div>
       <StockIdentityContext.Provider value={identity}>
         <div className="mt-6 space-y-4">{children}</div>

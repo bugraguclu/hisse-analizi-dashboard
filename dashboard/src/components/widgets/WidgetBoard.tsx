@@ -1,0 +1,849 @@
+"use client";
+
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import { Inbox, Plus } from "lucide-react";
+import { toast } from "sonner";
+import { useMediaQuery } from "@/components/charts/use-coarse-pointer";
+import { DEFAULT_TICKER } from "@/components/layout/nav";
+import { SectionHeadingLevel } from "@/components/stock/heading-level";
+import { StockIdentityScope } from "@/components/stock/identity-context";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { resolveOptions, widgetMeta, type WidgetCategory } from "./catalog";
+import { LAZY_WIDGETS } from "./components";
+import { hitTest, type DropHit, type MeasuredBoard } from "./drop";
+import { EditBar } from "./EditBar";
+import { useWidgetI18n } from "./i18n";
+import {
+  addWidget,
+  canMoveStep,
+  clampHeight,
+  findWidget,
+  freeWidth,
+  GRID_COLUMNS,
+  insertWidget,
+  isNoopMove,
+  MAX_WIDGETS,
+  MIN_WIDTH,
+  moveWidget,
+  moveWidgetStep,
+  removeWidget,
+  resizeColumn,
+  setWidgetHeight,
+  setWidgetWidth,
+  updateWidget,
+  widgetCount,
+  widgetsInOrder,
+  type Column,
+  type DropTarget,
+  type Layout,
+  type MoveDirection,
+  type OptionValue,
+  type WidgetInstance,
+} from "./model";
+import type { WidgetComponents } from "./types";
+import type { LayoutEditor } from "./use-layout-editor";
+import { WidgetFrame } from "./WidgetFrame";
+import { WidgetGallery } from "./WidgetGallery";
+import { WidgetSettingsDialog } from "./WidgetSettings";
+
+/** Gap between rows, columns and stacked cards (gap-4). */
+const GAP = 16;
+/** Height step of the keyboard height handle. */
+const HEIGHT_KEY_STEP = 40;
+/** Distance from the viewport edge (px) where a drag scrolls the page. */
+const SCROLL_EDGE = 72;
+
+export type Breakpoint = "lg" | "xl";
+
+/** Columns sit side by side from this breakpoint; below it every card is full width, in reading order. */
+const GRID_CLASS: Record<Breakpoint, string> = { lg: "lg:grid-cols-12", xl: "xl:grid-cols-12" };
+const SPAN_CLASS: Record<Breakpoint, string> = {
+  lg: "lg:[grid-column:span_var(--span)/span_var(--span)]",
+  xl: "xl:[grid-column:span_var(--span)/span_var(--span)]",
+};
+const WIDE_QUERY: Record<Breakpoint, string> = { lg: "(min-width: 64rem)", xl: "(min-width: 80rem)" };
+
+export interface BoardContext {
+  /** Stock widgets without a ticker of their own show this one. */
+  ticker?: string | null;
+  /** Custom pages: a stock widget may follow its own ticker (settings, and a label on the card). */
+  tickerOverrides?: boolean;
+}
+
+function spanStyle(span: number): CSSProperties {
+  return { "--span": span } as CSSProperties;
+}
+
+function shallowEqual(a: Record<string, OptionValue> | undefined, b: Record<string, OptionValue> | undefined): boolean {
+  if (a === b) return true;
+  const keysA = Object.keys(a ?? {});
+  const keysB = Object.keys(b ?? {});
+  return keysA.length === keysB.length && keysA.every((key) => a?.[key] === b?.[key]);
+}
+
+// ---------------------------------------------------------------------------
+// Widget content
+// ---------------------------------------------------------------------------
+
+function UnknownWidget() {
+  const { t } = useWidgetI18n();
+  return (
+    <div className="card-surface flex min-h-24 items-center justify-center gap-2 p-4 text-[13px] text-muted-foreground">
+      <Inbox aria-hidden className="size-4" />
+      {t("widget.unknown")}
+    </div>
+  );
+}
+
+/** The card itself. Memoised: moving or resizing other widgets doesn't re-render it. */
+const WidgetBody = memo(
+  function WidgetBody({
+    type,
+    ticker,
+    options,
+    components,
+  }: {
+    type: string;
+    ticker: string;
+    options: Record<string, OptionValue> | undefined;
+    components: WidgetComponents | undefined;
+  }) {
+    const meta = widgetMeta(type);
+    const Component = components?.[type] ?? LAZY_WIDGETS[type];
+    const resolved = useMemo(() => (meta ? resolveOptions(meta, options) : {}), [meta, options]);
+    if (!meta || !Component) return <UnknownWidget />;
+    const content = <Component ticker={ticker} options={resolved} />;
+    return meta.stock ? <StockIdentityScope ticker={ticker}>{content}</StockIdentityScope> : content;
+  },
+  (a, b) => a.type === b.type && a.ticker === b.ticker && a.components === b.components && shallowEqual(a.options, b.options),
+);
+
+/** Card-shaped stand-in for a widget below the fold that hasn't mounted yet. */
+function LazyPlaceholder({ minHeight }: { minHeight: number }) {
+  return (
+    <div aria-hidden className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
+      <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
+        <Skeleton className="h-3 w-32" />
+      </div>
+      <div className="space-y-3.5 p-4">
+        {[46, 62, 38, 56].map((width) => (
+          <div key={width} className="flex items-center justify-between gap-6">
+            <Skeleton className="h-3" style={{ width: `${width}%` }} />
+            <Skeleton className="h-3 w-14 shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Mounts a below-the-fold widget once it nears the viewport, so slow
+ * fundamentals endpoints don't compete with the cards on screen (as the
+ * stock pages' LazySection did).
+ */
+function LazyMount({ minHeight, children }: { minHeight: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || visible) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible]);
+  return (
+    <div ref={ref} className="flex min-w-0 grow flex-col [&>*]:grow">
+      {visible ? children : <LazyPlaceholder minHeight={minHeight} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Board
+// ---------------------------------------------------------------------------
+
+interface DragView {
+  widgetId: string;
+  /** Pointer, viewport coordinates. */
+  x: number;
+  y: number;
+  hit: DropHit | null;
+  /** The board's top-left in page coordinates (drop lines are drawn relative to it). */
+  origin: { left: number; top: number };
+}
+
+type ResizeView = { kind: "width"; columnId: string; width: number } | { kind: "height"; widgetId: string; height: number };
+
+function measure(board: HTMLElement): MeasuredBoard {
+  const sx = window.scrollX;
+  const sy = window.scrollY;
+  const box = (element: Element) => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top + sy, bottom: rect.bottom + sy, left: rect.left + sx, right: rect.right + sx };
+  };
+  return {
+    box: box(board),
+    rows: Array.from(board.querySelectorAll<HTMLElement>(":scope > [data-row-id]")).map((row) => ({
+      id: row.dataset.rowId ?? "",
+      box: box(row),
+      columns: Array.from(row.querySelectorAll<HTMLElement>(":scope > [data-col-id]")).map((column) => ({
+        id: column.dataset.colId ?? "",
+        box: box(column),
+        widgets: Array.from(column.querySelectorAll<HTMLElement>(":scope > [data-widget-id]")).map((widget) => ({
+          id: widget.dataset.widgetId ?? "",
+          box: box(widget),
+        })),
+      })),
+    })),
+  };
+}
+
+function lockCursor(cursor: string): () => void {
+  const { style } = document.body;
+  const previous = { cursor: style.cursor, userSelect: style.userSelect };
+  style.cursor = cursor;
+  style.userSelect = "none";
+  return () => {
+    style.cursor = previous.cursor;
+    style.userSelect = previous.userSelect;
+  };
+}
+
+/**
+ * Renders a widget layout and, while `editor.editing`, edits it:
+ *
+ * - drag a card (or its grip) to move it: into a stack, beside a column, or
+ *   into a row of its own — a line shows where it lands; the page scrolls
+ *   when the pointer nears the top or bottom edge; Escape cancels
+ * - drag a column's right edge to change its width (snaps to twelfths), a
+ *   card's bottom edge to fix its height (double-click: back to auto)
+ * - the card menu does the same from the keyboard or a phone (width presets,
+ *   heights, moves), plus settings and remove; the grip moves with the arrows
+ * - "+" in a row's free room and at the end add widgets from the gallery
+ *
+ * Below `stackBelow` every card is full width in reading order; dragging and
+ * the edge handles are wide-screen only there, the menu still works.
+ */
+export function WidgetBoard({
+  editor,
+  context = {},
+  stackBelow = "lg",
+  lazyFromRow = 3,
+  galleryCategories,
+  components,
+  className,
+}: {
+  editor: LayoutEditor;
+  /**
+   * The page's own cards, imported by the page so they render on the server
+   * as before; any other widget loads in the browser on demand.
+   */
+  components?: WidgetComponents;
+  context?: BoardContext;
+  stackBelow?: Breakpoint;
+  /** Rows from this index mount their widgets when scrolled near. */
+  lazyFromRow?: number;
+  /** Gallery categories to list first (the page's own kind of widgets). */
+  galleryCategories?: readonly WidgetCategory[];
+  className?: string;
+}) {
+  const { t } = useWidgetI18n();
+  const { layout, editing, commit } = editor;
+  const wide = useMediaQuery(WIDE_QUERY[stackBelow]);
+  const interactive = editing && wide;
+  const pageTicker = context.ticker ?? DEFAULT_TICKER;
+
+  const boardRef = useRef<HTMLDivElement>(null);
+  const layoutRef = useRef(layout);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const focusAfterRef = useRef<string | null>(null);
+
+  const [preview, setPreview] = useState<Layout | null>(null);
+  const [drag, setDrag] = useState<DragView | null>(null);
+  const [resize, setResize] = useState<ResizeView | null>(null);
+  const [gallery, setGallery] = useState<{ open: boolean; target: DropTarget | null; width: number | null }>({ open: false, target: null, width: null });
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  const shown = preview ?? layout;
+
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
+
+  // Leaving edit mode (or unmounting) ends any drag or resize in progress.
+  useEffect(() => {
+    if (editing) return;
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+  }, [editing]);
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  // After a keyboard move the widget re-mounts elsewhere: give its grip the focus back.
+  useEffect(() => {
+    const id = focusAfterRef.current;
+    if (!id) return;
+    focusAfterRef.current = null;
+    boardRef.current?.querySelector<HTMLElement>(`[data-grip="${CSS.escape(id)}"]`)?.focus();
+  }, [layout]);
+
+  // A widget just added: bring it into view and flash it.
+  useEffect(() => {
+    if (!highlight) return;
+    boardRef.current?.querySelector(`[data-widget-id="${CSS.escape(highlight)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timer = window.setTimeout(() => setHighlight(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [highlight]);
+
+  const nameOf = useCallback(
+    (widget: WidgetInstance | undefined) => {
+      const meta = widget ? widgetMeta(widget.type) : undefined;
+      return meta ? t(meta.name) : "";
+    },
+    [t],
+  );
+
+  // -------------------------------------------------------------------------
+  // Drag to move
+  // -------------------------------------------------------------------------
+
+  const startDrag = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, widgetId: string, fromGrip: boolean) => {
+      if (event.button !== 0 || !boardRef.current) return;
+      // Touch drags only from the grip, so a finger on a card still scrolls the page.
+      if (event.pointerType === "touch" && !fromGrip) return;
+      if (event.pointerType !== "touch") event.preventDefault();
+      cleanupRef.current?.();
+
+      const board = boardRef.current;
+      const pointerId = event.pointerId;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let pointerX = startX;
+      let pointerY = startY;
+      let started = false;
+      let measured: MeasuredBoard | null = null;
+      let hit: DropHit | null = null;
+      let frame = 0;
+      let unlock: (() => void) | null = null;
+
+      const update = () => {
+        if (!measured) return;
+        const next = hitTest(measured, pointerX + window.scrollX, pointerY + window.scrollY, GAP);
+        hit = next && !isNoopMove(layoutRef.current, widgetId, next.target) ? next : null;
+        setDrag({ widgetId, x: pointerX, y: pointerY, hit, origin: { left: measured.box.left, top: measured.box.top } });
+      };
+
+      const autoScroll = () => {
+        const height = window.innerHeight;
+        const speed = pointerY < SCROLL_EDGE ? -(SCROLL_EDGE - pointerY) : pointerY > height - SCROLL_EDGE ? pointerY - (height - SCROLL_EDGE) : 0;
+        if (speed !== 0) {
+          window.scrollBy(0, Math.round(speed / 3));
+          update();
+        }
+        frame = window.requestAnimationFrame(autoScroll);
+      };
+
+      const onMove = (move: PointerEvent) => {
+        if (move.pointerId !== pointerId) return;
+        pointerX = move.clientX;
+        pointerY = move.clientY;
+        if (!started) {
+          if (Math.hypot(pointerX - startX, pointerY - startY) < 5) return;
+          started = true;
+          measured = measure(board);
+          unlock = lockCursor("grabbing");
+          frame = window.requestAnimationFrame(autoScroll);
+        }
+        move.preventDefault();
+        update();
+      };
+
+      const finish = (drop: boolean) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+        window.removeEventListener("keydown", onKey, true);
+        window.cancelAnimationFrame(frame);
+        unlock?.();
+        cleanupRef.current = null;
+        setDrag(null);
+        if (drop && started && hit) {
+          const current = layoutRef.current;
+          const next = moveWidget(current, widgetId, hit.target);
+          if (next !== current) {
+            commit(next);
+            setAnnouncement(t("announce.moved", { name: nameOf(findWidget(current, widgetId)?.widget) }));
+          }
+        }
+      };
+      const onUp = (up: PointerEvent) => {
+        if (up.pointerId === pointerId) finish(true);
+      };
+      const onCancel = (cancel: PointerEvent) => {
+        if (cancel.pointerId === pointerId) finish(false);
+      };
+      const onKey = (key: KeyboardEvent) => {
+        if (key.key !== "Escape") return;
+        key.preventDefault();
+        key.stopPropagation();
+        finish(false);
+      };
+
+      window.addEventListener("pointermove", onMove, { passive: false });
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
+      window.addEventListener("keydown", onKey, true);
+      cleanupRef.current = () => finish(false);
+    },
+    [commit, nameOf, t],
+  );
+
+  // -------------------------------------------------------------------------
+  // Resize handles
+  // -------------------------------------------------------------------------
+
+  const startColumnResize = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, column: Column) => {
+      if (event.button !== 0 || !boardRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      cleanupRef.current?.();
+      const pitch = (boardRef.current.clientWidth + GAP) / GRID_COLUMNS;
+      const base = layoutRef.current;
+      const pointerId = event.pointerId;
+      const startX = event.clientX;
+      let next = base;
+      const unlock = lockCursor("col-resize");
+      setResize({ kind: "width", columnId: column.id, width: column.width });
+
+      const onMove = (move: PointerEvent) => {
+        if (move.pointerId !== pointerId) return;
+        next = resizeColumn(base, column.id, column.width + Math.round((move.clientX - startX) / pitch));
+        setPreview(next === base ? null : next);
+        const width = next.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width;
+        setResize({ kind: "width", columnId: column.id, width });
+      };
+      const finish = (apply: boolean) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+        unlock();
+        cleanupRef.current = null;
+        setPreview(null);
+        setResize(null);
+        if (apply && next !== base) commit(next);
+      };
+      const onUp = (up: PointerEvent) => {
+        if (up.pointerId === pointerId) finish(true);
+      };
+      const onCancel = (cancel: PointerEvent) => {
+        if (cancel.pointerId === pointerId) finish(false);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
+      cleanupRef.current = () => finish(false);
+    },
+    [commit],
+  );
+
+  const startHeightResize = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, widgetId: string) => {
+      if (event.button !== 0 || !boardRef.current) return;
+      const cell = boardRef.current.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(widgetId)}"]`);
+      if (!cell) return;
+      event.preventDefault();
+      event.stopPropagation();
+      cleanupRef.current?.();
+      const base = layoutRef.current;
+      const pointerId = event.pointerId;
+      const startY = event.clientY;
+      const startHeight = cell.getBoundingClientRect().height;
+      let next = base;
+      let moved = false;
+      const unlock = lockCursor("row-resize");
+
+      const onMove = (move: PointerEvent) => {
+        if (move.pointerId !== pointerId) return;
+        if (!moved && Math.abs(move.clientY - startY) < 3) return;
+        moved = true;
+        const height = clampHeight(startHeight + move.clientY - startY);
+        next = setWidgetHeight(base, widgetId, height);
+        setPreview(next);
+        setResize({ kind: "height", widgetId, height });
+      };
+      const finish = (apply: boolean) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+        unlock();
+        cleanupRef.current = null;
+        setPreview(null);
+        setResize(null);
+        if (apply && moved && next !== base) commit(next);
+      };
+      const onUp = (up: PointerEvent) => {
+        if (up.pointerId === pointerId) finish(true);
+      };
+      const onCancel = (cancel: PointerEvent) => {
+        if (cancel.pointerId === pointerId) finish(false);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
+      cleanupRef.current = () => finish(false);
+    },
+    [commit],
+  );
+
+  // -------------------------------------------------------------------------
+  // Commands (menu, keyboard, gallery)
+  // -------------------------------------------------------------------------
+
+  const moveStep = useCallback(
+    (widgetId: string, direction: MoveDirection) => {
+      const next = moveWidgetStep(layout, widgetId, direction);
+      if (next === layout) return;
+      focusAfterRef.current = widgetId;
+      commit(next);
+      setAnnouncement(t("announce.moved", { name: nameOf(findWidget(layout, widgetId)?.widget) }));
+    },
+    [commit, layout, nameOf, t],
+  );
+
+  const setWidth = useCallback(
+    (widgetId: string, width: number) => {
+      commit(setWidgetWidth(layout, widgetId, width));
+      setAnnouncement(t("announce.width", { name: nameOf(findWidget(layout, widgetId)?.widget), span: width }));
+    },
+    [commit, layout, nameOf, t],
+  );
+
+  const setHeight = useCallback(
+    (widgetId: string, height: number | null) => {
+      const next = setWidgetHeight(layout, widgetId, height);
+      commit(next);
+      const value = findWidget(next, widgetId)?.widget.height;
+      setAnnouncement(t("announce.height", { name: nameOf(findWidget(layout, widgetId)?.widget), height: value === undefined ? t("height.autoShort") : t("height.px", { px: value }) }));
+    },
+    [commit, layout, nameOf, t],
+  );
+
+  const remove = useCallback(
+    (widgetId: string) => {
+      const name = nameOf(findWidget(layout, widgetId)?.widget);
+      commit(removeWidget(layout, widgetId));
+      toast(t("widget.removed", { name }), { action: { label: t("edit.undo"), onClick: () => editor.undo() } });
+    },
+    [commit, editor, layout, nameOf, t],
+  );
+
+  const onColumnKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>, column: Column) => {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const next = resizeColumn(layout, column.id, column.width + step);
+      if (next === layout) return;
+      commit(next);
+      const width = next.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width;
+      setAnnouncement(t("announce.width", { name: nameOf(column.widgets[0]), span: width }));
+    },
+    [commit, layout, nameOf, t],
+  );
+
+  const onHeightKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>, widget: WidgetInstance) => {
+      if (event.key === "Home" || event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        setHeight(widget.id, null);
+        return;
+      }
+      const step = event.key === "ArrowDown" ? HEIGHT_KEY_STEP : event.key === "ArrowUp" ? -HEIGHT_KEY_STEP : 0;
+      if (!step) return;
+      event.preventDefault();
+      const cell = boardRef.current?.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(widget.id)}"]`);
+      const current = widget.height ?? cell?.getBoundingClientRect().height ?? 400;
+      setHeight(widget.id, current + step);
+    },
+    [setHeight],
+  );
+
+  const openGallery = useCallback((target: DropTarget | null = null, width: number | null = null) => setGallery({ open: true, target, width }), []);
+
+  const pick = useCallback(
+    (type: string) => {
+      const meta = widgetMeta(type);
+      if (!meta) return;
+      if (widgetCount(layout) >= MAX_WIDGETS) {
+        toast.error(t("gallery.full", { max: MAX_WIDGETS }));
+        return;
+      }
+      const { target, width } = gallery;
+      const added = target ? insertWidget(layout, { type }, width ?? meta.defaultWidth, target) : addWidget(layout, { type }, meta.defaultWidth);
+      commit(added.layout);
+      setGallery({ open: false, target: null, width: null });
+      setHighlight(added.id);
+      setAnnouncement(t("gallery.added", { name: t(meta.name) }));
+    },
+    [commit, gallery, layout, t],
+  );
+
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const widget of widgetsInOrder(layout)) map.set(widget.type, (map.get(widget.type) ?? 0) + 1);
+    return map;
+  }, [layout]);
+
+  const settingsWidget = settingsFor ? (findWidget(layout, settingsFor)?.widget ?? null) : null;
+  const total = widgetCount(shown);
+
+  return (
+    <>
+      <div ref={boardRef} className={cn("relative space-y-4", editing && "pb-28", className)} data-editing={editing ? "" : undefined}>
+        {shown.rows.map((row, rowIndex) => {
+          const free = freeWidth(row);
+          return (
+            <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1 gap-4", GRID_CLASS[stackBelow])}>
+              {row.columns.map((column) => {
+                let underHeading = false;
+                // Cards share the column's extra height by weight; if none may, all stretchable ones do.
+                const weight = (widget: WidgetInstance) => {
+                  const meta = widgetMeta(widget.type);
+                  return widget.height !== undefined || meta?.rigid ? null : (meta?.grow ?? 1);
+                };
+                const anyGrows = column.widgets.some((widget) => (weight(widget) ?? 0) > 0);
+                return (
+                  <div
+                    key={column.id}
+                    data-col-id={column.id}
+                    style={spanStyle(column.width)}
+                    className={cn("relative flex min-w-0 flex-col gap-4", SPAN_CLASS[stackBelow])}
+                  >
+                    {column.widgets.map((widget) => {
+                      const meta = widgetMeta(widget.type);
+                      const isHeading = widget.type === "general.heading";
+                      const nested = underHeading && !isHeading;
+                      if (isHeading) underHeading = true;
+                      const ticker = (context.tickerOverrides ? widget.ticker : undefined) ?? pageTicker;
+                      const fixed = widget.height !== undefined;
+                      const name = nameOf(widget);
+                      const Icon = meta?.icon;
+                      const body = <WidgetBody type={widget.type} ticker={ticker} options={widget.options} components={components} />;
+                      const lazy = rowIndex >= lazyFromRow && !!meta && !isHeading;
+                      const share = weight(widget);
+                      const grow = share === null ? 0 : anyGrows ? share : 1;
+                      return (
+                        <div
+                          key={widget.id}
+                          data-widget-id={widget.id}
+                          style={fixed ? { height: widget.height } : { flexGrow: grow }}
+                          className="relative flex min-w-0 shrink-0 flex-col"
+                        >
+                          <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto overscroll-contain rounded-2xl scrollbar-thin")}>
+                            <div inert={editing} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
+                              {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
+                                <p className="pb-1.5 font-mono text-[11px] font-semibold tracking-wide text-muted-foreground">{t("board.stockFor", { ticker })}</p>
+                              ) : null}
+                              <SectionHeadingLevel level={nested ? 3 : 2}>{lazy ? <LazyMount minHeight={meta.estimatedHeight}>{body}</LazyMount> : body}</SectionHeadingLevel>
+                            </div>
+                          </div>
+
+                          {editing ? (
+                            <WidgetFrame
+                              widgetId={widget.id}
+                              name={name}
+                              icon={Icon ? <Icon /> : null}
+                              columnWidth={column.width}
+                              height={widget.height}
+                              interactive={interactive}
+                              dragging={drag?.widgetId === widget.id}
+                              highlighted={highlight === widget.id}
+                              canMove={(direction) => canMoveStep(layout, widget.id, direction)}
+                              hasSettings={!!meta && ((meta.options?.length ?? 0) > 0 || (!!meta.stock && !!context.tickerOverrides))}
+                              onPointerDownSurface={(event) => startDrag(event, widget.id, false)}
+                              onPointerDownGrip={(event) => (interactive ? startDrag(event, widget.id, true) : undefined)}
+                              onMove={(direction) => moveStep(widget.id, direction)}
+                              onWidth={(width) => setWidth(widget.id, width)}
+                              onHeight={(height) => setHeight(widget.id, height)}
+                              onSettings={() => setSettingsFor(widget.id)}
+                              onRemove={() => remove(widget.id)}
+                            />
+                          ) : highlight === widget.id ? (
+                            <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-primary" />
+                          ) : null}
+
+                          {interactive ? (
+                            <div
+                              role="separator"
+                              aria-orientation="horizontal"
+                              tabIndex={0}
+                              aria-label={t("resize.height", { name })}
+                              aria-valuetext={fixed ? t("height.px", { px: widget.height ?? 0 }) : t("height.autoShort")}
+                              onPointerDown={(event) => startHeightResize(event, widget.id)}
+                              onDoubleClick={() => setHeight(widget.id, null)}
+                              onKeyDown={(event) => onHeightKey(event, widget)}
+                              className="group/handle absolute inset-x-0 -bottom-[14px] z-20 flex h-3 cursor-row-resize touch-none items-center justify-center outline-none"
+                            >
+                              <span className="h-1 w-12 rounded-full bg-primary/35 transition-[background-color,width] group-hover/handle:w-20 group-hover/handle:bg-primary group-focus-visible/handle:w-20 group-focus-visible/handle:bg-primary" />
+                              {resize?.kind === "height" && resize.widgetId === widget.id ? (
+                                <span className="absolute -top-8 rounded-md bg-foreground px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background">
+                                  {t("height.px", { px: resize.height })}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    {interactive ? (
+                      <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        tabIndex={0}
+                        aria-label={t("resize.width", { name: nameOf(column.widgets[0]) })}
+                        aria-valuenow={column.width}
+                        aria-valuemin={MIN_WIDTH}
+                        aria-valuemax={GRID_COLUMNS}
+                        aria-valuetext={t("width.value", { span: column.width })}
+                        onPointerDown={(event) => startColumnResize(event, column)}
+                        onKeyDown={(event) => onColumnKey(event, column)}
+                        className="group/handle absolute -right-[14px] bottom-0 top-0 z-20 flex w-3 cursor-col-resize touch-none items-center justify-center outline-none"
+                      >
+                        <span className="h-12 w-1 rounded-full bg-primary/35 transition-[background-color,height] group-hover/handle:h-20 group-hover/handle:bg-primary group-focus-visible/handle:h-20 group-focus-visible/handle:bg-primary" />
+                      </div>
+                    ) : null}
+                    {resize?.kind === "width" && resize.columnId === column.id ? (
+                      <span className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2 rounded-md bg-foreground px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background">
+                        {t("width.value", { span: resize.width })}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              {interactive && free >= MIN_WIDTH ? (
+                <button
+                  type="button"
+                  style={spanStyle(free)}
+                  onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
+                  className={cn(
+                    "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                    SPAN_CLASS[stackBelow],
+                  )}
+                >
+                  <Plus aria-hidden className="size-4" />
+                  {t("slot.add")}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+
+        {shown.rows.length === 0 && !editing ? (
+          <div className="card-surface flex flex-col items-center gap-1.5 px-6 py-12 text-center">
+            <Inbox aria-hidden className="size-5 text-muted-foreground" />
+            <p className="text-[14px] font-medium text-foreground">{t("board.empty")}</p>
+            <p className="max-w-sm text-[13px] text-muted-foreground">{t("board.emptyHint")}</p>
+          </div>
+        ) : null}
+
+        {editing ? (
+          <button
+            type="button"
+            onClick={() => openGallery()}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-7 text-[13px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <Plus aria-hidden className="size-4" />
+            {shown.rows.length === 0 ? t("board.emptyHint") : t("edit.add")}
+          </button>
+        ) : null}
+
+        {drag?.hit ? <DropIndicator hit={drag.hit} origin={drag.origin} label={t("drop.newRow")} /> : null}
+
+        <p className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
+      </div>
+
+      {drag ? <DragGhost drag={drag} widget={findWidget(layout, drag.widgetId)?.widget} name={nameOf(findWidget(layout, drag.widgetId)?.widget)} /> : null}
+
+      {editing ? <EditBar editor={editor} widgets={total} onAdd={() => openGallery()} hint={wide ? t("edit.hint") : t("edit.hintMobile")} /> : null}
+
+      <WidgetGallery
+        open={gallery.open}
+        onClose={() => setGallery({ open: false, target: null, width: null })}
+        onPick={pick}
+        counts={counts}
+        categories={galleryCategories}
+      />
+      <WidgetSettingsDialog
+        widget={settingsWidget}
+        meta={settingsWidget ? widgetMeta(settingsWidget.type) : undefined}
+        pageTicker={pageTicker}
+        tickerOverrides={!!context.tickerOverrides}
+        onSave={(patch) => settingsFor && commit(updateWidget(layout, settingsFor, patch))}
+        onClose={() => setSettingsFor(null)}
+      />
+    </>
+  );
+}
+
+/** The line that shows where a dragged widget will land. */
+function DropIndicator({ hit, origin, label }: { hit: DropHit; origin: { left: number; top: number }; label: string }) {
+  const { line } = hit;
+  const horizontal = line.orientation === "horizontal";
+  const style: CSSProperties = horizontal
+    ? { left: line.x - origin.left, top: line.y - origin.top - 2, width: line.length, height: 4 }
+    : { left: line.x - origin.left - 2, top: line.y - origin.top, width: 4, height: line.length };
+  return (
+    <div aria-hidden className="pointer-events-none absolute z-30 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_22%,transparent)]" style={style}>
+      {hit.target.kind === "row" ? (
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+          {label}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Follows the pointer during a drag: the widget's icon and name. */
+function DragGhost({ drag, widget, name }: { drag: DragView; widget: WidgetInstance | undefined; name: string }) {
+  const meta = widget ? widgetMeta(widget.type) : undefined;
+  const Icon = meta?.icon;
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed left-0 top-0 z-[60] flex max-w-64 items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-[13px] font-medium text-popover-foreground shadow-[0_16px_40px_-12px_rgb(0_0_0/0.45)]"
+      // Beside the pointer, flipped to its left near the right edge of the window.
+      style={{ transform: `translate(${drag.x + 270 > window.innerWidth ? drag.x - 270 : drag.x + 14}px, ${drag.y + 14}px)` }}
+    >
+      {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
+      <span className="truncate">{name}</span>
+    </div>
+  );
+}

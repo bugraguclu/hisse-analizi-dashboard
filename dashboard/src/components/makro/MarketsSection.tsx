@@ -324,7 +324,8 @@ function MarketChartPanel({ selectedKey, className }: { selectedKey: string; cla
   );
 }
 
-export function MarketsSection() {
+/** `bulletin={false}` leaves out the CBRT rates table (a widget of its own on customised pages). */
+export function MarketsSection({ bulletin = true }: { bulletin?: boolean }) {
   const [selected, setSelected] = useState("usdtry");
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -347,7 +348,7 @@ export function MarketsSection() {
           <YieldCurvePanel selected={selected} onSelect={selectFromCurve} />
         </div>
       </div>
-      <FxBulletinPanel />
+      {bulletin ? <FxBulletinPanel /> : null}
       {/* `/makro?piyasa=<key>` (the market strip's links) charts that instrument. After the
           chart on purpose: React attaches `chartRef` before this sibling's layout effect runs. */}
       <Suspense fallback={null}>

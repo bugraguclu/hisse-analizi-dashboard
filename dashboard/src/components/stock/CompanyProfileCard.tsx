@@ -7,7 +7,7 @@ import { useCompanyProfile, useCompanySector, useFastInfo, useQuote, useRatios }
 import { useStockI18n } from "./i18n";
 import type { SectorMetricKey } from "./sector";
 import { SectorLink, SectorMedianSub } from "./sector-ui";
-import { useShellIdentity } from "./StockShell";
+import { useShellIdentity } from "./identity-context";
 import { SectionCard, SectionError, Stat } from "./ui";
 
 function positive(value: number | null | undefined): number | null {

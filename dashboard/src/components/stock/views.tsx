@@ -1,194 +1,71 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { AllTimeframeSignals } from "./AllTimeframeSignals";
-import { AnalystRecommendations } from "./AnalystRecommendations";
-import { CompanyProfileCard } from "./CompanyProfileCard";
-import { DividendHistory } from "./DividendHistory";
-import { EarningsCalendar } from "./EarningsCalendar";
-import { FinancialHealthScorecard } from "./FinancialHealthScorecard";
-import { FinancialStatements } from "./FinancialStatements";
-import { HoldersCard } from "./HoldersCard";
-import { useStockI18n } from "./i18n";
-import { IndicatorPanel } from "./IndicatorPanel";
-import { KapEventsCard } from "./KapEventsCard";
-import { MovingAveragesTable, PivotsCard } from "./MovingAveragesTable";
-import { NewsCard } from "./NewsCard";
-import { PriceChartCard } from "./PriceChartCard";
-import { QuoteStats } from "./QuoteStats";
-import { RatiosCard } from "./RatiosCard";
-import { SectorComparisonCard } from "./SectorComparisonCard";
-import { StockShell } from "./StockShell";
-import { TechnicalSummary } from "./TechnicalSummary";
-import { LazySection, SectionHeadingLevel } from "./ui";
+import type { WidgetCategory } from "@/components/widgets/catalog";
+import type { BuiltInPage } from "@/components/widgets/defaults";
+import { EditLayoutButton } from "@/components/widgets/EditBar";
+import { useSitePageEditor } from "@/components/widgets/use-site-page";
+import { STOCK_WIDGETS } from "@/components/widgets/stock-widgets";
+import { WidgetBoard, type Breakpoint } from "@/components/widgets/WidgetBoard";
+import { StockShell, type StockView } from "./StockShell";
 
-/** Two cards side by side from lg; both stretch to the taller one, so headers and footers line up. */
-const PAIR = "grid grid-cols-1 gap-4 lg:grid-cols-2";
+/** Stock widgets first in the gallery on the stock pages. */
+const GALLERY_ORDER: readonly WidgetCategory[] = ["stock", "general", "market", "macro"];
 
 /**
- * A column of cards that fills its grid cell: when the column next to it is
- * taller, the extra height is shared by all of its cards (each grows from its
- * content height, footers stay at the bottom), so the two columns end on the
- * same line without one half-empty card or a hole under the shorter column.
- * Cards never shrink — their overflow is hidden, a squeezed card would clip.
+ * A stock page is a widget layout (components/widgets/defaults.ts holds the
+ * site's own: what an investor needs first at the top, fundamentals before
+ * technicals, the full statement tables last). "Customize" lets the visitor
+ * move, resize, hide and add cards; their layout applies to every stock.
  */
-const STACK = "flex min-w-0 flex-col gap-4 [&>*]:shrink-0 [&>*]:grow";
+function StockBoardPage({
+  ticker,
+  view,
+  page,
+  lazyFromRow,
+  stackBelow = "lg",
+}: {
+  ticker: string;
+  view: StockView;
+  page: BuiltInPage;
+  /** First row whose cards wait until scrolled near (where the hand-built page started its LazySections). */
+  lazyFromRow: number;
+  stackBelow?: Breakpoint;
+}) {
+  const editor = useSitePageEditor(page);
+  return (
+    <StockShell ticker={ticker} view={view} actions={<EditLayoutButton editor={editor} compact />}>
+      <WidgetBoard
+        editor={editor}
+        context={{ ticker, tickerOverrides: true }}
+        stackBelow={stackBelow}
+        lazyFromRow={lazyFromRow}
+        galleryCategories={GALLERY_ORDER}
+        components={STOCK_WIDGETS}
+      />
+    </StockShell>
+  );
+}
 
-/** A LazySection inside a STACK: the mounted card fills the (growing) wrapper. */
-const STACK_ITEM = "flex flex-col [&>*]:grow";
-
-/*
- * Every stock page runs top to bottom in the order an investor needs it:
- * summaries and verdicts before the figures behind them, fundamentals before
- * technicals, the full statement tables last. In a pair the left card (first
- * on phones) is the more important one.
- */
-
-/**
- * /hisse/[ticker] — overview: key figures and the chart, the verdicts
- * (scorecard, analysts), what is new (KAP, news), ratios and signals, the
- * stock against its sector, dividends and the report calendar, then the
- * statements. Below-the-fold sections mount when scrolled near.
- */
+/** /hisse/[ticker] — overview. Below-the-fold cards mount when scrolled near. */
 export function StockOverviewView({ ticker }: { ticker: string }) {
-  return (
-    <StockShell ticker={ticker} view="overview">
-      <QuoteStats ticker={ticker} />
-      <PriceChartCard ticker={ticker} />
-      <div className={PAIR}>
-        <FinancialHealthScorecard ticker={ticker} />
-        <AnalystRecommendations ticker={ticker} />
-      </div>
-      <LazySection columns={2} minHeight={560}>
-        <div className={PAIR}>
-          <KapEventsCard ticker={ticker} />
-          <NewsCard ticker={ticker} />
-        </div>
-      </LazySection>
-      <LazySection columns={2} minHeight={480}>
-        <div className={PAIR}>
-          <RatiosCard ticker={ticker} />
-          <AllTimeframeSignals ticker={ticker} />
-        </div>
-      </LazySection>
-      <LazySection minHeight={420}>
-        <SectorComparisonCard ticker={ticker} />
-      </LazySection>
-      <LazySection columns={2} minHeight={300}>
-        <div className={PAIR}>
-          <DividendHistory ticker={ticker} />
-          <EarningsCalendar ticker={ticker} />
-        </div>
-      </LazySection>
-      <LazySection minHeight={480}>
-        <FinancialStatements ticker={ticker} />
-      </LazySection>
-    </StockShell>
-  );
+  return <StockBoardPage ticker={ticker} view="overview" page="stock.overview" lazyFromRow={3} />;
 }
 
-/**
- * /temel/[ticker] — fundamentals: the scorecard over the ratios behind it
- * beside the analysts' view over valuation and the company profile (two
- * columns that end on the same line, so a bank's short ratio list doesn't
- * leave one half-empty card), the stock against its sector, dividends beside
- * ownership and the report calendar, then the statements.
- */
+/** /temel/[ticker] — fundamentals. */
 export function StockFundamentalView({ ticker }: { ticker: string }) {
-  return (
-    <StockShell ticker={ticker} view="fundamental">
-      <div className={PAIR}>
-        <div className={STACK}>
-          <FinancialHealthScorecard ticker={ticker} />
-          <RatiosCard ticker={ticker} />
-        </div>
-        <div className={STACK}>
-          <AnalystRecommendations ticker={ticker} />
-          <CompanyProfileCard ticker={ticker} />
-        </div>
-      </div>
-      <LazySection minHeight={420}>
-        <SectorComparisonCard ticker={ticker} />
-      </LazySection>
-      <LazySection columns={2} minHeight={440}>
-        <div className={PAIR}>
-          <DividendHistory ticker={ticker} />
-          <div className={STACK}>
-            <HoldersCard ticker={ticker} />
-            <EarningsCalendar ticker={ticker} />
-          </div>
-        </div>
-      </LazySection>
-      <LazySection minHeight={480}>
-        <FinancialStatements ticker={ticker} />
-      </LazySection>
-    </StockShell>
-  );
+  return <StockBoardPage ticker={ticker} view="fundamental" page="stock.fundamental" lazyFromRow={1} />;
 }
 
-/**
- * /teknik/[ticker] — technical analysis: the daily verdict and the chart, the
- * trend (moving averages) beside the verdict per timeframe, the oscillators,
- * then pivot levels.
- */
+/** /teknik/[ticker] — technical analysis. */
 export function StockTechnicalView({ ticker }: { ticker: string }) {
-  return (
-    <StockShell ticker={ticker} view="technical">
-      <TechnicalSummary ticker={ticker} />
-      <PriceChartCard ticker={ticker} variant="technical" />
-      <div className={PAIR}>
-        <MovingAveragesTable ticker={ticker} />
-        <AllTimeframeSignals ticker={ticker} />
-      </div>
-      <IndicatorPanel ticker={ticker} />
-      <LazySection minHeight={240}>
-        <PivotsCard ticker={ticker} />
-      </LazySection>
-    </StockShell>
-  );
-}
-
-/** One side of the combined view: a small caps label over a column of cards (their titles become h3). */
-function CombinedColumn({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-3">
-      <h2 id={id} className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h2>
-      <SectionHeadingLevel level={3}>
-        <div className={`${STACK} grow`}>{children}</div>
-      </SectionHeadingLevel>
-    </section>
-  );
+  return <StockBoardPage ticker={ticker} view="technical" page="stock.technical" lazyFromRow={4} />;
 }
 
 /**
  * /analiz/[ticker] — fundamental and technical summaries side by side from xl
  * (below that the two columns stack, fundamentals first, so no card is
- * squeezed into ~450px). Each column opens with its verdicts.
+ * squeezed into ~450px).
  */
 export function StockCombinedView({ ticker }: { ticker: string }) {
-  const { t } = useStockI18n();
-  return (
-    <StockShell ticker={ticker} view="combined">
-      <div className="grid grid-cols-1 gap-x-4 gap-y-8 xl:grid-cols-2">
-        <CombinedColumn id="combined-fundamental" title={t("tabs.fundamental")}>
-          <FinancialHealthScorecard ticker={ticker} />
-          <AnalystRecommendations ticker={ticker} />
-          <RatiosCard ticker={ticker} />
-          <SectorComparisonCard ticker={ticker} compact />
-          <CompanyProfileCard ticker={ticker} />
-          <HoldersCard ticker={ticker} />
-        </CombinedColumn>
-        <CombinedColumn id="combined-technical" title={t("tabs.technical")}>
-          <TechnicalSummary ticker={ticker} />
-          <AllTimeframeSignals ticker={ticker} />
-          <IndicatorPanel ticker={ticker} compact />
-          <LazySection minHeight={240} className={STACK_ITEM}>
-            <PivotsCard ticker={ticker} />
-          </LazySection>
-        </CombinedColumn>
-      </div>
-    </StockShell>
-  );
+  return <StockBoardPage ticker={ticker} view="combined" page="stock.combined" lazyFromRow={1} stackBelow="xl" />;
 }
