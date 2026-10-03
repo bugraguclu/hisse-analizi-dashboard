@@ -2,6 +2,10 @@
 
 ## Yayımlanmamış
 
+### Güvenlik
+
+- Next.js 16.3.8'e yükseltildi: `next/og` ImageResponse'taki uzaktan kod çalıştırma açığı (GHSA-vcvr-r3jv-pc5j) 16.3.5'i de kapsıyordu. Uygulama `next/og` kullanmıyor; `npm audit --omit=dev` 0 açık.
+
 ### İpuçları imleci izler
 
 - Çubuk ve göstergelerin ipucu artık her zaman imlecin üzerindeki parçaya ait. Önceden bir parçaya tıklamak ipucunu o parçaya sabitliyordu. İmleç başka parçaya geçince ya da çubuktan çıkınca eski ipucu ekranda kalıyor, yenisi açılmıyordu; vurgu ise yeni parçaya geçiyordu.
