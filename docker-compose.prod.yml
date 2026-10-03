@@ -25,6 +25,13 @@ x-resources-light: &resources-light
     cpus: "1"
     memory: 512M
 
+# The daily universe sync peaks above 512 MiB; under the light limit the kernel
+# OOM-killed the worker mid-sync (2026-09-30).
+x-resources-worker: &resources-worker
+  limits:
+    cpus: "1"
+    memory: 1G
+
 services:
   db:
     environment:
@@ -69,7 +76,7 @@ services:
     restart: always
     logging: *default-logging
     deploy:
-      resources: *resources-light
+      resources: *resources-worker
 
   dashboard:
     environment:
