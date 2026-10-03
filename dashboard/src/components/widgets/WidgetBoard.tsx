@@ -888,6 +888,7 @@ export function WidgetBoard({
         className={cn(
           "relative flex min-w-0 shrink-0 flex-col",
           editing ? "min-h-12 justify-end" : "[&:has([data-widget-body]:empty)]:hidden",
+          meta?.snug && !editing && "-mb-1",
         )}
       >
         {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (

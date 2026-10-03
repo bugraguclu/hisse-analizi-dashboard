@@ -72,7 +72,7 @@ export default function MakroPage() {
   const editor = useSitePageEditor("macro");
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-6">
+    <div className="mx-auto max-w-7xl space-y-8 pb-6">
       <div className="space-y-3">
         <PageHeader
           eyebrow={t("page.eyebrow")}

@@ -68,6 +68,11 @@ export interface WidgetMeta {
   /** Keeps its own height in a stack instead of sharing the column's extra height (headings). */
   rigid?: boolean;
   /**
+   * Belongs with what comes under it: the next row (or card) sits 12px below
+   * instead of 16 (the inflation tiles over their charts, as /makro had them).
+   */
+  snug?: boolean;
+  /**
    * Share of a stack's extra height (default 1). 0 = only when nothing else in
    * the stack can take it (the watchlist stays compact above market breadth).
    */
@@ -198,7 +203,7 @@ export const WIDGETS: readonly WidgetMeta[] = [
   plain("macro", "macro.kpis", Gauge, 12, 140),
   plain("macro", "macro.corridor", Landmark, 4, 360),
   plain("macro", "macro.policyInflation", ChartLine, 8, 360),
-  plain("macro", "macro.inflationTiles", Thermometer, 12, 140),
+  { ...plain("macro", "macro.inflationTiles", Thermometer, 12, 140), snug: true },
   plain("macro", "macro.inflationTrend", TrendingUp, 8, 360),
   plain("macro", "macro.monthlyCpi", ChartNoAxesColumn, 4, 360),
   plain("macro", "macro.markets", ArrowLeftRight, 12, 620),
