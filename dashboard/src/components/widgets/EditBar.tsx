@@ -12,7 +12,12 @@ export function EditLayoutButton({ editor, compact = false, className }: { edito
   const label = (text: string) => (compact ? <span className="max-sm:sr-only">{text}</span> : text);
   if (editor.editing) {
     return (
-      <button type="button" onClick={() => editor.setEditing(false)} className={cn(buttonVariants({ variant: "default", size: "md" }), className)}>
+      <button
+        type="button"
+        disabled={editor.pending}
+        onClick={() => editor.setEditing(false)}
+        className={cn(buttonVariants({ variant: "default", size: "md" }), className)}
+      >
         <Check aria-hidden />
         {label(t("edit.done"))}
       </button>
@@ -21,6 +26,7 @@ export function EditLayoutButton({ editor, compact = false, className }: { edito
   return (
     <button
       type="button"
+      disabled={editor.pending}
       onClick={() => editor.setEditing(true)}
       title={t("edit.buttonLabel")}
       className={cn(buttonVariants({ variant: "outline", size: "md" }), className)}

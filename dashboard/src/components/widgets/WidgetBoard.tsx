@@ -805,6 +805,24 @@ export function WidgetBoard({
   const settingsWidget = settingsFor ? (findWidget(layout, settingsFor)?.widget ?? null) : null;
   const total = widgetCount(shown);
 
+  if (editor.pending) {
+    return (
+      <div className={cn("space-y-4", className)} aria-busy="true">
+        <div>
+          <LazyPlaceholder minHeight={360} />
+        </div>
+        <div className={cn("grid grid-cols-1 gap-4", GRID_CLASS[stackBelow])}>
+          <div style={spanStyle(6)} className={SPAN_CLASS[stackBelow]}>
+            <LazyPlaceholder minHeight={280} />
+          </div>
+          <div style={spanStyle(6)} className={SPAN_CLASS[stackBelow]}>
+            <LazyPlaceholder minHeight={280} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const weight = (widget: WidgetInstance) => {
     const meta = widgetMeta(widget.type);
     return widget.height !== undefined || meta?.rigid ? null : (meta?.grow ?? 1);

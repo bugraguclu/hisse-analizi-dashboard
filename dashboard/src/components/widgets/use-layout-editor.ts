@@ -19,6 +19,8 @@ export interface LayoutEditor {
   reset?: () => void;
   /** Site pages only: the visitor has their own layout. */
   customized?: boolean;
+  /** Server/hydration pending state while loading a custom layout (skeleton shown). */
+  pending?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export function useLayoutEditor({
   layout,
   save,
   customized,
+  pending,
   resettable = false,
   initialEditing = false,
 }: {
@@ -36,6 +39,7 @@ export function useLayoutEditor({
   /** null = drop the visitor's layout (site pages). */
   save: (layout: Layout | null) => void;
   customized?: boolean;
+  pending?: boolean;
   resettable?: boolean;
   /** Open in edit mode (a page just created). */
   initialEditing?: boolean;
@@ -136,7 +140,8 @@ export function useLayoutEditor({
       canRedo,
       reset: resettable ? reset : undefined,
       customized,
+      pending,
     }),
-    [layout, editing, commit, undo, redo, canUndo, canRedo, resettable, reset, customized],
+    [layout, editing, commit, undo, redo, canUndo, canRedo, resettable, reset, customized, pending],
   );
 }

@@ -5,6 +5,8 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
+import { CUSTOM_LAYOUTS_COOKIE, parseCustomLayoutsCookie } from "@/components/widgets/custom-layouts-cookie";
+import type { BuiltInPage } from "@/components/widgets/defaults";
 import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
 
 // Type system (mapped to font-sans / font-mono / font-display in globals.css):
@@ -31,6 +33,11 @@ const OPEN_GRAPH_LOCALES: Record<Locale, string> = { tr: "tr_TR", en: "en_US", f
 async function requestLocale(): Promise<Locale> {
   const store = await cookies();
   return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
+}
+
+async function requestCustomLayouts(): Promise<BuiltInPage[]> {
+  const store = await cookies();
+  return parseCustomLayoutsCookie(store.get(CUSTOM_LAYOUTS_COOKIE)?.value);
 }
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -65,10 +72,11 @@ export default async function RootLayout({
   // The UI language travels in a cookie so the server renders it directly
   // (correct <html lang>, no flash of Turkish text for EN/FR users).
   const locale = await requestLocale();
+  const customLayouts = await requestCustomLayouts();
   return (
     <html lang={locale} className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full">
-        <Providers initialLocale={locale}>
+        <Providers initialLocale={locale} customLayouts={customLayouts}>
           <AppShell>{children}</AppShell>
           <Toaster />
         </Providers>

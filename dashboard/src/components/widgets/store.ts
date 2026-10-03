@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { DEFAULT_TICKER } from "@/components/layout/nav";
 import { isWidgetType } from "./catalog";
+import { CUSTOM_LAYOUTS_COOKIE, parseCustomLayoutsCookie, useCustomLayouts } from "./custom-layouts-context";
 import { DEFAULT_LAYOUTS, type BuiltInPage } from "./defaults";
 import { newId, normalizeTicker, sanitizeLayout, withFreshIds, type Layout } from "./model";
 
@@ -99,18 +100,23 @@ function parseOverrides(raw: unknown): Overrides {
   return overrides;
 }
 
+const EMPTY_LAYOUT: Layout = Object.freeze({ rows: [] }) as Layout;
+
 const overridesStore = createLocalStore(LAYOUTS_KEY, parseOverrides, EMPTY_OVERRIDES);
 
 export interface StoredLayout {
   layout: Layout;
   defaultLayout: Layout;
   customized: boolean;
+  pending?: boolean;
   /** null restores the default. */
   save: (layout: Layout | null) => void;
 }
 
 /** A site page's layout: the visitor's version when they customised it, else the default. */
 export function useStoredLayout(page: BuiltInPage): StoredLayout {
+  const cookieCustom = useCustomLayouts();
+  const hydrated = useHydrated();
   const overrides = useSyncExternalStore(overridesStore.subscribe, overridesStore.get, overridesStore.getServer);
   const save = useCallback(
     (layout: Layout | null) => {
@@ -121,8 +127,46 @@ export function useStoredLayout(page: BuiltInPage): StoredLayout {
     },
     [page],
   );
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const currentOverrides = overridesStore.get();
+    const keys = (Object.keys(currentOverrides) as BuiltInPage[])
+      .filter((k) => !!currentOverrides[k])
+      .sort();
+    const serializedKeys = keys.join(",");
+
+    const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${CUSTOM_LAYOUTS_COOKIE}=([^;]*)`));
+    const currentCookieVal = match ? decodeURIComponent(match[1]) : "";
+    const cookieKeys = parseCustomLayoutsCookie(currentCookieVal).sort().join(",");
+
+    if (serializedKeys !== cookieKeys) {
+      if (serializedKeys) {
+        document.cookie = `${CUSTOM_LAYOUTS_COOKIE}=${serializedKeys}; path=/; max-age=31536000; samesite=lax`;
+      } else {
+        document.cookie = `${CUSTOM_LAYOUTS_COOKIE}=; path=/; max-age=0; samesite=lax`;
+      }
+    }
+  }, [hydrated, overrides]);
+
+  if (!hydrated && cookieCustom.has(page)) {
+    return {
+      pending: true,
+      layout: EMPTY_LAYOUT,
+      defaultLayout: DEFAULT_LAYOUTS[page],
+      customized: true,
+      save,
+    };
+  }
+
   const override = overrides[page];
-  return { layout: override ?? DEFAULT_LAYOUTS[page], defaultLayout: DEFAULT_LAYOUTS[page], customized: !!override, save };
+  return {
+    pending: false,
+    layout: override ?? DEFAULT_LAYOUTS[page],
+    defaultLayout: DEFAULT_LAYOUTS[page],
+    customized: !!override,
+    save,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +182,6 @@ export interface CustomPage {
 }
 
 const EMPTY_PAGES: readonly CustomPage[] = Object.freeze([]);
-const EMPTY_LAYOUT: Layout = Object.freeze({ rows: [] }) as Layout;
 
 function parsePages(raw: unknown): readonly CustomPage[] {
   if (!Array.isArray(raw)) return EMPTY_PAGES;
