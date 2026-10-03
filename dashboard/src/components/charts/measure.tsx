@@ -5,6 +5,7 @@ import { formatChangePercent, trendTone, TREND_TEXT_CLASS } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { formatChartChange, formatSpan } from "./format";
+import { seriesUnit } from "./units";
 import { useChartI18n } from "./i18n";
 import { formatBarTime } from "./time";
 import type { ChartBar, ChartSeries } from "./types";
@@ -70,7 +71,7 @@ export function describeMeasure(measure: MeasureState, bars: readonly ChartBar[]
   const style = series.interval === "intraday" ? "dayMonthTime" : series.interval === "monthly" ? "monthYear" : "date";
   return {
     change,
-    changeText: formatChartChange(change, origin.close, series.currency),
+    changeText: formatChartChange(change, origin.close, seriesUnit(series)),
     percent: (change / origin.close) * 100,
     bars: b - a,
     span: formatSpan(first.time, last.time, series.interval, locale),

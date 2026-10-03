@@ -66,19 +66,40 @@ const DICT = {
   "draw.button": { tr: "Çizim", en: "Draw", fr: "Dessin" },
   "draw.title": { tr: "Çizim araçları: trend, yatay çizgi, Fibonacci…", en: "Drawing tools: trend line, horizontal line, Fibonacci…", fr: "Outils de dessin : tendance, ligne horizontale, Fibonacci…" },
 
-  "currency.button": { tr: "USD", en: "USD", fr: "USD" },
-  "currency.label": { tr: "Dolar bazında", en: "In US dollars", fr: "En dollars US" },
-  "currency.title": {
-    tr: "Dolar bazında (Alt+U): her bar kendi USD/TRY kuruna bölünür",
-    en: "In US dollars (Alt+U): each bar is divided by its own USD/TRY rate",
-    fr: "En dollars US (Alt+U) : chaque barre est divisée par son propre cours USD/TRY",
+  "unit.label": { tr: "Birim", en: "Unit", fr: "Unité" },
+  "unit.title": {
+    tr: "Fiyatların birimi: TL, dolar, euro, gram altın ya da enflasyondan arındırılmış TL (Alt+U: TL ↔ USD)",
+    en: "Price unit: lira, dollars, euros, grams of gold or inflation-adjusted lira (Alt+U: TRY ↔ USD)",
+    fr: "Unité des prix : livre, dollar, euro, grammes d'or ou livre corrigée de l'inflation (Alt+U : TRY ↔ USD)",
   },
-  "currency.ariaSummary": {
-    tr: "{ticker} fiyat grafiği, dolar bazında, {period}: son {price} USD, değişim {change}",
-    en: "{ticker} price chart in US dollars, {period}: last {price} USD, change {change}",
-    fr: "Graphique de {ticker} en dollars US, {period} : dernier {price} USD, variation {change}",
+  "unit.short.TRY": { tr: "TL", en: "TRY", fr: "TRY" },
+  "unit.short.USD": { tr: "USD", en: "USD", fr: "USD" },
+  "unit.short.EUR": { tr: "EUR", en: "EUR", fr: "EUR" },
+  "unit.short.GOLD": { tr: "Altın", en: "Gold", fr: "Or" },
+  "unit.short.REAL": { tr: "Reel", en: "Real", fr: "Réel" },
+  "unit.long.TRY": { tr: "Türk lirası", en: "Turkish lira", fr: "Livre turque" },
+  "unit.long.USD": { tr: "Dolar bazında", en: "In US dollars", fr: "En dollars US" },
+  "unit.long.EUR": { tr: "Euro bazında", en: "In euros", fr: "En euros" },
+  "unit.long.GOLD": { tr: "Gram altın bazında", en: "In grams of gold", fr: "En grammes d'or" },
+  "unit.long.REAL": { tr: "Enflasyondan arındırılmış (reel)", en: "Inflation-adjusted (real)", fr: "Corrigé de l'inflation (réel)" },
+  "unit.hint.TRY": { tr: "Nominal fiyat", en: "Nominal price", fr: "Prix nominal" },
+  "unit.hint.USD": { tr: "Her bar o günün USD/TRY kapanışına bölünür", en: "Each bar divided by that day's USD/TRY close", fr: "Chaque barre divisée par la clôture USD/TRY du jour" },
+  "unit.hint.EUR": { tr: "Her bar o günün EUR/TRY kapanışına bölünür", en: "Each bar divided by that day's EUR/TRY close", fr: "Chaque barre divisée par la clôture EUR/TRY du jour" },
+  "unit.hint.GOLD": { tr: "Fiyatın kaç gram altın ettiği", en: "How many grams of gold the price is worth", fr: "Combien de grammes d'or vaut le prix" },
+  "unit.hint.REAL": { tr: "TÜFE ile bugünün liralarına çevrilir", en: "Restated in today's lira with CPI", fr: "Converti en livres d'aujourd'hui avec l'IPC" },
+  "unit.suffix.TRY": { tr: "TL", en: "TRY", fr: "TRY" },
+  "unit.suffix.USD": { tr: "USD", en: "USD", fr: "USD" },
+  "unit.suffix.EUR": { tr: "EUR", en: "EUR", fr: "EUR" },
+  "unit.suffix.GOLD": { tr: "gr", en: "g", fr: "g" },
+  "unit.suffix.REAL": { tr: "TL", en: "TRY", fr: "TRY" },
+  "unit.unavailable": { tr: "1G, 5G ve Tümü'nde yok", en: "Not on 1D, 5D or Max", fr: "Pas sur 1J, 5J ni Max" },
+  "unit.realNote": { tr: "{month} fiyatlarıyla", en: "in {month} prices", fr: "aux prix de {month}" },
+  "unit.ariaSummary": {
+    tr: "{ticker} fiyat grafiği, {unit}, {period}: son {price} {suffix}, değişim {change}",
+    en: "{ticker} price chart, {unit}, {period}: last {price} {suffix}, change {change}",
+    fr: "Graphique de {ticker}, {unit}, {period} : dernier {price} {suffix}, variation {change}",
   },
-  "currency.legend": {
+  "unit.fxLegend": {
     tr: "Fiyatlar dolar bazında; son kur USD/TRY {rate}",
     en: "Prices in US dollars; latest rate USD/TRY {rate}",
     fr: "Prix en dollars US ; dernier cours USD/TRY {rate}",
@@ -226,6 +247,60 @@ const DICT = {
   "table.truncated": { tr: "Son {n} satır gösteriliyor", en: "Showing the latest {n} rows", fr: "Affichage des {n} dernières lignes" },
 
   "attribution": { tr: "Grafik: TradingView Lightweight Charts™", en: "Charts: TradingView Lightweight Charts™", fr: "Graphiques : TradingView Lightweight Charts™" },
+
+  // The card's simple toolbar: everything past the essentials sits in "Diğer"
+  "more.button": { tr: "Diğer", en: "More", fr: "Plus" },
+  "more.title": { tr: "Diğer grafik seçenekleri", en: "More chart options", fr: "Autres options du graphique" },
+  "more.view": { tr: "Görünüm", en: "Display", fr: "Affichage" },
+  "more.tools": { tr: "Araçlar", en: "Tools", fr: "Outils" },
+  "more.draw": { tr: "Çizim araçları", en: "Drawing tools", fr: "Outils de dessin" },
+  "more.measure": { tr: "Ölç (Shift + sürükle)", en: "Measure (Shift + drag)", fr: "Mesurer (Maj + glisser)" },
+  "more.table": { tr: "Veri tablosu", en: "Data table", fr: "Tableau des données" },
+  "action.resetShort": { tr: "Görünümü sıfırla", en: "Reset view", fr: "Réinitialiser la vue" },
+  "summary.sincePeriodStart": { tr: "dönem başından", en: "since period start", fr: "depuis le début de période" },
+
+  // Comparison with the market and the sector
+  "bench.ahead": { tr: "endeksin {diff} puan önünde", en: "{diff} pts ahead of the index", fr: "{diff} pts devant l'indice" },
+  "bench.behind": { tr: "endeksin {diff} puan gerisinde", en: "{diff} pts behind the index", fr: "{diff} pts derrière l'indice" },
+  "bench.suggested": { tr: "Önerilenler", en: "Suggested", fr: "Suggestions" },
+  "bench.market": { tr: "Piyasa", en: "Market", fr: "Marché" },
+  "bench.sector": { tr: "Sektör", en: "Sector", fr: "Secteur" },
+
+  // Analyst price targets
+  "targets.toggle": { tr: "Analist hedef fiyatı", en: "Analyst price target", fr: "Objectif de cours des analystes" },
+  "targets.title": { tr: "Analist hedefi · 12 ay", en: "Analyst target · 12 mo", fr: "Objectif analystes · 12 mois" },
+  "targets.titleN": { tr: "Analist hedefi · 12 ay · {n} analist", en: "Analyst target · 12 mo · {n} analysts", fr: "Objectif analystes · 12 mois · {n} analystes" },
+  "targets.mean": { tr: "Ort.", en: "Avg", fr: "Moy." },
+  "targets.high": { tr: "En yüksek", en: "High", fr: "Haut" },
+  "targets.low": { tr: "En düşük", en: "Low", fr: "Bas" },
+
+  // Dividend-reinvested (total return) line
+  "totalReturn.label": { tr: "Temettü dahil", en: "With dividends", fr: "Dividendes inclus" },
+
+  // The viewer's own average cost
+  "cost.edit": { tr: "Maliyetim…", en: "My average cost…", fr: "Mon prix de revient…" },
+  "cost.label": { tr: "Maliyetim", en: "My cost", fr: "Mon PRU" },
+  "cost.prompt": { tr: "Ortalama maliyetiniz (TL)", en: "Your average cost (TRY)", fr: "Votre prix de revient (TRY)" },
+  "cost.save": { tr: "Kaydet", en: "Save", fr: "Enregistrer" },
+  "cost.clear": { tr: "Kaldır", en: "Remove", fr: "Retirer" },
+  "cost.close": { tr: "Kapat", en: "Close", fr: "Fermer" },
+  "cost.note": { tr: "Yalnızca bu tarayıcıda saklanır", en: "Stored in this browser only", fr: "Enregistré dans ce navigateur uniquement" },
+  "cost.invalid": { tr: "Sıfırdan büyük bir fiyat girin", en: "Enter a price above zero", fr: "Saisissez un prix supérieur à zéro" },
+
+  // Expected events in the future space
+  "upcoming.earnings": { tr: "Beklenen finansal rapor", en: "Expected financial report", fr: "Rapport financier attendu" },
+  "upcoming.earningsDetail": { tr: "KAP'ın beklenen bildirim takvimine göre", en: "From KAP's expected disclosure calendar", fr: "D'après le calendrier des publications attendues du KAP" },
+  "upcoming.dividend": { tr: "İlan edilmiş temettü", en: "Announced dividend", fr: "Dividende annoncé" },
+  "upcoming.dividendDetail": { tr: "Hisse başı brüt {gross} TL", en: "Gross {gross} TRY per share", fr: "Brut {gross} TRY par action" },
+  "upcoming.nextDividend": { tr: "Sonraki temettü: {date} ({days} gün) · {gross} TL", en: "Next dividend: {date} ({days} days) · {gross} TRY", fr: "Prochain dividende : {date} ({days} jours) · {gross} TRY" },
+  "upcoming.nextReport": { tr: "Sonraki bilanço: {date} ({days} gün)", en: "Next report: {date} ({days} days)", fr: "Prochain rapport : {date} ({days} jours)" },
+
+  // One-click indicator sets
+  "templates.title": { tr: "Hazır setler", en: "Presets", fr: "Préréglages" },
+  "templates.trend": { tr: "Trend", en: "Trend", fr: "Tendance" },
+  "templates.momentum": { tr: "Momentum", en: "Momentum", fr: "Momentum" },
+  "templates.volatility": { tr: "Oynaklık", en: "Volatility", fr: "Volatilité" },
+  "templates.volume": { tr: "Hacim", en: "Volume", fr: "Volume" },
 } as const satisfies Record<string, Record<Locale, string>>;
 
 export type ChartKey = keyof typeof DICT;

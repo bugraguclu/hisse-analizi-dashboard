@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChartAttribution, ChartWorkspace } from "@/components/charts/ChartWorkspace";
 import {
   CHART_PERIODS,
@@ -11,15 +11,18 @@ import {
   usePrefetchChartPeriods,
   windowView,
 } from "@/components/charts/data";
+import { chartPriceFormatter, formatChartChange } from "@/components/charts/format";
 import { useChartI18n } from "@/components/charts/i18n";
 import { LiveBadge } from "@/components/charts/LiveBadge";
 import { ApiDataMeta } from "@/components/shared/DataMeta";
 import { useChartPrefs, type ChartPrefs } from "@/components/charts/prefs";
 import { formatBarTime } from "@/components/charts/time";
+import { requestCurrency, seriesUnit } from "@/components/charts/units";
+import { useUnitConversion } from "@/components/charts/use-unit";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useMarketStatus } from "@/hooks/use-market-status";
 import { useNow } from "@/hooks/use-now";
-import { formatChangePercent, formatMarketDate, formatNumber } from "@/lib/format";
+import { formatChangePercent, formatMarketDate, formatNumber, formatSigned } from "@/lib/format";
 import type { TranslationKey } from "@/lib/i18n";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock, sessionQuoteTime } from "@/lib/market-hours";
@@ -61,11 +64,12 @@ const INDEX_DEFAULTS: ChartPrefs = {
   scale: "normal",
   events: false,
   extremes: true,
+  targets: false,
   watermark: true,
   grid: true,
   magnet: true,
   drawingsHidden: false,
-  currency: "TRY",
+  unit: "TRY",
 };
 /** The home card stays compact; full screen brings indicators, comparison and drawings along. */
 const CARD_FEATURES = { indicators: false, compare: false, drawings: false, events: false };
@@ -94,8 +98,10 @@ export function IndexChartCard({ className }: { className?: string }) {
   const [period, setPeriod] = useState<ChartPeriod>("1d");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [prefs, setPrefs] = useChartPrefs("hisse.chart.index.v2", INDEX_DEFAULTS);
-  const historyQ = useChartHistory("index", SYMBOL, period, { currency: prefs.currency });
-  const prefetchPeriods = usePrefetchChartPeriods("index", SYMBOL, prefs.currency);
+  const { unit: chosenUnit, pending: conversionPending, error: conversionError, retry: retryConversion, convert } = useUnitConversion(prefs.unit, period);
+  const currency = requestCurrency(chosenUnit);
+  const historyQ = useChartHistory("index", SYMBOL, period, { currency });
+  const prefetchPeriods = usePrefetchChartPeriods("index", SYMBOL, currency);
   const quotesQ = useIndexQuotes();
   const now = useNow();
 
@@ -103,17 +109,22 @@ export function IndexChartCard({ className }: { className?: string }) {
   const quote = mergeQuote(findQuote(quotesQ.data?.quotes, SYMBOL), (history?.info ?? undefined) as Partial<IndexQuote> | undefined);
   const quoteTime = quoteTimeMs(quote);
   // The last bar follows the live level, so the chart ends where the header does (in dollars:
-  // the level over the latest USD/TRY close). The quote's other fields stay in lira.
+  // the level over the latest USD/TRY close; euros, gold and real lira convert after the merge).
+  // The quote's other fields stay in lira.
   const liveLevel = quoteInSeriesCurrency(history, quote.last) ?? null;
-  const series = useLiveSeries(history, liveLevel, quoteTime, true);
+  const liveSeries = useLiveSeries(history, liveLevel, quoteTime, true);
+  const series = useMemo(() => convert(liveSeries), [convert, liveSeries]);
   const shownPeriod = series?.period ?? period;
   const intraday = shownPeriod === "1d";
   const market = useMarketStatus(quoteTime);
   const live = intraday && market?.isOpen === true;
-  const usd = series?.currency === "USD";
+  // What is on screen decides the unit: a lira stand-in stays lira while the euro rates load.
+  const unit = series ? seriesUnit(series) : chosenUnit;
+  const lira = unit === "TRY";
+  const formatLevel = lira ? formatNumber : chartPriceFormatter(unit);
 
-  // In dollars 1D's reference is the previous session's close from the series, not the lira quote's.
-  const prevClose = usd
+  // In other units 1D's reference is the previous session's close from the series, not the lira quote's.
+  const prevClose = !lira
     ? intraday
       ? (series?.referenceClose ?? null)
       : null
@@ -128,19 +139,21 @@ export function IndexChartCard({ className }: { className?: string }) {
 
   // Header: live level and daily/period move, or the hovered bar when scrubbing the chart.
   const hovered = hoverIndex !== null && series ? series.bars[hoverIndex] : undefined;
-  const level = hovered?.close ?? liveLevel ?? stats?.last.close ?? null;
+  const level = hovered?.close ?? (lira || unit === "USD" ? liveLevel : null) ?? stats?.last.close ?? null;
+  // Changes keep the level's decimals (1,877 gr → −0,253).
+  const formatChange = (change: number | null | undefined) => (lira || change == null || level === null ? formatSigned(change) : formatChartChange(change, level, unit));
   const headerChange = hovered
     ? baselinePrice !== null
       ? hovered.close - baselinePrice
       : null
-    : intraday && !usd
+    : intraday && lira
       ? (quote.change ?? stats?.change ?? null)
       : (stats?.change ?? null);
   const headerPercent = hovered
     ? baselinePrice
       ? ((hovered.close - baselinePrice) / baselinePrice) * 100
       : null
-    : intraday && !usd
+    : intraday && lira
       ? (quote.change_percent ?? stats?.changePercent ?? null)
       : (stats?.changePercent ?? null);
 
@@ -152,9 +165,9 @@ export function IndexChartCard({ className }: { className?: string }) {
 
   const statItems: Array<[string, number | null | undefined]> = intraday
     ? [
-        [t("index.open"), (usd ? null : quote.open) ?? stats?.first.open],
-        [t("index.high"), (usd ? null : quote.high) ?? stats?.high],
-        [t("index.low"), (usd ? null : quote.low) ?? stats?.low],
+        [t("index.open"), (lira ? quote.open : null) ?? stats?.first.open],
+        [t("index.high"), (lira ? quote.high : null) ?? stats?.high],
+        [t("index.low"), (lira ? quote.low : null) ?? stats?.low],
         [t("index.prevClose"), prevClose],
       ]
     : [
@@ -166,13 +179,13 @@ export function IndexChartCard({ className }: { className?: string }) {
   const periodOptions = CHART_PERIODS.map((value) => ({ value, label: t(PERIOD_LABEL[value]), title: t(PERIOD_DESCRIPTION[value]) }));
   const ariaLabel =
     stats && level !== null
-      ? `${t("chart.ariaLabel")}${usd ? ` · ${tc("currency.label")}` : ""} · ${t(PERIOD_DESCRIPTION[shownPeriod])}: ${formatNumber(stats.first.close)} → ${formatNumber(stats.last.close)} (${formatChangePercent(stats.changePercent)})`
+      ? `${t("chart.ariaLabel")}${lira ? "" : ` · ${tc(`unit.long.${unit}`)}`} · ${t(PERIOD_DESCRIPTION[shownPeriod])}: ${formatLevel(stats.first.close)} → ${formatLevel(stats.last.close)} (${formatChangePercent(stats.changePercent)})`
       : t("chart.ariaLabel");
-  const usdTag = usd ? (
-    <span className="text-xs font-medium text-muted-foreground" title={tc("currency.label")}>
-      USD
+  const unitTag = lira ? null : (
+    <span className="text-xs font-medium text-muted-foreground" title={tc(`unit.long.${unit}`)}>
+      {tc(`unit.suffix.${unit}`)}
     </span>
-  ) : null;
+  );
 
   return (
     <DashboardCard labelledBy={HEADING_ID} className={className}>
@@ -186,9 +199,9 @@ export function IndexChartCard({ className }: { className?: string }) {
               <div className="mt-2 h-9 w-56 animate-pulse rounded-md bg-muted/60" aria-hidden="true" />
             ) : (
               <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{formatNumber(level)}</span>
-                {usdTag}
-                <ChangeLine change={headerChange} percent={headerPercent} />
+                <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{level === null ? formatNumber(null) : formatLevel(level)}</span>
+                {unitTag}
+                <ChangeLine change={headerChange} percent={headerPercent} formatChange={formatChange} />
                 <span className="text-xs text-muted-foreground">
                   {hoverLabel ?? (showsPastSession && stats ? formatMarketDate(stats.last.time, "dayMonth") : t(PERIOD_DESCRIPTION[shownPeriod]))}
                 </span>
@@ -230,9 +243,12 @@ export function IndexChartCard({ className }: { className?: string }) {
           series={series}
           status={{
             pending: historyQ.isPending,
-            error: historyQ.isError,
-            placeholder: historyQ.isPlaceholderData,
-            onRetry: () => void historyQ.refetch(),
+            error: historyQ.isError || conversionError,
+            placeholder: historyQ.isPlaceholderData || conversionPending,
+            onRetry: () => {
+              void historyQ.refetch();
+              retryConversion();
+            },
           }}
           period={period}
           periodOptions={periodOptions}
@@ -251,9 +267,9 @@ export function IndexChartCard({ className }: { className?: string }) {
           headline={
             level !== null ? (
               <span className="inline-flex items-baseline gap-2 font-mono tabular-nums">
-                <span className="text-[15px] font-semibold text-foreground">{formatNumber(level)}</span>
-                {usdTag}
-                <ChangeLine change={headerChange} percent={headerPercent} />
+                <span className="text-[15px] font-semibold text-foreground">{formatLevel(level)}</span>
+                {unitTag}
+                <ChangeLine change={headerChange} percent={headerPercent} formatChange={formatChange} />
                 {live && !hovered ? <LiveBadge label={tc("chart.live")} /> : null}
               </span>
             ) : null
@@ -262,12 +278,13 @@ export function IndexChartCard({ className }: { className?: string }) {
           errorMessage={t("chart.loadError")}
           downloadName={`BIST100-${shownPeriod}`}
           onIntent={prefetchPeriods}
+          convertSeries={convert}
         />
       </div>
 
       <dl className="mx-4 mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-4">
         {statItems.map(([label, value]) => (
-          <StatItem key={label} label={label} value={formatNumber(value)} />
+          <StatItem key={label} label={label} value={value == null ? formatNumber(null) : formatLevel(value)} />
         ))}
         {!intraday && <StatItem label={t("index.periodReturn")} value={formatChangePercent(stats?.changePercent)} />}
       </dl>

@@ -31,6 +31,11 @@ export interface CompareChoice {
   name?: string;
 }
 
+/** A one-click comparison offered above the search; `hint` says why ("Piyasa", "Sektör"). */
+export interface CompareSuggestion extends CompareChoice {
+  hint?: string;
+}
+
 /** Indices the backend serves with chart history (see /market/index/{symbol}). */
 export const COMPARE_INDICES: readonly CompareChoice[] = [
   { symbol: "XU100", kind: "index", label: "XU100", name: "BIST 100" },
@@ -57,6 +62,7 @@ export function ComparePicker({
   onClear,
   exclude,
   compact = false,
+  suggestions,
 }: {
   items: readonly CompareItem[];
   onAdd: (choice: CompareChoice) => void;
@@ -65,6 +71,8 @@ export function ComparePicker({
   /** The chart's own symbol. */
   exclude: string;
   compact?: boolean;
+  /** One-click choices above the search (BIST 100, the sector index, peers). */
+  suggestions?: ReadonlyArray<CompareSuggestion>;
 }) {
   const { t } = useChartI18n();
   const [open, setOpen] = useState(false);
@@ -158,6 +166,38 @@ export function ComparePicker({
               />
               {indexQ.isFetching && needle ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
             </div>
+
+            {suggestions && suggestions.length > 0 && !needle ? (
+              <div className="border-b border-border px-3 py-2">
+                <h3 className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("bench.suggested")}</h3>
+                <ul className="mt-1.5 flex flex-wrap gap-1">
+                  {suggestions.map((choice) => {
+                    const selected = active.get(choice.symbol);
+                    return (
+                      <li key={choice.symbol}>
+                        <button
+                          type="button"
+                          onClick={() => toggle(choice)}
+                          disabled={!selected && full}
+                          aria-pressed={selected !== undefined}
+                          title={choice.name}
+                          className={cn(
+                            "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50",
+                            selected ? "border-border bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                          )}
+                        >
+                          {selected ? (
+                            <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ background: SERIES_CSS_VAR[selected.color % 5] }} />
+                          ) : null}
+                          <span className="font-mono font-medium text-foreground">{choice.label}</span>
+                          {choice.hint ? <span className="text-[10px] text-muted-foreground">{choice.hint}</span> : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
 
             {items.length > 0 ? (
               <div className="border-b border-border px-3 py-2">

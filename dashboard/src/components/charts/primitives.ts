@@ -172,11 +172,15 @@ export interface EventBadge {
   index: number;
   letter: string;
   color: string;
+  /** An expected event in the future space, drawn with a dashed ring. */
+  upcoming?: boolean;
 }
 
 export interface EventBadgeStyle {
   card: string;
   font: string;
+  /** Badges sit in their own strip at the bottom of the pane (under the volume), with a hairline on top. */
+  lane?: { height: number; color: string };
 }
 
 const BADGE_RADIUS = 7;
@@ -253,18 +257,25 @@ export class EventBadgesPrimitive extends BasePrimitive {
         if (list) list.push(badge);
         else byIndex.set(badge.index, [badge]);
       }
-      const baseY = mediaSize.height - BADGE_RADIUS - 4;
+      const lane = this.style.lane;
+      const baseY = lane ? mediaSize.height - lane.height / 2 : mediaSize.height - BADGE_RADIUS - 4;
+      if (lane) {
+        context.fillStyle = lane.color;
+        context.fillRect(0, Math.round(mediaSize.height - lane.height) - 0.5, mediaSize.width, 1);
+      }
       for (const [index, list] of byIndex) {
         const x = timeScale.logicalToCoordinate(index as Logical);
         if (x === null || x < -BADGE_RADIUS || x > mediaSize.width + BADGE_RADIUS) continue;
         const shown = list.length > BADGE_STACK ? list.slice(0, BADGE_STACK - 1) : list;
-        shown.forEach((badge, i) => this.placed.push({ badge, x, y: baseY - i * (2 * BADGE_RADIUS + BADGE_GAP), label: badge.letter, extra: 0 }));
+        // In the lane the stack runs sideways (the strip is one badge tall).
+        const step = 2 * BADGE_RADIUS + BADGE_GAP;
+        const at = (i: number) => (lane ? { x: x + i * step, y: baseY } : { x, y: baseY - i * step });
+        shown.forEach((badge, i) => this.placed.push({ badge, ...at(i), label: badge.letter, extra: 0 }));
         if (list.length > BADGE_STACK) {
           const first = list[BADGE_STACK - 1];
           this.placed.push({
             badge: first,
-            x,
-            y: baseY - (BADGE_STACK - 1) * (2 * BADGE_RADIUS + BADGE_GAP),
+            ...at(BADGE_STACK - 1),
             label: `+${list.length - (BADGE_STACK - 1)}`,
             extra: list.length - (BADGE_STACK - 1),
           });
@@ -280,11 +291,125 @@ export class EventBadgesPrimitive extends BasePrimitive {
         context.fill();
         context.lineWidth = active ? 1.5 : 1.25;
         context.strokeStyle = placed.badge.color;
+        if (placed.badge.upcoming) context.setLineDash([2, 2]);
         context.stroke();
+        context.setLineDash([]);
         context.fillStyle = active ? this.style.card : placed.badge.color;
         context.font = `600 ${placed.label.length > 1 ? 8 : 9}px ${this.style.font}`;
         context.fillText(placed.label, placed.x, placed.y + 0.5);
       }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Analyst price-target fan in the future space
+// ---------------------------------------------------------------------------
+
+export interface TargetFan {
+  /** Logical index of the last real bar (fan origin) and of the fan's end (last future slot). */
+  from: number;
+  to: number;
+  last: number;
+  low: number;
+  mean: number;
+  high: number;
+  labels: { low: string; mean: string; high: string; title: string };
+  colors: { fill: string; line: string; mean: string; text: string; muted: string; card: string };
+  font: string;
+}
+
+/** Room kept free at the right edge of the plot for price-line titles, px. */
+const FAN_TITLE_ROOM = 88;
+/** Narrower than this the fan is not worth drawing (a short future space on a crowded chart), px. */
+const FAN_MIN_WIDTH = 24;
+
+/** Yahoo/TradingView-style projection: dashed lines from the last close to the low, mean and high target. */
+export class TargetFanPrimitive extends BasePrimitive {
+  constructor(private readonly fan: TargetFan) {
+    super("top");
+  }
+
+  protected render(target: Target): void {
+    const host = this.host;
+    if (!host) return;
+    const fan = this.fan;
+    const timeScale = host.chart.timeScale();
+    const x0 = timeScale.logicalToCoordinate(fan.from as Logical);
+    const end = timeScale.logicalToCoordinate(fan.to as Logical);
+    const y0 = host.series.priceToCoordinate(fan.last);
+    const yHigh = host.series.priceToCoordinate(fan.high);
+    const yMean = host.series.priceToCoordinate(fan.mean);
+    const yLow = host.series.priceToCoordinate(fan.low);
+    if (x0 === null || end === null || y0 === null || yHigh === null || yMean === null || yLow === null) return;
+    target.useMediaCoordinateSpace(({ context, mediaSize }) => {
+      // Price-line titles ("Dönem başı", "Maliyetim") sit at the plot's right edge: the fan stops short of them.
+      const x1 = Math.min(end, mediaSize.width - FAN_TITLE_ROOM);
+      if (x1 - x0 < FAN_MIN_WIDTH) return;
+      context.save();
+      // Cone
+      context.beginPath();
+      context.moveTo(x0, y0);
+      context.lineTo(x1, yHigh);
+      context.lineTo(x1, yLow);
+      context.closePath();
+      context.fillStyle = fan.colors.fill;
+      context.fill();
+      // Rays
+      const ray = (y: number, color: string, width: number) => {
+        context.beginPath();
+        context.moveTo(x0, y0);
+        context.lineTo(x1, y);
+        context.strokeStyle = color;
+        context.lineWidth = width;
+        context.setLineDash([4, 3]);
+        context.stroke();
+      };
+      ray(yHigh, fan.colors.line, 1);
+      ray(yLow, fan.colors.line, 1);
+      ray(yMean, fan.colors.mean, 1.5);
+      context.setLineDash([]);
+      // End dots
+      for (const [y, color] of [
+        [yHigh, fan.colors.line],
+        [yMean, fan.colors.mean],
+        [yLow, fan.colors.line],
+      ] as const) {
+        context.beginPath();
+        context.arc(x1, y, 3, 0, Math.PI * 2);
+        context.fillStyle = color;
+        context.fill();
+        context.lineWidth = 1.5;
+        context.strokeStyle = fan.colors.card;
+        context.stroke();
+      }
+      // Labels, right-aligned left of the end dots; nudged apart when they would overlap.
+      context.textAlign = "right";
+      context.textBaseline = "middle";
+      const placed: number[] = [];
+      const label = (y: number, text: string, color: string, weight: string) => {
+        let ly = y;
+        for (const other of placed) if (Math.abs(other - ly) < 14) ly = other + (ly >= other ? 14 : -14);
+        placed.push(ly);
+        context.font = `${weight} 10.5px ${fan.font}`;
+        const width = context.measureText(text).width;
+        const right = x1 - 8;
+        context.fillStyle = fan.colors.card;
+        context.globalAlpha = 0.85;
+        context.fillRect(right - width - 4, ly - 7, width + 8, 14);
+        context.globalAlpha = 1;
+        context.fillStyle = color;
+        context.fillText(text, right, ly + 0.5);
+      };
+      label(yMean, fan.labels.mean, fan.colors.mean, "600");
+      label(yHigh, fan.labels.high, fan.colors.text, "500");
+      label(yLow, fan.labels.low, fan.colors.text, "500");
+      // Title above the cone
+      context.font = `500 10px ${fan.font}`;
+      context.fillStyle = fan.colors.muted;
+      context.textAlign = "right";
+      context.fillText(fan.labels.title, x1 - 8, Math.min(yHigh, yMean, yLow, y0) - 16);
+      context.restore();
     });
   }
 }

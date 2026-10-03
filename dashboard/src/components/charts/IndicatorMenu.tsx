@@ -12,7 +12,7 @@ import { useChartI18n, type ChartKey } from "./i18n";
 import { defaultParams, INDICATOR_ORDER, INDICATORS, indicatorLabel } from "./indicator-catalog";
 import type { IndicatorDef } from "./indicator-types";
 import { localize } from "./indicator-view";
-import { MAX_INDICATORS, newIndicatorId } from "./prefs";
+import { MAX_INDICATORS, newIndicatorId, presetIndicator } from "./prefs";
 import type { IndicatorConfig, IndicatorKind } from "./types";
 
 const GROUPS: ReadonlyArray<{ group: IndicatorDef["group"]; label: ChartKey }> = [
@@ -20,6 +20,31 @@ const GROUPS: ReadonlyArray<{ group: IndicatorDef["group"]; label: ChartKey }> =
   { group: "momentum", label: "ind.group.momentum" },
   { group: "volatility", label: "ind.group.volatility" },
   { group: "volume", label: "ind.group.volume" },
+];
+
+/** One-click indicator sets (TradingView's "indicator templates"); picking one replaces the chart's indicators. */
+const TEMPLATES: ReadonlyArray<{ key: ChartKey; hint: string; build: () => IndicatorConfig[]; needsVolume?: boolean }> = [
+  {
+    key: "templates.trend",
+    hint: "SMA 20 · 50 · 200",
+    build: () => [presetIndicator("sma", { length: 20 }, 0), presetIndicator("sma", { length: 50 }, 1), presetIndicator("sma", { length: 200 }, 2)],
+  },
+  {
+    key: "templates.momentum",
+    hint: "RSI · MACD",
+    build: () => [presetIndicator("rsi", { length: 14 }, 0), presetIndicator("macd", { fast: 12, slow: 26, signal: 9 }, 0)],
+  },
+  {
+    key: "templates.volatility",
+    hint: "Bollinger · ATR",
+    build: () => [presetIndicator("bb", { length: 20, mult: 2 }, 3), presetIndicator("atr", { length: 14 }, 0)],
+  },
+  {
+    key: "templates.volume",
+    hint: "OBV · MFI",
+    build: () => [presetIndicator("obv", {}, 0), presetIndicator("mfi", { length: 14 }, 1)],
+    needsVolume: true,
+  },
 ];
 
 /** Lengths a second, third… instance of the same average starts with (TradingView users' usual set). */
@@ -169,6 +194,28 @@ export function IndicatorMenu({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin">
+              {!needle ? (
+                <section className="border-b border-border px-1.5 py-2">
+                  <h3 className="px-1.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("templates.title")}</h3>
+                  <div className="grid grid-cols-2 gap-1 px-1">
+                    {TEMPLATES.map((template) => {
+                      const disabled = template.needsVolume === true && !hasVolume;
+                      return (
+                        <button
+                          key={template.key}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => onChange(template.build())}
+                          className="flex flex-col items-start rounded-md border border-border px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+                        >
+                          <span className="text-[12px] font-medium text-foreground">{t(template.key)}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">{template.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
               {!needle && indicators.length > 0 ? (
                 <section className="border-b border-border px-1.5 py-2">
                   <h3 className="px-1.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("ind.onChart")}</h3>

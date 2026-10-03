@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { STALE_TIME } from "@/lib/queryClient";
 import type {
@@ -47,12 +47,17 @@ export function useTcmbCalendar() {
   });
 }
 
-export function useInflation() {
-  return useQuery({
+/** Also read by the charts' "real lira" unit (charts/use-unit.ts), which shares this cache entry. */
+export function inflationQuery() {
+  return queryOptions({
     queryKey: [...MACRO_QUERY_ROOT, "inflation"],
     queryFn: () => api.inflation() as Promise<InflationOut>,
     staleTime: STALE_TIME.reference,
   });
+}
+
+export function useInflation() {
+  return useQuery(inflationQuery());
 }
 
 export function useIndicators() {
@@ -73,11 +78,18 @@ export function useMarkets() {
   });
 }
 
-export function useMarketHistory(key: string, period: MarketPeriod) {
-  return useQuery({
+/** Also read by the charts' euro and gold units (charts/use-unit.ts), which share these cache entries. */
+export function marketHistoryQuery(key: string, period: MarketPeriod) {
+  return queryOptions({
     queryKey: [...MACRO_QUERY_ROOT, "market-history", key, period],
     queryFn: ({ signal }) => api.macroMarketHistory(key, period, signal) as Promise<MarketHistoryOut>,
     staleTime: STALE_TIME.analysis,
+  });
+}
+
+export function useMarketHistory(key: string, period: MarketPeriod) {
+  return useQuery({
+    ...marketHistoryQuery(key, period),
     placeholderData: (previous) => (previous?.key === key ? previous : undefined),
   });
 }

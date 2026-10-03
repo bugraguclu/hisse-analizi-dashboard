@@ -1,7 +1,8 @@
 import { formatNumber, formatPrice, formatSigned } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import { chartText } from "./i18n";
-import type { ChartCurrency, IntervalKind } from "./types";
+import type { ChartUnit, IntervalKind } from "./types";
+import { isLiraScale } from "./units";
 
 /** Decimals needed to print `step` exactly (0–4), e.g. 25 → 0, 2.5 → 1, 0.25 → 2. */
 export function decimalsForStep(step: number): number {
@@ -45,41 +46,39 @@ export function formatChartPrice(value: number): string {
 }
 
 /**
- * Decimals of a price in `currency`. Lira keeps the quotes' 2; dollar prices of BIST
- * shares run from cents to tens of dollars, so they keep 4 significant digits
- * (5,942 · 0,4127), and index levels in the hundreds 2.
+ * Decimals of a price in `unit`. Lira (also real lira) keeps the quotes' 2; dollar and euro
+ * prices of BIST shares run from cents to tens and grams of gold per share from thousandths
+ * to tens, so they keep 4 significant digits (5,942 · 0,4127 · 0,04590), levels in the
+ * hundreds 2.
  */
-export function chartPriceDecimals(value: number, currency: ChartCurrency): number {
+export function chartPriceDecimals(value: number, unit: ChartUnit): number {
   const abs = Math.abs(value);
-  if (currency === "TRY" || !Number.isFinite(abs) || abs === 0 || abs >= 100) return 2;
+  if (isLiraScale(unit) || !Number.isFinite(abs) || abs === 0 || abs >= 100) return 2;
   if (abs >= 1) return 3;
   return Math.min(6, 3 - Math.floor(Math.log10(abs)));
 }
 
-/** Bar price in dollars (see `chartPriceDecimals`). */
-export function formatUsdChartPrice(value: number): string {
+/** Bar price in dollars, euros or grams of gold (see `chartPriceDecimals`). */
+export function formatFineChartPrice(value: number): string {
   return formatNumber(value, chartPriceDecimals(value, "USD"));
 }
 
-/** A currency's bar price formatter; module-level functions, so stable enough for a chart `valueFormatter`. */
-export function chartPriceFormatter(currency: ChartCurrency): (value: number) => string {
-  return currency === "USD" ? formatUsdChartPrice : formatChartPrice;
+/** A unit's bar price formatter; module-level functions, so stable enough for a chart `valueFormatter`. */
+export function chartPriceFormatter(unit: ChartUnit): (value: number) => string {
+  return isLiraScale(unit) ? formatChartPrice : formatFineChartPrice;
 }
 
 /** Signed change with the decimals of the price it moves (`level`): "+2,25" for a lira quote, "+0,043" for a 5,94 $ share. */
-export function formatChartChange(change: number | null | undefined, level: number, currency: ChartCurrency): string {
-  return formatSigned(change, chartPriceDecimals(level, currency));
+export function formatChartChange(change: number | null | undefined, level: number, unit: ChartUnit): string {
+  return formatSigned(change, chartPriceDecimals(level, unit));
 }
 
-/** Price step of a series' scale: dollar prices tick below a cent. */
-export function chartMinMove(bars: readonly { close: number }[], currency: ChartCurrency): number {
-  if (currency === "TRY") return 0.01;
+/** Price step of a series' scale: dollar, euro and gold prices tick below a cent. */
+export function chartMinMove(bars: readonly { close: number }[], unit: ChartUnit): number {
+  if (isLiraScale(unit)) return 0.01;
   const top = bars.reduce((max, bar) => Math.max(max, Math.abs(bar.close)), 0);
-  return 10 ** -chartPriceDecimals(top, "USD");
+  return 10 ** -chartPriceDecimals(top, unit);
 }
-
-/** Unit written after amounts. */
-export const CURRENCY_UNIT: Readonly<Record<ChartCurrency, string>> = { TRY: "TL", USD: "USD" };
 
 /** Human span between two bar instants, e.g. "3 sa 30 dk", "26 gün", "1,4 yıl". */
 export function formatSpan(fromMs: number, toMs: number, interval: IntervalKind, locale: Locale): string {

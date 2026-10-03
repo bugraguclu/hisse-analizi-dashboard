@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, X } from "lucide-react";
+import { Loader2, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { ChartSkeleton } from "@/components/ui/chart-skeleton";
@@ -13,21 +13,22 @@ import { cn } from "@/lib/utils";
 import type { ChartPeriod } from "@/types";
 import { ChartDataTable } from "./ChartDataTable";
 import { ChartToolbar, type ToolbarFeatures } from "./ChartToolbar";
-import type { CompareChoice, CompareItem } from "./ComparePicker";
+import type { CompareChoice, CompareItem, CompareSuggestion } from "./ComparePicker";
 import { ToolButton } from "./controls";
 import { useCompareSeries } from "./data";
 import { DRAWING_SHORTCUTS, DrawingToolbar, useDrawings } from "./drawings";
 import type { DrawingTool } from "./drawings/types";
 import { useChartEvents } from "./events";
 import { INDICATORS } from "./indicator-catalog";
-import { FinancialChart, type FinancialChartHandle } from "./FinancialChart";
-import { formatChartPrice, formatUsdChartPrice } from "./format";
+import { FinancialChart, type FinancialChartHandle, type FinancialChartProps } from "./FinancialChart";
+import { chartPriceFormatter, formatChartPrice } from "./format";
 import { useChartI18n } from "./i18n";
 import type { ChartPrefs } from "./prefs";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { copyPng, downloadBlob } from "./snapshot";
 import { formatWallTime, toChartTime } from "./time";
 import type { ChartSeries, ChartView, CompareSeries } from "./types";
+import { effectiveUnit, isLiraScale, requestCurrency, seriesUnit } from "./units";
 import { useMediaQuery } from "./use-coarse-pointer";
 
 export type { ToolbarFeatures } from "./ChartToolbar";
@@ -48,6 +49,8 @@ export interface SummaryState {
   series: ChartSeries;
   view: ChartView | null;
   hoverIndex: number | null;
+  /** Cards have no date/OHLC legend row: their summary line carries the hovered bar's figures. */
+  mode: "card" | "fullscreen";
 }
 
 export interface ChartWorkspaceProps {
@@ -92,6 +95,22 @@ export interface ChartWorkspaceProps {
   /** Pointer or focus entered the chart (e.g. to prefetch the other periods). */
   onIntent?: () => void;
   className?: string;
+  /**
+   * The host's conversion of lira series into a derived unit (euros, gold, real lira; see
+   * use-unit.ts). `series` comes converted already; comparison series go through it here,
+   * so every line shares one unit. Must be stable.
+   */
+  convertSeries?: (series: ChartSeries | undefined) => ChartSeries | undefined;
+  /** Price-level layers the host computes: target fan, the viewer's levels, total-return line, expected events. */
+  layers?: Pick<FinancialChartProps, "targets" | "levels" | "extraLines" | "upcoming">;
+  /** Analyst target fan on/off (display menus). */
+  targetsToggle?: { on: boolean; onChange: (on: boolean) => void } | null;
+  /** Opens the viewer's average-cost editor (settings menus). */
+  onCostEdit?: (() => void) | null;
+  /** A row under the toolbar (the cost editor). */
+  belowToolbar?: ReactNode;
+  /** One-click comparisons above the compare search (BIST 100, the sector index, peers). */
+  compareSuggestions?: ReadonlyArray<CompareSuggestion>;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -136,6 +155,12 @@ export function ChartWorkspace({
   valueFormatter = formatChartPrice,
   onIntent,
   className,
+  convertSeries,
+  layers,
+  targetsToggle = null,
+  onCostEdit = null,
+  belowToolbar,
+  compareSuggestions,
 }: ChartWorkspaceProps) {
   const { t, locale } = useChartI18n();
   const chartRef = useRef<FinancialChartHandle>(null);
@@ -153,24 +178,24 @@ export function ChartWorkspace({
   const [compareItems, setCompareItems] = useState<CompareItem[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   // What is on screen decides the unit: a lira series stays labelled lira while its dollar twin loads.
-  const currency = series?.currency ?? prefs.currency;
-  const usd = currency === "USD";
-  const formatter = usd ? formatUsdChartPrice : valueFormatter;
-  // Prices of a drawing only mean something in one currency: dollar charts keep their own set.
-  const [drawings, setDrawings] = useDrawings(usd ? `${symbol}@USD` : symbol);
+  const unit = series ? seriesUnit(series) : effectiveUnit(prefs.unit, period);
+  const formatter = isLiraScale(unit) ? valueFormatter : chartPriceFormatter(unit);
+  const unitLabel = unit === "TRY" ? null : t(`unit.long.${unit}`);
+  // Prices of a drawing only mean something in one unit: every unit but lira keeps its own set.
+  const [drawings, setDrawings] = useDrawings(unit === "TRY" ? symbol : `${symbol}@${unit}`);
   const narrow = useMediaQuery("(max-width: 639px)");
   // Landscape phones: every row above the plot costs chart height.
   const short = useMediaQuery("(max-height: 520px)");
 
   const activeFeatures = fullscreen ? fullscreenFeatures : features;
-  const compareQ = useCompareSeries(activeFeatures.compare ? compareItems : [], period, prefs.currency);
+  const compareQ = useCompareSeries(activeFeatures.compare ? compareItems : [], period, requestCurrency(effectiveUnit(prefs.unit, period)));
   const compareSeries = useMemo<CompareSeries[]>(
     () =>
       compareItems.flatMap((item, i) => {
-        const data = compareQ.series[i];
+        const data = convertSeries ? convertSeries(compareQ.series[i]) : compareQ.series[i];
         return data ? [{ symbol: item.symbol, label: item.label, series: data, color: item.color }] : [];
       }),
-    [compareItems, compareQ.series],
+    [compareItems, compareQ.series, convertSeries],
   );
   const eventsQ = useChartEvents(symbol, locale, kind === "ticker" && activeFeatures.events && prefs.events);
   const chartEvents = kind === "ticker" && activeFeatures.events && prefs.events ? (eventsQ.data ?? []) : [];
@@ -264,7 +289,7 @@ export function ChartWorkspace({
       void copyPng(handle.snapshot()).then((ok) => (ok ? toast.success(t("snapshot.copied")) : toast.error(t("snapshot.copyFailed"))));
     } else {
       void handle.snapshot().then((blob) => {
-        if (blob) downloadBlob(blob, `${downloadName}${usd ? "-USD" : ""}.png`);
+        if (blob) downloadBlob(blob, `${downloadName}${unit === "TRY" ? "" : `-${unit}`}.png`);
       });
     }
   };
@@ -289,7 +314,7 @@ export function ChartWorkspace({
       if (event.code === "KeyS") {
         snapshotAction("download");
       } else if (event.code === "KeyU") {
-        onPrefsChange({ ...prefs, currency: prefs.currency === "USD" ? "TRY" : "USD" });
+        onPrefsChange({ ...prefs, unit: prefs.unit === "USD" ? "TRY" : "USD" });
       } else {
         const next = DRAWING_SHORTCUTS[event.code];
         if (!next) return;
@@ -358,7 +383,12 @@ export function ChartWorkspace({
             extremes={prefs.extremes}
             scale={prefs.scale}
             onScaleChange={(scale) => onPrefsChange({ ...prefs, scale })}
-            watermark={prefs.watermark ? { title: symbol, subtitle: [name, periodText, usd ? "USD" : null].filter(Boolean).join(" · ") } : null}
+            // Cards stay clean; full screen keeps the viewer's watermark setting.
+            watermark={
+              prefs.watermark && mode === "fullscreen"
+                ? { title: symbol, subtitle: [name, periodText, unit === "TRY" ? null : t(`unit.short.${unit}`)].filter(Boolean).join(" · ") }
+                : null
+            }
             grid={prefs.grid}
             events={chartEvents}
             tool={tool}
@@ -375,14 +405,29 @@ export function ChartWorkspace({
             symbol={symbol}
             snapshotTitle={{
               title: name ? `${symbol} · ${name}` : symbol,
-              subtitle: [periodText, usd ? t("currency.label") : null, clock ? t("chart.istanbulTime", { time: clock }) : null]
+              subtitle: [periodText, unitLabel, clock ? t("chart.istanbulTime", { time: clock }) : null]
                 .filter(Boolean)
                 .join(" · "),
             }}
             valueFormatter={formatter}
             onSnapshot={snapshotAction}
+            legendMode={mode === "card" ? "overlays" : "full"}
+            dragMeasure={mode === "card"}
+            {...layers}
           />
         </div>
+        {/* The card's toolbar has no zoom buttons: a zoomed or panned card offers the way back here. */}
+        {mode === "card" && view !== null && !view.isDefault && !busy ? (
+          <button
+            type="button"
+            onClick={() => chartRef.current?.reset()}
+            title={t("action.reset")}
+            className="absolute right-0 top-0 z-[5] inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2 py-0.5 text-[11px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <RotateCcw aria-hidden className="h-3 w-3" />
+            {t("action.resetShort")}
+          </button>
+        ) : null}
         {busy ? (
           <span
             role="status"
@@ -401,7 +446,7 @@ export function ChartWorkspace({
     const strip = activeFeatures.drawings && drawOpen && !rail;
     return (
       <>
-        {series && series.bars.length > 0 && summary && !(mode === "fullscreen" && short) ? summary({ series, view, hoverIndex }) : null}
+        {series && series.bars.length > 0 && summary && !(mode === "fullscreen" && short) ? summary({ series, view, hoverIndex, mode }) : null}
         <ChartToolbar
           mode={mode}
           prefs={prefs}
@@ -414,7 +459,14 @@ export function ChartWorkspace({
           onIndicatorsOpenChange={setIndicatorsOpen}
           compare={
             activeFeatures.compare
-              ? { items: compareItems, onAdd: addCompare, onRemove: removeCompare, onClear: () => setCompareItems([]), exclude: symbol }
+              ? {
+                  items: compareItems,
+                  onAdd: addCompare,
+                  onRemove: removeCompare,
+                  onClear: () => setCompareItems([]),
+                  exclude: symbol,
+                  suggestions: compareSuggestions,
+                }
               : null
           }
           drawOpen={strip}
@@ -433,7 +485,13 @@ export function ChartWorkspace({
           onSnapshot={snapshotAction}
           onShortcuts={() => setShortcutsOpen(true)}
           compact={narrow}
+          simple={mode === "card"}
+          period={period}
+          dragMeasure={mode === "card"}
+          targets={targetsToggle}
+          onCostEdit={onCostEdit}
         />
+        {belowToolbar}
         {strip ? (
           <DrawingToolbar
             tool={tool}

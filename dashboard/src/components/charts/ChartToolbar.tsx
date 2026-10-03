@@ -8,8 +8,8 @@ import {
   Check,
   ChevronDown,
   Copy,
-  DollarSign,
   Download,
+  Ellipsis,
   Keyboard,
   Maximize2,
   PenLine,
@@ -17,17 +17,21 @@ import {
   Ruler,
   Settings2,
   Table2,
+  Target,
+  Wallet,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ChartPeriod } from "@/types";
 import { ChartTypeIcon } from "./chart-icons";
-import { ComparePicker, type CompareChoice, type CompareItem } from "./ComparePicker";
+import { ComparePicker, type CompareChoice, type CompareItem, type CompareSuggestion } from "./ComparePicker";
 import { CheckMark, ChipButton, MENU_GROUP_LABEL_CLASS, MENU_ITEM_CLASS, POPUP_CLASS, RadioMark, ToolbarDivider, ToolButton } from "./controls";
 import { useChartI18n, type ChartKey } from "./i18n";
 import { IndicatorMenu } from "./IndicatorMenu";
 import { CHART_TYPES, type ChartPrefs } from "./prefs";
 import type { ChartType, PriceScaleKind } from "./types";
+import { UnitMenu } from "./UnitMenu";
 
 export interface ToolbarFeatures {
   indicators: boolean;
@@ -50,15 +54,25 @@ const SCALE_LABEL: Record<PriceScaleKind, ChartKey> = { normal: "scale.normal", 
 
 const ITEM_CLASS = MENU_ITEM_CLASS;
 const GROUP_LABEL_CLASS = MENU_GROUP_LABEL_CLASS;
+const ITEM_ICON_CLASS = "h-3.5 w-3.5 text-muted-foreground";
+
+type SetPref = <K extends keyof ChartPrefs>(key: K, value: ChartPrefs[K]) => void;
 
 function MenuPopup({ children, align = "end", className }: { children: ReactNode; align?: "start" | "end"; className?: string }) {
   return (
     <Menu.Portal>
       <Menu.Positioner side="bottom" align={align} sideOffset={6} collisionPadding={12} className="z-[90]">
-        <Menu.Popup className={cn(POPUP_CLASS, "min-w-52 p-1", className)}>{children}</Menu.Popup>
+        {/* Long menus scroll inside the viewport (landscape phones, short windows). */}
+        <Menu.Popup className={cn(POPUP_CLASS, "max-h-[var(--available-height)] min-w-52 overflow-y-auto overscroll-contain p-1 scrollbar-thin", className)}>
+          {children}
+        </Menu.Popup>
       </Menu.Positioner>
     </Menu.Portal>
   );
+}
+
+function MenuSeparator() {
+  return <Menu.Separator className="my-1 h-px bg-border" />;
 }
 
 function TypeMenu({ value, onChange, compact }: { value: ChartType; onChange: (type: ChartType) => void; compact: boolean }) {
@@ -95,12 +109,143 @@ function TypeMenu({ value, onChange, compact }: { value: ChartType; onChange: (t
   );
 }
 
+function Toggle({ checked, onChange, children }: { checked: boolean; onChange: (on: boolean) => void; children: ReactNode }) {
+  return (
+    <Menu.CheckboxItem className={ITEM_CLASS} checked={checked} onCheckedChange={onChange} closeOnClick={false}>
+      <CheckMark checked={checked} />
+      {children}
+    </Menu.CheckboxItem>
+  );
+}
+
+/** What is drawn besides the series: volume, events, analyst targets, high/low labels, (watermark), grid. */
+function DisplayGroup({
+  prefs,
+  set,
+  hasVolume,
+  events,
+  targets,
+  watermark,
+  label,
+}: {
+  prefs: ChartPrefs;
+  set: SetPref;
+  hasVolume: boolean;
+  events: boolean;
+  targets: ChartToolbarProps["targets"];
+  watermark: boolean;
+  label: ChartKey;
+}) {
+  const { t } = useChartI18n();
+  return (
+    <Menu.Group>
+      <Menu.GroupLabel className={GROUP_LABEL_CLASS}>{t(label)}</Menu.GroupLabel>
+      {hasVolume ? (
+        <Toggle checked={prefs.volume} onChange={(on) => set("volume", on)}>
+          {t("settings.volume")}
+        </Toggle>
+      ) : null}
+      {events ? (
+        <Toggle checked={prefs.events} onChange={(on) => set("events", on)}>
+          {t("settings.events")}
+        </Toggle>
+      ) : null}
+      {targets ? (
+        <Toggle checked={targets.on} onChange={targets.onChange}>
+          <span className="flex-1">{t("targets.toggle")}</span>
+          <Target aria-hidden className={ITEM_ICON_CLASS} />
+        </Toggle>
+      ) : null}
+      <Toggle checked={prefs.extremes} onChange={(on) => set("extremes", on)}>
+        {t("settings.extremes")}
+      </Toggle>
+      {watermark ? (
+        <Toggle checked={prefs.watermark} onChange={(on) => set("watermark", on)}>
+          {t("settings.watermark")}
+        </Toggle>
+      ) : null}
+      <Toggle checked={prefs.grid} onChange={(on) => set("grid", on)}>
+        {t("settings.grid")}
+      </Toggle>
+    </Menu.Group>
+  );
+}
+
+/** Price axis: normal, logarithmic or % (locked to % while comparing). */
+function ScaleGroup({ prefs, set, comparing }: { prefs: ChartPrefs; set: SetPref; comparing: boolean }) {
+  const { t } = useChartI18n();
+  const value = comparing ? "percent" : prefs.scale;
+  return (
+    <Menu.Group>
+      <Menu.GroupLabel className={GROUP_LABEL_CLASS}>{t("settings.scale")}</Menu.GroupLabel>
+      <Menu.RadioGroup value={value} onValueChange={(scale: PriceScaleKind) => set("scale", scale)} disabled={comparing}>
+        {(["normal", "log", "percent"] as const).map((scale) => (
+          <Menu.RadioItem key={scale} value={scale} className={ITEM_CLASS} closeOnClick={false}>
+            <RadioMark checked={value === scale} />
+            <span className="flex-1">{t(SCALE_LABEL[scale])}</span>
+            {scale !== "normal" ? <kbd className="font-mono text-[10px] text-muted-foreground">{scale === "log" ? "Alt+L" : "Alt+P"}</kbd> : null}
+          </Menu.RadioItem>
+        ))}
+      </Menu.RadioGroup>
+      {comparing ? <p className="px-2 pb-1 text-[10px] leading-3 text-muted-foreground">{t("scale.compareLocked")}</p> : null}
+    </Menu.Group>
+  );
+}
+
+function SnapshotItems({ onSnapshot }: { onSnapshot: (action: "download" | "copy") => void }) {
+  const { t } = useChartI18n();
+  return (
+    <>
+      <Menu.Item className={ITEM_CLASS} onClick={() => onSnapshot("download")}>
+        <Download aria-hidden className={ITEM_ICON_CLASS} />
+        <span className="flex-1">{t("snapshot.download")}</span>
+        <kbd className="font-mono text-[10px] text-muted-foreground">Alt+S</kbd>
+      </Menu.Item>
+      <Menu.Item className={ITEM_CLASS} onClick={() => onSnapshot("copy")}>
+        <Copy aria-hidden className={ITEM_ICON_CLASS} />
+        <span className="flex-1">{t("snapshot.copy")}</span>
+      </Menu.Item>
+    </>
+  );
+}
+
+/** The viewer's average cost, keyboard shortcuts and "restore the default setup". */
+function SetupItems({ onCostEdit, onShortcuts, onReset }: { onCostEdit: (() => void) | null; onShortcuts: () => void; onReset: () => void }) {
+  const { t } = useChartI18n();
+  return (
+    <>
+      {onCostEdit ? (
+        <Menu.Item className={ITEM_CLASS} onClick={onCostEdit}>
+          <Wallet aria-hidden className={ITEM_ICON_CLASS} />
+          <span className="flex-1">{t("cost.edit")}</span>
+        </Menu.Item>
+      ) : null}
+      <Menu.Item className={ITEM_CLASS} onClick={onShortcuts}>
+        <Keyboard aria-hidden className={ITEM_ICON_CLASS} />
+        <span className="flex-1">{t("settings.shortcuts")}</span>
+        <kbd className="font-mono text-[10px] text-muted-foreground">?</kbd>
+      </Menu.Item>
+      <Menu.Item className={ITEM_CLASS} onClick={onReset}>
+        <RotateCcw aria-hidden className={ITEM_ICON_CLASS} />
+        {t("settings.reset")}
+      </Menu.Item>
+    </>
+  );
+}
+
 export interface ChartToolbarProps {
   mode: "card" | "fullscreen";
+  /**
+   * The card's row: style, unit, indicators, comparison and a "Diğer" menu with everything
+   * else (display, scale, drawing, table, snapshot). Full screen keeps every control in view.
+   */
+  simple: boolean;
   prefs: ChartPrefs;
   onPrefsChange: (next: ChartPrefs) => void;
   /** Stable defaults for "restore default setup". */
   defaults: ChartPrefs;
+  /** Units are offered per period (euros, gold and real lira need daily or weekly bars). */
+  period: ChartPeriod;
   features: ToolbarFeatures;
   intraday: boolean;
   hasVolume: boolean;
@@ -112,6 +257,7 @@ export interface ChartToolbarProps {
     onRemove: (symbol: string) => void;
     onClear: () => void;
     exclude: string;
+    suggestions?: ReadonlyArray<CompareSuggestion>;
   } | null;
   /** The horizontal drawing strip is open (card, or full screen on phones). */
   drawOpen: boolean;
@@ -121,6 +267,8 @@ export interface ChartToolbarProps {
   drawingCount: number;
   measureOn: boolean;
   onMeasureChange: (on: boolean) => void;
+  /** A plain drag measures already (cards): no separate measure entry. */
+  dragMeasure: boolean;
   tableOn: boolean;
   onTableChange: (on: boolean) => void;
   onFullscreen: () => void;
@@ -130,61 +278,39 @@ export interface ChartToolbarProps {
   onReset: () => void;
   onSnapshot: (action: "download" | "copy") => void;
   onShortcuts: () => void;
+  /** Analyst target fan on/off; null when the chart has none. */
+  targets: { on: boolean; onChange: (on: boolean) => void } | null;
+  /** Opens the viewer's average-cost editor; null when the chart has no cost line. */
+  onCostEdit: (() => void) | null;
   /** Phone width: icon-only chips. */
   compact: boolean;
   className?: string;
 }
 
+type RestProps = ChartToolbarProps & { set: SetPref; fullscreenButton: ReactNode };
+
 /**
- * The chart's tool row: style, currency, indicators, comparison, drawing and
- * events on the left (the things that change what is drawn), view commands,
- * snapshot, settings and full screen on the right. Wraps into two rows on phones.
+ * The chart's tool row: style, unit, indicators, comparison, drawing and events on the
+ * left (the things that change what is drawn), view commands, snapshot, settings and
+ * full screen on the right; wraps into two rows on phones. Cards get the `simple` row.
  */
-export function ChartToolbar({
-  mode,
-  prefs,
-  onPrefsChange,
-  defaults,
-  features,
-  intraday,
-  hasVolume,
-  indicatorsOpen,
-  onIndicatorsOpenChange,
-  compare,
-  drawOpen,
-  showDrawToggle,
-  onDrawOpenChange,
-  drawingCount,
-  measureOn,
-  onMeasureChange,
-  tableOn,
-  onTableChange,
-  onFullscreen,
-  zoomed,
-  onZoomIn,
-  onZoomOut,
-  onReset,
-  onSnapshot,
-  onShortcuts,
-  compact,
-  className,
-}: ChartToolbarProps) {
+export function ChartToolbar(props: ChartToolbarProps) {
+  const { mode, simple, prefs, onPrefsChange, period, features, intraday, hasVolume, indicatorsOpen, onIndicatorsOpenChange, compare, compact, onFullscreen, className } =
+    props;
   const { t } = useChartI18n();
-  const comparing = (compare?.items.length ?? 0) > 0;
-  const set = <K extends keyof ChartPrefs>(key: K, value: ChartPrefs[K]) => onPrefsChange({ ...prefs, [key]: value });
+  const set: SetPref = (key, value) => onPrefsChange({ ...prefs, [key]: value });
+  const fullscreenButton =
+    mode === "card" ? (
+      <ChipButton data-chart-action="fullscreen" onClick={onFullscreen} title={t("action.fullscreen")} className="ml-0.5 border-border px-2">
+        <Maximize2 />
+        <span className="hidden sm:inline">{t("action.fullscreenShort")}</span>
+      </ChipButton>
+    ) : null;
 
   return (
-    <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex flex-wrap items-center gap-x-1 gap-y-1.5", className)}>
+    <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex items-center gap-x-1", !simple && "flex-wrap gap-y-1.5", className)}>
       <TypeMenu value={prefs.type} onChange={(type) => set("type", type)} compact={compact} />
-      <ChipButton
-        pressed={prefs.currency === "USD"}
-        onClick={() => set("currency", prefs.currency === "USD" ? "TRY" : "USD")}
-        title={t("currency.title")}
-        aria-label={compact ? t("currency.button") : undefined}
-      >
-        <DollarSign />
-        {compact ? null : t("currency.button")}
-      </ChipButton>
+      <UnitMenu value={prefs.unit} onChange={(unit) => set("unit", unit)} period={period} compact={compact} />
       {features.indicators ? (
         <IndicatorMenu
           indicators={prefs.indicators}
@@ -206,8 +332,134 @@ export function ChartToolbar({
           onClear={compare.onClear}
           exclude={compare.exclude}
           compact={compact}
+          suggestions={compare.suggestions}
         />
       ) : null}
+      {simple ? <SimpleRest {...props} set={set} fullscreenButton={fullscreenButton} /> : <FullRest {...props} set={set} fullscreenButton={fullscreenButton} />}
+    </div>
+  );
+}
+
+/** Card: the drawing chip only while drawings exist, the measure chip only while measuring; the rest under "Diğer". */
+function SimpleRest({
+  prefs,
+  onPrefsChange,
+  defaults,
+  features,
+  hasVolume,
+  compare,
+  drawOpen,
+  showDrawToggle,
+  onDrawOpenChange,
+  drawingCount,
+  measureOn,
+  onMeasureChange,
+  dragMeasure,
+  tableOn,
+  onTableChange,
+  onSnapshot,
+  onShortcuts,
+  targets,
+  onCostEdit,
+  compact,
+  set,
+  fullscreenButton,
+}: RestProps) {
+  const { t } = useChartI18n();
+  const comparing = (compare?.items.length ?? 0) > 0;
+  return (
+    <>
+      {showDrawToggle && (drawOpen || drawingCount > 0) ? (
+        <ChipButton pressed={drawOpen} onClick={() => onDrawOpenChange(!drawOpen)} title={t("draw.title")} aria-label={compact ? t("draw.button") : undefined}>
+          <PenLine />
+          {compact ? null : t("draw.button")}
+          {drawingCount > 0 ? <span className="rounded-sm bg-muted px-1 font-mono text-[10px] leading-4 text-foreground tabular-nums">{drawingCount}</span> : null}
+        </ChipButton>
+      ) : null}
+      {measureOn ? (
+        <ChipButton pressed onClick={() => onMeasureChange(false)} title={t("action.measureOn")} aria-label={compact ? t("action.measure") : undefined}>
+          <Ruler />
+          {compact ? null : t("action.measure")}
+        </ChipButton>
+      ) : null}
+      <div className="ml-auto flex items-center gap-0.5">
+        <Menu.Root>
+          <Menu.Trigger
+            render={
+              <ChipButton title={t("more.title")} aria-label={t("more.title")} className="px-1.5">
+                <Ellipsis />
+                {compact ? null : <span>{t("more.button")}</span>}
+              </ChipButton>
+            }
+          />
+          <MenuPopup className="min-w-64">
+            <DisplayGroup prefs={prefs} set={set} hasVolume={hasVolume} events={features.events} targets={targets} watermark={false} label="more.view" />
+            <MenuSeparator />
+            <ScaleGroup prefs={prefs} set={set} comparing={comparing} />
+            <MenuSeparator />
+            <Menu.Group>
+              <Menu.GroupLabel className={GROUP_LABEL_CLASS}>{t("more.tools")}</Menu.GroupLabel>
+              {showDrawToggle ? (
+                <Menu.Item className={ITEM_CLASS} onClick={() => onDrawOpenChange(!drawOpen)}>
+                  <PenLine aria-hidden className={ITEM_ICON_CLASS} />
+                  <span className="flex-1">{t("more.draw")}</span>
+                </Menu.Item>
+              ) : null}
+              {dragMeasure ? null : (
+                <Menu.Item className={ITEM_CLASS} onClick={() => onMeasureChange(!measureOn)}>
+                  <Ruler aria-hidden className={ITEM_ICON_CLASS} />
+                  <span className="flex-1">{t("more.measure")}</span>
+                </Menu.Item>
+              )}
+              <Toggle checked={tableOn} onChange={onTableChange}>
+                <span className="flex-1">{t("more.table")}</span>
+                <Table2 aria-hidden className={ITEM_ICON_CLASS} />
+              </Toggle>
+            </Menu.Group>
+            <MenuSeparator />
+            <SnapshotItems onSnapshot={onSnapshot} />
+            <MenuSeparator />
+            <SetupItems onCostEdit={onCostEdit} onShortcuts={onShortcuts} onReset={() => onPrefsChange(defaults)} />
+          </MenuPopup>
+        </Menu.Root>
+        {fullscreenButton}
+      </div>
+    </>
+  );
+}
+
+/** Full screen: every tool in view. */
+function FullRest({
+  prefs,
+  onPrefsChange,
+  defaults,
+  features,
+  hasVolume,
+  compare,
+  drawOpen,
+  showDrawToggle,
+  onDrawOpenChange,
+  drawingCount,
+  measureOn,
+  onMeasureChange,
+  tableOn,
+  onTableChange,
+  zoomed,
+  onZoomIn,
+  onZoomOut,
+  onReset,
+  onSnapshot,
+  onShortcuts,
+  targets,
+  onCostEdit,
+  compact,
+  set,
+  fullscreenButton,
+}: RestProps) {
+  const { t } = useChartI18n();
+  const comparing = (compare?.items.length ?? 0) > 0;
+  return (
+    <>
       {showDrawToggle ? (
         <ChipButton pressed={drawOpen} onClick={() => onDrawOpenChange(!drawOpen)} title={t("draw.title")} aria-label={compact ? t("draw.button") : undefined}>
           <PenLine />
@@ -244,80 +496,21 @@ export function ChartToolbar({
         <Menu.Root>
           <Menu.Trigger render={<ToolButton label={t("snapshot.button")}><Camera /></ToolButton>} />
           <MenuPopup>
-            <Menu.Item className={ITEM_CLASS} onClick={() => onSnapshot("download")}>
-              <Download aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="flex-1">{t("snapshot.download")}</span>
-              <kbd className="font-mono text-[10px] text-muted-foreground">Alt+S</kbd>
-            </Menu.Item>
-            <Menu.Item className={ITEM_CLASS} onClick={() => onSnapshot("copy")}>
-              <Copy aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="flex-1">{t("snapshot.copy")}</span>
-            </Menu.Item>
+            <SnapshotItems onSnapshot={onSnapshot} />
           </MenuPopup>
         </Menu.Root>
         <Menu.Root>
           <Menu.Trigger render={<ToolButton label={t("settings.button")}><Settings2 /></ToolButton>} />
           <MenuPopup className="min-w-60">
-            <Menu.Group>
-              <Menu.GroupLabel className={GROUP_LABEL_CLASS}>{t("settings.display")}</Menu.GroupLabel>
-              {hasVolume ? (
-                <Menu.CheckboxItem className={ITEM_CLASS} checked={prefs.volume} onCheckedChange={(on) => set("volume", on)} closeOnClick={false}>
-                  <CheckMark checked={prefs.volume} />
-                  {t("settings.volume")}
-                </Menu.CheckboxItem>
-              ) : null}
-              {features.events ? (
-                <Menu.CheckboxItem className={ITEM_CLASS} checked={prefs.events} onCheckedChange={(on) => set("events", on)} closeOnClick={false}>
-                  <CheckMark checked={prefs.events} />
-                  {t("settings.events")}
-                </Menu.CheckboxItem>
-              ) : null}
-              <Menu.CheckboxItem className={ITEM_CLASS} checked={prefs.extremes} onCheckedChange={(on) => set("extremes", on)} closeOnClick={false}>
-                <CheckMark checked={prefs.extremes} />
-                {t("settings.extremes")}
-              </Menu.CheckboxItem>
-              <Menu.CheckboxItem className={ITEM_CLASS} checked={prefs.watermark} onCheckedChange={(on) => set("watermark", on)} closeOnClick={false}>
-                <CheckMark checked={prefs.watermark} />
-                {t("settings.watermark")}
-              </Menu.CheckboxItem>
-              <Menu.CheckboxItem className={ITEM_CLASS} checked={prefs.grid} onCheckedChange={(on) => set("grid", on)} closeOnClick={false}>
-                <CheckMark checked={prefs.grid} />
-                {t("settings.grid")}
-              </Menu.CheckboxItem>
-            </Menu.Group>
-            <Menu.Separator className="my-1 h-px bg-border" />
-            <Menu.Group>
-              <Menu.GroupLabel className={GROUP_LABEL_CLASS}>{t("settings.scale")}</Menu.GroupLabel>
-              <Menu.RadioGroup value={comparing ? "percent" : prefs.scale} onValueChange={(scale: PriceScaleKind) => set("scale", scale)} disabled={comparing}>
-                {(["normal", "log", "percent"] as const).map((scale) => (
-                  <Menu.RadioItem key={scale} value={scale} className={ITEM_CLASS} closeOnClick={false}>
-                    <RadioMark checked={(comparing ? "percent" : prefs.scale) === scale} />
-                    <span className="flex-1">{t(SCALE_LABEL[scale])}</span>
-                    {scale !== "normal" ? <kbd className="font-mono text-[10px] text-muted-foreground">{scale === "log" ? "Alt+L" : "Alt+P"}</kbd> : null}
-                  </Menu.RadioItem>
-                ))}
-              </Menu.RadioGroup>
-              {comparing ? <p className="px-2 pb-1 text-[10px] leading-3 text-muted-foreground">{t("scale.compareLocked")}</p> : null}
-            </Menu.Group>
-            <Menu.Separator className="my-1 h-px bg-border" />
-            <Menu.Item className={ITEM_CLASS} onClick={onShortcuts}>
-              <Keyboard aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="flex-1">{t("settings.shortcuts")}</span>
-              <kbd className="font-mono text-[10px] text-muted-foreground">?</kbd>
-            </Menu.Item>
-            <Menu.Item className={ITEM_CLASS} onClick={() => onPrefsChange(defaults)}>
-              <RotateCcw aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
-              {t("settings.reset")}
-            </Menu.Item>
+            <DisplayGroup prefs={prefs} set={set} hasVolume={hasVolume} events={features.events} targets={targets} watermark label="settings.display" />
+            <MenuSeparator />
+            <ScaleGroup prefs={prefs} set={set} comparing={comparing} />
+            <MenuSeparator />
+            <SetupItems onCostEdit={onCostEdit} onShortcuts={onShortcuts} onReset={() => onPrefsChange(defaults)} />
           </MenuPopup>
         </Menu.Root>
-        {mode === "card" ? (
-          <ChipButton data-chart-action="fullscreen" onClick={onFullscreen} title={t("action.fullscreen")} className="ml-0.5 border-border px-2">
-            <Maximize2 />
-            <span className="hidden sm:inline">{t("action.fullscreenShort")}</span>
-          </ChipButton>
-        ) : null}
+        {fullscreenButton}
       </div>
-    </div>
+    </>
   );
 }

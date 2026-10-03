@@ -68,7 +68,7 @@ const translations = {
   "period.ytd": { tr: "YBB", en: "YTD", fr: "YTD" },
   "period.1y": { tr: "1Y", en: "1Y", fr: "1A" },
   "period.5y": { tr: "5Y", en: "5Y", fr: "5A" },
-  "period.max": { tr: "Maks.", en: "Max", fr: "Max" },
+  "period.max": { tr: "Tümü", en: "Max", fr: "Max" },
   "index.periodReturn": { tr: "Dönem getirisi", en: "Period return", fr: "Rendement de la période" },
   "indices.loadError": { tr: "Endeks verileri yüklenemedi", en: "Could not load index data", fr: "Impossible de charger les indices" },
   "watchlist.done": { tr: "Bitti", en: "Done", fr: "Terminé" },

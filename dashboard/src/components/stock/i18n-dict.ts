@@ -84,11 +84,7 @@ const dict = {
   "chart.periodRange": { tr: "Dönem aralığı", en: "Period range", fr: "Fourchette" },
   "chart.empty": { tr: "Bu dönem için fiyat verisi yok", en: "No price data for this period", fr: "Aucune donnée de cours pour cette période" },
   "chart.volumeLegend": { tr: "Hacim (yeşil: yükselen, kırmızı: düşen mum)", en: "Volume (green: up bar, red: down bar)", fr: "Volume (vert : hausse, rouge : baisse)" },
-  "chart.footer": {
-    tr: "Kesikli çizgi dönem başı referansını (1G: önceki kapanış) gösterir. Saatler İstanbul saatidir.",
-    en: "The dashed line marks the period's reference price (1D: previous close). Times are Istanbul time.",
-    fr: "La ligne pointillée indique le cours de référence (1J : clôture précédente). Heures d'Istanbul.",
-  },
+  "chart.footer": { tr: "Saatler İstanbul saatidir.", en: "Times are Istanbul time.", fr: "Heures d'Istanbul." },
   "chart.ariaSummary": {
     tr: "{ticker} fiyat grafiği, {period}: son {price} TL, değişim {change}",
     en: "{ticker} price chart, {period}: last {price} TRY, change {change}",
@@ -99,7 +95,7 @@ const dict = {
   "period.1mo": { tr: "1A", en: "1M", fr: "1M" },
   "period.3mo": { tr: "3A", en: "3M", fr: "3M" },
   "period.6mo": { tr: "6A", en: "6M", fr: "6M" },
-  "period.ytd": { tr: "YB", en: "YTD", fr: "YTD" },
+  "period.ytd": { tr: "YBB", en: "YTD", fr: "YTD" },
   "period.1y": { tr: "1Y", en: "1Y", fr: "1A" },
   "period.5y": { tr: "5Y", en: "5Y", fr: "5A" },
   "period.max": { tr: "Tümü", en: "Max", fr: "Max" },

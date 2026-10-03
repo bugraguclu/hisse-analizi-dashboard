@@ -661,22 +661,30 @@ export function parseDividends(resp: unknown): Dividend[] {
 }
 
 /**
- * Gross dividends paid in the last 365 days, per share of today's capital, and the
- * resulting yield at `price`. Per-share amounts before a bonus issue refer to the old
- * share count (BIMAS paid 5,00 TL on 600 mn shares before its 2026 2:1 bonus), so
- * each payment is re-based as total payout ÷ the share count implied by the newest
- * row (total ÷ per-share); rows without a total keep their per-share amount.
+ * Gross dividends per share of today's capital. Per-share amounts before a bonus issue refer
+ * to the old share count (BIMAS paid 5,00 TL on 600 mn shares before its 2026 2:1 bonus), so
+ * each payment is re-based as total payout ÷ the share count implied by the newest row
+ * (total ÷ per-share); rows without a total keep their per-share amount. Newest first.
  */
+export function rebasedDividends(dividends: readonly Dividend[]): Array<{ time: number; perShare: number }> {
+  const newest = dividends.find((d) => d.total != null && d.grossPerShare != null && d.grossPerShare > 0);
+  const shares = newest?.total != null && newest.grossPerShare ? newest.total / newest.grossPerShare : null;
+  return dividends.flatMap((d) => {
+    if (d.grossPerShare == null) return [];
+    const perShare = shares && d.total != null ? d.total / shares : d.grossPerShare;
+    return perShare > 0 ? [{ time: d.time, perShare }] : [];
+  });
+}
+
+/** Gross dividends paid in the last 365 days per share of today's capital (see `rebasedDividends`), and the yield at `price`. */
 export function trailingDividendYield(
   dividends: Dividend[],
   price: number | null,
   now = Date.now(),
 ): { perShare: number; yieldPct: number | null; count: number } {
   const cutoff = now - 365 * 86_400_000;
-  const newest = dividends.find((d) => d.total != null && d.grossPerShare != null && d.grossPerShare > 0);
-  const shares = newest?.total != null && newest.grossPerShare ? newest.total / newest.grossPerShare : null;
-  const paid = dividends.filter((d) => d.time >= cutoff && d.time <= now && d.grossPerShare != null);
-  const perShare = paid.reduce((sum, d) => sum + (shares && d.total != null ? d.total / shares : (d.grossPerShare ?? 0)), 0);
+  const paid = rebasedDividends(dividends).filter((d) => d.time >= cutoff && d.time <= now);
+  const perShare = paid.reduce((sum, d) => sum + d.perShare, 0);
   return { perShare, yieldPct: price && price > 0 ? (perShare / price) * 100 : null, count: paid.length };
 }
 

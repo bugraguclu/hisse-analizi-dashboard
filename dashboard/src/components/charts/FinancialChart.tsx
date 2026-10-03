@@ -47,9 +47,10 @@ import { useChartI18n, type ChartKey } from "./i18n";
 import { buildIndicatorInput } from "./indicator-catalog";
 import { buildIndicatorView, lineRgb, toneRgb, type IndicatorView } from "./indicator-view";
 import { describeMeasure, measureGeometry, MeasureOverlay, type MeasureGeometry, type MeasureState } from "./measure";
-import { BandFillPrimitive, EventBadgesPrimitive, SessionBreaksPrimitive, type EventBadge } from "./primitives";
+import { BandFillPrimitive, EventBadgesPrimitive, SessionBreaksPrimitive, TargetFanPrimitive, type EventBadge } from "./primitives";
 import { composeSnapshot, type SnapshotHeader, type SnapshotLabel } from "./snapshot";
 import { barLabelStyle, formatBarTime, formatWallTime, SESSION_END_MINUTES, tickLabel, toChartTime, wallMinutes } from "./time";
+import { seriesUnit } from "./units";
 import type {
   ChartBar,
   ChartEvent,
@@ -149,6 +150,42 @@ export interface FinancialChartProps {
   valueFormatter?: (value: number) => string;
   handleRef?: Ref<FinancialChartHandle>;
   className?: string;
+  /**
+   * "overlays" (cards): the date/OHLC row is left to the card's own summary line and the
+   * baseline is named on the price axis; only indicator and comparison keys stay above the plot.
+   */
+  legendMode?: "full" | "overlays";
+  /** A plain mouse drag measures (cards); Shift + drag and the measure tool always do. */
+  dragMeasure?: boolean;
+  /** Analyst consensus, drawn as a fan from the last close into the future space. */
+  targets?: PriceTargets | null;
+  /** Horizontal levels with an axis label (the viewer's average cost). */
+  levels?: readonly PriceLevel[];
+  /** Extra dashed lines on the price pane (dividend-reinvested total return), one value per bar. */
+  extraLines?: readonly ExtraLine[];
+  /** Expected events (next financial report, announced dividend): dashed badges in the future space. */
+  upcoming?: readonly ChartEvent[];
+}
+
+export interface PriceTargets {
+  low: number;
+  mean: number;
+  high: number;
+  analysts: number | null;
+}
+
+export interface PriceLevel {
+  price: number;
+  label: string;
+  tone: "primary" | "up" | "down" | "muted";
+}
+
+export interface ExtraLine {
+  key: string;
+  label: string;
+  values: ReadonlyArray<number | null>;
+  /** Categorical palette slot (0–4). */
+  slot: number;
 }
 
 interface AxisBox {
@@ -179,6 +216,13 @@ const CHART_FONT_SIZE = 11;
 /** Widest bar spacing, in px: short periods on wide plots show extra bars instead of fat ones. */
 const MAX_BAR_SPACING = 48;
 const NO_DRAWINGS: readonly Drawing[] = [];
+const NO_LEVELS: readonly PriceLevel[] = [];
+const NO_LINES: readonly ExtraLine[] = [];
+const NO_EVENTS: readonly ChartEvent[] = [];
+/** Height of the event badges' own strip at the bottom of the price pane, px. */
+const EVENT_LANE_PX = 22;
+/** Share of the price pane the volume bars may take. */
+const VOLUME_SHARE = 0.14;
 const ignoreDrawings = () => {};
 
 const EVENT_SLOT: Record<ChartEventKind, number | null> = { earnings: 0, dividend: 1, capital: 2, disclosure: null };
@@ -216,6 +260,27 @@ function sessionPadTimes(series: ChartSeries, times: readonly UTCTimestamp[]): U
   const pad: UTCTimestamp[] = [];
   for (let time = last + step; time <= end; time += step) pad.push(time as UTCTimestamp);
   return pad;
+}
+
+/** Empty daily (weekdays), weekly or monthly slots after the last bar: room for the target fan and upcoming events. */
+function futureSlots(interval: ChartSeries["interval"], last: UTCTimestamp | undefined, count: number): UTCTimestamp[] {
+  if (last === undefined || count <= 0 || interval === "intraday") return [];
+  const out: UTCTimestamp[] = [];
+  let t: number = last;
+  for (let i = 0; i < count; i += 1) {
+    if (interval === "daily") {
+      do t += 86_400;
+      while ([0, 6].includes(new Date(t * 1000).getUTCDay()));
+    } else if (interval === "weekly") {
+      t += 7 * 86_400;
+    } else {
+      const d = new Date(t * 1000);
+      d.setUTCMonth(d.getUTCMonth() + 1);
+      t = d.getTime() / 1000;
+    }
+    out.push(t as UTCTimestamp);
+  }
+  return out;
 }
 
 /** Index of the last bar at or before `time` (ascending bars, binary search); -1 if none. */
@@ -341,7 +406,8 @@ function chartOptions(
     localization: {
       locale: getIntlLocale(),
       priceFormatter: (price: BarPrice) => format(price),
-      tickmarksPriceFormatter: (prices: BarPrice[]) => formatTicks(prices, (value, decimals) => formatNumber(value, decimals)),
+      // Prices are positive: the margins under the data (volume, event strip) would otherwise get ticks below 0 on "Tümü".
+      tickmarksPriceFormatter: (prices: BarPrice[]) => formatTicks(prices, (value, decimals) => (value < 0 ? "" : formatNumber(value, decimals))),
       percentageFormatter: (value: number) => formatChangePercent(value),
       tickmarksPercentageFormatter: (values: number[]) =>
         formatTicks(values, (value, decimals) => formatChangePercent(value, Math.min(decimals, 2))),
@@ -462,6 +528,12 @@ export function FinancialChart({
   valueFormatter = formatChartPrice,
   handleRef,
   className,
+  legendMode = "full",
+  dragMeasure = false,
+  targets = null,
+  levels = NO_LEVELS,
+  extraLines = NO_LINES,
+  upcoming = NO_EVENTS,
 }: FinancialChartProps) {
   const { t, locale } = useChartI18n();
   const motionAllowed = useMotionAllowed();
@@ -510,8 +582,31 @@ export function FinancialChart({
   const compareActive = compareList.length > 0;
   const percentScale = compareActive || scale === "percent";
   const baselinePrice = baseline && !compareActive ? baseline.price : null;
+  // Cards name the baseline on the price axis; their legend has no row for it.
+  const baselineTitle = legendMode === "overlays" ? (baseline?.label ?? "") : "";
+  const levelsKey = JSON.stringify(levels);
   const times = useMemo(() => bars.map((bar) => toChartTime(bar.time)), [bars]);
   const padTimes = useMemo(() => (padToSessionEnd ? sessionPadTimes(series, times) : []), [padToSessionEnd, series, times]);
+  // Room after the last bar for the target fan (30 % of the window) and the expected events, at
+  // most 35 % of the window so the bars keep most of the plot; an event further out stays off the
+  // chart (cards still name it). Daily, weekly and monthly charts only.
+  const upcomingKey = upcoming.map((event) => `${event.id}@${event.time}`).join("|");
+  const upcomingTimes = upcoming.map((event) => event.time).join(",");
+  const hasTargets = targets !== null;
+  const futureTimes = useMemo(() => {
+    if (padTimes.length > 0 || series.interval === "intraday" || times.length === 0) return [];
+    const windowBars = Math.max(1, times.length - series.windowStart);
+    const room = Math.max(12, Math.round(windowBars * 0.35));
+    const slots = futureSlots(series.interval, times[times.length - 1], room);
+    let count = hasTargets ? Math.max(12, Math.round(windowBars * 0.3)) : 0;
+    for (const time of upcomingTimes ? upcomingTimes.split(",") : []) {
+      const at = toChartTime(Number(time));
+      const slot = slots.findIndex((candidate) => candidate >= at);
+      const needed = slot + 1 + Math.max(3, Math.round(windowBars * 0.04));
+      if (slot >= 0 && needed <= room) count = Math.max(count, needed);
+    }
+    return slots.slice(0, count);
+  }, [padTimes.length, series.interval, series.windowStart, times, hasTargets, upcomingTimes]);
   const hasVolume = useMemo(() => bars.some((bar) => bar.volume !== null && bar.volume > 0), [bars]);
   const indicatorInput = useMemo(() => buildIndicatorInput(bars, series.interval), [bars, series.interval]);
   // A string key keeps the computed views stable when parents pass fresh arrays with the same content.
@@ -679,7 +774,7 @@ export function FinancialChart({
     registry.clear();
     for (let i = chart.panes().length - 1; i > 0; i -= 1) chart.removePane(i);
 
-    chart.applyOptions(chartOptions(lib, palette, series, valueFormatter, padTimes.length > 0, type, grid));
+    chart.applyOptions(chartOptions(lib, palette, series, valueFormatter, padTimes.length > 0 || futureTimes.length > 0, type, grid));
     if (bars.length === 0) {
       publishBuild(null, palette);
       return;
@@ -689,8 +784,8 @@ export function FinancialChart({
     const down = rgba(palette.down);
     const mainRgb: Rgb = mainTone === "up" ? palette.up : mainTone === "down" ? palette.down : palette.primary;
     const ring = rgba(palette.card);
-    const priceFormat = { type: "custom" as const, formatter: (price: BarPrice) => valueFormatter(price), minMove: chartMinMove(bars, series.currency) };
-    const pad = padTimes.map((time) => ({ time }));
+    const priceFormat = { type: "custom" as const, formatter: (price: BarPrice) => valueFormatter(price), minMove: chartMinMove(bars, seriesUnit(series)) };
+    const pad = [...padTimes, ...futureTimes].map((time) => ({ time }));
     const attach = (owner: AnySeries, primitive: ISeriesPrimitive<Time>) => {
       owner.attachPrimitive(primitive);
       primitivesRef.current.push({ series: owner, primitive });
@@ -794,10 +889,13 @@ export function FinancialChart({
       baseLineStyle: lib.LineStyle.Dashed,
       baseLineWidth: 1,
     });
-    const eventsShown = events.length > 0;
+    const eventsShown = events.length > 0 || upcoming.length > 0;
+    // Event badges get a fixed-height strip at the bottom of the price pane, under the volume bars.
+    const mainPaneHeight = Math.max(120, (host.clientHeight || (typeof height === "number" ? height : 480)) - paneHeight * drawnPanes.length);
+    const lane = eventsShown ? EVENT_LANE_PX / mainPaneHeight : 0;
     chart.priceScale("right", 0).applyOptions({
       mode: percentScale ? lib.PriceScaleMode.Percentage : scale === "log" ? lib.PriceScaleMode.Logarithmic : lib.PriceScaleMode.Normal,
-      scaleMargins: { top: 0.1, bottom: (volume && hasVolume ? 0.22 : 0.08) + (eventsShown ? 0.05 : 0) },
+      scaleMargins: { top: 0.1, bottom: (volume && hasVolume ? VOLUME_SHARE + 0.02 : lane > 0 ? 0.04 : 0.08) + lane },
     });
 
     if (baselinePrice !== null) {
@@ -809,11 +907,11 @@ export function FinancialChart({
         axisLabelVisible: true,
         axisLabelColor: rgba(palette.muted),
         axisLabelTextColor: rgba(palette.card),
-        title: "",
+        title: baselineTitle,
       });
     }
 
-    // Volume: histogram along the bottom fifth of the main pane --------------
+    // Volume: histogram along the bottom of the main pane, above the event strip ----
     if (volume && hasVolume) {
       const volumeSeries = chart.addSeries(lib.HistogramSeries, {
         priceScaleId: "volume",
@@ -821,15 +919,17 @@ export function FinancialChart({
         lastValueVisible: false,
         priceLineVisible: false,
       });
-      const alpha = palette.dark ? 0.34 : 0.26;
-      const upColor = rgba(palette.up, alpha);
-      const downColor = rgba(palette.down, alpha);
+      // Candles keep up/down colours (they read as the bars above); line and area charts get one quiet tone.
+      const candles = CANDLE_TYPES.has(type);
+      const alpha = candles ? (palette.dark ? 0.26 : 0.2) : palette.dark ? 0.2 : 0.15;
+      const upColor = rgba(candles ? palette.up : palette.muted, alpha);
+      const downColor = rgba(candles ? palette.down : palette.muted, alpha);
       volumeSeries.setData(
         bars.map((bar, i) =>
           bar.volume === null ? { time: times[i] } : { time: times[i], value: bar.volume, color: barIsUp(bars, i) ? upColor : downColor },
         ),
       );
-      chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, visible: false });
+      chart.priceScale("volume").applyOptions({ scaleMargins: { top: 1 - VOLUME_SHARE - lane, bottom: lane }, visible: false });
       registry.set("volume", volumeSeries);
     }
 
@@ -988,10 +1088,116 @@ export function FinancialChart({
           color: rgba(slot === null ? palette.muted : palette.series[slot]),
         });
       }
-      const primitive = new EventBadgesPrimitive({ card: rgba(palette.card), font: palette.fontFamily });
+      for (const event of upcoming) {
+        const at = toChartTime(event.time);
+        const k = futureTimes.findIndex((slot) => slot >= at);
+        if (k < 0) continue;
+        const slot = EVENT_SLOT[event.kind];
+        badges.push({
+          id: event.id,
+          kind: event.kind,
+          index: bars.length + padTimes.length + k,
+          letter: t(EVENT_LETTER[event.kind]),
+          color: rgba(slot === null ? palette.muted : palette.series[slot]),
+          upcoming: true,
+        });
+      }
+      const primitive = new EventBadgesPrimitive({
+        card: rgba(palette.card),
+        font: palette.fontFamily,
+        lane: lane > 0 ? { height: EVENT_LANE_PX, color: rgba(palette.border) } : undefined,
+      });
       attach(main, primitive);
       primitive.setBadges(badges);
       eventsRef.current = primitive;
+    }
+
+    // Price-level layers (total-return line, the viewer's levels, the analyst target fan): not on % scales ----
+    if (!percentScale) {
+      for (const line of extraLines) {
+        const extra = chart.addSeries(lib.LineSeries, {
+          color: rgba(palette.series[line.slot % 5]),
+          lineWidth: 2,
+          lineStyle: lib.LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: line.label,
+          priceFormat,
+        });
+        extra.setData(line.values.map((value, j) => (value === null || value === undefined ? { time: times[j] } : { time: times[j], value })));
+        registry.set(`extra:${line.key}`, extra);
+      }
+    }
+    const extraPrices: number[] = [];
+    if (!percentScale) {
+      for (const level of levels) {
+        const color = rgba(level.tone === "up" ? palette.up : level.tone === "down" ? palette.down : level.tone === "muted" ? palette.muted : palette.primary);
+        main.createPriceLine({
+          price: level.price,
+          color,
+          lineWidth: 1,
+          lineStyle: lib.LineStyle.LargeDashed,
+          axisLabelVisible: true,
+          axisLabelColor: color,
+          axisLabelTextColor: rgba(palette.card),
+          title: level.label,
+        });
+        extraPrices.push(level.price);
+      }
+    }
+    if (targets && futureTimes.length > 0 && lastClose !== null && !percentScale) {
+      const meanUp = targets.mean >= lastClose;
+      const meanColor = rgba(meanUp ? palette.up : palette.down);
+      const pct = (value: number) => formatChangePercent(((value - lastClose) / lastClose) * 100);
+      attach(
+        main,
+        new TargetFanPrimitive({
+          from: bars.length - 1,
+          to: bars.length - 1 + padTimes.length + futureTimes.length,
+          last: lastClose,
+          low: targets.low,
+          mean: targets.mean,
+          high: targets.high,
+          labels: {
+            title: targets.analysts ? t("targets.titleN", { n: targets.analysts }) : t("targets.title"),
+            mean: `${t("targets.mean")} ${valueFormatter(targets.mean)} (${pct(targets.mean)})`,
+            high: `${t("targets.high")} ${valueFormatter(targets.high)}`,
+            low: `${t("targets.low")} ${valueFormatter(targets.low)}`,
+          },
+          colors: {
+            fill: rgba(meanUp ? palette.up : palette.down, palette.dark ? 0.08 : 0.07),
+            line: rgba(palette.muted, 0.8),
+            mean: meanColor,
+            text: rgba(palette.foreground, 0.85),
+            muted: rgba(palette.muted),
+            card: rgba(palette.card),
+          },
+          font: palette.fontFamily,
+        }),
+      );
+      main.createPriceLine({
+        price: targets.mean,
+        color: meanColor,
+        lineVisible: false,
+        axisLabelVisible: true,
+        axisLabelColor: meanColor,
+        axisLabelTextColor: rgba(palette.card),
+        title: "",
+      });
+      extraPrices.push(targets.low, targets.high);
+    }
+    // The scale keeps the levels and the whole target range in view.
+    if (extraPrices.length > 0) {
+      const lo = Math.min(...extraPrices);
+      const hi = Math.max(...extraPrices);
+      main.applyOptions({
+        autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
+          const res = original();
+          if (!res) return res;
+          return { ...res, priceRange: { minValue: Math.min(res.priceRange.minValue, lo), maxValue: Math.max(res.priceRange.maxValue, hi) } };
+        },
+      });
     }
 
     if (extremes) markersRef.current = lib.createSeriesMarkers(main, []);
@@ -999,7 +1205,7 @@ export function FinancialChart({
     attach(main, drawingPrimitive);
 
     // Period window by default; keep the user's zoom/pan across refetches of the same data.
-    const defaultRange = { from: series.windowStart - 0.5, to: bars.length - 1 + padTimes.length + 0.5 };
+    const defaultRange = { from: series.windowStart - 0.5, to: bars.length - 1 + padTimes.length + futureTimes.length + 0.5 };
     defaultRangeRef.current = defaultRange;
     timeScale.setVisibleLogicalRange(keepView && previousRange ? previousRange : defaultRange);
     publishBuild(main, palette);
@@ -1013,7 +1219,8 @@ export function FinancialChart({
       cancelAnimationFrame(frame);
       cancelReveal?.();
     };
-    // `eventsKey` stands for `events`, the watermark texts for `watermark` (parents pass fresh objects).
+    // `eventsKey` stands for `events`, `levelsKey` for `levels`, `upcomingKey` for `upcoming` and the
+    // watermark texts for `watermark` (parents pass fresh objects); `targets` and `extraLines` are memoized.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     engine,
@@ -1047,6 +1254,12 @@ export function FinancialChart({
     themeVersion,
     t,
     drawingPrimitive,
+    futureTimes,
+    baselineTitle,
+    targets,
+    levelsKey,
+    extraLines,
+    upcomingKey,
   ]);
 
   // Crosshair → legend / header scrub, event badges; double click on the plot resets the view.
@@ -1190,6 +1403,8 @@ export function FinancialChart({
     return logical === null ? null : clamp(Math.round(logical), 0, bars.length - 1);
   });
   const measureWanted = useEffectEvent((event: PointerEvent) => tool === "measure" || (tool === "cursor" && event.shiftKey));
+  // Cards: a plain mouse drag in cursor mode measures once it has moved a few px (Google Finance).
+  const dragMeasureWanted = useEffectEvent((event: PointerEvent) => dragMeasure && tool === "cursor" && event.pointerType === "mouse" && !event.shiftKey);
   const commitMeasure = useEffectEvent((next: MeasureState | null) => {
     setMeasure(next);
     const main = seriesRef.current.get("main");
@@ -1204,8 +1419,9 @@ export function FinancialChart({
     const plot = plotRef.current;
     if (!plot) return;
     let active: { pointerId: number; start: number } | null = null;
+    // A pending drag-measure lets the press through (clicks on badges still work) but hides the moves (no pan).
     const swallow = (event: Event) => {
-      if (active) event.stopPropagation();
+      if (active || (pending && (event.type === "mousemove" || event.type === "touchmove"))) event.stopPropagation();
     };
     const onPointerMove = (event: PointerEvent) => {
       if (!active || event.pointerId !== active.pointerId) return;
@@ -1222,8 +1438,42 @@ export function FinancialChart({
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
     };
+    // A pending drag that becomes a measurement after a few px of travel,
+    // unless another handler (drawing handles) claimed the press.
+    let pending: { pointerId: number; start: number; x: number; y: number; down: PointerEvent } | null = null;
+    const onPendingMove = (event: PointerEvent) => {
+      if (!pending || event.pointerId !== pending.pointerId) return;
+      if (pending.down.defaultPrevented) {
+        dropPending();
+        return;
+      }
+      if (Math.hypot(event.clientX - pending.x, event.clientY - pending.y) < 5) return;
+      active = { pointerId: pending.pointerId, start: pending.start };
+      dropPending();
+      const end = indexAt(event.clientX, null) ?? active.start;
+      commitMeasure({ start: active.start, end, dragging: true });
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    };
+    const dropPending = () => {
+      pending = null;
+      window.removeEventListener("pointermove", onPendingMove);
+      window.removeEventListener("pointerup", dropPending);
+      window.removeEventListener("pointercancel", dropPending);
+    };
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || !measureWanted(event)) return;
+      if (event.button !== 0) return;
+      if (!measureWanted(event)) {
+        if (!dragMeasureWanted(event)) return;
+        const start = indexAt(event.clientX, event.clientY);
+        if (start === null) return;
+        pending = { pointerId: event.pointerId, start, x: event.clientX, y: event.clientY, down: event };
+        window.addEventListener("pointermove", onPendingMove);
+        window.addEventListener("pointerup", dropPending);
+        window.addEventListener("pointercancel", dropPending);
+        return;
+      }
       const start = indexAt(event.clientX, event.clientY);
       if (start === null) return;
       active = { pointerId: event.pointerId, start };
@@ -1243,6 +1493,7 @@ export function FinancialChart({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
+      dropPending();
     };
   }, []);
 
@@ -1347,7 +1598,7 @@ export function FinancialChart({
     if (!engine) return;
     const range = engine.chart.timeScale().getVisibleLogicalRange();
     if (!range) return;
-    const total = bars.length + padTimes.length;
+    const total = bars.length + padTimes.length + futureTimes.length;
     const width = range.to - range.from;
     const nextWidth = clamp(width * factor, Math.min(8, total), total + 1);
     const anchor = hoverIndex ?? range.to;
@@ -1377,7 +1628,7 @@ export function FinancialChart({
     if (!engine) return;
     const range = engine.chart.timeScale().getVisibleLogicalRange();
     if (!range) return;
-    const to = bars.length - 1 + padTimes.length + 0.5;
+    const to = bars.length - 1 + padTimes.length + futureTimes.length + 0.5;
     animateTo({ from: to - (range.to - range.from), to });
   }
 
@@ -1403,7 +1654,7 @@ export function FinancialChart({
       title: snapshotTitle?.title ?? symbol,
       subtitle: snapshotTitle?.subtitle ?? formatBarTime(bars[bars.length - 1].time, barLabelStyle(series.interval)),
       value: valueFormatter(lastClose),
-      change: change !== null && windowBase ? `${formatChangePercent((change / windowBase) * 100)} (${formatChartChange(change, lastClose, series.currency)})` : "",
+      change: change !== null && windowBase ? `${formatChangePercent((change / windowBase) * 100)} (${formatChartChange(change, lastClose, seriesUnit(series))})` : "",
       tone: trendTone(change),
       footer: t("snapshot.footer"),
       overlays: legendRow.filter((item) => item.status === "ok").flatMap((item) => snapshotLabels(palette, item, last)),
@@ -1578,7 +1829,7 @@ export function FinancialChart({
 
   const tipEvents = eventTip
     ? (eventsRef.current?.groupOf(eventTip.id) ?? [eventTip.id])
-        .map((id) => events.find((event) => event.id === id))
+        .map((id) => events.find((event) => event.id === id) ?? upcoming.find((event) => event.id === id))
         .filter((event): event is ChartEvent => event !== undefined)
     : [];
 
@@ -1598,6 +1849,7 @@ export function FinancialChart({
         baseline={baseline && !compareActive ? baseline : null}
         compare={legendCompare}
         hovering={hoverIndex !== null}
+        hideMain={legendMode === "overlays"}
       />
       <div
         ref={plotRef}

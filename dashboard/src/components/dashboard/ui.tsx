@@ -111,13 +111,24 @@ export function ChangePill({ value, className }: { value: number | null | undefi
 }
 
 /** Signed absolute change + percent: "+104,11 (+%0,78)". */
-export function ChangeLine({ change, percent, className }: { change: number | null | undefined; percent: number | null | undefined; className?: string }) {
+/** Signed change and percent with a trend arrow; `formatChange` for units with finer prices (grams of gold). */
+export function ChangeLine({
+  change,
+  percent,
+  formatChange = formatSigned,
+  className,
+}: {
+  change: number | null | undefined;
+  percent: number | null | undefined;
+  formatChange?: (change: number | null | undefined) => string;
+  className?: string;
+}) {
   const tone = trendTone(percent ?? change);
   const Icon = TREND_ICON[tone];
   return (
     <span className={cn("inline-flex items-center gap-1 font-mono text-sm font-medium tabular-nums", TREND_TEXT_CLASS[tone], className)}>
       <Icon className="h-4 w-4" aria-hidden="true" />
-      {formatSigned(change)} ({formatChangePercent(percent)})
+      {formatChange(change)} ({formatChangePercent(percent)})
     </span>
   );
 }

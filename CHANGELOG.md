@@ -2,6 +2,38 @@
 
 ## Yayımlanmamış
 
+### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi
+
+Hisse ve BIST 100 grafik kartları sadeleşti; tam ekran bütün araçlarıyla duruyor. Hisse grafiğine hissenin kendi verisinden gelen katmanlar eklendi.
+
+**Kartlar sadeleşti:**
+- Araç çubuğunda grafik türü, birim, göstergeler, karşılaştır, **Diğer** ve tam ekran kaldı. Hacim, olaylar, analist hedefi, tepe/dip etiketleri, ızgara, fiyat ölçeği, çizim araçları, veri tablosu, PNG, maliyet, kısayollar ve varsayılan görünüm "Diğer" menüsünde. Tam ekranda her araç görünür.
+- Tek satır özet: fiyat, değişim (tutar ve yüzde), dönem ve hissenin BIST 100'e göre durumu. Grafiğin üzerine gelince o barın değeri, başlangıçtan o güne değişim, mumlarda açılış/yüksek/düşük ve hacim. Kartta tarih ve AYDK lejant satırı kalktı, böylece aynı anda iki farklı değişim yüzdesi görünmüyor. Dönem başı (1G'de önceki kapanış) çizgisinin adı fiyat ekseninde yazar.
+- Kartta filigran yok (ayar tam ekranda geçerli). Çizgi ve alan grafikte hacim çubukları tek ve soluk renkte; mumlarda yükselen/düşen renkleri kalır. Olay rozetleri hacmin altında kendi şeridinde.
+- Kartta fareyle sürüklemek ölçer (Google Finance gibi). Kaydırmak için yatay tekerlek, ok tuşları ya da tam ekran; yakınlaştırmak için Ctrl/⌘ + tekerlek. Yakınlaştırılmış kartın sağ üstünde "Görünümü sıfırla" çıkar.
+- Dönem adları iki grafikte aynı: "YBB" ve "Tümü".
+- Göstergeler menüsünde hazır setler: Trend (SMA 20/50/200), Momentum (RSI, MACD), Oynaklık (Bollinger, ATR), Hacim (OBV, MFI).
+
+**Birim: TL · USD · EUR · Altın · Reel** (araç çubuğundaki birim menüsü; Alt+U TL ile USD arasında geçer):
+- EUR ve gram altında her bar o günün EUR/TRY ya da gram altın kapanışına bölünür: son bir yıl günlük, öncesi haftalık kapanışlarla (makro sayfasının TradingView serileri). Reel, fiyatları TÜFE ile son açıklanan ayın liralarına çevirir; özet satırı hangi ayın fiyatları olduğunu yazar ("Ağu 2026 fiyatlarıyla").
+- 1G, 5G ve Tümü'nde EUR, altın ve reel yok: bu dönemlerde grafik TL gösterir, seçim öbür dönemlerde geri gelir. Kurların yetişmediği eski ısınma barları gösterilmez; göstergeler o zaman biraz geç başlar.
+- Karşılaştırılan endeks ve hisseler de aynı birime çevrilir. Çizimler her birim için ayrı saklanır.
+- Önceki "USD" düğmesi bu menüye taşındı; USD seçmiş olanların seçimi korunur.
+
+**Hisse grafiğinin yeni katmanları:**
+- **BIST 100'e göre:** özet satırı aynı dönemde endeksin değişimini ve hissenin endeksin kaç puan önünde ya da gerisinde olduğunu yazar.
+- **Karşılaştırma önerileri:** tek tıkla BIST 100, hissenin sektör endeksi (KAP sektöründen; ör. THYAO → BIST Ulaştırma) ve sektörün en büyük üç şirketi.
+- **Analist hedef fiyatı:** son kapanıştan 12 aylık en düşük, ortalama ve en yüksek hedefe uzanan yelpaze; analist sayısını ve ortalamanın potansiyelini yazar. TL ve reel grafiklerde; "Diğer"den kapatılır.
+- **Temettü dahil getiri:** dönem içinde temettü ödenmişse, temettülerin hisseye yeniden yatırıldığı kesikli çizgi ve özet satırında getirisi (TL grafiklerde). Bedelsiz öncesi temettüler bugünkü pay sayısına göre ölçeklenir.
+- **Maliyetim:** "Diğer → Maliyetim…" ile girilen ortalama maliyet kesikli çizgiyle çizilir; özet satırı maliyete göre kâr ya da zararı yazar. Yalnızca bu tarayıcıda saklanır.
+- **Yaklaşan olaylar:** KAP'ın beklenen bildirim takvimindeki sonraki finansal rapor ve ilan edilmiş temettü, son barın sağında kesikli rozetle çizilir; dönem kısa kalırsa yalnızca özet satırında yazar.
+
+**Düzeltmeler:**
+- "Tümü" döneminde fiyat ekseni sıfırın altında etiket göstermiyor.
+- Uzun grafik menüleri kısa ekranlarda ekran içinde kayıyor.
+
+Kod: `dashboard/src/components/charts/units.ts` (birim hesabı) ve `use-unit.ts`, `UnitMenu.tsx`, `total-return.ts`, `sector-index.ts`, `cost.tsx`; birim ve temettü hesabı için `npm test` testleri.
+
 ### Güvenlik
 
 - Next.js 16.3.8'e yükseltildi: `next/og` ImageResponse'taki uzaktan kod çalıştırma açığı (GHSA-vcvr-r3jv-pc5j) 16.3.5'i de kapsıyordu. Uygulama `next/og` kullanmıyor; `npm audit --omit=dev` 0 açık.
@@ -22,7 +54,7 @@
 
 ### Grafikler: dolar bazında görünüm
 
-Hisse ve BIST 100 grafikleri araç çubuğundaki **USD** düğmesiyle (ya da Alt+U) dolar bazında gösterilir. Seçim tarayıcıda hatırlanır.
+Hisse ve BIST 100 grafikleri dolar bazında gösterilebilir: birim menüsünde **USD** (ya da Alt+U; menü yukarıdaki bölümde). Seçim tarayıcıda hatırlanır.
 
 - Her barın açılış, yüksek, düşük ve kapanışı, aynı dönemin USD/TRY kapanışına bölünür. Kaynak TradingView FX_IDC:USDTRY, makro sayfasıyla aynı. 1G ve 5G'de aynı 15/30 dakikalık dilim, günlükte aynı gün, haftalık ve aylıkta aynı hafta ve ay kullanılır. Hacim lot olarak kalır. Günlük kapanışlar TradingView'daki THYAO/USDTRY grafiğiyle aynıdır.
 - Mumlar, göstergeler (ısınma barlarıyla), karşılaştırma, dönem değişimi, taban çizgisi, veri tablosu, ölçüm ve PNG görüntüsü dolar değerleriyle çalışır. 1G'de taban çizgisi önceki seansın dolar kapanışıdır. Canlı fiyat, son USD/TRY kuruna bölünerek son bara işlenir. Fiyatlar 4 anlamlı basamakla yazılır (5,942 USD).

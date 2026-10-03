@@ -78,10 +78,19 @@ export interface ChartSeries {
   currency: ChartCurrency;
   /** USD series: the newest USD/TRY close, to bring lira quotes into dollars; null in lira. */
   fxRate: number | null;
+  /** Set when the client re-expressed the lira bars in a derived unit (units.ts); otherwise the unit is `currency`. */
+  unit?: DerivedUnit;
 }
 
-/** Currency a chart shows prices in. */
+/** Currency the chart endpoints return prices in. */
 export type ChartCurrency = "TRY" | "USD";
+
+/**
+ * What a chart's prices are expressed in. TRY and USD come from the API; euros, grams of
+ * gold and inflation-adjusted ("real") lira are derived from the lira bars on the client.
+ */
+export type ChartUnit = ChartCurrency | DerivedUnit;
+export type DerivedUnit = "EUR" | "GOLD" | "REAL";
 
 /** Visible bar range of a chart, in `bars` indices (inclusive). */
 export interface ChartView {

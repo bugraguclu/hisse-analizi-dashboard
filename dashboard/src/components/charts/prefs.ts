@@ -2,7 +2,8 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { INDICATORS, sanitizeParams } from "./indicator-catalog";
-import type { ChartCurrency, ChartType, IndicatorConfig, IndicatorKind, OverlayKey, PaneKey, PriceScaleKind } from "./types";
+import type { ChartType, ChartUnit, IndicatorConfig, IndicatorKind, OverlayKey, PaneKey, PriceScaleKind } from "./types";
+import { isChartUnit } from "./units";
 
 /** What a viewer set up on a chart; remembered per chart kind in localStorage. */
 export interface ChartPrefs {
@@ -14,14 +15,20 @@ export interface ChartPrefs {
   events: boolean;
   /** High/low labels of the visible range. */
   extremes: boolean;
+  /** Analyst price-target fan after the last bar (stock charts). */
+  targets: boolean;
   /** Faint symbol name behind the series. */
   watermark: boolean;
   grid: boolean;
   /** Drawing tools snap to open/high/low/close. */
   magnet: boolean;
   drawingsHidden: boolean;
-  /** Prices in lira or in US dollars (each bar divided by its USD/TRY close). */
-  currency: ChartCurrency;
+  /**
+   * What prices are shown in: lira, dollars (each bar divided by its USD/TRY close), euros,
+   * grams of gold or inflation-adjusted lira (see units.ts). Stored as `unit`; prefs saved
+   * before units existed carry `currency: "USD" | "TRY"`, which still counts.
+   */
+  unit: ChartUnit;
 }
 
 export const CHART_TYPES: readonly ChartType[] = ["area", "line", "baseline", "candles", "hollow", "heikin", "bars"];
@@ -112,11 +119,12 @@ export function sanitizePrefs(raw: string | null, defaults: ChartPrefs): ChartPr
       scale: SCALES.includes(parsed.scale as PriceScaleKind) ? (parsed.scale as PriceScaleKind) : defaults.scale,
       events: bool(parsed.events, defaults.events),
       extremes: bool(parsed.extremes, defaults.extremes),
+      targets: bool(parsed.targets, defaults.targets),
       watermark: bool(parsed.watermark, defaults.watermark),
       grid: bool(parsed.grid, defaults.grid),
       magnet: bool(parsed.magnet, defaults.magnet),
       drawingsHidden: bool(parsed.drawingsHidden, defaults.drawingsHidden),
-      currency: parsed.currency === "USD" || parsed.currency === "TRY" ? parsed.currency : defaults.currency,
+      unit: isChartUnit(parsed.unit) ? parsed.unit : parsed.currency === "USD" ? "USD" : defaults.unit,
     };
   } catch {
     return defaults;
