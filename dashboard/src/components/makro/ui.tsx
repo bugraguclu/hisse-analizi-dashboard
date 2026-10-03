@@ -17,25 +17,20 @@ import { useMakroI18n, type MakroKey } from "./i18n";
 export function MacroSection({
   id,
   title,
-  description,
   children,
   className,
 }: {
   id: string;
   title: ReactNode;
-  description?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   const headingId = `${id}-title`;
   return (
     <section id={id} aria-labelledby={headingId} className={cn("scroll-mt-24 space-y-3", className)}>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <h2 id={headingId} className="text-[15px] font-semibold tracking-tight text-foreground">
-          {title}
-        </h2>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-      </div>
+      <h2 id={headingId} className="text-[15px] font-semibold tracking-tight text-foreground">
+        {title}
+      </h2>
       {children}
     </section>
   );

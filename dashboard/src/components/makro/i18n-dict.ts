@@ -11,52 +11,17 @@ const dict = {
   // Page
   "page.eyebrow": { tr: "Türkiye ekonomisi", en: "Turkish economy", fr: "Économie turque" },
   "page.title": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
-  "page.description": {
-    tr: "Para politikası, enflasyon, piyasalar, büyüme ve dış denge — TCMB, TÜİK ve piyasa verileriyle tek sayfada.",
-    en: "Monetary policy, inflation, markets, growth and the external balance — CBRT, TurkStat and market data on one page.",
-    fr: "Politique monétaire, inflation, marchés, croissance et équilibre extérieur — données de la CBRT, de TurkStat et des marchés sur une page.",
-  },
   "page.sections": { tr: "Bölümler", en: "Sections", fr: "Sections" },
   "page.refresh": { tr: "Yenile", en: "Refresh", fr: "Actualiser" },
   "page.refreshing": { tr: "Yenileniyor…", en: "Refreshing…", fr: "Actualisation…" },
 
   // Sections
   "section.monetary": { tr: "Para politikası", en: "Monetary policy", fr: "Politique monétaire" },
-  "section.monetary.desc": {
-    tr: "TCMB faiz koridoru, PPK kararları ve reel faiz.",
-    en: "CBRT rate corridor, MPC decisions and the real rate.",
-    fr: "Corridor de taux de la CBRT, décisions du comité et taux réel.",
-  },
   "section.inflation": { tr: "Enflasyon", en: "Inflation", fr: "Inflation" },
-  "section.inflation.desc": {
-    tr: "Tüketici (TÜFE) ve üretici (ÜFE) fiyatları, yıllık ve aylık.",
-    en: "Consumer (CPI) and producer (PPI) prices, annual and monthly.",
-    fr: "Prix à la consommation (IPC) et à la production (IPP), annuels et mensuels.",
-  },
   "section.activity": { tr: "Büyüme ve istihdam", en: "Growth and labour", fr: "Croissance et emploi" },
-  "section.activity.desc": {
-    tr: "GSYH, sanayi üretimi, tüketim, güven endeksleri ve işgücü piyasası.",
-    en: "GDP, industrial production, consumption, confidence and the labour market.",
-    fr: "PIB, production industrielle, consommation, confiance et marché du travail.",
-  },
   "section.external": { tr: "Dış denge, rezervler ve maliye", en: "External balance, reserves and fiscal", fr: "Équilibre extérieur, réserves et finances publiques" },
-  "section.external.desc": {
-    tr: "Cari denge, dış ticaret, doğrudan yatırım, TCMB rezervleri, bütçe ve kamu borcu.",
-    en: "Current account, trade, direct investment, CBRT reserves, budget and public debt.",
-    fr: "Compte courant, commerce, investissements directs, réserves de la CBRT, budget et dette publique.",
-  },
   "section.markets": { tr: "Piyasalar", en: "Markets", fr: "Marchés" },
-  "section.markets.desc": {
-    tr: "Döviz, altın, petrol ve devlet tahvili getirileri.",
-    en: "FX, gold, oil and government bond yields.",
-    fr: "Change, or, pétrole et rendements des obligations d'État.",
-  },
   "section.calendar": { tr: "Ekonomik takvim", en: "Economic calendar", fr: "Calendrier économique" },
-  "section.calendar.desc": {
-    tr: "Bu haftanın ve önümüzdeki günlerin veri açıklamaları.",
-    en: "Data releases for this week and the days ahead.",
-    fr: "Publications de données de la semaine et des prochains jours.",
-  },
 
   // Generic
   "common.source": { tr: "Kaynak", en: "Source", fr: "Source" },
@@ -86,7 +51,6 @@ const dict = {
   "common.low": { tr: "En düşük", en: "Low", fr: "Plus bas" },
   "common.periodChange": { tr: "Dönem değişimi", en: "Period change", fr: "Variation sur la période" },
   "common.periodStart": { tr: "Dönem başı", en: "Period start", fr: "Début de période" },
-  "common.delayedNote": { tr: "Piyasa verileri gecikmeli olabilir.", en: "Market data may be delayed.", fr: "Les données de marché peuvent être différées." },
 
   // Source names as the API reports them (Turkish), localised for display
   "src.tcmb": { tr: "TCMB", en: "CBRT", fr: "CBRT" },
@@ -265,7 +229,6 @@ const dict = {
 
   // Markets
   "mk.instruments": { tr: "Döviz, emtia ve tahvil", en: "FX, commodities and bonds", fr: "Change, matières premières et obligations" },
-  "mk.instrumentsDesc": { tr: "Son fiyat ve günlük değişim — grafiği görmek için seçin", en: "Last price and daily change — select to chart", fr: "Dernier cours et variation — sélectionnez pour le graphique" },
   "mk.group.fx": { tr: "Döviz", en: "FX", fr: "Change" },
   "mk.group.commodity": { tr: "Emtia", en: "Commodities", fr: "Matières premières" },
   "mk.group.bond": { tr: "Devlet tahvili getirisi", en: "Government bond yields", fr: "Rendements des obligations d'État" },

@@ -146,10 +146,8 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
                   <span className="whitespace-nowrap">{t("header.updatedAt", { time: quoteTimeLabel })}</span>
                 </>
               ) : null}
-              {SEPARATOR}
-              <span className="whitespace-nowrap">{t("header.delayed")}</span>
             </p>
-            <ApiDataMeta path={`/market/snapshot?symbols=${ticker}`} showDelay={false} />
+            <ApiDataMeta path={`/market/snapshot?symbols=${ticker}`} />
             <p className="sr-only" aria-live="polite" aria-atomic="true">
               {t("header.liveQuote", {
                 price: formatPrice(quote.last),

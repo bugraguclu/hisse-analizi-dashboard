@@ -29,7 +29,6 @@ export interface DataMetaInfo {
   ageSeconds: number | null;
   servedFrom: ServedFrom | null;
   stale: boolean;
-  delaySeconds: number | null;
   notes: string[];
 }
 
@@ -54,7 +53,6 @@ export function readDataMeta(payload: unknown): DataMetaInfo | null {
     ageSeconds: toFiniteNumber(m.age_seconds),
     servedFrom,
     stale: m.stale === true || servedFrom === "stale",
-    delaySeconds: toFiniteNumber(m.delay_seconds),
     notes: Array.isArray(m.notes) ? m.notes.map(text).filter((note): note is string => note !== null) : [],
   };
   return info.source || info.fetchedAt || info.servedFrom || info.asOf ? info : null;
@@ -91,7 +89,6 @@ const DICT = {
     en: "Provider unreachable; last saved data",
     fr: "Fournisseur injoignable ; dernières données enregistrées",
   },
-  delayed: { tr: "{minutes} dk gecikmeli", en: "Delayed {minutes} min", fr: "Différé de {minutes} min" },
   asOf: { tr: "{date} itibarıyla", en: "As of {date}", fr: "Au {date}" },
   updated: { tr: "güncelleme {when}", en: "updated {when}", fr: "mis à jour {when}" },
   source: { tr: "Kaynak: {source}", en: "Source: {source}", fr: "Source : {source}" },
@@ -122,15 +119,12 @@ function describe(info: DataMetaInfo, locale: Locale, now: number | null) {
   const parts: string[] = [];
   const when = info.asOf ? asOfLabel(info.asOf) : fetchedLabel(info, now);
   if (info.stale) parts.push(when ? `${DICT.stale[locale]} (${when})` : DICT.stale[locale]);
-  if (info.delaySeconds !== null && info.delaySeconds >= 60) {
-    parts.push(fill(DICT.delayed[locale], { minutes: String(Math.round(info.delaySeconds / 60)) }));
-  }
   return parts;
 }
 
 /**
  * Low-prominence provenance line (11px muted text; warn colour only when stale).
- * - default: shows only what the reader must know — stale fallback and provider delay
+ * - default: shows only what the reader must know — the stale fallback
  * - `showSource` / `showAsOf`: also name the source / the date the data describes
  * The full detail (source, fetch time, served-from, backend notes) is in the tooltip.
  */
@@ -138,15 +132,12 @@ export function DataMeta({
   payload,
   showSource = false,
   showAsOf = false,
-  showDelay = true,
   className,
 }: {
   /** Raw API response (the component reads its `meta` block). */
   payload: unknown;
   showSource?: boolean;
   showAsOf?: boolean;
-  /** Off where the card already says prices are delayed. */
-  showDelay?: boolean;
   className?: string;
 }) {
   const { locale } = useLocale();
@@ -154,7 +145,7 @@ export function DataMeta({
   const info = readDataMeta(payload);
   if (!info) return null;
 
-  const parts = describe(showDelay ? info : { ...info, delaySeconds: null }, locale, now);
+  const parts = describe(info, locale, now);
   const name = sourceName(info.source);
   if (showAsOf && info.asOf && !info.stale) parts.push(fill(DICT.asOf[locale], { date: asOfLabel(info.asOf) }));
   if (showSource && name) parts.push(fill(DICT.source[locale], { source: name }));

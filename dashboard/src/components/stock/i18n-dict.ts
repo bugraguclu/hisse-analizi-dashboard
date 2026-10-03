@@ -49,7 +49,6 @@ const dict = {
   "header.sessionClosed": { tr: "Seans kapalı", en: "Market closed", fr: "Marché fermé" },
   "header.updatedAt": { tr: "{time} itibarıyla", en: "as of {time}", fr: "à {time}" },
   "header.quoteUnavailable": { tr: "Anlık fiyat alınamadı", en: "Live quote unavailable", fr: "Cours indisponible" },
-  "header.delayed": { tr: "Fiyatlar gecikmeli olabilir", en: "Prices may be delayed", fr: "Cours potentiellement différés" },
   "header.technicalSignal": { tr: "Teknik sinyal (günlük)", en: "Technical signal (daily)", fr: "Signal technique (quotidien)" },
   "header.signalInfo": { tr: "Teknik sinyal nasıl hesaplanıyor?", en: "How is the technical signal computed?", fr: "Comment le signal technique est-il calculé ?" },
   "header.signalInfoTitle": { tr: "Teknik sinyal nedir?", en: "What is the technical signal?", fr: "Qu'est-ce que le signal technique ?" },
@@ -510,9 +509,9 @@ const dict = {
   "peers.col.roe": { tr: "ROE", en: "ROE", fr: "ROE" },
   "peers.col.dividendYield": { tr: "Temettü verimi", en: "Div. yield", fr: "Rendement" },
   "peers.footer": {
-    tr: "Sektör = KAP sektörü; ortalama = medyan, en az 3 şirketle. F/K, PD/DD ve FD/FAVÖK'te yalnızca pozitif değerler, temettü veriminde yalnızca ödeyenler sayılır. Piyasa değeri, F/K, PD/DD ve temettü verimi Hisse Tarama verisinden (15 dk gecikmeli); FD/FAVÖK, marj ve ROE son finansal tablolardan.",
-    en: "Sector = KAP sector; average = median, with at least 3 companies. P/E, P/B and EV/EBITDA count positive values only, dividend yield counts payers only. Market cap, P/E, P/B and dividend yield come from the screener data (15-min delay); EV/EBITDA, margin and ROE from the latest financial statements.",
-    fr: "Secteur = secteur KAP ; moyenne = médiane, avec au moins 3 sociétés. PER, C/VC et VE/EBITDA ne comptent que les valeurs positives, le rendement que les sociétés qui versent. Capitalisation, PER, C/VC et rendement viennent des données du filtre (différé 15 min) ; VE/EBITDA, marge et ROE des derniers états financiers.",
+    tr: "Sektör = KAP sektörü; ortalama = medyan, en az 3 şirketle. F/K, PD/DD ve FD/FAVÖK'te yalnızca pozitif değerler, temettü veriminde yalnızca ödeyenler sayılır. Piyasa değeri, F/K, PD/DD ve temettü verimi Hisse Tarama verisinden; FD/FAVÖK, marj ve ROE son finansal tablolardan.",
+    en: "Sector = KAP sector; average = median, with at least 3 companies. P/E, P/B and EV/EBITDA count positive values only, dividend yield counts payers only. Market cap, P/E, P/B and dividend yield come from the screener data; EV/EBITDA, margin and ROE from the latest financial statements.",
+    fr: "Secteur = secteur KAP ; moyenne = médiane, avec au moins 3 sociétés. PER, C/VC et VE/EBITDA ne comptent que les valeurs positives, le rendement que les sociétés qui versent. Capitalisation, PER, C/VC et rendement viennent des données du filtre ; VE/EBITDA, marge et ROE des derniers états financiers.",
   },
 } satisfies Record<string, Entry>;
 

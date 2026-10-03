@@ -190,7 +190,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
       footer={
         <>
           {t("chart.footer")} <ChartAttribution />
-          <ApiDataMeta path={`/market/ticker/${ticker}/history`} showDelay={false} className="mt-1" />
+          <ApiDataMeta path={`/market/ticker/${ticker}/history`} className="mt-1" />
         </>
       }
     >

@@ -273,7 +273,7 @@ export function IndexChartCard({ className }: { className?: string }) {
       </dl>
       <p className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
         <ChartAttribution />
-        <ApiDataMeta path={`/market/index/${SYMBOL}`} showDelay={false} className="mt-1" />
+        <ApiDataMeta path={`/market/index/${SYMBOL}`} className="mt-1" />
       </p>
     </DashboardCard>
   );

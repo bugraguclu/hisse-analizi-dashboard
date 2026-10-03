@@ -176,7 +176,6 @@ export function EventsView() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title={t("page.title")}
-        description={t("page.subtitle")}
         actions={
           <FeedStatus status={feedStatus} now={now} refreshing={listQ.isFetching || feedStatus.isFetching} onRefresh={refresh} />
         }

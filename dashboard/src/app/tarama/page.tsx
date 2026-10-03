@@ -39,19 +39,17 @@ import { DEFAULT_WATCHLIST_ID, useWatchlists } from "@/hooks/use-watchlists";
 /** The universe endpoint is cached for 120 s on the backend. */
 const REFRESH_MS = 120_000;
 
-function Header({ asOf, delay }: { asOf?: string; delay?: number }) {
+function Header({ asOf }: { asOf?: string }) {
   const { t } = useTaramaI18n();
   const now = useNow();
   let status: string | null = null;
   if (asOf && now !== null) {
     const sameDay = formatMarketDate(asOf, "date") === formatMarketDate(now, "date");
     status = t("status.updated", { time: formatMarketDate(asOf, sameDay ? "time" : "dayMonthTime") });
-    if (delay) status += ` · ${t("status.delayed", { minutes: delay })}`;
   }
   return (
     <PageHeader
       title={t("page.title")}
-      description={t("page.description")}
       actions={status ? <p className="text-[11px] text-muted-foreground">{status}</p> : undefined}
     />
   );
@@ -180,7 +178,7 @@ function Screener() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <Header asOf={data?.as_of} delay={data?.delay_minutes} />
+      <Header asOf={data?.as_of} />
 
       <ScreenerFilters state={state} onChange={update} data={data} />
 

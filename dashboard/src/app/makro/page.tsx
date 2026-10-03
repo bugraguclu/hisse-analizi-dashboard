@@ -71,13 +71,13 @@ export default function MakroPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-6">
       <div className="space-y-3">
-        <PageHeader eyebrow={t("page.eyebrow")} title={t("page.title")} description={t("page.description")} actions={<RefreshButton />} />
+        <PageHeader eyebrow={t("page.eyebrow")} title={t("page.title")} actions={<RefreshButton />} />
         <SectionNav />
       </div>
 
       <KpiStrip />
 
-      <MacroSection id="para-politikasi" title={t("section.monetary")} description={t("section.monetary.desc")}>
+      <MacroSection id="para-politikasi" title={t("section.monetary")}>
         {/* Panels stretch to one row height; the chart grows to fill it. */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <CorridorPanel />
@@ -85,7 +85,7 @@ export default function MakroPage() {
         </div>
       </MacroSection>
 
-      <MacroSection id="enflasyon" title={t("section.inflation")} description={t("section.inflation.desc")}>
+      <MacroSection id="enflasyon" title={t("section.inflation")}>
         <InflationTiles />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <InflationTrendPanel className="lg:col-span-2" />
@@ -93,19 +93,19 @@ export default function MakroPage() {
         </div>
       </MacroSection>
 
-      <MacroSection id="piyasalar" title={t("section.markets")} description={t("section.markets.desc")}>
+      <MacroSection id="piyasalar" title={t("section.markets")}>
         <MarketsSection />
       </MacroSection>
 
-      <MacroSection id="takvim" title={t("section.calendar")} description={t("section.calendar.desc")}>
+      <MacroSection id="takvim" title={t("section.calendar")}>
         <EconomicCalendar />
       </MacroSection>
 
-      <MacroSection id="buyume" title={t("section.activity")} description={t("section.activity.desc")}>
+      <MacroSection id="buyume" title={t("section.activity")}>
         <IndicatorGrid keys={ACTIVITY_KEYS} label={t("section.activity")} />
       </MacroSection>
 
-      <MacroSection id="dis-denge" title={t("section.external")} description={t("section.external.desc")}>
+      <MacroSection id="dis-denge" title={t("section.external")}>
         <IndicatorGrid keys={EXTERNAL_KEYS} label={t("section.external")} />
       </MacroSection>
     </div>

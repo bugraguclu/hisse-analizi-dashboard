@@ -73,7 +73,6 @@ function QuoteBoard({ selected, onSelect, className }: { selected: string; onSel
     <Panel
       className={className}
       title={t("mk.instruments")}
-      subtitle={t("mk.instrumentsDesc")}
       bodyClassName="px-0 py-1"
       footer={
         <>
@@ -174,7 +173,6 @@ function MarketChartPanel({ selectedKey, className }: { selectedKey: string; cla
           <span className="text-[11px] font-normal text-muted-foreground">{instrumentCode(selectedKey, t)}</span>
         </span>
       }
-      subtitle={t(`range.${period}.long` as MakroKey)}
       actions={
         <>
           <RangePicker
@@ -187,7 +185,7 @@ function MarketChartPanel({ selectedKey, className }: { selectedKey: string; cla
       }
       footer={
         <>
-          <SourceLine source={history?.source ?? "TradingView"} parts={[t("common.delayedNote")]} />
+          <SourceLine source={history?.source ?? "TradingView"} />
           {isYield ? <p className="mt-1">{t("mk.yieldNote")}</p> : null}
         </>
       }

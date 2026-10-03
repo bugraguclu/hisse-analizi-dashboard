@@ -11,11 +11,6 @@ type Entry = { tr: string; en: string; fr: string };
 const dict = {
   // Page / metadata
   "page.title": { tr: "KAP Haberleri", en: "KAP News", fr: "Actualités KAP" },
-  "page.subtitle": {
-    tr: "Borsa İstanbul şirketlerinin KAP bildirimleri — anlık akış",
-    en: "KAP disclosures from Borsa Istanbul companies — live feed",
-    fr: "Publications KAP des sociétés de Borsa Istanbul — flux en direct",
-  },
   "page.metaDescription": {
     tr: "Borsa İstanbul şirketlerinin KAP bildirimleri: hisse, kategori, önem ve tarihe göre filtrelenebilir anlık akış.",
     en: "KAP disclosures from Borsa Istanbul companies: a live feed you can filter by stock, category, importance and date.",

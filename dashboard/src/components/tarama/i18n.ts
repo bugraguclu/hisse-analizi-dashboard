@@ -15,11 +15,6 @@ type Entry = { tr: string; en: string; fr: string };
 const dict = {
   // Page
   "page.title": { tr: "Hisse Tarama", en: "Stock Screener", fr: "Filtrage d'actions" },
-  "page.description": {
-    tr: "Borsa İstanbul'daki tüm hisseleri değerleme, kârlılık, teknik ve analist verileriyle filtreleyin.",
-    en: "Filter every Borsa Istanbul stock by valuation, profitability, technical and analyst data.",
-    fr: "Filtrez toutes les actions de Borsa Istanbul selon la valorisation, la rentabilité, l'analyse technique et les analystes.",
-  },
 
   // Filters panel
   "filters.title": { tr: "Filtreler", en: "Filters", fr: "Filtres" },
@@ -242,7 +237,7 @@ const dict = {
   "col.sector": { tr: "Sektör", en: "Sector", fr: "Secteur" },
   "col.sector.title": { tr: "KAP sektörü", en: "KAP sector", fr: "Secteur KAP" },
   "col.close": { tr: "Fiyat", en: "Price", fr: "Cours" },
-  "col.close.title": { tr: "Son fiyat (₺, 15 dk gecikmeli)", en: "Last price (₺, 15-min delayed)", fr: "Dernier cours (₺, différé de 15 min)" },
+  "col.close.title": { tr: "Son fiyat (₺)", en: "Last price (₺)", fr: "Dernier cours (₺)" },
   "col.change_pct": { tr: "Günlük", en: "Day", fr: "Jour" },
   "col.change_pct.title": { tr: "Önceki kapanışa göre değişim", en: "Change vs. previous close", fr: "Variation vs. clôture précédente" },
   "col.turnover": { tr: "Hacim", en: "Turnover", fr: "Volume" },
@@ -360,7 +355,6 @@ const dict = {
 
   // Status, warnings, errors
   "status.updated": { tr: "Güncelleme {time}", en: "Updated {time}", fr: "Mis à jour {time}" },
-  "status.delayed": { tr: "Fiyatlar {minutes} dk gecikmeli", en: "Prices delayed {minutes} min", fr: "Cours différés de {minutes} min" },
   "status.sources": { tr: "Kaynak: TradingView, İş Yatırım, Borsa İstanbul", en: "Sources: TradingView, İş Yatırım, Borsa Istanbul", fr: "Sources : TradingView, İş Yatırım, Borsa Istanbul" },
   "warn.sectors": {
     tr: "KAP sektörleri şu an alınamıyor; sektör filtresi ve sektöre göre taramalar geçici olarak çalışmıyor.",
