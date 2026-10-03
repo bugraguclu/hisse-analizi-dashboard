@@ -61,6 +61,8 @@ export interface WidgetMeta {
   defaultWidth: number;
   /** Placeholder height (px) while it waits to mount below the fold. */
   estimatedHeight: number;
+  /** Plain text keywords for gallery search. */
+  keywords?: string;
   /** Shows one stock: follows the page's ticker unless given its own. */
   stock?: boolean;
   /** Keeps its own height in a stack instead of sharing the column's extra height (headings). */
@@ -111,6 +113,30 @@ const NOTE_OPTIONS: readonly WidgetOption[] = [
   { key: "text", kind: "text", label: "opt.text", multiline: true, maxLength: 4000 },
 ];
 
+const KEYWORDS: Record<string, string> = {
+  "stock.quote": "Günlük işlem özeti fiyat hacim piyasa değeri F/K PD/DD",
+  "stock.scorecard": "Şirket analiz karnesi",
+  "stock.signals": "Zaman dilimlerine göre sinyaller",
+  "stock.earnings": "Finansal rapor takvimi bilanço tarihi",
+  "stock.statements": "Finansal tablolar bilanço gelir tablosu nakit akışı",
+  "stock.holders": "Ortaklık yapısı ortaklar halka açıklık",
+  "stock.technicalSummary": "Teknik özet al sat",
+  "stock.pivots": "Pivot seviyeleri destek direnç",
+  "stock.dividends": "Temettü geçmişi kâr payı verim",
+  "market.index": "BIST 100 endeks XU100",
+  "market.watchlist": "Takip Listesi favoriler",
+  "market.breadth": "Piyasa genişliği en çok yükselenler düşenler",
+  "market.events": "Son Gelişmeler KAP bildirimleri",
+  "macro.kpis": "Temel göstergeler",
+  "macro.inflationTiles": "TÜFE yıllık enflasyon",
+  "macro.inflationTrend": "Yıllık enflasyon TÜFE ÜFE",
+  "macro.markets": "Döviz emtia tahvil getiri eğrisi dolar euro altın",
+  "macro.fxBulletin": "TCMB gösterge kurları",
+  "macro.calendar": "Ekonomik takvim sıradaki önemli veri",
+  "macro.activity": "Büyüme ve istihdam GSYH işsizlik",
+  "macro.external": "Dış denge rezervler maliye cari açık",
+};
+
 function stock(type: string, icon: LucideIcon, defaultWidth: number, estimatedHeight: number, options?: readonly WidgetOption[]): WidgetMeta {
   const key = type.slice("stock.".length);
   return {
@@ -121,13 +147,24 @@ function stock(type: string, icon: LucideIcon, defaultWidth: number, estimatedHe
     description: `w.stock.${key}.desc` as WidgetKey,
     defaultWidth,
     estimatedHeight,
+    keywords: KEYWORDS[type],
     stock: true,
     options,
   };
 }
 
 function plain(category: Exclude<WidgetCategory, "stock">, type: string, icon: LucideIcon, defaultWidth: number, estimatedHeight: number, options?: readonly WidgetOption[]): WidgetMeta {
-  return { type, category, icon, name: `w.${type}` as WidgetKey, description: `w.${type}.desc` as WidgetKey, defaultWidth, estimatedHeight, options };
+  return {
+    type,
+    category,
+    icon,
+    name: `w.${type}` as WidgetKey,
+    description: `w.${type}.desc` as WidgetKey,
+    defaultWidth,
+    estimatedHeight,
+    keywords: KEYWORDS[type],
+    options,
+  };
 }
 
 export const WIDGETS: readonly WidgetMeta[] = [

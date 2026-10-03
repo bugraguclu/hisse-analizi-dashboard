@@ -39,7 +39,11 @@ export function WidgetGallery({
   const results = useMemo(() => {
     const needle = foldTr(query.trim());
     return WIDGETS.filter((meta) => category === "all" || meta.category === category)
-      .filter((meta) => !needle || foldTr(`${t(meta.name)} ${t(meta.description)} ${t(`category.${meta.category}` as WidgetKey)}`).includes(needle))
+      .filter(
+        (meta) =>
+          !needle ||
+          foldTr(`${t(meta.name)} ${t(meta.description)} ${t(`category.${meta.category}` as WidgetKey)} ${meta.keywords ?? ""}`).includes(needle),
+      )
       .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
   }, [query, category, order, t]);
 
@@ -71,7 +75,7 @@ export function WidgetGallery({
           <div className="flex items-start gap-3 border-b border-border px-5 pb-3 pt-4">
             <div className="min-w-0 grow">
               <Dialog.Title className="text-[17px] font-semibold">{t("gallery.title")}</Dialog.Title>
-              <Dialog.Description className="mt-0.5 text-xs text-muted-foreground">{t("gallery.subtitle")}</Dialog.Description>
+              <Dialog.Description className="sr-only">{t("gallery.subtitle")}</Dialog.Description>
             </div>
             <Dialog.Close
               aria-label={t("settings.close")}

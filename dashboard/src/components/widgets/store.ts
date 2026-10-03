@@ -193,9 +193,13 @@ export const pageActions = {
   remove(id: string) {
     updatePages((pages) => pages.filter((page) => page.id !== id));
   },
-  /** Puts a removed page back where it was (undo). */
-  restore(page: CustomPage, index: number) {
-    updatePages((pages) => (pages.some((p) => p.id === page.id) ? pages : [...pages.slice(0, index), page, ...pages.slice(index)]));
+  /** Puts a removed page back where it was (undo). Returns false if at capacity. */
+  restore(page: CustomPage, index: number): boolean {
+    const current = pagesStore.get();
+    if (current.length >= MAX_PAGES) return false;
+    if (current.some((p) => p.id === page.id)) return false;
+    updatePages((pages) => [...pages.slice(0, index), page, ...pages.slice(index)]);
+    return true;
   },
   setLayout(id: string, layout: Layout) {
     updatePages((pages) => pages.map((page) => (page.id === id ? { ...page, layout } : page)));

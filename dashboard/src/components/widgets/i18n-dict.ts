@@ -168,14 +168,17 @@ const dict = {
   "board.empty": { tr: "Bu sayfada henüz widget yok", en: "No widgets on this page yet", fr: "Aucun widget sur cette page" },
   "board.emptyHint": { tr: "Temettü, bilanço, grafik… İstediğiniz kartları ekleyerek başlayın.", en: "Dividends, statements, charts… Start by adding the cards you want.", fr: "Dividendes, états financiers, graphiques… Commencez par ajouter vos cartes." },
   "board.stockFor": { tr: "{ticker} için", en: "for {ticker}", fr: "pour {ticker}" },
+  "board.noData": { tr: "Bu hisse için veri yok", en: "No data for this stock", fr: "Aucune donnée pour cette action" },
 
   // Settings
   "settings.ticker": { tr: "Hisse", en: "Stock", fr: "Action" },
   "settings.tickerPage": { tr: "Sayfanın hissesi ({ticker})", en: "The page's stock ({ticker})", fr: "L'action de la page ({ticker})" },
+  "settings.tickerDefault": { tr: "Varsayılan hisse ({ticker})", en: "Default stock ({ticker})", fr: "Action par défaut ({ticker})" },
   "settings.tickerPick": { tr: "Başka bir hisse seçin", en: "Pick another stock", fr: "Choisir une autre action" },
   "settings.tickerHint": { tr: "Bu kart sayfanın hissesi yerine seçtiğiniz hisseyi gösterir.", en: "This card shows the stock you pick instead of the page's.", fr: "Cette carte affiche l'action choisie au lieu de celle de la page." },
   "settings.none": { tr: "Bu widget'ın ayarı yok.", en: "This widget has no settings.", fr: "Ce widget n'a pas de réglages." },
   "settings.close": { tr: "Kapat", en: "Close", fr: "Fermer" },
+  "ticker.notFound": { tr: "{ticker} bulunamadı", en: "{ticker} not found", fr: "{ticker} introuvable" },
 
   // Gallery
   "gallery.title": { tr: "Widget ekle", en: "Add a widget", fr: "Ajouter un widget" },
@@ -193,12 +196,7 @@ const dict = {
   "pages.tabs": { tr: "Kişisel sayfalar", en: "Personal pages", fr: "Pages personnelles" },
   "pages.new": { tr: "Yeni sayfa", en: "New page", fr: "Nouvelle page" },
   "pages.defaultName": { tr: "Sayfam {n}", en: "My page {n}", fr: "Ma page {n}" },
-  "pages.introTitle": { tr: "Kendi sayfanı oluştur", en: "Build your own page", fr: "Créez votre propre page" },
-  "pages.introBody": {
-    tr: "Temettü, bilanço, fiyat grafiği, KAP bildirimleri, makro göstergeler… İstediğiniz kartları seçin, sürükleyerek yerleştirin, büyütüp küçültün. Sayfalarınız bu tarayıcıda saklanır.",
-    en: "Dividends, statements, price charts, KAP filings, macro figures… Pick the cards you want, drag them into place, make them bigger or smaller. Your pages are saved in this browser.",
-    fr: "Dividendes, états financiers, graphiques, publications KAP, indicateurs macro… Choisissez vos cartes, placez-les par glisser-déposer, agrandissez-les ou réduisez-les. Vos pages sont enregistrées dans ce navigateur.",
-  },
+  "pages.introTitle": { tr: "Kendi sayfanızı oluşturun", en: "Build your own page", fr: "Créez votre propre page" },
   "pages.startBlank": { tr: "Boş sayfa", en: "Blank page", fr: "Page vierge" },
   "pages.startBlankDesc": { tr: "Widget'ları tek tek kendiniz seçin", en: "Pick every widget yourself", fr: "Choisissez chaque widget vous-même" },
   "pages.templates": { tr: "ya da bir şablonla başlayın", en: "or start from a template", fr: "ou partez d'un modèle" },

@@ -111,7 +111,7 @@ function StartOptions({ pages, onCreate, ticker }: { pages: readonly CustomPage[
         onClick={() => start(uniqueName(pages, (attempt) => t("pages.defaultName", { n: pages.length + 1 + attempt })), EMPTY_LAYOUT)}
         className="group flex w-full items-center gap-4 rounded-xl border border-dashed border-foreground/25 bg-card p-5 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50"
       >
-        <span aria-hidden className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+        <span aria-hidden className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
           <SquarePlus className="size-5" />
         </span>
         <span className="min-w-0">
@@ -145,6 +145,7 @@ function StartOptions({ pages, onCreate, ticker }: { pages: readonly CustomPage[
         })}
       </ul>
       {full ? <p className="text-xs text-muted-foreground">{t("pages.limit", { max: MAX_PAGES })}</p> : null}
+      <p className="text-xs text-muted-foreground">{t("pages.storageNote")}</p>
     </div>
   );
 }
@@ -153,7 +154,7 @@ function Intro({ pages, onCreate }: { pages: readonly CustomPage[]; onCreate: Cr
   const { t } = useWidgetI18n();
   return (
     <div className="mx-auto max-w-4xl space-y-8">
-      <PageHeader eyebrow={t("pages.title")} title={t("pages.introTitle")} description={t("pages.introBody")} />
+      <PageHeader eyebrow={t("pages.title")} title={t("pages.introTitle")} />
       <StartOptions pages={pages} onCreate={onCreate} ticker={DEFAULT_TICKER} />
     </div>
   );
@@ -176,7 +177,10 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
       action: {
         label: t("edit.undo"),
         onClick: () => {
-          pageActions.restore(page, index);
+          if (!pageActions.restore(page, index)) {
+            toast.error(t("pages.limit", { max: MAX_PAGES }));
+            return;
+          }
           router.replace(pageHref(page.id), { scroll: false });
         },
       },

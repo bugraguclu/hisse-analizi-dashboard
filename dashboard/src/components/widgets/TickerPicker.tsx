@@ -4,8 +4,10 @@ import { useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { ChevronDown } from "lucide-react";
 import { POPUP_CLASS } from "@/components/charts/controls";
+import { useCompanies } from "@/components/dashboard/queries";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { cn } from "@/lib/utils";
+import { useWidgetI18n } from "./i18n";
 
 /** A button showing a stock symbol that opens the stock search to pick another. */
 export function TickerPicker({
@@ -24,8 +26,18 @@ export function TickerPicker({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { data: companies, isSuccess } = useCompanies();
+  const { t } = useWidgetI18n();
+
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setError(null);
+      }}
+    >
       <Popover.Trigger
         aria-label={`${label}: ${value}`}
         className={cn(
@@ -44,11 +56,24 @@ export function TickerPicker({
               variant="overlay"
               autoFocus
               onSelect={(ticker) => {
-                onChange(ticker);
+                const norm = ticker.trim().toUpperCase();
+                if (isSuccess && companies) {
+                  const exists = companies.some((c) => c.ticker.toUpperCase() === norm);
+                  if (!exists) {
+                    setError(t("ticker.notFound", { ticker: norm }));
+                    return;
+                  }
+                }
+                setError(null);
+                onChange(norm);
                 setOpen(false);
               }}
-              onClose={() => setOpen(false)}
+              onClose={() => {
+                setError(null);
+                setOpen(false);
+              }}
             />
+            {error ? <p className="mt-2 text-center text-xs font-medium text-destructive">{error}</p> : null}
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
