@@ -28,6 +28,7 @@ export function WidgetSettingsDialog({
   widget,
   meta,
   pageTicker,
+  pageHasTicker = true,
   tickerOverrides,
   onSave,
   onClose,
@@ -35,27 +36,40 @@ export function WidgetSettingsDialog({
   widget: WidgetInstance | null;
   meta: WidgetMeta | undefined;
   pageTicker: string;
+  pageHasTicker?: boolean;
   tickerOverrides: boolean;
   onSave: (patch: WidgetSettingsPatch) => void;
   onClose: () => void;
 }) {
   const open = widget !== null && meta !== undefined;
+  const [cached, setCached] = useState<{ widget: WidgetInstance; meta: WidgetMeta } | null>(null);
+
+  if (widget !== null && meta !== undefined && (cached?.widget !== widget || cached?.meta !== meta)) {
+    setCached({ widget, meta });
+  }
+
+  const active = widget !== null && meta !== undefined ? { widget, meta } : cached;
+
   return (
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
+      onOpenChangeComplete={(next) => {
+        if (!next) setCached(null);
+      }}
     >
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
         <Dialog.Popup className="fixed left-1/2 top-[12vh] z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-border bg-card text-foreground shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)] outline-none transition-[opacity,scale] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
-          {open ? (
+          {active ? (
             <SettingsForm
-              key={widget.id}
-              widget={widget}
-              meta={meta}
+              key={active.widget.id}
+              widget={active.widget}
+              meta={active.meta}
               pageTicker={pageTicker}
+              pageHasTicker={pageHasTicker}
               tickerOverrides={tickerOverrides}
               onSave={(patch) => {
                 onSave(patch);
@@ -74,6 +88,7 @@ function SettingsForm({
   widget,
   meta,
   pageTicker,
+  pageHasTicker = true,
   tickerOverrides,
   onSave,
   onCancel,
@@ -81,6 +96,7 @@ function SettingsForm({
   widget: WidgetInstance;
   meta: WidgetMeta;
   pageTicker: string;
+  pageHasTicker?: boolean;
   tickerOverrides: boolean;
   onSave: (patch: WidgetSettingsPatch) => void;
   onCancel: () => void;
@@ -131,7 +147,12 @@ function SettingsForm({
               value={ticker === null ? "page" : "own"}
               onChange={(value) => setTicker(value === "page" ? null : (ticker ?? pageTicker))}
               options={[
-                { value: "page", label: t("settings.tickerPage", { ticker: pageTicker }) },
+                {
+                  value: "page",
+                  label: pageHasTicker
+                    ? t("settings.tickerPage", { ticker: pageTicker })
+                    : t("settings.tickerDefault", { ticker: pageTicker }),
+                },
                 { value: "own", label: t("settings.tickerPick") },
               ]}
             />

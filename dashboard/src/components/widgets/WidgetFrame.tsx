@@ -120,7 +120,7 @@ export function WidgetFrame({
     >
       <div
         onPointerDown={(event) => event.stopPropagation()}
-        className="absolute right-2 top-2 flex max-w-[calc(100%-1rem)] cursor-default items-center gap-0.5 rounded-md border border-border bg-popover/95 p-0.5 text-popover-foreground shadow-[0_6px_16px_-8px_rgb(0_0_0/0.35)] backdrop-blur-sm"
+        className="absolute right-2 top-2 flex max-w-[calc(100%-1rem)] cursor-default items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-[0_6px_16px_-8px_rgb(0_0_0/0.35)]"
       >
         <button
           type="button"

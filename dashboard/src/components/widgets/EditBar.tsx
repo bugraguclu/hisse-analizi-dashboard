@@ -46,10 +46,9 @@ export function EditBar({ editor, widgets, onAdd, hint }: { editor: LayoutEditor
     <div
       role="toolbar"
       aria-label={t("edit.toolbar")}
-      className="fixed inset-x-3 bottom-3 z-40 mx-auto flex max-w-max items-center gap-1 overflow-x-auto rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-[0_16px_40px_-16px_rgb(0_0_0/0.45)] backdrop-blur scrollbar-none md:bottom-5"
+      className="fixed inset-x-3 bottom-3 z-40 mx-auto flex max-w-max items-center gap-1 overflow-x-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-[0_16px_40px_-16px_rgb(0_0_0/0.45)] scrollbar-none md:bottom-5"
     >
       <div className="hidden min-w-0 items-center gap-2 pl-2 pr-3 lg:flex">
-        <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-primary" />
         <span className="flex flex-col leading-tight">
           <span className="text-[12px] font-semibold text-foreground">
             {t("edit.mode")} <span className="font-normal text-muted-foreground">· {t("edit.count", { count: widgets })}</span>

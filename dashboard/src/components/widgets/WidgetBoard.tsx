@@ -155,9 +155,21 @@ function LazyPlaceholder({ minHeight }: { minHeight: number }) {
  * fundamentals endpoints don't compete with the cards on screen (as the
  * stock pages' LazySection did).
  */
-function LazyMount({ minHeight, children }: { minHeight: number; children: ReactNode }) {
+function LazyMount({
+  minHeight,
+  eager = false,
+  emptyLabel,
+  children,
+}: {
+  minHeight: number;
+  eager?: boolean;
+  emptyLabel?: string;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const shown = visible || eager;
+
   useEffect(() => {
     const element = ref.current;
     if (!element || visible) return;
@@ -173,9 +185,20 @@ function LazyMount({ minHeight, children }: { minHeight: number; children: React
     observer.observe(element);
     return () => observer.disconnect();
   }, [visible]);
+
   return (
     <div ref={ref} className="flex min-w-0 grow flex-col [&>*]:grow">
-      {visible ? children : <LazyPlaceholder minHeight={minHeight} />}
+      {shown ? (
+        <div
+          data-widget-body
+          data-empty-label={emptyLabel}
+          className="flex min-w-0 grow flex-col [&>*]:grow empty:flex empty:min-h-12 empty:items-center empty:justify-center empty:text-xs empty:text-muted-foreground [&:empty:after]:content-[attr(data-empty-label)]"
+        >
+          {children}
+        </div>
+      ) : (
+        <LazyPlaceholder minHeight={minHeight} />
+      )}
     </div>
   );
 }
@@ -185,12 +208,23 @@ function LazyMount({ minHeight, children }: { minHeight: number; children: React
  * height, and sets the plot to what fills the height exactly (chrome = card −
  * plot, so one step settles it). At the smallest plot the card scrolls.
  */
-function FittedChart({ height, basePlot, inert, children }: { height: number; basePlot: number; inert: boolean; children: ReactNode }) {
+function FittedChart({
+  height,
+  basePlot,
+  inert,
+  children,
+}: {
+  height: number | null;
+  basePlot: number;
+  inert: boolean;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [plot, setPlot] = useState<number | null>(null);
+
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element || height === null) return;
     const observer = new ResizeObserver(() => {
       const natural = element.offsetHeight;
       setPlot((current) => {
@@ -202,9 +236,10 @@ function FittedChart({ height, basePlot, inert, children }: { height: number; ba
     observer.observe(element);
     return () => observer.disconnect();
   }, [height, basePlot]);
+
   return (
-    <div ref={ref} inert={inert} className="flex min-w-0 shrink-0 flex-col [&>*:last-child]:grow">
-      <ChartHeightContext.Provider value={plot}>{children}</ChartHeightContext.Provider>
+    <div ref={ref} inert={inert} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
+      <ChartHeightContext.Provider value={height === null ? null : plot}>{children}</ChartHeightContext.Provider>
     </div>
   );
 }
@@ -306,6 +341,7 @@ export function WidgetBoard({
 
   const boardRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef(layout);
+  const removalRef = useRef<{ toastId: string | number; json: string } | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const focusAfterRef = useRef<string | null>(null);
 
@@ -321,6 +357,13 @@ export function WidgetBoard({
 
   useEffect(() => {
     layoutRef.current = layout;
+  }, [layout]);
+
+  useEffect(() => {
+    if (removalRef.current && JSON.stringify(layout) !== removalRef.current.json) {
+      toast.dismiss(removalRef.current.toastId);
+      removalRef.current = null;
+    }
   }, [layout]);
 
   // Leaving edit mode (or unmounting) ends any drag or resize in progress.
@@ -378,12 +421,17 @@ export function WidgetBoard({
       let hit: DropHit | null = null;
       let frame = 0;
       let unlock: (() => void) | null = null;
+      let resizeObserver: ResizeObserver | null = null;
 
       const update = () => {
         if (!measured) return;
         const next = hitTest(measured, pointerX + window.scrollX, pointerY + window.scrollY, GAP);
         hit = next && !isNoopMove(layoutRef.current, widgetId, next.target) ? next : null;
         setDrag({ widgetId, x: pointerX, y: pointerY, hit, origin: { left: measured.box.left, top: measured.box.top } });
+      };
+
+      const onScroll = () => {
+        update();
       };
 
       const autoScroll = () => {
@@ -398,12 +446,22 @@ export function WidgetBoard({
 
       const onMove = (move: PointerEvent) => {
         if (move.pointerId !== pointerId) return;
+        if (move.buttons === 0) {
+          finish(false);
+          return;
+        }
         pointerX = move.clientX;
         pointerY = move.clientY;
         if (!started) {
           if (Math.hypot(pointerX - startX, pointerY - startY) < 5) return;
           started = true;
           measured = measure(board);
+          resizeObserver = new ResizeObserver(() => {
+            measured = measure(board);
+            update();
+          });
+          resizeObserver.observe(board);
+          window.addEventListener("scroll", onScroll, { passive: true });
           unlock = lockCursor("grabbing");
           frame = window.requestAnimationFrame(autoScroll);
         }
@@ -416,6 +474,9 @@ export function WidgetBoard({
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("blur", onBlur);
+        window.removeEventListener("scroll", onScroll);
+        resizeObserver?.disconnect();
         window.cancelAnimationFrame(frame);
         unlock?.();
         cleanupRef.current = null;
@@ -441,11 +502,13 @@ export function WidgetBoard({
         key.stopPropagation();
         finish(false);
       };
+      const onBlur = () => finish(false);
 
       window.addEventListener("pointermove", onMove, { passive: false });
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
       window.addEventListener("keydown", onKey, true);
+      window.addEventListener("blur", onBlur);
       cleanupRef.current = () => finish(false);
     },
     [commit, nameOf, t],
@@ -471,6 +534,10 @@ export function WidgetBoard({
 
       const onMove = (move: PointerEvent) => {
         if (move.pointerId !== pointerId) return;
+        if (move.buttons === 0) {
+          finish(false);
+          return;
+        }
         next = resizeColumn(base, column.id, column.width + Math.round((move.clientX - startX) / pitch));
         setPreview(next === base ? null : next);
         const width = next.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width;
@@ -480,6 +547,8 @@ export function WidgetBoard({
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
+        window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("blur", onBlur);
         unlock();
         cleanupRef.current = null;
         setPreview(null);
@@ -492,9 +561,19 @@ export function WidgetBoard({
       const onCancel = (cancel: PointerEvent) => {
         if (cancel.pointerId === pointerId) finish(false);
       };
+      const onKey = (key: KeyboardEvent) => {
+        if (key.key !== "Escape") return;
+        key.preventDefault();
+        key.stopPropagation();
+        finish(false);
+      };
+      const onBlur = () => finish(false);
+
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("blur", onBlur);
       cleanupRef.current = () => finish(false);
     },
     [commit],
@@ -518,6 +597,10 @@ export function WidgetBoard({
 
       const onMove = (move: PointerEvent) => {
         if (move.pointerId !== pointerId) return;
+        if (move.buttons === 0) {
+          finish(false);
+          return;
+        }
         if (!moved && Math.abs(move.clientY - startY) < 3) return;
         moved = true;
         const height = clampHeight(startHeight + move.clientY - startY);
@@ -529,6 +612,8 @@ export function WidgetBoard({
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
+        window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("blur", onBlur);
         unlock();
         cleanupRef.current = null;
         setPreview(null);
@@ -541,9 +626,19 @@ export function WidgetBoard({
       const onCancel = (cancel: PointerEvent) => {
         if (cancel.pointerId === pointerId) finish(false);
       };
+      const onKey = (key: KeyboardEvent) => {
+        if (key.key !== "Escape") return;
+        key.preventDefault();
+        key.stopPropagation();
+        finish(false);
+      };
+      const onBlur = () => finish(false);
+
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("blur", onBlur);
       cleanupRef.current = () => finish(false);
     },
     [commit],
@@ -585,8 +680,23 @@ export function WidgetBoard({
   const remove = useCallback(
     (widgetId: string) => {
       const name = nameOf(findWidget(layout, widgetId)?.widget);
-      commit(removeWidget(layout, widgetId));
-      toast(t("widget.removed", { name }), { action: { label: t("edit.undo"), onClick: () => editor.undo() } });
+      const next = removeWidget(layout, widgetId);
+      commit(next);
+      const nextJson = JSON.stringify(next);
+      if (removalRef.current) {
+        toast.dismiss(removalRef.current.toastId);
+      }
+      const toastId = toast(t("widget.removed", { name }), {
+        action: {
+          label: t("edit.undo"),
+          onClick: () => {
+            if (JSON.stringify(layoutRef.current) === nextJson) {
+              editor.undo();
+            }
+          },
+        },
+      });
+      removalRef.current = { toastId, json: nextJson };
     },
     [commit, editor, layout, nameOf, t],
   );
@@ -683,15 +793,15 @@ export function WidgetBoard({
                       const name = nameOf(widget);
                       const Icon = meta?.icon;
                       const body = <WidgetBody type={widget.type} ticker={ticker} options={widget.options} components={components} />;
-                      const lazy = rowIndex >= lazyFromRow && !!meta && !isHeading;
-                      const content = (
-                        <>
-                          {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
-                            <p className="pb-1.5 font-mono text-[11px] font-semibold tracking-wide text-muted-foreground">{t("board.stockFor", { ticker })}</p>
-                          ) : null}
-                          <SectionHeadingLevel level={nested ? 3 : 2}>{lazy ? <LazyMount minHeight={meta.estimatedHeight}>{body}</LazyMount> : body}</SectionHeadingLevel>
-                        </>
+                      const eager = rowIndex < lazyFromRow && widget.options?.lazy !== true;
+                      const inner = isHeading ? (
+                        body
+                      ) : (
+                        <LazyMount eager={eager} minHeight={meta?.estimatedHeight ?? 240} emptyLabel={editing ? t("board.noData") : undefined}>
+                          {body}
+                        </LazyMount>
                       );
+                      const content = <SectionHeadingLevel level={nested ? 3 : 2}>{inner}</SectionHeadingLevel>;
                       const share = weight(widget);
                       const grow = share === null ? 0 : anyGrows ? share : 1;
                       return (
@@ -700,11 +810,19 @@ export function WidgetBoard({
                           data-widget-id={widget.id}
                           style={fixed ? { height: widget.height } : { flexGrow: grow }}
                           // While editing, room for the toolbar even on a one-line heading.
-                          className={cn("relative flex min-w-0 shrink-0 flex-col", editing && "min-h-12 justify-end")}
+                          className={cn(
+                            "relative flex min-w-0 shrink-0 flex-col",
+                            editing ? "min-h-12 justify-end" : "[&:has([data-widget-body]:empty)]:hidden",
+                          )}
                         >
-                          <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto overscroll-contain rounded-2xl scrollbar-thin")}>
-                            {fixed && meta?.plotHeight ? (
-                              <FittedChart height={widget.height ?? 0} basePlot={meta.plotHeight(resolveOptions(meta, widget.options))} inert={editing}>
+                          {meta?.stock && (context.ticker == null || ticker !== context.ticker) ? (
+                            <span className="pointer-events-none absolute left-3 top-0 z-[1] -translate-y-1/2 bg-background px-1 font-mono text-[10px] font-semibold tracking-wide text-muted-foreground">
+                              {t("board.stockFor", { ticker })}
+                            </span>
+                          ) : null}
+                          <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto rounded-2xl scrollbar-thin")}>
+                            {meta?.plotHeight ? (
+                              <FittedChart height={widget.height ?? null} basePlot={meta.plotHeight(resolveOptions(meta, widget.options))} inert={editing}>
                                 {content}
                               </FittedChart>
                             ) : (
@@ -847,6 +965,7 @@ export function WidgetBoard({
         widget={settingsWidget}
         meta={settingsWidget ? widgetMeta(settingsWidget.type) : undefined}
         pageTicker={pageTicker}
+        pageHasTicker={context.ticker != null}
         tickerOverrides={!!context.tickerOverrides}
         onSave={(patch) => settingsFor && commit(updateWidget(layout, settingsFor, patch))}
         onClose={() => setSettingsFor(null)}
@@ -863,7 +982,7 @@ function DropIndicator({ hit, origin, label }: { hit: DropHit; origin: { left: n
     ? { left: line.x - origin.left, top: line.y - origin.top - 2, width: line.length, height: 4 }
     : { left: line.x - origin.left - 2, top: line.y - origin.top, width: 4, height: line.length };
   return (
-    <div aria-hidden className="pointer-events-none absolute z-30 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_22%,transparent)]" style={style}>
+    <div aria-hidden className="pointer-events-none absolute z-30 rounded-full bg-primary" style={style}>
       {hit.target.kind === "row" ? (
         <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
           {label}
