@@ -9,9 +9,9 @@ Her kart artık bir widget, her sayfa bir widget düzeni. Varsayılan düzenler 
 **Düzenle** (Piyasa, Hisse sayfalarının dördü, Makro):
 - Kartı sürükleyip bırakın: bir sütunun içine (üstüne/altına), bir sütunun yanına (yeni sütun) ya da iki satırın arasına (yeni satır). Nereye düşeceğini mavi bir çizgi gösterir; ekranın kenarına gelince sayfa kayar; Esc vazgeçer.
 - Sütunun sağ kenarını sürükleyerek genişlik (12 sütunluk ızgarada; dolu satırda iki sütunun arasındaki ayraç gibi), kartın alt kenarını sürükleyerek yükseklik. Çift tıklama yüksekliği otomatiğe döndürür. Grafik kartlarında grafik yeni yüksekliğe sığacak şekilde büyür ya da küçülür.
-- Kart menüsü: genişlik (çeyrek, üçte bir, yarım, üçte iki, dörtte üç, tam genişlik — tam genişlik kartı kendi satırına alır), yükseklik, taşı (yukarı/aşağı/sola/sağa), ayarlar (görünüm, kompakt, kartın izlediği hisse) ve kaldır. Tutamak seçiliyken ok tuşları kartı taşır.
-- Satırdaki boş alanda ve sayfanın sonunda "+": widget galerisi (36 widget, arama, kategoriler). Geri al / yinele (⌘Z, ⇧⌘Z), varsayılana dön.
-- Düzenler bu tarayıcıda saklanır; hisse sayfasının düzeni her hisse için geçerli. Telefonda kartlar tek sütunda; taşıma ve boyut kart menüsünden.
+- Kart menüsü: genişlik (çeyrek, üçte bir, yarım, üçte iki, dörtte üç, tam genişlik — tam genişlik kartı kendi satırına alır), yükseklik, taşı (yukarı/aşağı/sola/sağa — komşu sütunlara ve satırlara birleşme/ayrılma adımları), ayarlar (görünüm, kompakt, kartın izlediği hisse) ve kaldır. Tutamak seçiliyken ok tuşları kartı taşır.
+- Satırdaki boş alanda ve sayfanın sonunda "+": widget galerisi (35 widget, arama, kategoriler). Geri al / yinele (⌘Z, ⇧⌘Z), varsayılana dön.
+- Düzenler bu tarayıcıda saklanır; hisse sayfasının düzeni her hisse için geçerli. Kişiselleştirilmiş sayfalarda varsayılan düzenin anlık parlaması (flash) çerez tabanlı durum kontrolüyle engellendi. Bütün kartları kaldırılmış boş sayfalar geçerli bir düzen olarak korunur. Telefonda kartlar tek sütunda; taşıma ve boyut kart menüsünden.
 
 **Sayfalarım** (`/sayfalarim`): kendi sayfalarınız (en fazla 12). Boş sayfa ya da şablon (hisse özeti, temel, teknik, temettü ve bilanço, piyasa özeti, makro). Her sayfanın bir hissesi var; tek tek kartlar başka bir hisseyi izleyebilir ("GARAN için"). Yeniden adlandırma, çoğaltma, silme (geri alınabilir). Başlık ve not widget'ları; Makro sayfasının bölüm bağlantıları başlıklardan gelir.
 
