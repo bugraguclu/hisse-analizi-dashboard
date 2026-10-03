@@ -2,6 +2,14 @@
 
 ## Yayımlanmamış
 
+### İpuçları imleci izler
+
+- Çubuk ve göstergelerin ipucu artık her zaman imlecin üzerindeki parçaya ait. Önceden bir parçaya tıklamak ipucunu o parçaya sabitliyordu. İmleç başka parçaya geçince ya da çubuktan çıkınca eski ipucu ekranda kalıyor, yenisi açılmıyordu; vurgu ise yeni parçaya geçiyordu.
+- Artık farenin tıklaması bir şey sabitlemez. Dokunmatik ekranda dokunmak ipucunu açar, aynı parçaya yeniden dokunmak kapatır, başka parçaya dokunmak ona geçer. Klavyeyle odaklanınca açılır. Soluklaşan parçalar her zaman ipucu görünen parçaya göre belirlenir.
+- Ortak bileşen `dashboard/src/components/charts/mini/ChartTooltip.tsx`. Onu kullananlar: teknik özet ve zaman dilimi oy çubukları, piyasa genişliği, ortaklık yapısı, finansal oranlar, analist hedef fiyatı, RSI ve Stokastik göstergeleri.
+- Ortaklık yapısı listesi ve piyasa genişliği etiketleri de çubukla aynı olay türünü (pointer) dinler. Bir satırdan çubuğa hızlı geçişte vurgu artık kaybolmuyor.
+- Fiyat grafiğinin olay rozetleri: tıklanan rozetin kutusu bağlantılarıyla açık kalır. Başka bir rozetin üzerine gelince o rozetin bilgisi görünür, rozetlerden çıkınca tıklanan kutu geri gelir. Üst üste dizili rozetlerin üzerinden geçen imleç de tıklanan kutuya ulaşır. Vurgulu rozet her zaman kutusu görünen rozettir.
+
 ### Grafikler: dolar bazında görünüm
 
 Hisse ve BIST 100 grafikleri araç çubuğundaki **USD** düğmesiyle (ya da Alt+U) dolar bazında gösterilir. Seçim tarayıcıda hatırlanır.

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -26,6 +25,7 @@ export interface SegmentBarProps {
   showPercent?: boolean;
   /** Controlled highlight (sync with an external list). Omit for uncontrolled. */
   highlightKey?: string | null;
+  /** Called with the segment whose tooltip shows (null when it closes). */
   onHighlightChange?: (key: string | null) => void;
   /** false renders a purely decorative, aria-hidden bar (no focus, no tooltip). */
   interactive?: boolean;
@@ -34,7 +34,7 @@ export interface SegmentBarProps {
 
 /**
  * 100%-stacked horizontal bar. Segments grow from the left on mount, the
- * hovered/focused segment gets a hairline outline while the rest dim, and
+ * segment whose tooltip shows gets a hairline outline while the rest dim, and
  * every non-zero segment carries a hover+focus tooltip (value leads, label
  * and share% follow) on top of its own accessible name.
  */
@@ -51,17 +51,11 @@ export function SegmentBar({
 }: SegmentBarProps) {
   const { t } = useMiniChartI18n();
   const motionAllowed = useMotionAllowed();
-  const { getTriggerProps, tooltip } = useChartTooltip();
-  const [internalHighlight, setInternalHighlight] = useState<string | null>(null);
+  // The highlight follows the tooltip, so the lifted segment is always the one whose numbers show.
+  const { activeKey, getTriggerProps, tooltip } = useChartTooltip({ onActiveKeyChange: onHighlightChange });
 
-  const controlled = highlightKey !== undefined;
-  const effectiveHighlight = controlled ? highlightKey : internalHighlight;
+  const effectiveHighlight = highlightKey !== undefined ? highlightKey : activeKey;
   const fmt = formatValue ?? ((value: number) => formatNumber(value, 0));
-
-  function setHighlight(key: string | null) {
-    if (!controlled) setInternalHighlight(key);
-    onHighlightChange?.(key);
-  }
 
   const visible = segments.filter((segment) => segment.value > 0);
   const total = visible.reduce((sum, segment) => sum + segment.value, 0);
@@ -104,29 +98,9 @@ export function SegmentBar({
           return (
             <div
               key={segment.key}
+              {...trigger}
               role="img"
               aria-label={`${segment.label}: ${fmt(segment.value)} (${formatPercent(share, 1)})`}
-              tabIndex={trigger.tabIndex}
-              aria-describedby={trigger["aria-describedby"]}
-              data-tooltip-scope={trigger["data-tooltip-scope"]}
-              onMouseEnter={(event) => {
-                trigger.onMouseEnter(event);
-                setHighlight(segment.key);
-              }}
-              onMouseLeave={(event) => {
-                trigger.onMouseLeave(event);
-                setHighlight(null);
-              }}
-              onFocus={(event) => {
-                trigger.onFocus(event);
-                setHighlight(segment.key);
-              }}
-              onBlur={(event) => {
-                trigger.onBlur(event);
-                setHighlight(null);
-              }}
-              onClick={trigger.onClick}
-              onKeyDown={trigger.onKeyDown}
               className={segClassName}
               style={style}
             />

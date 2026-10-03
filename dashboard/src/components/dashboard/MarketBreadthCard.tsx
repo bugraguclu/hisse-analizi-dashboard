@@ -130,6 +130,9 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   const breadth = useMemo(() => (rows ? computeBreadth(rows, companiesQ.data) : null), [rows, companiesQ.data]);
   const total = breadth ? breadth.up + breadth.down + breadth.flat : 0;
   const [highlight, setHighlight] = useState<string | null>(null);
+  // The legend uses pointer events like the bar's tooltip, so moving between a label and a segment
+  // leaves one before entering the other; a label only clears its own highlight.
+  const clearHighlight = (key: string) => setHighlight((current) => (current === key ? null : current));
 
   let body: React.ReactNode;
   if (screenerQ.isPending || (companiesQ.isPending && !companiesQ.isError)) {
@@ -151,10 +154,10 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               aria-label={`${breadth.up} ${t("dashboard.advancers")}`}
               tabIndex={0}
               className={cn("outline-none transition-opacity", "text-up", highlight != null && highlight !== "up" && "opacity-50")}
-              onMouseEnter={() => setHighlight("up")}
-              onMouseLeave={() => setHighlight(null)}
+              onPointerEnter={() => setHighlight("up")}
+              onPointerLeave={() => clearHighlight("up")}
               onFocus={() => setHighlight("up")}
-              onBlur={() => setHighlight(null)}
+              onBlur={() => clearHighlight("up")}
             >
               {breadth.up} {t("dashboard.advancers")}
             </span>
@@ -163,10 +166,10 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               aria-label={`${breadth.flat} ${t("dashboard.unchanged")}`}
               tabIndex={0}
               className={cn("outline-none transition-opacity", "text-muted-foreground", highlight != null && highlight !== "flat" && "opacity-50")}
-              onMouseEnter={() => setHighlight("flat")}
-              onMouseLeave={() => setHighlight(null)}
+              onPointerEnter={() => setHighlight("flat")}
+              onPointerLeave={() => clearHighlight("flat")}
               onFocus={() => setHighlight("flat")}
-              onBlur={() => setHighlight(null)}
+              onBlur={() => clearHighlight("flat")}
             >
               {breadth.flat} {t("dashboard.unchanged")}
             </span>
@@ -175,10 +178,10 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               aria-label={`${breadth.down} ${t("dashboard.decliners")}`}
               tabIndex={0}
               className={cn("outline-none transition-opacity", "text-down", highlight != null && highlight !== "down" && "opacity-50")}
-              onMouseEnter={() => setHighlight("down")}
-              onMouseLeave={() => setHighlight(null)}
+              onPointerEnter={() => setHighlight("down")}
+              onPointerLeave={() => clearHighlight("down")}
               onFocus={() => setHighlight("down")}
-              onBlur={() => setHighlight(null)}
+              onBlur={() => clearHighlight("down")}
             >
               {breadth.down} {t("dashboard.decliners")}
             </span>

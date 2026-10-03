@@ -168,15 +168,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
                   return (
                     <li
                       key={row.key}
-                      tabIndex={trigger.tabIndex}
-                      aria-describedby={trigger["aria-describedby"]}
-                      data-tooltip-scope={trigger["data-tooltip-scope"]}
-                      onMouseEnter={trigger.onMouseEnter}
-                      onMouseLeave={trigger.onMouseLeave}
-                      onFocus={trigger.onFocus}
-                      onBlur={trigger.onBlur}
-                      onClick={trigger.onClick}
-                      onKeyDown={trigger.onKeyDown}
+                      {...trigger}
                       className={cn(
                         "col-span-full -mx-1.5 grid min-h-7 grid-cols-subgrid items-center rounded-sm px-1.5 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/60",
                         withSector && "gap-y-1.5 py-1.5 @sm:gap-y-0 @sm:py-0",

@@ -496,6 +496,11 @@ export function FinancialChart({
   const [scrolledBack, setScrolledBack] = useState(false);
   const [manualScale, setManualScale] = useState(false);
   const [eventTip, setEventTip] = useState<EventTip | null>(null);
+  /**
+   * The clicked badge: its tip (a dialog with links) shows whenever the pointer is on no other badge.
+   * A ref, so a crosshair event right after the click already sees the new pin.
+   */
+  const pinnedEventRef = useRef<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const coarsePointer = useCoarsePointer();
   const [announcement, setAnnouncement] = useState("");
@@ -1051,25 +1056,32 @@ export function FinancialChart({
     onHoverChange?.(index);
     const objectId = param.hoveredInfo?.objectId;
     const eventId = typeof objectId === "string" && objectId.startsWith("event:") ? objectId.slice(6) : null;
-    eventsRef.current?.setActive(eventId);
+    // The badge under the pointer shows its tip, over a pinned one too; off the badges the pinned tip
+    // comes back, so the pointer can cross a stacked badge on its way to the pinned tip's links.
+    const pinnedId = pinnedEventRef.current;
+    const shownId = eventId ?? pinnedId;
+    eventsRef.current?.setActive(shownId);
     setEventTip((current) => {
-      if (current?.pinned) return current;
-      if (!eventId) return null;
-      if (current?.id === eventId) return current;
-      const position = eventsRef.current?.positionOf(eventId);
-      return position ? { id: eventId, x: position.x, y: position.y, pinned: false } : null;
+      if (!shownId) return null;
+      if (current?.id === shownId) return current;
+      const position = eventsRef.current?.positionOf(shownId);
+      return position ? { id: shownId, x: position.x, y: position.y, pinned: shownId === pinnedId } : null;
     });
   });
   const onClick = useEffectEvent((param: MouseEventParams<Time>) => {
     const objectId = param.hoveredInfo?.objectId;
     const eventId = typeof objectId === "string" && objectId.startsWith("event:") ? objectId.slice(6) : null;
-    if (!eventId) {
-      setEventTip((current) => (current?.pinned ? null : current));
-      return;
-    }
-    const position = eventsRef.current?.positionOf(eventId);
-    if (position) setEventTip({ id: eventId, x: position.x, y: position.y, pinned: true });
+    // A click on a badge pins its tip, anywhere else unpins.
+    pinnedEventRef.current = eventId;
+    eventsRef.current?.setActive(eventId);
+    const position = eventId ? eventsRef.current?.positionOf(eventId) : null;
+    setEventTip(eventId && position ? { id: eventId, x: position.x, y: position.y, pinned: true } : null);
   });
+  const closeEventTip = () => {
+    pinnedEventRef.current = null;
+    setEventTip(null);
+    eventsRef.current?.setActive(null);
+  };
   const onDoubleClick = useEffectEvent(() => resetView());
   useEffect(() => {
     if (!engine) return;
@@ -1489,7 +1501,7 @@ export function FinancialChart({
         setHoverIndex(null);
         onHoverChange?.(null);
         setMeasure(null);
-        setEventTip(null);
+        closeEventTip();
         if (tool !== "cursor") onToolChange?.("cursor");
         // Nothing to clear: let the Escape reach the full-screen dialog.
         if (!cleared) return;
@@ -1613,7 +1625,7 @@ export function FinancialChart({
             events={tipEvents}
             plotWidth={axisBox?.plotWidth ?? 0}
             interval={series.interval}
-            onClose={() => setEventTip(null)}
+            onClose={closeEventTip}
           />
         ) : null}
         {axisBox && scrolledBack && bars.length > 0 ? (

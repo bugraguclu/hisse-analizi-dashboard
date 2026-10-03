@@ -11,6 +11,7 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -18,36 +19,60 @@ import { cn } from "@/lib/utils";
 import { TONE_BG, type Tone } from "./tone";
 
 /**
- * Shared tooltip primitive for every mini chart (SegmentBar, RangeGauge,
- * MeterBar, TargetRange, Sparkline). Renders in a portal to `document.body`
- * with `position: fixed` so it always escapes a card's `overflow-hidden`,
- * flips above/below the anchor and clamps to the viewport.
+ * Shared tooltip primitive for the mini charts (SegmentBar, RangeGauge,
+ * TargetRange, Sparkline) and the RatiosCard rows. Renders in a portal to
+ * `document.body` with `position: fixed` so it always escapes a card's
+ * `overflow-hidden`, flips above/below the anchor and clamps to the viewport.
  *
  * Tooltips only ever ENHANCE: the same value must be reachable without one
  * (visible text, list row, aria-label). This primitive just owns the
- * show/hide state machine (hover, keyboard focus, touch tap-to-toggle,
- * Escape/scroll/resize/blur to dismiss) and the floating box itself.
+ * show/hide state machine and the floating box itself. There is one tooltip
+ * per chart and it always belongs to the mark the user is on:
+ * - mouse: entering a mark shows it, leaving hides it, entering another mark
+ *   switches to that one. A click never pins, so a clicked mark can't keep its
+ *   tooltip up while the pointer is on another mark or off the chart.
+ * - touch / pen (no hover): a tap shows the mark, a second tap hides it, a tap
+ *   on another mark switches to it.
+ * - keyboard: focus shows, blur hides; leaving a hovered mark falls back to
+ *   the keyboard-focused one.
+ * Escape, scroll, resize and a press outside the chart dismiss it.
  */
 
 const VIEWPORT_MARGIN = 8;
 const ANCHOR_GAP = 6;
 
+/** What brought the tooltip up, which decides what takes it down again. */
+type TooltipSource = "hover" | "focus" | "tap";
+
 interface ActiveTooltip {
   key: string;
   content: ReactNode;
   rect: DOMRect;
+  source: TooltipSource;
+}
+
+interface FocusedMark {
+  key: string;
+  content: ReactNode;
+  element: Element;
 }
 
 export interface ChartTooltipTriggerProps {
   tabIndex: 0;
   "aria-describedby": string | undefined;
   "data-tooltip-scope": string;
-  onMouseEnter: (event: MouseEvent<Element>) => void;
-  onMouseLeave: (event: MouseEvent<Element>) => void;
+  onPointerEnter: (event: PointerEvent<Element>) => void;
+  onPointerLeave: (event: PointerEvent<Element>) => void;
+  onPointerDown: (event: PointerEvent<Element>) => void;
   onFocus: (event: FocusEvent<Element>) => void;
   onBlur: (event: FocusEvent<Element>) => void;
   onClick: (event: MouseEvent<Element>) => void;
   onKeyDown: (event: KeyboardEvent<Element>) => void;
+}
+
+export interface UseChartTooltipOptions {
+  /** Called when the tooltip moves to another mark or closes (null), e.g. to keep a highlight on the mark it shows. */
+  onActiveKeyChange?: (key: string | null) => void;
 }
 
 export interface UseChartTooltipResult {
@@ -55,7 +80,7 @@ export interface UseChartTooltipResult {
   tooltipId: string;
   /** Key of the mark currently shown, or null. */
   activeKey: string | null;
-  /** Whether `key` is the mark currently shown (hover, focus or pinned). */
+  /** Whether `key` is the mark currently shown (hover, focus or tap). */
   isActive: (key: string) => boolean;
   /** Build hover/focus/click/keyboard wiring for one discrete interactive mark. Spread onto the DOM element. */
   getTriggerProps: (key: string, content: ReactNode) => ChartTooltipTriggerProps;
@@ -68,28 +93,47 @@ export interface UseChartTooltipResult {
   tooltip: ReactNode;
 }
 
-export function useChartTooltip(): UseChartTooltipResult {
+export function useChartTooltip({ onActiveKeyChange }: UseChartTooltipOptions = {}): UseChartTooltipResult {
   const tooltipId = `chart-tooltip-${useId()}`;
   const [active, setActive] = useState<ActiveTooltip | null>(null);
-  const pinnedRef = useRef(false);
+  // The handlers read the latest tooltip here, not the one of the render that created them.
+  const activeRef = useRef<ActiveTooltip | null>(null);
+  /** The mark with keyboard focus: the tooltip goes back to it when the mouse leaves another mark. */
+  const focusedRef = useRef<FocusedMark | null>(null);
+  /** Pointer type of the press before a click; null when a keyboard or assistive technology clicked. */
+  const pressRef = useRef<string | null>(null);
+  const onActiveKeyChangeRef = useRef(onActiveKeyChange);
+  useLayoutEffect(() => {
+    onActiveKeyChangeRef.current = onActiveKeyChange;
+  });
+
+  const commit = useCallback((next: ActiveTooltip | null) => {
+    const previousKey = activeRef.current?.key ?? null;
+    activeRef.current = next;
+    setActive(next);
+    const nextKey = next?.key ?? null;
+    if (nextKey !== previousKey) onActiveKeyChangeRef.current?.(nextKey);
+  }, []);
 
   const hide = useCallback(() => {
-    pinnedRef.current = false;
-    setActive(null);
-  }, []);
+    focusedRef.current = null;
+    commit(null);
+  }, [commit]);
 
-  const show = useCallback((key: string, content: ReactNode, rect: DOMRect) => {
-    setActive({ key, content, rect });
-  }, []);
+  const show = useCallback(
+    (key: string, content: ReactNode, rect: DOMRect) => commit({ key, content, rect, source: "hover" }),
+    [commit],
+  );
 
   // Escape / scroll / resize / outside pointerdown all dismiss — only wired while open.
+  const open = active !== null;
   useEffect(() => {
-    if (!active) return;
+    if (!open) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") hide();
     };
     const onScrollOrResize = () => hide();
-    const onPointerDown = (event: PointerEvent) => {
+    const onPointerDown = (event: globalThis.PointerEvent) => {
       let node = event.target instanceof Node ? event.target : null;
       while (node) {
         if (node instanceof Element && node.getAttribute("data-tooltip-scope") === tooltipId) return;
@@ -107,36 +151,57 @@ export function useChartTooltip(): UseChartTooltipResult {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [active, hide, tooltipId]);
+  }, [open, hide, tooltipId]);
 
-  const getTriggerProps = useCallback(
-    (key: string, content: ReactNode): ChartTooltipTriggerProps => ({
+  function getTriggerProps(key: string, content: ReactNode): ChartTooltipTriggerProps {
+    const showOn = (element: Element, source: TooltipSource) =>
+      commit({ key, content, rect: element.getBoundingClientRect(), source });
+    return {
       tabIndex: 0,
       "aria-describedby": active?.key === key ? tooltipId : undefined,
       "data-tooltip-scope": tooltipId,
-      onMouseEnter: (event) => {
-        if (pinnedRef.current) return;
-        setActive({ key, content, rect: event.currentTarget.getBoundingClientRect() });
+      // Touch and pen fire enter/leave around every tap as well: their taps go through onClick.
+      onPointerEnter: (event) => {
+        if (event.pointerType === "mouse") showOn(event.currentTarget, "hover");
       },
-      onMouseLeave: () => {
-        if (pinnedRef.current) return;
-        setActive((current) => (current?.key === key ? null : current));
+      onPointerLeave: (event) => {
+        const current = activeRef.current;
+        if (event.pointerType !== "mouse" || current?.key !== key || current.source !== "hover") return;
+        const focused = focusedRef.current;
+        commit(
+          focused?.element.isConnected
+            ? { key: focused.key, content: focused.content, rect: focused.element.getBoundingClientRect(), source: "focus" }
+            : null,
+        );
+      },
+      onPointerDown: (event) => {
+        pressRef.current = event.pointerType;
+        // Mousing on the chart drops the keyboard fallback, so a clicked mark never comes back on its own.
+        if (event.pointerType === "mouse") focusedRef.current = null;
       },
       onFocus: (event) => {
-        setActive({ key, content, rect: event.currentTarget.getBoundingClientRect() });
+        // A click or tap focuses the mark too; only keyboard focus shows the tooltip.
+        if (!event.currentTarget.matches(":focus-visible")) return;
+        focusedRef.current = { key, content, element: event.currentTarget };
+        showOn(event.currentTarget, "focus");
       },
       onBlur: () => {
-        if (pinnedRef.current) return;
-        setActive((current) => (current?.key === key ? null : current));
+        if (focusedRef.current?.key === key) focusedRef.current = null;
+        const current = activeRef.current;
+        if (current?.key === key && current.source === "focus") commit(null);
       },
       onClick: (event) => {
-        if (active?.key === key && pinnedRef.current) {
-          pinnedRef.current = false;
-          setActive(null);
+        const pointerType = pressRef.current;
+        pressRef.current = null;
+        const current = activeRef.current;
+        if (pointerType === "mouse") {
+          // Hovering already shows it; a click only brings it back after Escape or a scroll.
+          if (current?.key !== key) showOn(event.currentTarget, "hover");
           return;
         }
-        pinnedRef.current = true;
-        setActive({ key, content, rect: event.currentTarget.getBoundingClientRect() });
+        // Touch, pen, or a click from the keyboard or assistive technology: tap to toggle.
+        if (current?.key === key && current.source !== "hover") commit(null);
+        else showOn(event.currentTarget, "tap");
       },
       onKeyDown: (event) => {
         if (event.key === "Escape") {
@@ -144,9 +209,8 @@ export function useChartTooltip(): UseChartTooltipResult {
           hide();
         }
       },
-    }),
-    [active, hide, tooltipId],
-  );
+    };
+  }
 
   return {
     tooltipId,

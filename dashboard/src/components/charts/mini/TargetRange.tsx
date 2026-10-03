@@ -58,17 +58,9 @@ function Marker({
 }) {
   return (
     <div
+      {...trigger}
       role="img"
       aria-label={ariaLabel}
-      tabIndex={trigger.tabIndex}
-      aria-describedby={trigger["aria-describedby"]}
-      data-tooltip-scope={trigger["data-tooltip-scope"]}
-      onMouseEnter={trigger.onMouseEnter}
-      onMouseLeave={trigger.onMouseLeave}
-      onFocus={trigger.onFocus}
-      onBlur={trigger.onBlur}
-      onClick={trigger.onClick}
-      onKeyDown={trigger.onKeyDown}
       className={cn(
         "absolute top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
         className,

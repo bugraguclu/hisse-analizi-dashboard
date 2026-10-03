@@ -1,5 +1,5 @@
 export { TooltipNote, TooltipValueRow, useChartTooltip } from "./ChartTooltip";
-export type { ChartTooltipTriggerProps, UseChartTooltipResult } from "./ChartTooltip";
+export type { ChartTooltipTriggerProps, UseChartTooltipOptions, UseChartTooltipResult } from "./ChartTooltip";
 
 export { SegmentBar } from "./SegmentBar";
 export type { SegmentBarProps, SegmentBarSegment } from "./SegmentBar";

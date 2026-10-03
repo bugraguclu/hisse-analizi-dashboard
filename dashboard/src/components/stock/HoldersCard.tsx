@@ -60,10 +60,12 @@ export function HoldersCard({ ticker }: { ticker: string }) {
                     "-mx-1.5 grid min-h-7 grid-cols-[minmax(0,1fr)_5rem_3.5rem] items-center gap-3 rounded-sm px-1.5 outline-none transition-opacity hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/60",
                     dimmed && "opacity-60",
                   )}
-                  onMouseEnter={() => setHighlight(segKey)}
-                  onMouseLeave={() => setHighlight(null)}
+                  // Pointer events like the bar's tooltip, so moving between a row and a segment
+                  // leaves one before entering the other; a row only clears its own highlight.
+                  onPointerEnter={() => setHighlight(segKey)}
+                  onPointerLeave={() => setHighlight((current) => (current === segKey ? null : current))}
                   onFocus={() => setHighlight(segKey)}
-                  onBlur={() => setHighlight(null)}
+                  onBlur={() => setHighlight((current) => (current === segKey ? null : current))}
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", TONE_BG[tone])} />
