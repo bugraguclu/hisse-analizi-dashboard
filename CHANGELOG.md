@@ -1,6 +1,6 @@
 # Değişiklik Günlüğü
 
-## Yayımlanmamış
+## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi
 
