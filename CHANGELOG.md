@@ -10,6 +10,12 @@
 - Ortaklık yapısı listesi ve piyasa genişliği etiketleri de çubukla aynı olay türünü (pointer) dinler. Bir satırdan çubuğa hızlı geçişte vurgu artık kaybolmuyor.
 - Fiyat grafiğinin olay rozetleri: tıklanan rozetin kutusu bağlantılarıyla açık kalır. Başka bir rozetin üzerine gelince o rozetin bilgisi görünür, rozetlerden çıkınca tıklanan kutu geri gelir. Üst üste dizili rozetlerin üzerinden geçen imleç de tıklanan kutuya ulaşır. Vurgulu rozet her zaman kutusu görünen rozettir.
 
+### Piyasa şeridi tıklanabilir
+
+- Üstteki kayan şeridin her kalemi, sitede o verinin gösterildiği yere gider. Döviz, altın, Brent ve tahvil faizleri Makro Ekonomi'de o enstrüman seçili olarak piyasa grafiğine iner (`/makro?piyasa=usdtry`). BIST 100 ana sayfadaki endeks grafiğine gider; kendi sayfası olmayan BIST 30, BIST Banka ve BIST Sınai, Hisse Tarama'da o endeksin hisselerini açar (`/tarama?idx=XU030`). Önceden döviz kalemleri makro sayfasının en üstüne gidiyordu, makro sayfasındayken de tıklamak hiçbir şey yapmıyordu.
+- Üzerine gelince kalem öne çıkar: hafif bir zemin belirir, etiket parlaklaşır (şerit zaten imlecin altında durur). İpucu kalemin nereye gittiğini ve verinin kaynağını yazar.
+- Makro sayfası bu bağlantıyla açılınca grafik, üstteki paneller yüklenip yükseklik değiştirirken yerinde tutulur (telefonda ilk atlama sayfanın sonuna takılabiliyordu). Makro sayfasındayken tıklanınca grafiğe yumuşak kayar (hareketi azalt ayarında atlar). `piyasa` parametresi iş bitince adresten silinir, böylece aynı kaleme yeniden tıklamak yine grafiğe götürür; bilinmeyen anahtar yok sayılır (`dashboard/src/components/makro/RequestedMarket.tsx`).
+
 ### Grafikler: dolar bazında görünüm
 
 Hisse ve BIST 100 grafikleri araç çubuğundaki **USD** düğmesiyle (ya da Alt+U) dolar bazında gösterilir. Seçim tarayıcıda hatırlanır.

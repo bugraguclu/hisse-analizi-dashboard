@@ -10,17 +10,22 @@ import type { TranslationKey } from "@/lib/i18n";
 import { useMarketStatus } from "@/hooks/use-market-status";
 import { findQuote, quoteTimeMs, useIndexQuotes } from "@/components/dashboard/queries";
 import { formatBp, formatMarketValue } from "@/components/makro/format";
+import { marketHref } from "@/components/makro/links";
 import { useMarkets } from "@/components/makro/queries";
 import type { MarketQuote } from "@/components/makro/types";
 import { cn } from "@/lib/utils";
 import { useMarquee, useMarqueePause } from "./use-marquee";
 
-/** Headline BIST indices, in tape order, with their short names. */
+/**
+ * Headline BIST indices, in tape order, with their short names. The home page opens with
+ * the BIST 100 chart; the others have no page of their own, so they open their stocks in
+ * the screener.
+ */
 const STRIP_INDICES = [
-  { symbol: "XU100", label: "BIST 100" },
-  { symbol: "XU030", label: "BIST 30" },
-  { symbol: "XBANK", label: "BIST Banka" },
-  { symbol: "XUSIN", label: "BIST Sınai" },
+  { symbol: "XU100", label: "BIST 100", opens: "home" },
+  { symbol: "XU030", label: "BIST 30", opens: "screener" },
+  { symbol: "XBANK", label: "BIST Banka", opens: "screener" },
+  { symbol: "XUSIN", label: "BIST Sınai", opens: "screener" },
 ] as const;
 
 interface TapeInstrument {
@@ -62,7 +67,10 @@ interface TapeEntry {
   change?: number | null;
   changeText?: string;
   neutral?: boolean;
+  /** Where the site shows this figure. */
   href?: string;
+  /** The destination brings its target into view itself (the macro page's chart). */
+  keepScroll?: boolean;
   title?: string;
 }
 
@@ -80,7 +88,9 @@ function TapeItem({ entry, clone }: { entry: TapeEntry; clone: boolean }) {
     </>
   ) : (
     <>
-      <span className="text-muted-foreground transition-colors group-hover:text-foreground">{entry.label}</span>
+      <span className="text-muted-foreground transition-colors group-hover:text-foreground group-focus-visible:text-foreground">
+        {entry.label}
+      </span>
       <span className="font-mono font-medium tabular-nums text-foreground">{entry.value}</span>
       <span
         className={cn(
@@ -100,10 +110,13 @@ function TapeItem({ entry, clone }: { entry: TapeEntry; clone: boolean }) {
           href={entry.href}
           // A moving tape would otherwise prefetch the link every time it scrolls into view.
           prefetch={false}
+          scroll={entry.keepScroll ? false : undefined}
           draggable={false}
           tabIndex={clone ? -1 : undefined}
           title={entry.title}
-          className="group flex items-baseline gap-2 whitespace-nowrap rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          // The tape stops under the pointer; the item lights up. The negative margin keeps the
+          // padded highlight from moving the tape.
+          className="group -mx-1.5 flex items-baseline gap-2 whitespace-nowrap rounded-sm px-1.5 py-0.5 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {content}
         </Link>
@@ -142,7 +155,8 @@ function TapeCopy({ groups, clone, ref }: { groups: TapeGroup[]; clone: boolean;
 /**
  * Market tape under the header: BIST indices, live FX / gold / oil and the
  * benchmark bond yields, scrolling endlessly (drag, swipe, wheel, Tab and a
- * pause button), with the session status fixed on the right.
+ * pause button), with the session status fixed on the right. Every item links
+ * to where the site shows it.
  */
 export function MarketStrip() {
   const { t, locale } = useLocale();
@@ -159,7 +173,7 @@ export function MarketStrip() {
 
   const groups: TapeGroup[] = [];
 
-  const indexEntries = STRIP_INDICES.flatMap<TapeEntry>(({ symbol, label }) => {
+  const indexEntries = STRIP_INDICES.flatMap<TapeEntry>(({ symbol, label, opens }) => {
     if (quotesQ.isPending) return [{ id: symbol, label, pending: true }];
     const quote = findQuote(quotes, symbol);
     if (!quote) return [];
@@ -171,6 +185,11 @@ export function MarketStrip() {
         value: formatNumber(quote.last !== null && quote.last > 0 ? quote.last : null),
         change: quote.change_percent,
         changeText: formatChangePercent(quote.change_percent),
+        href: opens === "home" ? "/" : `/tarama?idx=${symbol}`,
+        title:
+          opens === "home"
+            ? t("shell.tapeChartAt", { name: label, page: t("nav.dashboard") })
+            : t("shell.tapeStocksAt", { name: label, page: t("nav.screening") }),
       },
     ];
   });
@@ -185,6 +204,7 @@ export function MarketStrip() {
       if (!quote || typeof quote.last !== "number" || !Number.isFinite(quote.last)) return [];
       const updatedAt = quote.updated_at ?? marketsQ.data?.as_of;
       const source = t(yields ? "shell.tapeYieldSource" : "shell.tapePriceSource");
+      const destination = t("shell.tapeChartAt", { name: label, page: t("nav.macroEconomy") });
       return [
         {
           id: instrument.key,
@@ -194,10 +214,12 @@ export function MarketStrip() {
           change: yields ? quote.change : quote.change_percent,
           changeText: yields ? formatBp(quote.change, locale) : formatChangePercent(quote.change_percent),
           neutral: yields,
-          href: "/makro",
-          title: updatedAt
-            ? `${source}, ${t("shell.tapeUpdated", { time: formatMarketDate(updatedAt, "time") })}`
-            : source,
+          // Opens the markets section with this instrument charted.
+          href: marketHref(instrument.key),
+          keepScroll: true,
+          title: `${destination}\n${
+            updatedAt ? `${source}, ${t("shell.tapeUpdated", { time: formatMarketDate(updatedAt, "time") })}` : source
+          }`,
         },
       ];
     });

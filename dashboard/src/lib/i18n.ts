@@ -123,6 +123,8 @@ const translations = {
     fr: "Rendement obligataire de référence (TradingView), variation en points de base",
   },
   "shell.tapeUpdated": { tr: "son güncelleme {time}", en: "last updated {time}", fr: "dernière mise à jour {time}" },
+  "shell.tapeChartAt": { tr: "{name} grafiği · {page}", en: "{name} chart · {page}", fr: "Graphique {name} · {page}" },
+  "shell.tapeStocksAt": { tr: "{name} hisseleri · {page}", en: "{name} stocks · {page}", fr: "Actions {name} · {page}" },
   "shell.tapePause": { tr: "Şeridi durdur", en: "Pause ticker", fr: "Mettre le bandeau en pause" },
   "shell.tapePlay": { tr: "Şeridi oynat", en: "Play ticker", fr: "Relancer le bandeau" },
   "nav.short.markets": { tr: "Piyasa", en: "Markets", fr: "Marchés" },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { EMPTY_VALUE, formatMarketDate, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { AXIS_TICK, CURSOR_STYLE, GRID_STROKE, SERIES_COLOR, ChartTable, ChartTo
 import { DataLabel, NeutralChange, Panel, PanelEmpty, PanelError, PriceChange, RangePicker, Shimmer, SourceLine, ViewToggle, type ChartView } from "./ui";
 import { YieldCurvePanel } from "./YieldCurvePanel";
 import { FxBulletinPanel } from "./FxBulletinPanel";
+import { RequestedMarket } from "./RequestedMarket";
 import type { MarketHistoryOut, MarketPeriod, MarketQuote } from "./types";
 
 const BOARD_GROUPS = ["fx", "commodity", "global"] as const;
@@ -347,6 +348,11 @@ export function MarketsSection() {
         </div>
       </div>
       <FxBulletinPanel />
+      {/* `/makro?piyasa=<key>` (the market strip's links) charts that instrument. After the
+          chart on purpose: React attaches `chartRef` before this sibling's layout effect runs. */}
+      <Suspense fallback={null}>
+        <RequestedMarket onSelect={setSelected} targetRef={chartRef} />
+      </Suspense>
     </div>
   );
 }
