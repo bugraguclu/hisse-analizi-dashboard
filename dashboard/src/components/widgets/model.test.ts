@@ -11,12 +11,14 @@ import {
   moveWidgetStep,
   removeWidget,
   resizeColumn,
+  railRow,
   row,
   sanitizeLayout,
   setWidgetHeight,
   setWidgetWidth,
   updateWidget,
   widgetsInOrder,
+  withFreshIds,
 } from "./model.ts";
 
 /** Compact picture of a layout: one string per row, "width:type+type" per column. */
@@ -97,6 +99,20 @@ describe("moveWidget", () => {
     const layout = home();
     assert.equal(moveWidget(layout, "nope", { kind: "row", beforeRowId: null }), layout);
   });
+
+  test("A2: moving a single-card column inside its own row keeps widths", () => {
+    const l1 = buildLayout("t", [row([8, "A"], [4, "B"])]);
+    const n1 = moveWidget(l1, idOf(l1, "A"), { kind: "column", rowId: "t-r0", beforeColumnId: null });
+    assert.deepEqual(shape(n1), ["4:B 8:A"]);
+
+    const l2 = buildLayout("m", [row([4, "corridor"], [8, "policy"])]);
+    const n2 = moveWidget(l2, idOf(l2, "policy"), { kind: "column", rowId: "m-r0", beforeColumnId: "m-r0c0" });
+    assert.deepEqual(shape(n2), ["8:policy 4:corridor"]);
+
+    const l3 = buildLayout("t", [row([6, "A"], [3, "B"], [3, "C"])]);
+    const n3 = moveWidget(l3, idOf(l3, "A"), { kind: "column", rowId: "t-r0", beforeColumnId: null });
+    assert.deepEqual(shape(n3), ["3:B 3:C 6:A"]);
+  });
 });
 
 describe("isNoopMove", () => {
@@ -117,13 +133,13 @@ describe("isNoopMove", () => {
 });
 
 describe("moveWidgetStep", () => {
-  test("up/down reorder a stack, then leave it", () => {
+  test("up/down reorder a stack, then merge into neighbouring stack", () => {
     const layout = home();
     const breadth = idOf(layout, "breadth");
     const up = moveWidgetStep(layout, breadth, "up");
     assert.deepEqual(shape(up), ["8:chart+events 4:breadth+watch", "6:a 6:b", "12:wide"]);
-    const out = moveWidgetStep(layout, breadth, "down");
-    assert.deepEqual(shape(out), ["8:chart+events 4:watch", "4:breadth", "6:a 6:b", "12:wide"]);
+    const down = moveWidgetStep(layout, breadth, "down");
+    assert.deepEqual(shape(down), ["8:chart+events 4:watch", "6:a 6:breadth+b", "12:wide"]);
   });
 
   test("a widget alone in its row swaps rows", () => {
@@ -132,12 +148,12 @@ describe("moveWidgetStep", () => {
     assert.equal(moveWidgetStep(layout, idOf(layout, "wide"), "down"), layout);
   });
 
-  test("left/right swap columns or split a stack", () => {
+  test("left/right swap columns or merge into neighbour stack", () => {
     const layout = home();
     assert.deepEqual(shape(moveWidgetStep(layout, idOf(layout, "b"), "left")), ["8:chart+events 4:watch+breadth", "6:b 6:a", "12:wide"]);
     assert.equal(moveWidgetStep(layout, idOf(layout, "b"), "right"), layout);
-    const split = moveWidgetStep(layout, idOf(layout, "watch"), "left");
-    assert.deepEqual(shape(split), ["4:chart+events 4:watch 4:breadth", "6:a 6:b", "12:wide"]);
+    const intoNeighbour = moveWidgetStep(layout, idOf(layout, "watch"), "left");
+    assert.deepEqual(shape(intoNeighbour), ["8:watch+chart+events 4:breadth", "6:a 6:b", "12:wide"]);
   });
 });
 
@@ -273,5 +289,233 @@ describe("sanitizeLayout", () => {
     assert.equal(sanitizeLayout(null, known), null);
     assert.equal(sanitizeLayout({ rows: "x" }, known), null);
     assert.equal(sanitizeLayout({ rows: [{ columns: [{ widgets: [{ type: "gone" }] }] }] }, known), null);
+  });
+
+  test("A1: an empty layout is a valid saved layout", () => {
+    assert.deepEqual(sanitizeLayout({ rows: [] }, known), { rows: [] });
+    // all-unknown types still falls back to null
+    assert.equal(sanitizeLayout({ rows: [{ columns: [{ widgets: [{ type: "gone" }] }] }] }, known), null);
+    // remove every widget of home layout, round-trip and sanitize
+    const homeLayout = buildLayout("home", [row([8, "market.index", "market.events"], [4, "market.watchlist", "market.breadth"])]);
+    let empty = homeLayout;
+    for (const w of widgetsInOrder(homeLayout)) empty = removeWidget(empty, w.id);
+    assert.deepEqual(empty, { rows: [] });
+    const stored = JSON.parse(JSON.stringify(empty));
+    assert.deepEqual(sanitizeLayout(stored, () => true), { rows: [] });
+  });
+});
+
+describe("A3: no-op edits create no history and no override", () => {
+  test("identical patch returns same reference", () => {
+    const layout = buildLayout("technical", [row([12, "stock.technicalSummary"]), row([12, { type: "stock.chart", options: { view: "technical" } }])]);
+    const chart = layout.rows[1].columns[0].widgets[0];
+    const patch = { ticker: null, options: { view: "technical" } };
+    const next = updateWidget(layout, chart.id, patch);
+    assert.equal(next, layout);
+  });
+
+  test("{ticker: null} on widget with no ticker returns same reference", () => {
+    const layout = home();
+    const chart = idOf(layout, "chart");
+    const next = updateWidget(layout, chart, { ticker: null });
+    assert.equal(next, layout);
+  });
+
+  test("null for an absent option key returns same reference", () => {
+    const layout = home();
+    const chart = idOf(layout, "chart");
+    const next = updateWidget(layout, chart, { options: { absent: null } });
+    assert.equal(next, layout);
+  });
+
+  test("a real change returns a new object", () => {
+    const layout = home();
+    const chart = idOf(layout, "chart");
+    const next = updateWidget(layout, chart, { ticker: "THYAO" });
+    assert.notEqual(next, layout);
+    assert.equal(findWidget(next, chart)?.widget.ticker, "THYAO");
+  });
+});
+
+describe("A4: keyboard moves (a)-(f)", () => {
+  test("(a) stock.overview: news down, up, right restores rows 3-4", () => {
+    const ov = buildLayout("overview", [
+      row([12, "stock.quote"]),
+      row([12, "stock.chart"]),
+      row([6, "stock.scorecard"], [6, "stock.analysts"]),
+      row([6, "stock.kap"], [6, "stock.news"]),
+      row([6, "stock.ratios"], [6, "stock.signals"]),
+      row([12, "stock.sector"]),
+      row([6, "stock.dividends"], [6, "stock.earnings"]),
+      row([12, "stock.statements"]),
+    ]);
+    const newsId = idOf(ov, "stock.news");
+    let l = ov;
+    l = moveWidgetStep(l, newsId, "down");
+    l = moveWidgetStep(l, newsId, "up");
+    l = moveWidgetStep(l, newsId, "right");
+    assert.equal(shape(l)[3], "6:stock.kap 6:stock.news");
+    assert.equal(shape(l)[4], "6:stock.ratios 6:stock.signals");
+  });
+
+  test("(b) overview: statements (lone, 12 wide) up swaps with dividends|earnings row", () => {
+    const ov = buildLayout("overview", [
+      row([6, "stock.dividends"], [6, "stock.earnings"]),
+      row([12, "stock.statements"]),
+    ]);
+    const next = moveWidgetStep(ov, idOf(ov, "stock.statements"), "up");
+    assert.deepEqual(shape(next), ["12:stock.statements", "6:stock.dividends 6:stock.earnings"]);
+  });
+
+  test("(c) a lone 6-wide card under a row with 6 free joins as new last column", () => {
+    const l = buildLayout("t", [row([6, "x"]), row([6, "card"])]);
+    const next = moveWidgetStep(l, idOf(l, "card"), "up");
+    assert.deepEqual(shape(next), ["6:x 6:card"]);
+  });
+
+  test("(d) home: watchlist sequence", () => {
+    const homeL = buildLayout("home", [row([8, "market.index", "market.events"], [4, "market.watchlist", "market.breadth"])]);
+    const wId = idOf(homeL, "market.watchlist");
+    let l = homeL;
+    l = moveWidgetStep(l, wId, "down");
+    assert.deepEqual(shape(l), ["8:market.index+market.events 4:market.breadth+market.watchlist"]);
+    l = moveWidgetStep(l, wId, "down");
+    assert.deepEqual(shape(l), ["8:market.index+market.events 4:market.breadth", "4:market.watchlist"]);
+    l = moveWidgetStep(l, wId, "up");
+    assert.deepEqual(shape(l), ["8:market.index+market.events+market.watchlist 4:market.breadth"]);
+    l = moveWidgetStep(l, wId, "right");
+    assert.deepEqual(shape(l), ["8:market.index+market.events 4:market.breadth+market.watchlist"]);
+    l = moveWidgetStep(l, wId, "up");
+    assert.deepEqual(shape(l), ["8:market.index+market.events 4:market.watchlist+market.breadth"]);
+  });
+
+  test("(e) reachability: BFS over W moves (depth <= 6) puts W in Y stack in < 2 s", () => {
+    const t0 = performance.now();
+    const homeL = buildLayout("home", [row([8, "market.index", "market.events"], [4, "market.watchlist", "market.breadth"])]);
+    const overviewL = buildLayout("ov", [
+      row([6, "stock.scorecard"], [6, "stock.analysts"]),
+      row([6, "stock.kap"], [6, "stock.news"]),
+      row([6, "stock.ratios"], [6, "stock.signals"]),
+    ]);
+
+    for (const layout of [homeL, overviewL]) {
+      const all = widgetsInOrder(layout);
+      for (const w of all) {
+        for (const y of all) {
+          if (w.id === y.id) continue;
+          const queue = [{ l: layout, depth: 0 }];
+          const seen = new Set([shape(layout).join("/")]);
+          let found = false;
+          while (queue.length > 0) {
+            const { l, depth } = queue.shift()!;
+            const atW = findWidget(l, w.id)!;
+            const atY = findWidget(l, y.id)!;
+            if (atW.column.id === atY.column.id) {
+              found = true;
+              break;
+            }
+            if (depth >= 6) continue;
+            for (const dir of ["up", "down", "left", "right"] as const) {
+              const nextL = moveWidgetStep(l, w.id, dir);
+              if (nextL === l) continue;
+              const key = shape(nextL).join("/");
+              if (!seen.has(key)) {
+                seen.add(key);
+                queue.push({ l: nextL, depth: depth + 1 });
+              }
+            }
+          }
+          assert.ok(found, `could not reach ${y.type} from ${w.type}`);
+        }
+      }
+    }
+    const elapsed = performance.now() - t0;
+    assert.ok(elapsed < 2000, `BFS took ${elapsed}ms >= 2000ms`);
+  });
+
+  test("(f) invariants hold after every move step", () => {
+    function checkInvariants(l: Layout, label: string) {
+      const ids = new Set<string>();
+      for (const r of l.rows) {
+        assert.ok(!ids.has(r.id), `${label}: dup row id ${r.id}`);
+        ids.add(r.id);
+        assert.ok(r.columns.length > 0, `${label}: empty row ${r.id}`);
+        const w = r.columns.reduce((s, c) => s + c.width, 0);
+        assert.ok(w <= 12, `${label}: row width ${w} > 12`);
+        for (const c of r.columns) {
+          assert.ok(!ids.has(c.id), `${label}: dup col id ${c.id}`);
+          ids.add(c.id);
+          assert.ok(c.widgets.length > 0, `${label}: empty col ${c.id}`);
+          assert.ok(Number.isInteger(c.width) && c.width >= 2 && c.width <= 12, `${label}: bad width ${c.width}`);
+          for (const x of c.widgets) {
+            assert.ok(!ids.has(x.id), `${label}: dup widget id ${x.id}`);
+            ids.add(x.id);
+          }
+        }
+      }
+    }
+
+    const testLayout = buildLayout("inv", [
+      row([8, "a", "b"], [4, "c", "d"]),
+      row([6, "e"], [6, "f"]),
+      row([12, "g"]),
+    ]);
+    const all = widgetsInOrder(testLayout);
+    for (const w of all) {
+      for (const dir of ["up", "down", "left", "right"] as const) {
+        const next = moveWidgetStep(testLayout, w.id, dir);
+        checkInvariants(next, `${w.type} ${dir}`);
+      }
+    }
+  });
+});
+
+describe("A5: rail rows in the model", () => {
+  test("railRow sets the flag, survives clone, withFreshIds and sanitize round-trip", () => {
+    const layout = buildLayout("h", [
+      railRow([8, "market.index", "market.events"], [4, "market.watchlist", "market.breadth"]),
+      row([12, "full"]),
+    ]);
+    assert.equal(layout.rows[0].rail, true);
+    assert.equal(layout.rows[1].rail, undefined);
+
+    // withFreshIds
+    const fresh = withFreshIds(layout);
+    assert.equal(fresh.rows[0].rail, true);
+    assert.equal(fresh.rows[1].rail, undefined);
+
+    // sanitize round-trip
+    const serialized = JSON.parse(JSON.stringify(layout));
+    const sanitized = sanitizeLayout(serialized, () => true);
+    assert.ok(sanitized);
+    assert.equal(sanitized.rows[0].rail, true);
+    assert.equal(sanitized.rows[1].rail, undefined);
+
+    // rail: "yes" dropped
+    const badRail = JSON.parse(JSON.stringify(layout));
+    badRail.rows[0].rail = "yes";
+    const sanitizedBad = sanitizeLayout(badRail, () => true);
+    assert.ok(sanitizedBad);
+    assert.equal(sanitizedBad.rows[0].rail, undefined);
+
+    // moves inside the row keep the rail flag
+    const moved = moveWidgetStep(layout, idOf(layout, "market.events"), "up");
+    assert.equal(moved.rows[0].rail, true);
+  });
+});
+
+describe("A6: full width preset on card with stack-mates", () => {
+  test("[6: note, chart], chart -> full moves only chart to new row below", () => {
+    const layout = buildLayout("p", [row([6, "general.note", "stock.chart"])]);
+    const chartId = idOf(layout, "stock.chart");
+    const next = setWidgetWidth(layout, chartId, 12);
+    assert.deepEqual(shape(next), ["6:general.note", "12:stock.chart"]);
+  });
+
+  test("two-column row, stack-mates keep their column", () => {
+    const layout = buildLayout("q", [row([6, "general.note", "stock.chart"], [6, "stock.news"])]);
+    const chartId = idOf(layout, "stock.chart");
+    const next = setWidgetWidth(layout, chartId, 12);
+    assert.deepEqual(shape(next), ["6:general.note 6:stock.news", "12:stock.chart"]);
   });
 });

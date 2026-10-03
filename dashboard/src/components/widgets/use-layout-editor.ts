@@ -73,6 +73,7 @@ export function useLayoutEditor({
   const commit = useCallback(
     (next: Layout) => {
       if (next === current.current.layout) return;
+      if (JSON.stringify(next) === JSON.stringify(current.current.layout)) return;
       apply(next, "commit");
     },
     [apply],
@@ -105,6 +106,7 @@ export function useLayoutEditor({
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (document.querySelector('[role="dialog"]')) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, [contenteditable='true']")) return;
       const key = event.key.toLowerCase();

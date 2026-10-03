@@ -49,6 +49,7 @@ export interface Column {
 export interface Row {
   id: string;
   columns: Column[];
+  rail?: true;
 }
 
 export interface Layout {
@@ -116,7 +117,15 @@ function clone(layout: Layout): Layout {
   return {
     rows: layout.rows.map((row) => ({
       id: row.id,
-      columns: row.columns.map((column) => ({ id: column.id, width: column.width, widgets: column.widgets.map((w) => ({ ...w })) })),
+      ...(row.rail ? { rail: true as const } : {}),
+      columns: row.columns.map((column) => ({
+        id: column.id,
+        width: column.width,
+        widgets: column.widgets.map((w) => ({
+          ...w,
+          ...(w.options ? { options: { ...w.options } } : {}),
+        })),
+      })),
     })),
   };
 }
@@ -182,7 +191,11 @@ function prune(layout: Layout): Layout {
       }
       columns.push(column);
     }
-    if (columns.length > 0) rows.push({ id: row.id, columns });
+    if (columns.length > 0) {
+      const keptRow: Row = { id: row.id, columns };
+      if (row.rail) keptRow.rail = true;
+      rows.push(keptRow);
+    }
   }
   return { rows };
 }
@@ -243,6 +256,22 @@ function insertAt(layout: Layout, widget: WidgetInstance, width: number, target:
  * when nothing would move.
  */
 export function moveWidget(layout: Layout, widgetId: string, target: DropTarget): Layout {
+  const at = findWidget(layout, widgetId);
+  if (!at) return layout;
+  if (isNoopMove(layout, widgetId, target)) return layout;
+
+  if (target.kind === "column" && target.rowId === at.row.id && at.column.widgets.length === 1) {
+    const next = clone(layout);
+    const row = next.rows[at.rowIndex];
+    const [col] = row.columns.splice(at.columnIndex, 1);
+    const insertIndex = target.beforeColumnId === null
+      ? row.columns.length
+      : row.columns.findIndex((c) => c.id === target.beforeColumnId);
+    if (insertIndex < 0) return layout;
+    row.columns.splice(insertIndex, 0, col);
+    return next;
+  }
+
   const detached = detach(layout, widgetId);
   if (!detached) return layout;
   // Resolve against the layout before pruning: the widget's own (now empty)
@@ -295,49 +324,164 @@ export function isNoopMove(layout: Layout, widgetId: string, target: DropTarget)
   return target.beforeRowId === at.row.id || target.beforeRowId === (next?.id ?? null);
 }
 
+function columnSpan(r: Row, colIndex: number): [start: number, end: number] {
+  let start = 0;
+  for (let i = 0; i < colIndex; i++) {
+    start += r.columns[i].width;
+  }
+  return [start, start + r.columns[colIndex].width];
+}
+
+function bestOverlapColumnIndex(row: Row, colIndex: number, otherRow: Row): number {
+  const [s1, e1] = columnSpan(row, colIndex);
+  let bestIndex = 0;
+  let maxOverlap = -1;
+  let start2 = 0;
+  for (let j = 0; j < otherRow.columns.length; j++) {
+    const w = otherRow.columns[j].width;
+    const end2 = start2 + w;
+    const overlap = Math.max(0, Math.min(e1, end2) - Math.max(s1, start2));
+    if (overlap > maxOverlap) {
+      maxOverlap = overlap;
+      bestIndex = j;
+    }
+    start2 = end2;
+  }
+  return bestIndex;
+}
+
 /**
- * Keyboard / menu moves. Up/down reorder within the stack, then leave it for
- * a row of their own (swapping whole rows when the widget is alone in one);
- * left/right swap columns, or split the widget out beside its stack.
+ * Keyboard / menu moves. Up/down reorder within the stack, then merge into
+ * neighbouring stacks or rows (swapping full rows when lone); left/right swap
+ * columns, merge into a neighbour stack, or split the widget out.
  */
 export function moveWidgetStep(layout: Layout, widgetId: string, direction: MoveDirection): Layout {
   const at = findWidget(layout, widgetId);
   if (!at) return layout;
   const { row, column, rowIndex, columnIndex, widgetIndex } = at;
+  const isLone = row.columns.length === 1 && column.widgets.length === 1;
 
-  if (direction === "up" || direction === "down") {
-    const step = direction === "up" ? -1 : 1;
-    const neighbour = column.widgets[widgetIndex + step];
-    if (neighbour) {
+  if (direction === "up") {
+    // 1. Not first in its stack → swap with the card above.
+    if (widgetIndex > 0) {
       const next = clone(layout);
       const widgets = next.rows[rowIndex].columns[columnIndex].widgets;
-      [widgets[widgetIndex], widgets[widgetIndex + step]] = [widgets[widgetIndex + step], widgets[widgetIndex]];
+      [widgets[widgetIndex], widgets[widgetIndex - 1]] = [widgets[widgetIndex - 1], widgets[widgetIndex]];
       return next;
     }
-    const otherRow = layout.rows[rowIndex + step];
-    if (row.columns.length === 1 && column.widgets.length === 1) {
-      if (!otherRow) return layout;
+    // 2. No row above → no-op.
+    if (rowIndex === 0) return layout;
+    const rowAbove = layout.rows[rowIndex - 1];
+
+    // 3. Lone card:
+    if (isLone) {
+      if (column.width === GRID_COLUMNS) {
+        const next = clone(layout);
+        [next.rows[rowIndex], next.rows[rowIndex - 1]] = [next.rows[rowIndex - 1], next.rows[rowIndex]];
+        return next;
+      }
+      const free = freeWidth(rowAbove);
+      if (free >= MIN_WIDTH) {
+        const next = clone(layout);
+        const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+        const joinWidth = Math.min(column.width, free);
+        next.rows[rowIndex - 1].columns.push({ id: newId("c"), width: joinWidth, widgets: [widget] });
+        return prune(next);
+      }
+      // else → bottom of the row above's best-overlap stack.
+      const targetColIdx = bestOverlapColumnIndex(row, columnIndex, rowAbove);
       const next = clone(layout);
-      [next.rows[rowIndex], next.rows[rowIndex + step]] = [next.rows[rowIndex + step], next.rows[rowIndex]];
-      return next;
+      const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+      next.rows[rowIndex - 1].columns[targetColIdx].widgets.push(widget);
+      return prune(next);
     }
-    // Leave the stack for a new row just above / below the current one.
-    const beforeRowId = direction === "up" ? row.id : (otherRow?.id ?? null);
-    return moveWidget(layout, widgetId, { kind: "row", beforeRowId });
+
+    // 4. Otherwise (it shares its row and is first in its stack) → bottom of the row above's best-overlap stack.
+    const targetColIdx = bestOverlapColumnIndex(row, columnIndex, rowAbove);
+    const next = clone(layout);
+    const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+    next.rows[rowIndex - 1].columns[targetColIdx].widgets.push(widget);
+    return prune(next);
   }
 
+  if (direction === "down") {
+    // 1. Not last in its stack → swap with the card below.
+    if (widgetIndex < column.widgets.length - 1) {
+      const next = clone(layout);
+      const widgets = next.rows[rowIndex].columns[columnIndex].widgets;
+      [widgets[widgetIndex], widgets[widgetIndex + 1]] = [widgets[widgetIndex + 1], widgets[widgetIndex]];
+      return next;
+    }
+
+    // 2. Lone card:
+    if (isLone) {
+      if (rowIndex === layout.rows.length - 1) return layout;
+      if (column.width === GRID_COLUMNS) {
+        const next = clone(layout);
+        [next.rows[rowIndex], next.rows[rowIndex + 1]] = [next.rows[rowIndex + 1], next.rows[rowIndex]];
+        return next;
+      }
+      const rowBelow = layout.rows[rowIndex + 1];
+      const free = freeWidth(rowBelow);
+      if (free >= MIN_WIDTH) {
+        const next = clone(layout);
+        const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+        const joinWidth = Math.min(column.width, free);
+        next.rows[rowIndex + 1].columns.push({ id: newId("c"), width: joinWidth, widgets: [widget] });
+        return prune(next);
+      }
+      // else → top of its best-overlap stack.
+      const targetColIdx = bestOverlapColumnIndex(row, columnIndex, rowBelow);
+      const next = clone(layout);
+      const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+      next.rows[rowIndex + 1].columns[targetColIdx].widgets.unshift(widget);
+      return prune(next);
+    }
+
+    // 3. It shares its row and is last in its stack:
+    if (rowIndex < layout.rows.length - 1) {
+      const rowBelow = layout.rows[rowIndex + 1];
+      const targetColIdx = bestOverlapColumnIndex(row, columnIndex, rowBelow);
+      const next = clone(layout);
+      const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+      next.rows[rowIndex + 1].columns[targetColIdx].widgets.unshift(widget);
+      return prune(next);
+    }
+    // no row below → split into a new last row (keeps its column width).
+    const next = clone(layout);
+    const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+    next.rows.push({ id: newId("r"), columns: [{ id: newId("c"), width: column.width, widgets: [widget] }] });
+    return prune(next);
+  }
+
+  // LEFT / RIGHT
   const step = direction === "left" ? -1 : 1;
   const neighbour = row.columns[columnIndex + step];
-  if (column.widgets.length === 1) {
-    if (!neighbour) return layout;
+  if (neighbour) {
+    if (column.widgets.length === 1) {
+      // alone in its column → swap the columns (widths travel with them);
+      const next = clone(layout);
+      const columns = next.rows[rowIndex].columns;
+      [columns[columnIndex], columns[columnIndex + step]] = [columns[columnIndex + step], columns[columnIndex]];
+      return next;
+    }
+    // else → into the neighbour's stack at min(own index, neighbour length).
     const next = clone(layout);
-    const columns = next.rows[rowIndex].columns;
-    [columns[columnIndex], columns[columnIndex + step]] = [columns[columnIndex + step], columns[columnIndex]];
-    return next;
+    const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
+    const targetCol = next.rows[rowIndex].columns[columnIndex + step];
+    const insertIdx = Math.min(widgetIndex, targetCol.widgets.length);
+    targetCol.widgets.splice(insertIdx, 0, widget);
+    return prune(next);
   }
-  // Split out of the stack into a new column beside it.
-  const beforeColumnId = direction === "left" ? column.id : (neighbour?.id ?? null);
-  return moveWidget(layout, widgetId, { kind: "column", rowId: row.id, beforeColumnId });
+
+  // No neighbour:
+  if (column.widgets.length > 1) {
+    // it shares its column → split into a new column at that edge (today's behaviour: new column gets the old width, then fitRow);
+    const beforeColumnId = direction === "left" ? column.id : null;
+    return moveWidget(layout, widgetId, { kind: "column", rowId: row.id, beforeColumnId });
+  }
+  // else → no-op.
+  return layout;
 }
 
 export function canMoveStep(layout: Layout, widgetId: string, direction: MoveDirection): boolean {
@@ -358,6 +502,13 @@ export function setWidgetWidth(layout: Layout, widgetId: string, width: number):
   const at = findWidget(layout, widgetId);
   if (!at) return layout;
   const wanted = clampWidth(width);
+  if (wanted === GRID_COLUMNS && at.column.widgets.length > 1) {
+    const moved = clone(moveWidget(layout, widgetId, { kind: "row", beforeRowId: layout.rows[at.rowIndex + 1]?.id ?? null }));
+    const target = findWidget(moved, widgetId);
+    if (!target) return layout;
+    target.column.width = GRID_COLUMNS;
+    return moved;
+  }
   if (at.column.width === wanted) return layout;
   const others = at.row.columns.length - 1;
   if (others * MIN_WIDTH + wanted > GRID_COLUMNS) {
@@ -427,24 +578,52 @@ export function updateWidget(
   widgetId: string,
   patch: { ticker?: string | null; options?: Record<string, OptionValue | null> },
 ): Layout {
-  const next = clone(layout);
-  const at = findWidget(next, widgetId);
+  const at = findWidget(layout, widgetId);
   if (!at) return layout;
-  const widget = at.widget;
+  const original = at.widget;
+
+  let newTicker: string | undefined = original.ticker;
   if (patch.ticker !== undefined) {
-    const ticker = patch.ticker === null ? null : normalizeTicker(patch.ticker);
-    if (ticker) widget.ticker = ticker;
-    else delete widget.ticker;
+    const normalized = patch.ticker === null ? null : normalizeTicker(patch.ticker);
+    newTicker = normalized ?? undefined;
   }
+
+  let newOptions: Record<string, OptionValue> | undefined = original.options ? { ...original.options } : undefined;
   if (patch.options) {
-    const options = { ...widget.options };
+    const opts: Record<string, OptionValue> = { ...(original.options ?? {}) };
     for (const [key, value] of Object.entries(patch.options)) {
-      if (value === null) delete options[key];
-      else options[key] = typeof value === "string" ? value.slice(0, MAX_TEXT_LENGTH) : value;
+      if (value === null) {
+        delete opts[key];
+      } else {
+        opts[key] = typeof value === "string" ? value.slice(0, MAX_TEXT_LENGTH) : value;
+      }
     }
-    if (Object.keys(options).length > 0) widget.options = options;
-    else delete widget.options;
+    newOptions = Object.keys(opts).length > 0 ? opts : undefined;
   }
+
+  const tickerSame = original.ticker === newTicker;
+  const origOpts = original.options ?? {};
+  const nextOpts = newOptions ?? {};
+  const origKeys = Object.keys(origOpts);
+  const nextKeys = Object.keys(nextOpts);
+  let optionsSame = origKeys.length === nextKeys.length;
+  if (optionsSame) {
+    for (const k of origKeys) {
+      if (origOpts[k] !== nextOpts[k]) {
+        optionsSame = false;
+        break;
+      }
+    }
+  }
+
+  if (tickerSame && optionsSame) return layout;
+
+  const next = clone(layout);
+  const target = findWidget(next, widgetId)!.widget;
+  if (newTicker !== undefined) target.ticker = newTicker;
+  else delete target.ticker;
+  if (newOptions !== undefined) target.options = newOptions;
+  else delete target.options;
   return next;
 }
 
@@ -478,14 +657,18 @@ export function freeWidth(row: Row): number {
 /** A copy with fresh ids — for templates and duplicated pages. */
 export function withFreshIds(layout: Layout): Layout {
   return {
-    rows: layout.rows.map((row) => ({
-      id: newId("r"),
-      columns: row.columns.map((column) => ({
-        id: newId("c"),
-        width: column.width,
-        widgets: column.widgets.map((w) => ({ ...w, options: w.options ? { ...w.options } : undefined, id: newId("w") })),
-      })),
-    })),
+    rows: layout.rows.map((row) => {
+      const r: Row = {
+        id: newId("r"),
+        columns: row.columns.map((column) => ({
+          id: newId("c"),
+          width: column.width,
+          widgets: column.widgets.map((w) => ({ ...w, options: w.options ? { ...w.options } : undefined, id: newId("w") })),
+        })),
+      };
+      if (row.rail) r.rail = true;
+      return r;
+    }),
   };
 }
 
@@ -496,25 +679,37 @@ export function withFreshIds(layout: Layout): Layout {
 /** Shorthand for default layouts: `row([6, "stock.ratios"], [6, "stock.signals", "stock.news"])`. */
 export type ColumnSpec = [width: number, ...widgets: Array<string | Omit<WidgetInstance, "id">>];
 
+export type RowSpec = ColumnSpec[] | { rail: true; columns: [ColumnSpec, ColumnSpec] };
+
 export function row(...columns: ColumnSpec[]): ColumnSpec[] {
   return columns;
 }
 
+export function railRow(main: ColumnSpec, rail: ColumnSpec): { rail: true; columns: [ColumnSpec, ColumnSpec] } {
+  return { rail: true, columns: [main, rail] };
+}
+
 /** Builds a layout with deterministic ids (stable across server and client renders). */
-export function buildLayout(prefix: string, rows: ColumnSpec[][]): Layout {
+export function buildLayout(prefix: string, rows: RowSpec[]): Layout {
   let widgetIndex = 0;
   return {
-    rows: rows.map((columns, r) => ({
-      id: `${prefix}-r${r}`,
-      columns: columns.map(([width, ...widgets], c) => ({
-        id: `${prefix}-r${r}c${c}`,
-        width,
-        widgets: widgets.map((spec) => {
-          const id = `${prefix}-w${widgetIndex++}`;
-          return typeof spec === "string" ? { id, type: spec } : { ...spec, id };
-        }),
-      })),
-    })),
+    rows: rows.map((rowSpec, r) => {
+      const isRail = !Array.isArray(rowSpec) && rowSpec.rail === true;
+      const columns = Array.isArray(rowSpec) ? rowSpec : rowSpec.columns;
+      const rowObj: Row = {
+        id: `${prefix}-r${r}`,
+        columns: columns.map(([width, ...widgets], c) => ({
+          id: `${prefix}-r${r}c${c}`,
+          width,
+          widgets: widgets.map((spec) => {
+            const id = `${prefix}-w${widgetIndex++}`;
+            return typeof spec === "string" ? { id, type: spec } : { ...spec, id };
+          }),
+        })),
+      };
+      if (isRail) rowObj.rail = true;
+      return rowObj;
+    }),
   };
 }
 
@@ -550,6 +745,7 @@ export function sanitizeLayout(raw: unknown, isKnownType: (type: string) => bool
   if (!raw || typeof raw !== "object") return null;
   const rawRows = (raw as { rows?: unknown }).rows;
   if (!Array.isArray(rawRows)) return null;
+  if (rawRows.length === 0) return { rows: [] };
   const seen = new Set<string>();
   const uniqueId = (value: unknown, prefix: "w" | "c" | "r") => {
     const id = typeof value === "string" && ID_RE.test(value) && !seen.has(value) ? value : newId(prefix);
@@ -561,6 +757,7 @@ export function sanitizeLayout(raw: unknown, isKnownType: (type: string) => bool
   for (const rawRow of rawRows) {
     if (rows.length >= MAX_ROWS || widgets >= MAX_WIDGETS) break;
     if (!rawRow || typeof rawRow !== "object") continue;
+    const isRail = (rawRow as { rail?: unknown }).rail === true;
     const rawColumns = (rawRow as { columns?: unknown }).columns;
     if (!Array.isArray(rawColumns)) continue;
     const columns: Column[] = [];
@@ -590,6 +787,7 @@ export function sanitizeLayout(raw: unknown, isKnownType: (type: string) => bool
     if (columns.length === 0) continue;
     // A row with more columns than the grid holds continues in the next one.
     let current: Row = { id: uniqueId((rawRow as { id?: unknown }).id, "r"), columns: [] };
+    if (isRail) current.rail = true;
     for (const column of columns) {
       if ((current.columns.length + 1) * MIN_WIDTH > GRID_COLUMNS) {
         rows.push(current);
