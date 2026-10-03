@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
 import { formatNumber, toFiniteNumber } from "@/lib/format";
@@ -12,7 +12,6 @@ import { presetHref } from "@/components/tarama/model";
 import { useCompanies, useScreenerRows } from "./queries";
 import { CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
 
-const HEADING_ID = "breadth-heading";
 const MOVER_COUNT = 5;
 /** Below this many tracked symbols in the screener, fall back to the whole market. */
 const MIN_TRACKED = 20;
@@ -123,6 +122,7 @@ function MoverList({ title, movers, href }: { title: string; movers: Mover[]; hr
 }
 
 export function MarketBreadthCard({ className }: { className?: string }) {
+  const headingId = useId();
   const { t } = useLocale();
   const screenerQ = useScreenerRows();
   const companiesQ = useCompanies();
@@ -205,9 +205,9 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={headingId} className={className}>
       <CardHeading
-        id={HEADING_ID}
+        id={headingId}
         className="border-b-0 pb-2"
         title={t("dashboard.breadth")}
         subtitle={breadth ? t(breadth.scope === "bist100" ? "dashboard.universeBist100" : "dashboard.universeAll") : undefined}

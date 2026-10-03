@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { CARD_CHART_HEIGHT, useCardChartHeight } from "@/components/charts/chart-height";
 import { ChartAttribution, ChartWorkspace } from "@/components/charts/ChartWorkspace";
 import {
@@ -32,7 +32,6 @@ import { findQuote, quoteTimeMs, useIndexQuotes } from "./queries";
 import { ChangeLine, DashboardCard, StatItem } from "./ui";
 
 const SYMBOL = "XU100";
-const HEADING_ID = "bist100-heading";
 
 const PERIOD_LABEL: Record<ChartPeriod, TranslationKey> = {
   "1d": "period.1d",
@@ -94,6 +93,7 @@ function mergeQuote(primary: IndexQuote | null, embedded: Partial<IndexQuote> | 
 }
 
 export function IndexChartCard({ className }: { className?: string }) {
+  const headingId = useId();
   const { t } = useLocale();
   const { t: tc } = useChartI18n();
   const [period, setPeriod] = useState<ChartPeriod>("1d");
@@ -190,11 +190,11 @@ export function IndexChartCard({ className }: { className?: string }) {
   );
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={headingId} className={className}>
       <div className="px-4 pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <h2 id={HEADING_ID} className="text-[13px] font-semibold text-foreground">
+            <h2 id={headingId} className="text-[13px] font-semibold text-foreground">
               BIST 100
             </h2>
             {level === null && (quotesQ.isPending || historyQ.isPending) ? (
