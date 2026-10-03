@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
 import { Menu } from "@base-ui/react/menu";
 import { BarChart3, ChartCandlestick, Coins, Copy, Ellipsis, Globe, LayoutDashboard, Pencil, Plus, Scale, SquarePlus, Trash2, X, type LucideIcon } from "lucide-react";
@@ -39,6 +39,18 @@ function pageHref(id: string): string {
   return `/sayfalarim?${PAGE_PARAM}=${encodeURIComponent(id)}`;
 }
 
+/**
+ * Shows another of the visitor's pages. Native history, which Next.js keeps in
+ * sync with useSearchParams: the pages live in this browser, so switching
+ * needs no server round trip (router.push waits for one: seconds on a busy
+ * server, with the previous page still on screen).
+ */
+function showPage(id: string | null, mode: "push" | "replace") {
+  const url = id ? pageHref(id) : "/sayfalarim";
+  if (mode === "push") window.history.pushState(null, "", url);
+  else window.history.replaceState(null, "", url);
+}
+
 /** The first candidate name no page has yet ("Sayfam 3", "Teknik analiz 2"). */
 function uniqueName(pages: readonly CustomPage[], candidate: (attempt: number) => string): string {
   const names = new Set(pages.map((page) => page.name));
@@ -55,7 +67,6 @@ export function CustomPagesView() {
   const hydrated = useHydrated();
   const pages = useCustomPages();
   const params = useSearchParams();
-  const router = useRouter();
   const requested = params.get(PAGE_PARAM);
   const active = pages.find((page) => page.id === requested) ?? pages[0] ?? null;
   // A page just created opens in edit mode.
@@ -66,10 +77,10 @@ export function CustomPagesView() {
       const id = pageActions.create(name, ticker, layout);
       if (!id) return null;
       setEditOnOpen(widgetCount(layout) === 0 ? id : null);
-      router.push(pageHref(id), { scroll: false });
+      showPage(id, "push");
       return id;
     },
-    [router],
+    [],
   );
 
   if (!hydrated) return <PagesSkeleton />;
@@ -163,7 +174,6 @@ function Intro({ pages, onCreate }: { pages: readonly CustomPage[]; onCreate: Cr
 /** One custom page: tabs to the others, its stock, the board. */
 function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPage; pages: readonly CustomPage[]; onCreate: CreatePage; initialEditing: boolean }) {
   const { t } = useWidgetI18n();
-  const router = useRouter();
   const save = useCallback((layout: Layout | null) => pageActions.setLayout(page.id, layout ?? EMPTY_LAYOUT), [page.id]);
   const editor = useLayoutEditor({ layout: page.layout, save, initialEditing });
   const [dialog, setDialog] = useState<"new" | "rename" | null>(null);
@@ -172,7 +182,7 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
     const index = pages.findIndex((p) => p.id === page.id);
     const next = pages[index + 1] ?? pages[index - 1];
     pageActions.remove(page.id);
-    router.replace(next ? pageHref(next.id) : "/sayfalarim", { scroll: false });
+    showPage(next?.id ?? null, "replace");
     toast(t("pages.deleted", { name: page.name }), {
       action: {
         label: t("edit.undo"),
@@ -181,7 +191,7 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
             toast.error(t("pages.limit", { max: MAX_PAGES }));
             return;
           }
-          router.replace(pageHref(page.id), { scroll: false });
+          showPage(page.id, "replace");
         },
       },
     });
@@ -189,7 +199,7 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
 
   const duplicate = () => {
     const id = pageActions.duplicate(page.id, t("pages.copyName", { name: page.name }));
-    if (id) router.push(pageHref(id), { scroll: false });
+    if (id) showPage(id, "push");
     else toast.error(t("pages.limit", { max: MAX_PAGES }));
   };
 

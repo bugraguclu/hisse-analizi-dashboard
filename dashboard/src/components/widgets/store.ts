@@ -236,11 +236,12 @@ export const pageActions = {
   remove(id: string) {
     updatePages((pages) => pages.filter((page) => page.id !== id));
   },
-  /** Puts a removed page back where it was (undo). Returns false if at capacity. */
+  /** Puts a removed page back where it was (undo). False when the page cap is reached. */
   restore(page: CustomPage, index: number): boolean {
     const current = pagesStore.get();
+    // Already back (a second click on the toast): nothing to do, and no limit error.
+    if (current.some((p) => p.id === page.id)) return true;
     if (current.length >= MAX_PAGES) return false;
-    if (current.some((p) => p.id === page.id)) return false;
     updatePages((pages) => [...pages.slice(0, index), page, ...pages.slice(index)]);
     return true;
   },
