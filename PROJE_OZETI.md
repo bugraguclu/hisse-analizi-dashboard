@@ -22,7 +22,7 @@ Hedef kullanıcılar; BIST’i takip eden bireysel yatırımcılar, araştırma 
 | Hisse sayfası | Günlük fiyat ve değişim, grafik, piyasa istatistikleri, son 12 ay finansal oranları, analiz karnesi, KAP bildirimleri, haberler, analist hedefleri, finansal tablolar, temettü |
 | Teknik / Temel / Kombine | Aynı hisse sayfasında sekmeler: göstergeler ve dokuz zaman dilimi özeti; şirket profili, değerleme ve ortaklık yapısı; ikisinin karşılaştırması |
 | Makro Ekonomi | TCMB politika faizi ve koridor, TÜFE, USD/EUR/GBP kurları, önem ve ülke filtreli ekonomik takvim |
-| Hisse Tarama | ~630 işlem gören BIST payı, 26 hazır tarama, gelişmiş filtreler, sıralanabilir tablo, teknik sinyal taraması |
+| Hisse Tarama | ~630 işlem gören BIST payı, 31 hazır tarama, gelişmiş filtreler, sıralanabilir tablo, teknik sinyal taraması |
 | Olaylar & KAP | Kaynak, kategori, önem, tarih ve hisse filtreli KAP/haber arşivi; sunucu tarafı sayfalama |
 
 ## Veri kaynakları ve doğruluk yaklaşımı

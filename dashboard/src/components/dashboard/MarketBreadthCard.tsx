@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { Company, ScreenerRow } from "@/types";
 import { SegmentBar } from "@/components/charts/mini";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
+import { presetHref } from "@/components/tarama/model";
 import { useCompanies, useScreenerRows } from "./queries";
 import { CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
 
@@ -38,6 +39,17 @@ function rowChange(row: ScreenerRow): number | null {
   return toFiniteNumber(row.change_pct ?? row.change_percent);
 }
 
+type RankedMover = Mover & { move: number; cap: number };
+
+/**
+ * /tarama's order for a daily-change sort: the change at display precision (the
+ * screener keeps two decimals), then market cap, then ticker. Stocks at the ±10 %
+ * limit often tie, so without it the list a heading opens would start differently.
+ */
+function byMove(dir: 1 | -1) {
+  return (a: RankedMover, b: RankedMover) => dir * (a.move - b.move) || b.cap - a.cap || a.ticker.localeCompare(b.ticker, "tr");
+}
+
 /**
  * Advancers/decliners and top movers from screener rows. Uses the tracked
  * BIST 100 constituents when available (so penny stocks at the ±10 % limit
@@ -52,31 +64,40 @@ export function computeBreadth(rows: readonly ScreenerRow[], companies: readonly
   let up = 0;
   let down = 0;
   let flat = 0;
-  const movers: Mover[] = [];
+  const movers: RankedMover[] = [];
   for (const row of universe) {
     const change = rowChange(row);
     if (change === null || !row.symbol) continue;
     if (Math.abs(change) < FLAT_EPSILON) flat += 1;
     else if (change > 0) up += 1;
     else down += 1;
-    movers.push({ ticker: row.symbol, name: names.get(row.symbol) ?? row.name ?? "", price: toFiniteNumber(row.close), change });
+    movers.push({
+      ticker: row.symbol,
+      name: names.get(row.symbol) ?? row.name ?? "",
+      price: toFiniteNumber(row.close),
+      change,
+      move: Number(change.toFixed(2)),
+      cap: toFiniteNumber(row.market_cap) ?? -1,
+    });
   }
-  movers.sort((a, b) => b.change - a.change);
   return {
     scope,
     up,
     down,
     flat,
-    gainers: movers.filter((m) => m.change >= FLAT_EPSILON).slice(0, MOVER_COUNT),
-    losers: movers.filter((m) => m.change <= -FLAT_EPSILON).slice(-MOVER_COUNT).reverse(),
+    gainers: movers.filter((m) => m.change >= FLAT_EPSILON).sort(byMove(-1)).slice(0, MOVER_COUNT),
+    losers: movers.filter((m) => m.change <= -FLAT_EPSILON).sort(byMove(1)).slice(0, MOVER_COUNT),
   };
 }
 
-function MoverList({ title, movers }: { title: string; movers: Mover[] }) {
+/** `href` opens the whole list on /tarama; an empty list has nothing more to show there. */
+function MoverList({ title, movers, href }: { title: string; movers: Mover[]; href: string }) {
   const { t } = useLocale();
   return (
     <div className="border-t border-border pb-2">
-      <GroupLabel>{title}</GroupLabel>
+      <GroupLabel href={movers.length > 0 ? href : undefined} action={t("common.viewAll")}>
+        {title}
+      </GroupLabel>
       {movers.length === 0 ? (
         <p className="px-4 py-2 text-xs text-muted-foreground">{t("common.noData")}</p>
       ) : (
@@ -119,6 +140,8 @@ export function MarketBreadthCard({ className }: { className?: string }) {
     body = <EmptyState compact message={t("dashboard.moversUnavailable")} />;
   } else {
     const summary = `${breadth.up} ${t("dashboard.advancers")}, ${breadth.down} ${t("dashboard.decliners")}, ${breadth.flat} ${t("dashboard.unchanged")}`;
+    // The screener lists the same universe as this card, so its first rows are these movers.
+    const screenerIndex = breadth.scope === "bist100" ? "XU100" : "";
     body = (
       <>
         <div className="px-5 pb-4">
@@ -172,8 +195,8 @@ export function MarketBreadthCard({ className }: { className?: string }) {
             className="mt-2"
           />
         </div>
-        <MoverList title={t("dashboard.topGainers")} movers={breadth.gainers} />
-        <MoverList title={t("dashboard.topLosers")} movers={breadth.losers} />
+        <MoverList title={t("dashboard.topGainers")} movers={breadth.gainers} href={presetHref("top_gainers", screenerIndex)} />
+        <MoverList title={t("dashboard.topLosers")} movers={breadth.losers} href={presetHref("top_losers", screenerIndex)} />
       </>
     );
   }

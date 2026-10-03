@@ -196,6 +196,18 @@ const dict = {
   "preset.rsi_overbought.note": { tr: "14 günlük göreli güç endeksi", en: "14-day relative strength index", fr: "Indice de force relative sur 14 jours" },
   "preset.volume_spike": { tr: "Hacim artışı", en: "Volume spike", fr: "Pic de volume" },
   "preset.volume_spike.note": { tr: "Bugünkü hacim / 10 günlük ortalama hacim", en: "Today's volume / 10-day average volume", fr: "Volume du jour / volume moyen sur 10 jours" },
+  "preset.top_gainers": { tr: "En çok yükselenler", en: "Top gainers", fr: "Plus fortes hausses" },
+  "preset.top_gainers.rule": {
+    tr: "Önceki kapanışın üzerinde, en çok yükselen başta",
+    en: "Above the previous close, biggest gain first",
+    fr: "Au-dessus de la clôture précédente, plus forte hausse en tête",
+  },
+  "preset.top_losers": { tr: "En çok düşenler", en: "Top losers", fr: "Plus fortes baisses" },
+  "preset.top_losers.rule": {
+    tr: "Önceki kapanışın altında, en çok düşen başta",
+    en: "Below the previous close, biggest loss first",
+    fr: "Sous la clôture précédente, plus forte baisse en tête",
+  },
   "preset.day_gainers": { tr: "Günün yükselenleri", en: "Today's gainers", fr: "Hausses du jour" },
   "preset.day_gainers.note": { tr: "Önceki kapanışa göre değişim", en: "Change vs. the previous close", fr: "Variation vs. la clôture précédente" },
   "preset.day_losers": { tr: "Günün düşenleri", en: "Today's losers", fr: "Baisses du jour" },

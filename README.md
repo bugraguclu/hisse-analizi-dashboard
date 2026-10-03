@@ -37,7 +37,7 @@ Borsa İstanbul için piyasa takibi ve hisse analizi uygulaması: piyasa özeti,
 | **Kombine** | Teknik ve temel görünüm yan yana: teknik özet ve göstergeler, analist önerisi ve konsensüs hedef fiyat, analiz karnesi, oranlar, ortaklık yapısı |
 | **Makroekonomi** | TCMB politika faizi, faiz koridoru ve PPK takvimi; reel faiz; TÜFE/ÜFE; büyüme ve istihdam; dış denge, rezervler, bütçe dengesi ve kamu borcu; tahvil getiri eğrisi, döviz, altın ve emtia grafikleri; TCMB gösterge kurları |
 | **Ekonomik takvim** | Türkiye ve yurt dışı veri açıklamaları: gerçekleşen, tahmin ve önceki değer; önem, ülke ve konu filtreleri; arama; CSV ve `.ics` dışa aktarma |
-| **Hisse tarama** | ~630 BIST payı; değerleme, kârlılık, ölçek, teknik, performans ve analist kriterleri; 26 hazır tarama; endeks ve sektör filtreleri; beş sütun görünümü; sıralama ve CSV dışa aktarma |
+| **Hisse tarama** | ~630 BIST payı; değerleme, kârlılık, ölçek, teknik, performans ve analist kriterleri; 31 hazır tarama; endeks ve sektör filtreleri; beş sütun görünümü; sıralama ve CSV dışa aktarma |
 | **KAP haberleri** | Günlere göre gruplanan bildirim akışı; tarih, önem, kategori, hisse ve takip listesi filtreleri; arama ve dört sıralama; bildirimin tablolarıyla tam metni, `j`/`k` ile önceki ve sonraki bildirim |
 | **Her sayfada** | Piyasa şeridi (BIST 100/30/Banka/Sınai, USD ve EUR, gram ve ons altın, Brent, 2 ve 10 yıllık tahvil faizi, seans durumu); `⌘K` ile hisse arama; Türkçe, İngilizce ve Fransızca; açık ve koyu tema; telefon uyumu; tarama, KAP ve takvim filtreleri URL'de saklanır ve bağlantıyla paylaşılabilir |
 
@@ -96,7 +96,7 @@ Görüntüler 26 Eylül 2026'da canlı siteden alındı. GitHub'ı koyu temada k
           <img src="docs/images/screener-light.webp" alt="Hisse tarama: filtre çubuğu ve sonuç tablosu">
         </picture>
       </a>
-      <p align="center"><sub>Hisse tarama: 26 hazır tarama ve kriter filtreleri</sub></p>
+      <p align="center"><sub>Hisse tarama: 31 hazır tarama ve kriter filtreleri</sub></p>
     </td>
     <td width="50%" valign="top">
       <a href="https://hisse-analizi.duckdns.org/makro">

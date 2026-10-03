@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -52,9 +53,41 @@ export function CardHeading({
   );
 }
 
-/** Small-caps label above a group of rows inside a panel ("EN ÇOK YÜKSELENLER"). */
-export function GroupLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn("px-4 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground", className)}>{children}</p>;
+const GROUP_LABEL_CLASS = "px-4 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
+
+/**
+ * Small-caps label above a group of rows inside a panel ("EN ÇOK YÜKSELENLER").
+ * With `href` the whole label row links to the full list; `action` names that link on the right.
+ */
+export function GroupLabel({
+  children,
+  className,
+  href,
+  action,
+}: {
+  children: ReactNode;
+  className?: string;
+  href?: string;
+  action?: ReactNode;
+}) {
+  if (!href) return <p className={cn(GROUP_LABEL_CLASS, className)}>{children}</p>;
+  return (
+    <Link
+      href={href}
+      className={cn(
+        GROUP_LABEL_CLASS,
+        "group flex items-baseline justify-between gap-3 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring",
+        className,
+      )}
+    >
+      <span className="min-w-0 truncate">{children}</span>
+      {action && (
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal normal-case tracking-normal text-primary underline-offset-4 group-hover:underline">
+          {action} <ArrowRight className="h-3 w-3" aria-hidden="true" />
+        </span>
+      )}
+    </Link>
+  );
 }
 
 const TREND_ICON = { up: ArrowUpRight, down: ArrowDownRight, flat: Minus } as const;

@@ -132,6 +132,12 @@ Mimari sözleşme ve ölçülen kaynak gerçekleri [docs/data-platform.md](./doc
 - README yeniden yazıldı: canlı site bağlantısı, canlı siteden alınmış ekran görüntüleri (açık ve koyu tema; masaüstü ve telefon), güncellenmiş özellik ve veri kaynağı tabloları, mimari diyagramı, tek komutla sunucu kurulumu, teknolojiler ve proje yapısı. Veri kaynakları bölümündeki iki hata düzeltildi: nakit akışı İş Yatırım'dan gelir; `meta` bloğu yalnızca depo öncelikli uçlardadır.
 - `PROJE_OZETI.md`: canlı sürüm bağlantısı, kurulum betiğiyle yayına alma adımları (ACME e-postası artık gerekmiyor), tarama şablonu sayısı (26).
 
+### En çok yükselenler / düşenler → Hisse Tarama
+
+- Ana sayfadaki piyasa genişliği kartında “En çok yükselenler” ve “En çok düşenler” başlıkları tıklanabilir (“Tümünü gör →”). Hisse Tarama, kartla aynı evrende (BIST 100) ilgili tarama seçili, Performans görünümünde ve günlük değişime göre sıralı açılır.
+- TARAMALAR → Performans grubuna iki yeni tarama: **En çok yükselenler** (önceki kapanışın üzerindeki tüm hisseler, en çok yükselen başta) ve **En çok düşenler**. ±%5 eşikli “Günün yükselenleri / düşenleri” aynen duruyor; aynı alanı kullandıkları için birbirinin yerine geçerler.
+- Kartın listeleri taramanın sıralama kuralını kullanır (iki ondalıklı değişim, eşitlikte piyasa değeri, sonra kod): ±%10 tavan/taban eşitliklerinde de kartın ilk beşi taramanın ilk beş satırıyla aynı sırada.
+
 ### Tek yasal uyarı
 
 - Sitenin ilk açılışında bir kez “Yasal uyarı” penceresi çıkar: sitedeki hiçbir içerik yatırım tavsiyesi değildir; fiyatlar, grafikler, sinyaller ve analizler bilgilendirme amaçlıdır, veriler gecikmeli ya da hatalı olabilir. “Anladım” ya da Esc ile kapanır, seçim tarayıcıda hatırlanır (`hisse.legalNotice.v1`). Metin esaslı biçimde değişirse anahtarın sürümü artırılıp uyarı yeniden gösterilir. Sayfa altındaki “Yasal uyarı” bağlantısı pencereyi yeniden açar (`dashboard/src/components/layout/LegalNotice.tsx`).

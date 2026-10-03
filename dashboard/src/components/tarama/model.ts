@@ -403,7 +403,7 @@ export type PresetId =
   | "profitable" | "high_roe" | "roe_above_sector" | "high_net_margin"
   | "large_cap" | "mid_cap" | "small_cap" | "liquid"
   | "uptrend" | "golden_cross" | "death_cross" | "near_high" | "near_low" | "rsi_oversold" | "rsi_overbought" | "volume_spike"
-  | "day_gainers" | "day_losers" | "week_gainers"
+  | "top_gainers" | "top_losers" | "day_gainers" | "day_losers" | "week_gainers"
   | "buy_rec" | "sell_rec" | "high_upside" | "high_foreign";
 
 export interface PresetDef {
@@ -426,6 +426,8 @@ export const RSI_OVERSOLD = 30;
 export const RSI_OVERBOUGHT = 70;
 export const NEAR_52W_PCT = 5;
 export const VOLUME_SPIKE = 2;
+/** Moves smaller than this (percent) round to 0,00 and count as unchanged. */
+const FLAT_EPSILON = 0.005;
 
 /**
  * Menu order. Screens on the same field replace each other (see presetsConflict),
@@ -456,6 +458,9 @@ export const PRESETS: readonly PresetDef[] = [
   { id: "rsi_oversold", group: "technical", ranges: { rsi: { max: RSI_OVERSOLD } }, view: "technical", sort: ["rsi", "asc"] },
   { id: "rsi_overbought", group: "technical", ranges: { rsi: { min: RSI_OVERBOUGHT } }, view: "technical", sort: ["rsi", "desc"] },
   { id: "volume_spike", group: "technical", ranges: { rvol: { min: VOLUME_SPIKE } }, view: "technical", sort: ["rel_volume", "desc"] },
+  // Every riser / faller, biggest move first — the full lists behind the home page's movers.
+  { id: "top_gainers", group: "performance", ranges: { chg: { min: FLAT_EPSILON } }, view: "performance", sort: ["change_pct", "desc"] },
+  { id: "top_losers", group: "performance", ranges: { chg: { max: -FLAT_EPSILON } }, view: "performance", sort: ["change_pct", "asc"] },
   { id: "day_gainers", group: "performance", ranges: { chg: { min: 5 } }, view: "performance", sort: ["change_pct", "desc"] },
   { id: "day_losers", group: "performance", ranges: { chg: { max: -5 } }, view: "performance", sort: ["change_pct", "asc"] },
   { id: "week_gainers", group: "performance", ranges: { p1w: { min: 10 } }, view: "performance", sort: ["perf_1w", "desc"] },
@@ -505,6 +510,14 @@ export function togglePreset(state: ScreenerState, preset: PresetDef): ScreenerS
     sort: preset.sort?.[0] ?? state.sort,
     dir: preset.sort?.[1] ?? state.dir,
   });
+}
+
+/** A /tarama link that opens with one quick screen on, in its own view and order (optionally within an index). */
+export function presetHref(id: PresetId, index = ""): string {
+  const preset = PRESET_BY_ID.get(id);
+  const state: ScreenerState = { ...DEFAULT_STATE, index };
+  const query = serializeState(preset ? togglePreset(state, preset) : state);
+  return query ? `/tarama?${query}` : "/tarama";
 }
 
 // ---------------------------------------------------------------------------
@@ -769,9 +782,6 @@ function passesRelative(row: Row, relative: RelativeRule, stats: ReadonlyMap<str
 // ---------------------------------------------------------------------------
 // Derived display data
 // ---------------------------------------------------------------------------
-
-/** Moves smaller than this (percent) round to 0,00 and count as unchanged. */
-const FLAT_EPSILON = 0.005;
 
 export function breadth(rows: readonly Row[]): { up: number; down: number; flat: number } {
   let up = 0;
