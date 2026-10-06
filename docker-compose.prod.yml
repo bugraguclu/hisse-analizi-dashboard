@@ -93,7 +93,6 @@ services:
     image: caddy:2-alpine
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN must be set in production (e.g. hisse.example.com)}
-      N8N_GATE_PASSWORD_HASH: ${N8N_GATE_PASSWORD_HASH:?N8N_GATE_PASSWORD_HASH must be set in production}
     ports:
       - "80:80"
       - "443:443"

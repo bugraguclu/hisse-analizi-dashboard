@@ -28,14 +28,3 @@
 		}
 	}
 }
-
-# n8n shares this server and the existing HTTPS entry point. The extra login
-# protects the initial owner-account setup and remains useful afterward.
-n8n.hisse-analizi.duckdns.org {
-	basic_auth {
-		n8n {$N8N_GATE_PASSWORD_HASH}
-	}
-
-	encode zstd gzip
-	reverse_proxy n8n:5678
-}
