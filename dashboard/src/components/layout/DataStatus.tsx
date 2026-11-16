@@ -73,7 +73,7 @@ export function useDataStatus(): { health: DataHealth; feeds: FeedStatus[]; prim
 }
 
 const DOT_CLASS: Record<DataHealth, string> = {
-  loading: "bg-muted-foreground/40",
+  loading: "bg-muted-foreground/60 skeleton-pulse",
   fresh: "bg-up",
   stale: "bg-warn",
   unknown: "bg-muted-foreground/60",

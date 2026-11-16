@@ -73,7 +73,7 @@ function NewsRow({ item, now }: { item: NewsItem; now: number | null }) {
 function NewsSkeleton() {
   const { t } = useStockI18n();
   return (
-    <div role="status" className="divide-y divide-border">
+    <div role="status" className="divide-y divide-border skeleton-rows">
       <span className="sr-only">{t("state.loading")}</span>
       {[88, 70, 80, 64, 76].map((width, i) => (
         <div key={i} aria-hidden className="space-y-2 px-4 py-3.5">

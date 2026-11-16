@@ -138,7 +138,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
           {groups.map((group, groupIndex) => (
             <div key={group.title} className={cn("col-span-full grid grid-cols-subgrid", groupIndex > 0 && "mt-4")}>
               <h3 className="col-span-full mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t(group.title)}</h3>
-              <ul className="col-span-full grid grid-cols-subgrid gap-y-0.5">
+              <ul className="col-span-full grid grid-cols-subgrid gap-y-0.5 skeleton-rows">
                 {group.rows.map((row) => {
                   const value = ratios?.values[row.key] ?? null;
                   const rowPeriod = ratios?.periods[row.key] ?? mainPeriod;
@@ -196,7 +196,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
                       {withSector ? (
                         <span className="col-start-3 row-start-1 text-right font-mono text-[11px] tabular-nums text-muted-foreground @sm:col-start-4">
                           {sectorPending ? (
-                            <Skeleton className="ml-auto h-3 w-10" />
+                            <Skeleton as="span" className="ml-auto h-3 w-10" />
                           ) : (
                             <>
                               <span className="sr-only">{t("ratios.sectorColumn")}: </span>

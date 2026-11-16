@@ -166,7 +166,7 @@ export function ComparePicker({
                 }}
                 className="h-10 min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
               />
-              {indexQ.isFetching && needle ? <Hourglass aria-hidden className="h-3.5 w-3.5 text-muted-foreground" /> : null}
+              {indexQ.isFetching && needle ? <Hourglass aria-hidden className="h-3.5 w-3.5 text-muted-foreground skeleton-pulse" /> : null}
             </div>
 
             {suggestions && suggestions.length > 0 && !needle ? (

@@ -27,7 +27,7 @@ interface StatItem {
  * 3 columns on phones, 4 from a 512px card, one row of 8 from 896px — both
  * groups have 8 stats, so every step fills its rows and the columns line up.
  */
-const GRID = "grid grid-cols-3 gap-x-3 gap-y-3.5 @lg:grid-cols-4 @lg:gap-x-5 @4xl:grid-cols-8";
+const GRID = "grid grid-cols-3 gap-x-3 gap-y-3.5 skeleton-rows @lg:grid-cols-4 @lg:gap-x-5 @4xl:grid-cols-8";
 
 /**
  * Values sit on the bottom line of their cell (labels may wrap). When some stats

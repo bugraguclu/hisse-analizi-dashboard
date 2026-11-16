@@ -2160,4 +2160,3 @@ test("packing closes gaps without changing the reading order", () => {
   assert.equal(packLayout(DEFAULT_LAYOUT), DEFAULT_LAYOUT);
 });
 ```
-

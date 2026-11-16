@@ -1,0 +1,24 @@
+@media (prefers-reduced-motion: no-preference) {
+  .revealSegments {
+    animation: reveal-segments var(--motion-reveal) var(--motion-ease-out);
+  }
+
+  .growBar {
+    transform-origin: left center;
+    animation: grow-bar var(--motion-reveal) var(--motion-ease-out);
+  }
+}
+
+@keyframes reveal-segments {
+  from, to {
+    mask-image: linear-gradient(90deg, black 48%, transparent 52%);
+    mask-size: 220% 100%;
+  }
+  from { mask-position: 100% 0; }
+  to { mask-position: 0% 0; }
+}
+
+@keyframes grow-bar {
+  from { scale: 0 1; }
+  to { scale: 1 1; }
+}

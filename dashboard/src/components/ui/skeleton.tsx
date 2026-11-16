@@ -1,14 +1,16 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-/** Static placeholder block. */
-function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
+type SkeletonProps = React.ComponentPropsWithoutRef<"div"> & { as?: "div" | "span" };
+
+function Skeleton({ as: Element = "div", className, ...props }: SkeletonProps) {
   return (
-    <div
+    <Element
       data-slot="skeleton"
-      className={cn("rounded-sm bg-muted/70", className)}
+      aria-hidden="true"
+      className={cn("block rounded-sm bg-skeleton skeleton-pulse", className)}
       {...props}
     />
-  )
+  );
 }
 
-export { Skeleton }
+export { Skeleton };

@@ -50,6 +50,7 @@
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
+  --color-skeleton: color-mix(in oklab, var(--foreground) 16%, var(--card));
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
@@ -355,19 +356,50 @@
   mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 
-/* The market tape retains its loading treatment. */
-@utility skeleton-shimmer {
-  background-image: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 7%, transparent), transparent);
-  background-size: 200% 100%;
-  animation: tape-shimmer 1.8s ease-in-out infinite;
-  @media (prefers-reduced-motion: reduce) {
-    animation-duration: 0.01ms;
-    animation-iteration-count: 1;
+@utility skeleton-pulse {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: skeleton-breathe var(--motion-pulse) ease-in-out var(--skeleton-delay, 0ms) infinite;
   }
 }
-@keyframes tape-shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+
+@utility skeleton-rows {
+  & > :nth-child(5n + 2) { --skeleton-delay: calc(-1 * var(--motion-pulse-step)); }
+  & > :nth-child(5n + 3) { --skeleton-delay: calc(-2 * var(--motion-pulse-step)); }
+  & > :nth-child(5n + 4) { --skeleton-delay: calc(-3 * var(--motion-pulse-step)); }
+  & > :nth-child(5n + 5) { --skeleton-delay: calc(-4 * var(--motion-pulse-step)); }
+}
+
+@keyframes skeleton-breathe {
+  0%, 100% {
+    opacity: 0.55;
+    scale: var(--motion-scale-pulse);
+  }
+
+  50% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@utility motion-data-in {
+  animation: data-in var(--motion-fade) var(--motion-ease-out);
+}
+
+@keyframes data-in {
+  from { opacity: 0.72; }
+}
+
+@utility motion-card-in {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: card-in var(--motion-panel) var(--motion-ease-out) var(--card-delay) backwards;
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0.8;
+    translate: 0 5px;
+  }
 }
 
 /* Numbers that must not jitter while they change. */

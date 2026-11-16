@@ -54,7 +54,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
   let body: React.ReactNode;
   if (eventsQ.isPending) {
     body = <RowSkeleton rows={4} />;
-  } else if (eventsQ.isError) {
+  } else if (eventsQ.isLoadingError) {
     body = <ErrorState compact message={t("events.loadError")} onRetry={() => void eventsQ.refetch()} />;
   } else if (events.length === 0) {
     body = <EmptyState compact message={t("dashboard.noEventsYet")} />;
@@ -116,7 +116,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={HEADING_ID} className={className} entranceOrder={3}>
       <CardHeading
         id={HEADING_ID}
         title={
@@ -134,7 +134,9 @@ export function LatestEventsCard({ className }: { className?: string }) {
           </Link>
         }
       />
-      <CardBody>{body}</CardBody>
+      <CardBody pending={eventsQ.isPending} reveal={events.length > 0}>
+        {body}
+      </CardBody>
     </DashboardCard>
   );
 }

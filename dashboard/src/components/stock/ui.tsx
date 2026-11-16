@@ -145,7 +145,7 @@ const SKELETON_LABEL_WIDTHS = [46, 62, 38, 56, 42, 58, 50];
 export function SectionSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   const { t } = useStockI18n();
   return (
-    <div {...TRANSIENT} className={cn("space-y-3.5 py-1", className)} role="status" aria-live="polite">
+    <div {...TRANSIENT} className={cn("space-y-3.5 py-1 skeleton-rows", className)} role="status" aria-live="polite">
       <span className="sr-only">{t("state.loading")}</span>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} aria-hidden className="flex items-center justify-between gap-6">

@@ -189,7 +189,7 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
         <SectionError error={fastQ.error} onRetry={() => void fastQ.refetch()} />
       ) : (
         <div className="space-y-5">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 skeleton-rows sm:grid-cols-3">
             {profile.map((item) => (
               <Stat
                 key={item.key}
@@ -203,7 +203,7 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
           </dl>
           <div className="border-t border-border/40 pt-4">
             <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("profile.valuation")}</h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 skeleton-rows sm:grid-cols-3">
               {valuation.map((item) => {
                 // Computed ratios are needed for F/S, FD/FAVÖK and as the F/K–PD/DD fallback.
                 const needsRatios =

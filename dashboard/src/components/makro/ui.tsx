@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
 import { DEFAULT_LAYOUT_ONLY, TileGroup } from "@/components/workspace/Workspace";
 import { usePanel } from "@/components/workspace/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMakroI18n, type MakroKey } from "./i18n";
 
 // ---------------------------------------------------------------------------
@@ -153,11 +154,6 @@ export function PanelEmpty({ message, className }: { message?: string; className
   return <p className={cn("py-8 text-center text-[13px] text-muted-foreground", className)}>{message ?? t("common.noData")}</p>;
 }
 
-/** Shimmer block sized like the content it stands in for. */
-export function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return <div aria-hidden="true" style={style} className={cn("rounded-sm bg-muted/60", className)} />;
-}
-
 // ---------------------------------------------------------------------------
 // Numbers and changes
 // ---------------------------------------------------------------------------
@@ -204,7 +200,7 @@ export function NeutralChange({ value, text, className }: { value: number | null
 export function TileGrid({ className, children, label }: { className?: string; children: ReactNode; label?: string }) {
   return (
     <div className="card-surface overflow-hidden" role={label ? "group" : undefined} aria-label={label}>
-      <div className={cn("-mb-px -mr-px grid [&>*]:border-b [&>*]:border-r [&>*]:border-border", className)}>{children}</div>
+      <div className={cn("-mb-px -mr-px grid skeleton-rows [&>*]:border-b [&>*]:border-r [&>*]:border-border", className)}>{children}</div>
     </div>
   );
 }
@@ -238,15 +234,15 @@ export function StatTile({
   return (
     // Four subgrid rows — label, value, change, hint — shared by every tile in the same
     // TileGrid row: labels wrap instead of being cut, and values stay on one line.
-    <div className={cn("row-span-4 grid min-w-0 grid-rows-subgrid px-4 py-3", className)}>
+    <div aria-busy={loading || undefined} className={cn("row-span-4 grid min-w-0 grid-rows-subgrid px-4 py-3", className)}>
       <div className="flex min-h-5 items-center gap-1 self-start">
         <DataLabel className="min-w-0">{label}</DataLabel>
         {info ? <InfoPopover label={info.label}>{info.content}</InfoPopover> : null}
       </div>
       {loading ? (
         <>
-          <Shimmer className={cn("mt-1.5", size === "lg" ? "h-7 w-24" : "h-6 w-20")} />
-          <Shimmer className="mt-2 h-3 w-28" />
+          <Skeleton className={cn("mt-1.5 max-w-full origin-left", size === "lg" ? "h-7 w-24" : "h-6 w-20")} />
+          <Skeleton className="mt-2 h-3 w-28 max-w-full origin-left bg-skeleton/70" />
           <span />
         </>
       ) : (
