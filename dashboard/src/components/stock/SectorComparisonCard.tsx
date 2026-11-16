@@ -63,7 +63,9 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
   const sectorName = useSectorName(sector);
   const [expanded, setExpanded] = useState(false);
   // In a layout slot every peer is there to scroll, so a taller card simply shows more of them.
-  const { fill } = usePanel();
+  const { fill, columns: slotColumns } = usePanel();
+  // A narrow slot shows the short column set, like the combined view's column.
+  const short = compact || (fill && slotColumns <= 3);
 
   // No KAP sector (a handful of listings): nothing to compare, no card.
   if (sectorQ.isSuccess && !sector) return null;
@@ -84,7 +86,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
     );
   }
 
-  const columns = visibleColumns(sector, compact);
+  const columns = visibleColumns(sector, short);
   const self = sector.peers.find((peer) => peer.symbol === ticker) ?? null;
   const others = sector.peers.filter((peer) => peer.symbol !== ticker);
   const shown = expanded || fill ? others : others.slice(0, TOP_PEERS);
@@ -163,7 +165,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
           <thead>
             <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
               {/* A set width: with few figure columns (a bank's) the spare room goes between the figures. */}
-              <th scope="col" className={cn(STICKY, "bg-card font-semibold", compact ? "sm:w-52" : "sm:w-64")}>
+              <th scope="col" className={cn(STICKY, "bg-card font-semibold", short ? "sm:w-52" : "sm:w-64")}>
                 {t("peers.stock")}
               </th>
               {columns.map((column) => (

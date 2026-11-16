@@ -4,6 +4,7 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { TREND_PILL_CLASS, TREND_TEXT_CLASS, formatChangePercent, formatDay, formatPrice, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMovingAverageCross, usePivots, useQuote, useSignals } from "./hooks";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n } from "./i18n";
 import { movingAverageRows } from "./parsers";
 import type { Pivots } from "./types";
@@ -163,6 +164,7 @@ function PivotLadder({ pivots, price }: { pivots: Pivots; price: number | null }
 
 /** Classic pivot points (support/resistance) from the backend. */
 export function PivotsCard({ ticker }: { ticker: string }) {
+  const slotted = useSlotted();
   const { t } = useStockI18n();
   const pivotsQ = usePivots(ticker);
   const { quote } = useQuote(ticker);
@@ -190,7 +192,7 @@ export function PivotsCard({ ticker }: { ticker: string }) {
       ) : (
         <div className="space-y-4">
           <PivotLadder pivots={pivots} price={price} />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className={cn("grid grid-cols-1 gap-3", slotted ? "@lg:grid-cols-3" : "sm:grid-cols-3")}>
             <div className="space-y-2 rounded-lg border border-border/60 bg-surface p-3">
               <div className="flex items-center gap-1 text-xs font-bold text-foreground">
                 <ArrowUpRight aria-hidden className="h-3.5 w-3.5 text-muted-foreground" /> {t("pivots.resistance")}

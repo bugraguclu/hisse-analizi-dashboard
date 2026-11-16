@@ -52,6 +52,17 @@
     box-shadow var(--motion-popover) var(--motion-ease-out);
 }
 
+/* A drag that misses a handle must not sweep a text selection across the cards. */
+.editing .tile {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.editing .tile :where(input, textarea, [contenteditable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .editing .tile:hover,
 .editing .tile:focus-within {
   outline-color: color-mix(in oklab, var(--foreground) 26%, transparent);
@@ -164,6 +175,11 @@
     min-height: 0;
   }
 
+  /* Cards read the size of their slot (`slot-*` variants) to decide what to show. */
+  .positioned .tile:not([data-hug]) {
+    container: tile / size;
+  }
+
   /* A card that hugs its content sets the height of its slot, not the other way round. */
   .positioned .tile[data-hug] {
     align-self: start;
@@ -171,6 +187,15 @@
 
   .positioned .tile[data-hug] > * {
     flex: 0 0 auto;
+  }
+
+  /* While it loads, such a card keeps the height it had, so the page does not jump. */
+  .positioned .tile[data-hug]:has([data-transient]) {
+    min-height: calc(var(--rows) * var(--row-step) - var(--grid-gap));
+  }
+
+  .positioned .tile[data-hug]:has([data-transient]) > * {
+    flex: 1 0 auto;
   }
 
   .destination {

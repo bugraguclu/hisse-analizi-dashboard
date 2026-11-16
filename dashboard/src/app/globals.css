@@ -3,6 +3,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * A card in a layout slot (see components/workspace): variants on the size of
+ * that slot. They never match on a page that keeps its default layout.
+ */
+@custom-variant slot-short {
+  @container tile (max-height: 25.99rem) {
+    @slot;
+  }
+}
+@custom-variant slot-tall {
+  @container tile (min-height: 36rem) {
+    @slot;
+  }
+}
+@custom-variant slot-narrow {
+  @container tile (max-width: 29.99rem) {
+    @slot;
+  }
+}
+@custom-variant slot-wide {
+  @container tile (min-width: 44rem) {
+    @slot;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

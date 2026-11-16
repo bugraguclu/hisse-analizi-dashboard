@@ -28,26 +28,31 @@ import { SectionHeadingLevel } from "./ui";
  * and resize them; each view keeps its own layout, shared by all stocks.
  */
 const CARDS = {
-  // A strip of figures: it is as tall as its rows, whatever its width.
+  /*
+   * A fixed set of figures: the card is as tall as they are at the width it is
+   * given, so it never scrolls and never has room left over. Wider, the figures
+   * spread into more columns and the card gets shorter.
+   */
   quote: { title: "quote.sectionLabel", hug: true },
-  // Narrower or shorter than this, the chart's controls leave no room for the plot.
-  chart: { title: "chart.title", minW: 3, minH: 14 },
-  scorecard: { title: "score.title" },
-  analysts: { title: "analyst.title" },
-  kap: { title: "kap.title" },
-  news: { title: "news.title" },
-  ratios: { title: "ratios.title" },
-  signals: { title: "tf.title" },
-  sector: { title: "peers.title", minW: 3 },
-  dividends: { title: "div.title" },
-  earnings: { title: "earn.title" },
-  holders: { title: "holders.title" },
-  profile: { title: "profile.title" },
+  scorecard: { title: "score.title", hug: true },
+  analysts: { title: "analyst.title", hug: true },
+  ratios: { title: "ratios.title", hug: true },
+  signals: { title: "tf.title", hug: true },
+  earnings: { title: "earn.title", hug: true },
+  holders: { title: "holders.title", hug: true },
+  profile: { title: "profile.title", hug: true },
+  summary: { title: "tech.summaryTitle", hug: true },
+  averages: { title: "ma.title", hug: true, minW: 3 },
+  indicators: { title: "tech.indicatorsTitle", hug: true, minW: 3 },
+  pivots: { title: "pivots.title", hug: true },
+  // A chart takes any size. Narrower or shorter than this, its controls leave no room for the plot.
+  chart: { title: "chart.title", minW: 3, minH: 11 },
+  // Lists and tables: the card scrolls when short and stops growing where the list ends.
+  kap: { title: "kap.title", minH: 6 },
+  news: { title: "news.title", minH: 6 },
+  dividends: { title: "div.title", minH: 6 },
+  sector: { title: "peers.title", minW: 3, minH: 7 },
   statements: { title: "fin.title", minW: 3, minH: 8 },
-  summary: { title: "tech.summaryTitle" },
-  averages: { title: "ma.title" },
-  indicators: { title: "tech.indicatorsTitle", minW: 3 },
-  pivots: { title: "pivots.title" },
 } as const satisfies Record<string, Omit<WorkspaceCard, "label"> & { title: StockKey }>;
 
 type CardId = keyof typeof CARDS;

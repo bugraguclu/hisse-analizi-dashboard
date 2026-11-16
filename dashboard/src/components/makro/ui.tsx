@@ -8,7 +8,7 @@ import { formatChangePercent, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
 import { DEFAULT_LAYOUT_ONLY, TileGroup } from "@/components/workspace/Workspace";
-import { usePanel } from "@/components/workspace/panel";
+import { TRANSIENT, usePanel } from "@/components/workspace/panel";
 import { useMakroI18n, type MakroKey } from "./i18n";
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,9 @@ export function MacroSection({
 
 /**
  * Flat panel with a text title row, optional right-aligned actions and a footnote.
- * In a layout slot (see Workspace) it is as tall as the slot and its body scrolls.
+ * In a layout slot (see Workspace) it is as tall as the slot: a chart in its
+ * body takes the height there is, and a short slot leaves the footnote out so
+ * the plot keeps its room.
  */
 export function Panel({
   title,
@@ -78,7 +80,9 @@ export function Panel({
       </header>
       <div className={cn("flex-1 px-4 py-3", fill && "min-h-0 overflow-y-auto scrollbar-thin", bodyClassName)}>{children}</div>
       {footer ? (
-        <footer className="shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
+        <footer className={cn("shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground", fill && "slot-short:hidden")}>
+          {footer}
+        </footer>
       ) : null}
     </section>
   );
@@ -132,7 +136,7 @@ function errorMessage(error: unknown, fallback: string): string {
 export function PanelError({ error, onRetry, className }: { error: unknown; onRetry?: () => void; className?: string }) {
   const { t } = useMakroI18n();
   return (
-    <div role="alert" className={cn("flex flex-col items-center justify-center gap-2 py-8 text-center", className)}>
+    <div {...TRANSIENT} role="alert" className={cn("flex flex-col items-center justify-center gap-2 py-8 text-center", className)}>
       <p className="text-[13px] text-foreground">{errorMessage(error, t("common.loadError"))}</p>
       {onRetry ? (
         <button
@@ -155,7 +159,7 @@ export function PanelEmpty({ message, className }: { message?: string; className
 
 /** Shimmer block sized like the content it stands in for. */
 export function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return <div aria-hidden="true" style={style} className={cn("rounded-sm bg-muted/60", className)} />;
+  return <div {...TRANSIENT} aria-hidden="true" style={style} className={cn("rounded-sm bg-muted/60", className)} />;
 }
 
 // ---------------------------------------------------------------------------

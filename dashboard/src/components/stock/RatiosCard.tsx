@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatMultiple, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useCompanySector, useRatios } from "./hooks";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n, type StockKey } from "./i18n";
 import type { SectorMetricKey } from "./sector";
 import { useSectorName } from "./sector-ui";
@@ -71,6 +72,23 @@ const samePeriod = (a: RatioPeriod | null | undefined, b: RatioPeriod | null | u
  */
 const GRID_PLAIN = "grid-cols-[minmax(0,9rem)_1fr_auto]";
 const GRID_SECTOR = "grid-cols-[minmax(0,1fr)_auto_auto] @sm:grid-cols-[minmax(0,9rem)_minmax(2.5rem,1fr)_auto_auto]";
+/**
+ * In a layout slot a wide card sets the groups two abreast instead of
+ * stretching the bars across it: the same tracks twice with a gutter between,
+ * each group spanning one half.
+ */
+const WIDE_PLAIN = {
+  grid: "@3xl:grid-cols-[minmax(0,9rem)_1fr_auto_2rem_minmax(0,9rem)_1fr_auto]",
+  left: "@3xl:col-span-3 @3xl:col-start-1",
+  right: "@3xl:col-span-3 @3xl:col-start-5",
+  heading: ["", ""],
+};
+const WIDE_SECTOR = {
+  grid: "@3xl:grid-cols-[minmax(0,9rem)_minmax(2.5rem,1fr)_auto_auto_2rem_minmax(0,9rem)_minmax(2.5rem,1fr)_auto_auto]",
+  left: "@3xl:col-span-4 @3xl:col-start-1",
+  right: "@3xl:col-span-4 @3xl:col-start-6",
+  heading: ["@3xl:col-start-8", "@3xl:col-start-9"],
+};
 
 /**
  * Profitability, balance-sheet and growth ratios from the latest annual KAP
@@ -81,6 +99,7 @@ const GRID_SECTOR = "grid-cols-[minmax(0,1fr)_auto_auto] @sm:grid-cols-[minmax(0
 export function RatiosCard({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
   const { t: tMini } = useMiniChartI18n();
+  const slotted = useSlotted();
   const periodLabel = usePeriodLabel();
   const ratiosQ = useRatios(ticker);
   const sectorQ = useCompanySector(ticker);
@@ -97,6 +116,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
   // The column shows while the sector loads (no jump when it lands) and once any row has a median.
   const sectorPending = sectorQ.isPending;
   const withSector = sectorPending || rowOrder.some((key) => sector?.metrics[key]?.median != null);
+  const wide = slotted && groups.length > 1 ? (withSector ? WIDE_SECTOR : WIDE_PLAIN) : null;
 
   return (
     <SectionCard
@@ -123,7 +143,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
       ) : groups.length === 0 ? (
         <SectionEmpty message={t("ratios.empty")} hint={t("ratios.emptyHint")} />
       ) : (
-        <div className={cn("grid gap-x-3", withSector ? GRID_SECTOR : GRID_PLAIN)}>
+        <div className={cn("grid gap-x-3", withSector ? GRID_SECTOR : GRID_PLAIN, wide?.grid)}>
           {withSector ? (
             <div
               aria-hidden
@@ -133,10 +153,24 @@ export function RatiosCard({ ticker }: { ticker: string }) {
               <span className="col-start-3 row-start-1 text-right @sm:col-start-4" title={sectorName ?? undefined}>
                 {t("ratios.sectorColumn")}
               </span>
+              {wide ? (
+                <>
+                  <span className={cn("row-start-1 hidden text-right @3xl:block", wide.heading[0])}>{ticker}</span>
+                  <span className={cn("row-start-1 hidden text-right @3xl:block", wide.heading[1])}>{t("ratios.sectorColumn")}</span>
+                </>
+              ) : null}
             </div>
           ) : null}
           {groups.map((group, groupIndex) => (
-            <div key={group.title} className={cn("col-span-full grid grid-cols-subgrid", groupIndex > 0 && "mt-4")}>
+            <div
+              key={group.title}
+              className={cn(
+                "col-span-full grid grid-cols-subgrid content-start",
+                groupIndex > 0 && "mt-4",
+                wide && (groupIndex % 2 === 0 ? wide.left : wide.right),
+                wide && groupIndex === 1 && "@3xl:mt-0",
+              )}
+            >
               <h3 className="col-span-full mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t(group.title)}</h3>
               <ul className="col-span-full grid grid-cols-subgrid gap-y-0.5">
                 {group.rows.map((row) => {

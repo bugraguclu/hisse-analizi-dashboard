@@ -17,7 +17,7 @@ export function DashboardView() {
       storageKey="hisse.dashboard.layout"
       cards={{
         // Shorter than this, the chart's own controls leave no room for the plot.
-        index: { label: "BIST 100", minW: 3, minH: 15 },
+        index: { label: "BIST 100", minW: 3, minH: 11 },
         watchlist: { label: t("dashboard.watchlist"), minH: 8 },
         breadth: { label: t("dashboard.breadth"), minH: 8 },
         events: { label: t("dashboard.latestDevelopments"), minH: 6 },

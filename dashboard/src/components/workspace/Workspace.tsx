@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -47,7 +48,7 @@ import {
   type LayoutItem,
   type WorkspaceLayout,
 } from "./layout-model";
-import { PanelProvider, type PanelState } from "./panel";
+import { PanelProvider, TRANSIENT, type PanelState } from "./panel";
 import { useLayoutGesture, type GesturePreview, type GestureRelease } from "./use-layout-gesture";
 import styles from "./workspace.module.css";
 
@@ -66,6 +67,8 @@ export type WorkspaceCard = Partial<CardLimits> & {
 const STORAGE_PREFIX = "hisse.layout.";
 const SAVED_EVENT = "workspace-layout-saved";
 const DESTINATION = "destination";
+/** However little a card has to show, its slot keeps room for a title and a line. */
+const MIN_CEILING = 3;
 const GLIDE_EASING = cubicBezier(motionCurve.easeOut);
 const GRID_STYLE = {
   "--grid-columns": WORKSPACE_COLUMNS,
@@ -140,6 +143,8 @@ type WorkspaceState = {
   nudge: (id: string, kind: LayoutChange, x: number, y: number, control: Control) => void;
   canNudge: (id: string, kind: LayoutChange, x: number, y: number) => boolean;
   reportHeight: (id: string, rows: number) => void;
+  /** The height at which a card shows all it has; `null` when it can use any height. */
+  reportCeiling: (id: string, rows: number | null) => void;
   absent: ReadonlySet<string>;
   reportPresence: (id: string, present: boolean) => void;
   startEditing: () => void;
@@ -193,6 +198,7 @@ export function Workspace({
   );
   const [edit, setEdit] = useState<Edit | null>(null);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const [ceilings, setCeilings] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [absent, setAbsent] = useState<ReadonlySet<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState("");
   const grid = useRef<HTMLDivElement>(null);
@@ -211,25 +217,33 @@ export function Workspace({
     const card = cards[id];
     // A card that hugs its content is as tall as that content, whatever it is.
     if (card?.hug) return { minW: card.minW ?? DEFAULT_LIMITS.minW, minH: 1, maxH: MAX_GRID_ROWS, hug: true };
-    return {
-      minW: card?.minW ?? DEFAULT_LIMITS.minW,
-      minH: card?.minH ?? DEFAULT_LIMITS.minH,
-      maxH: card?.maxH ?? DEFAULT_LIMITS.maxH,
-    };
+    // A card with a finite list stops growing where the list ends, however short that is.
+    const maxH = Math.min(card?.maxH ?? DEFAULT_LIMITS.maxH, ceilings.get(id) ?? MAX_GRID_ROWS);
+    return { minW: card?.minW ?? DEFAULT_LIMITS.minW, minH: Math.min(card?.minH ?? DEFAULT_LIMITS.minH, maxH), maxH };
   };
-  const hugging = new Map([...heights].filter(([id]) => cards[id]?.hug));
   const saved = parseLayout(stored, ids, limits);
   const editing = desktop && edit !== null;
   const draft = editing ? edit.layout : saved;
   // A card with nothing to show (no sector to compare with, say) gives up its slot until it has.
   const missing = draft && absent.size > 0 ? draft.filter(({ id }) => absent.has(id)) : [];
-  const present = draft && missing.length > 0 ? packLayout(draft.filter(({ id }) => !absent.has(id))) : draft;
-  // Cards that hug their content report their height once they are on screen.
-  const base = present && fitHeights(present, hugging);
+  const present = draft && packLayout(missing.length > 0 ? draft.filter(({ id }) => !absent.has(id)) : draft);
+  // Cards that hug their content report their height once they are on screen;
+  // the others are no taller than what they have to show.
+  function fit(layout: WorkspaceLayout): WorkspaceLayout {
+    const fitted = new Map([...heights].filter(([id]) => cards[id]?.hug));
+    for (const { id, h } of layout) {
+      const ceiling = cards[id]?.hug ? undefined : ceilings.get(id);
+      if (ceiling !== undefined && h > ceiling) fitted.set(id, ceiling);
+    }
+    return fitHeights(layout, fitted);
+  }
+  const base = present && fit(present);
 
   function commit(layout: WorkspaceLayout, id: string, kind: Control, reveal: boolean) {
     control.current = { id, kind, reveal };
-    setEdit({ layout: [...layout, ...missing], status: "changed" });
+    // Cards the layout does not place (hidden now, or shown since it was worked out) keep their slots.
+    const placed = new Set(layout.map((item) => item.id));
+    setEdit({ layout: [...layout, ...(draft ?? []).filter((item) => !placed.has(item.id))], status: "changed" });
     const item = layout.find((entry) => entry.id === id);
     if (item) {
       setAnnouncement(t("dashboard.layoutPosition", {
@@ -247,7 +261,10 @@ export function Workspace({
     if (release.changed) commit(release.layout, release.id, release.kind, false);
   });
   const preview = base ? gesture.preview : null;
-  const layout = preview?.layout ?? base;
+  // The gesture works from the heights the cards had when it began. They are
+  // measured again as a card is reshaped, so the outline shows the slot the
+  // card will really take and its neighbours make room for exactly that.
+  const layout = preview ? fit(preview.layout) : base;
   const customized = layout !== null;
   const positioned = desktop && customized;
   const slots = new Map<string, LayoutItem>();
@@ -284,7 +301,11 @@ export function Workspace({
     }
     if (!before) return;
     const columnStep = (width + WORKSPACE_GAP) / WORKSPACE_COLUMNS;
-    const pixels = ({ w, h }: LayoutItem) => ({ width: `${w * columnStep - WORKSPACE_GAP}px`, height: `${h * WORKSPACE_ROW_STEP - WORKSPACE_GAP}px` });
+    // A card that hugs its content is never given a height: the content sets it.
+    const pixels = ({ w, h }: LayoutItem, hug = false) => ({
+      width: `${w * columnStep - WORKSPACE_GAP}px`,
+      ...(!hug && { height: `${h * WORKSPACE_ROW_STEP - WORKSPACE_GAP}px` }),
+    });
     for (const [key, slot] of slots) {
       const previous = before.slots.get(key);
       if (!previous) continue;
@@ -297,16 +318,19 @@ export function Workspace({
       if (!element) continue;
 
       const flight = glides.current.get(key);
-      let [x, y] = flight?.playState === "running" ? displacement(element) : [0, 0];
+      const flying = flight?.playState === "running";
+      let [x, y] = flying ? displacement(element) : [0, 0];
       x += (previous.x - slot.x) * columnStep;
       y += (previous.y - slot.y) * WORKSPACE_ROW_STEP;
       if (dropped?.kind === "move") {
         x += dropped.dx;
         y += dropped.dy;
       }
+      const hug = Boolean(cards[key]?.hug);
       const resized = dropped?.kind === "resize"
-        ? { width: `${dropped.width}px`, height: `${dropped.height}px` }
-        : needsResize ? pixels(previous) : null;
+        ? { width: `${dropped.width}px`, ...(!hug && { height: `${dropped.height}px` }) }
+        // An outline still changing size carries on from the size it has reached.
+        : needsResize ? (flying ? { width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px` } : pixels(previous)) : null;
       if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && !resized) continue;
 
       flight?.cancel();
@@ -314,7 +338,7 @@ export function Workspace({
       const glide = element.animate(
         [
           { translate: `${x}px ${y}px`, ...resized, ...lifted },
-          { translate: "0px 0px", ...(resized && pixels(slot)), ...lifted },
+          { translate: "0px 0px", ...(resized && pixels(slot, hug)), ...lifted },
         ],
         {
           duration: key === DESTINATION ? motionDuration.press : dropped ? motionDuration.popover : motionDuration.move,
@@ -427,6 +451,15 @@ export function Workspace({
     reportHeight(id, rows) {
       setHeights((current) => (current.get(id) === rows ? current : new Map(current).set(id, rows)));
     },
+    reportCeiling(id, rows) {
+      setCeilings((current) => {
+        if (rows === null ? !current.has(id) : current.get(id) === rows) return current;
+        const next = new Map(current);
+        if (rows === null) next.delete(id);
+        else next.set(id, rows);
+        return next;
+      });
+    },
     absent,
     reportPresence(id, shown) {
       setAbsent((current) => {
@@ -535,7 +568,7 @@ export const DEFAULT_LAYOUT_ONLY = { "data-default-layout-only": "" } as const;
 /** Card-shaped stand-in for a tile that has not been scrolled near yet. */
 function TilePlaceholder({ minHeight }: { minHeight: number }) {
   return (
-    <div aria-hidden className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
+    <div aria-hidden {...TRANSIENT} className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
       <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
         <Skeleton className="h-3 w-32" />
       </div>
@@ -574,7 +607,7 @@ export function Tile({
 }) {
   const { t } = useLocale();
   const workspace = useWorkspace();
-  const { cards, customized, positioned, editing, base, preview, gesture, helpId, reportHeight, reportPresence } = workspace;
+  const { cards, customized, positioned, editing, base, preview, gesture, helpId, reportHeight, reportCeiling, reportPresence } = workspace;
   const element = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(!lazy);
   const card = cards[id];
@@ -587,7 +620,12 @@ export function Tile({
   const fill = positioned && !hug && slot !== undefined;
   const columns = slot?.w ?? 0;
   const rows = slot?.h ?? 0;
-  const panel = useMemo<PanelState>(() => ({ fill, columns, rows }), [fill, columns, rows]);
+  const reportSpare = useCallback((spare: number | null) => {
+    const height = element.current?.offsetHeight ?? 0;
+    reportCeiling(id, spare === null || height === 0 ? null : Math.max(MIN_CEILING, Math.ceil((height - spare + WORKSPACE_GAP) / WORKSPACE_ROW_STEP)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reportCeiling only forwards to a state setter
+  }, [id]);
+  const panel = useMemo<PanelState>(() => ({ fill, columns, rows, reportSpare }), [fill, columns, rows, reportSpare]);
 
   useEffect(() => {
     const tile = element.current;
@@ -615,11 +653,20 @@ export function Tile({
   }, [id]);
 
   const measured = positioned && hug;
+  const held = useRef(rows);
+  useLayoutEffect(() => {
+    held.current = rows;
+  }, [rows]);
   useLayoutEffect(() => {
     const tile = element.current;
     if (!tile || !measured) return;
     const report = () => {
-      if (tile.offsetHeight > 0) reportHeight(id, Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP));
+      if (tile.offsetHeight === 0) return;
+      const height = Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP);
+      // A placeholder keeps the height the card had (it may need more, never less);
+      // only real content makes the card shorter.
+      if (height <= held.current && tile.querySelector("[data-transient]")) return;
+      reportHeight(id, height);
     };
     report();
     const observer = new ResizeObserver(report);
@@ -640,11 +687,9 @@ export function Tile({
         aria-label={name}
         aria-describedby={helpId}
         title={name}
+        // The press belongs to the gesture: it must not select text or start a native drag.
+        onMouseDown={(event) => event.preventDefault()}
         onPointerDown={(event: PointerEvent<HTMLButtonElement>) => gesture.start(event, item, kind, base)}
-        onPointerMove={gesture.move}
-        onPointerUp={gesture.end}
-        onPointerCancel={gesture.cancelPointer}
-        onLostPointerCapture={gesture.cancelPointer}
         onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
           const adjustment = adjustments.find(({ key, kind: target }) => key === event.key && target === kind);
           if (!adjustment) return;

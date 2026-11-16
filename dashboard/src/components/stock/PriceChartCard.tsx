@@ -424,6 +424,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   return (
     <SectionCard
       title={t("chart.title")}
+      stretch
       bodyClassName={fill ? "flex flex-col overflow-hidden" : undefined}
       actions={
         <div className="contents" onPointerEnter={warmPeriods} onFocusCapture={warmPeriods}>

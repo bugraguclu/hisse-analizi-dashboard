@@ -10,15 +10,100 @@ export type PanelState = Readonly<{
   columns: number;
   /** Slot height in grid rows (0 on a page that keeps its default layout). */
   rows: number;
+  /**
+   * Tells the slot how much room its card leaves unused, in pixels (negative
+   * when the content overflows and scrolls). `null` while that is unknown.
+   */
+  reportSpare: (spare: number | null) => void;
 }>;
 
-const NATURAL: PanelState = { fill: false, columns: 0, rows: 0 };
+const NATURAL: PanelState = { fill: false, columns: 0, rows: 0, reportSpare: () => {} };
 const PanelContext = createContext<PanelState>(NATURAL);
 
 export const PanelProvider = PanelContext.Provider;
 
 export function usePanel(): PanelState {
   return useContext(PanelContext);
+}
+
+/**
+ * Whether the card sits in a layout slot of any kind. Cards use it to arrange
+ * their content by the width they were given (`@container` variants) while the
+ * page's default layout stays exactly as it was written.
+ */
+export function useSlotted(): boolean {
+  return useContext(PanelContext).columns > 0;
+}
+
+/**
+ * Marks loading placeholders and error messages: content that stands in for
+ * the real thing and says nothing about how tall the card will be.
+ */
+export const TRANSIENT = { "data-transient": "" } as const;
+
+/** Wraps everything a card's scrolling body shows, so its full height can be read. */
+export const PANEL_CONTENT = { "data-panel-content": "" } as const;
+
+/**
+ * Ref for the scrolling body of a card whose content has an end (a list, a
+ * table, a set of figures). The body holds one element marked `PANEL_CONTENT`,
+ * whose children are the content. In a layout slot the body reports the room
+ * that content leaves unused, so the slot is never taller than the card can fill.
+ */
+export function usePanelBody() {
+  const { fill, reportSpare } = usePanel();
+  return useCallback((body: HTMLElement | null) => {
+    if (!body || !fill) return;
+    const content = body.querySelector<HTMLElement>(":scope > [data-panel-content]");
+    if (!content) return;
+    const measure = () => {
+      if (content.querySelector("[data-transient]")) {
+        reportSpare(null);
+        return;
+      }
+      const style = getComputedStyle(body);
+      let used = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+      for (const child of content.children) used += (child as HTMLElement).offsetHeight;
+      reportSpare(body.clientHeight - used);
+    };
+    const resize = new ResizeObserver(measure);
+    const watch = () => {
+      resize.disconnect();
+      resize.observe(body);
+      for (const child of content.children) resize.observe(child);
+    };
+    // The wrapper is at least as tall as the body, so its children are what changes size.
+    const swap = new MutationObserver(() => {
+      watch();
+      measure();
+    });
+    watch();
+    measure();
+    swap.observe(content, { childList: true, subtree: true });
+    return () => {
+      resize.disconnect();
+      swap.disconnect();
+      reportSpare(null);
+    };
+  }, [fill, reportSpare]);
+}
+
+/** The size of an element in a layout slot, followed live while the card is resized. */
+export function usePanelSize() {
+  const { fill } = usePanel();
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const ref = useCallback((element: HTMLElement | null) => {
+    if (!element || !fill) return;
+    const measure = () => {
+      const { clientWidth: width, clientHeight: height } = element;
+      setSize((current) => (current?.width === width && current.height === height ? current : { width, height }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fill]);
+  return [ref, fill ? size : null] as const;
 }
 
 /**
@@ -30,15 +115,6 @@ export function usePanel(): PanelState {
  * `reserve` is the height taken by anything else inside that element.
  */
 export function useFitCount(rowHeight: number, natural: number, reserve = 0) {
-  const { fill } = usePanel();
-  const [fit, setFit] = useState<number | null>(null);
-  const ref = useCallback((element: HTMLElement | null) => {
-    if (!element || !fill) return;
-    const measure = () => setFit(Math.max(1, Math.floor((element.clientHeight - reserve) / rowHeight)));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [fill, rowHeight, reserve]);
-  return [ref, fill && fit !== null ? fit : natural] as const;
+  const [ref, size] = usePanelSize();
+  return [ref, size ? Math.max(1, Math.floor((size.height - reserve) / rowHeight)) : natural] as const;
 }
