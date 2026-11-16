@@ -162,6 +162,7 @@ export function ChartWorkspace({
 }: ChartWorkspaceProps) {
   const { t, locale } = useChartI18n();
   const chartRef = useRef<FinancialChartHandle>(null);
+  const plotEntranceClaimed = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const nativeFullscreenRef = useRef(false);
@@ -201,6 +202,12 @@ export function ChartWorkspace({
   const handleHover = (index: number | null) => {
     setHoverIndex(index);
     onHoverChange?.(index);
+  };
+
+  const claimPlotEntrance = () => {
+    if (plotEntranceClaimed.current) return false;
+    plotEntranceClaimed.current = true;
+    return true;
   };
 
   const openFullscreen = () => {
@@ -397,6 +404,7 @@ export function ChartWorkspace({
             onUndoStateChange={setCanUndo}
             onHoverChange={handleHover}
             onViewChange={setView}
+            claimPlotEntrance={claimPlotEntrance}
             wheelZoom={mode === "fullscreen" ? "always" : "modifier"}
             ariaLabel={ariaLabel}
             symbol={symbol}

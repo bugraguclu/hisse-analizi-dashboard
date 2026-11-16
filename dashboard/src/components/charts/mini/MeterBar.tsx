@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import motion from "../chart-motion.module.css";
 
 export interface MeterBarProps {
   /** null renders an empty track. */
@@ -43,6 +44,7 @@ export function MeterBar({ value, scale, height = 6, reference, className }: Met
         <div
           className={cn(
             "h-full rounded-full",
+            motion.growBar,
             value != null && value < 0 ? "bg-down/70" : "bg-primary/70",
           )}
           style={{ width: `${width}%` }}

@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
+import { staggerDelay } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /** Flat panel used by every home-page section. */
@@ -12,16 +13,27 @@ export function DashboardCard({
   className,
   children,
   labelledBy,
+  entranceOrder,
 }: {
   className?: string;
   children: ReactNode;
   /** id of the heading that names this region. */
   labelledBy?: string;
+  entranceOrder?: number;
 }) {
+  const entrance = entranceOrder === undefined ? undefined : { "--card-delay": `${staggerDelay(entranceOrder)}ms` } as CSSProperties;
   return (
-    <section aria-labelledby={labelledBy} className={cn("card-surface min-w-0 overflow-hidden", className)}>
+    <section style={entrance} aria-labelledby={labelledBy} className={cn("card-surface min-w-0 overflow-hidden", entrance && "motion-card-in", className)}>
       {children}
     </section>
+  );
+}
+
+export function CardBody({ children, pending, reveal }: { children: ReactNode; pending: boolean; reveal: boolean }) {
+  return (
+    <div aria-busy={pending || undefined} className={reveal ? "motion-data-in" : undefined}>
+      {children}
+    </div>
   );
 }
 

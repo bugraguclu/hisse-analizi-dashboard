@@ -4,6 +4,7 @@ export const motionDuration = {
   panel: 260,
   move: 250,
   fade: 220,
+  reveal: 420,
   pulse: 1760,
 } as const;
 
@@ -51,6 +52,7 @@ export const motionCss = {
   "--motion-move": `${motionDuration.move}ms`,
   "--motion-fade": `${motionDuration.fade}ms`,
   "--motion-fade-exit": `${exitDuration(motionDuration.fade)}ms`,
+  "--motion-reveal": `${motionDuration.reveal}ms`,
   "--motion-pulse": `${motionDuration.pulse}ms`,
   "--motion-pulse-step": "90ms",
   "--motion-scale-press": motionScale.press,

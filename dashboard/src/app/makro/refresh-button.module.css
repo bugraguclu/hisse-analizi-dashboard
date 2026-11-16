@@ -1,0 +1,9 @@
+@media (prefers-reduced-motion: no-preference) {
+  .refreshIcon[data-refreshing="true"] {
+    animation: refresh-turn calc(3 * var(--motion-panel)) linear 3;
+  }
+}
+
+@keyframes refresh-turn {
+  to { transform: rotate(1turn); }
+}

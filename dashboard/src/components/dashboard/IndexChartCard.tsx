@@ -192,7 +192,7 @@ export function IndexChartCard({ className }: { className?: string }) {
   );
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={HEADING_ID} className={className} entranceOrder={0}>
       <div className="px-4 pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0" aria-busy={levelPending || undefined}>
@@ -205,7 +205,7 @@ export function IndexChartCard({ className }: { className?: string }) {
                 <Skeleton className="h-3.5 w-20 origin-left bg-skeleton/70" />
               </div>
             ) : (
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 motion-data-in">
                 <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{level === null ? formatNumber(null) : formatLevel(level)}</span>
                 {unitTag}
                 <ChangeLine change={headerChange} percent={headerPercent} formatChange={formatChange} />

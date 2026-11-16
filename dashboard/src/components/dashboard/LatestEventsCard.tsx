@@ -13,7 +13,7 @@ import { categoryKeys, severityKeys, toCategoryKey, toSeverity, type SeverityKey
 import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/use-now";
 import type { EventOut } from "@/types";
-import { CardHeading, DashboardCard, RowSkeleton } from "./ui";
+import { CardBody, CardHeading, DashboardCard, RowSkeleton } from "./ui";
 
 const HEADING_ID = "latest-events-heading";
 const MAX_ITEMS = 6;
@@ -51,7 +51,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
   let body: React.ReactNode;
   if (eventsQ.isPending) {
     body = <RowSkeleton rows={4} />;
-  } else if (eventsQ.isError) {
+  } else if (eventsQ.isLoadingError) {
     body = <ErrorState compact message={t("events.loadError")} onRetry={() => void eventsQ.refetch()} />;
   } else if (events.length === 0) {
     body = <EmptyState compact message={t("dashboard.noEventsYet")} />;
@@ -113,7 +113,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={HEADING_ID} className={className} entranceOrder={3}>
       <CardHeading
         id={HEADING_ID}
         title={
@@ -131,7 +131,9 @@ export function LatestEventsCard({ className }: { className?: string }) {
           </Link>
         }
       />
-      {body}
+      <CardBody pending={eventsQ.isPending} reveal={events.length > 0}>
+        {body}
+      </CardBody>
     </DashboardCard>
   );
 }

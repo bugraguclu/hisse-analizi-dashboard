@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Hourglass, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -12,6 +13,7 @@ import { InflationTiles, InflationTrendPanel, MonthlyCpiPanel } from "@/componen
 import { ACTIVITY_KEYS, EXTERNAL_KEYS, IndicatorGrid } from "@/components/makro/IndicatorGrid";
 import { MarketsSection } from "@/components/makro/MarketsSection";
 import { EconomicCalendar } from "@/components/makro/EconomicCalendar";
+import styles from "./refresh-button.module.css";
 
 /**
  * Page order, most important for an investor first: the policy rate and
@@ -31,16 +33,32 @@ function RefreshButton() {
   const { t } = useMakroI18n();
   const queryClient = useQueryClient();
   const fetching = useIsFetching({ queryKey: MACRO_QUERY_ROOT }) > 0;
+  const [refreshing, setRefreshing] = useState(false);
+  const busy = fetching || refreshing;
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: MACRO_QUERY_ROOT });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
     <button
       type="button"
-      onClick={() => void queryClient.invalidateQueries({ queryKey: MACRO_QUERY_ROOT })}
-      disabled={fetching}
-      aria-busy={fetching}
+      onClick={refresh}
+      disabled={busy}
+      aria-busy={busy}
       className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-ring"
     >
-      {fetching ? <Hourglass className="h-3.5 w-3.5 skeleton-pulse" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
-      {fetching ? t("page.refreshing") : t("page.refresh")}
+      {fetching && !refreshing ? (
+        <Hourglass className="h-3.5 w-3.5 skeleton-pulse" aria-hidden />
+      ) : (
+        <RefreshCw className={`h-3.5 w-3.5 ${styles.refreshIcon}`} data-refreshing={refreshing || undefined} aria-hidden />
+      )}
+      {busy ? t("page.refreshing") : t("page.refresh")}
     </button>
   );
 }

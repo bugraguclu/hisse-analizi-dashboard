@@ -10,7 +10,7 @@ import { SegmentBar } from "@/components/charts/mini";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { presetHref } from "@/components/tarama/model";
 import { useCompanies, useScreenerRows } from "./queries";
-import { CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
+import { CardBody, CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
 
 const HEADING_ID = "breadth-heading";
 const MOVER_COUNT = 5;
@@ -134,10 +134,12 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   // leaves one before entering the other; a label only clears its own highlight.
   const clearHighlight = (key: string) => setHighlight((current) => (current === key ? null : current));
 
+  const pending = screenerQ.isPending || companiesQ.isPending;
+
   let body: React.ReactNode;
-  if (screenerQ.isPending || (companiesQ.isPending && !companiesQ.isError)) {
+  if (pending) {
     body = <RowSkeleton rows={6} />;
-  } else if (screenerQ.isError) {
+  } else if (screenerQ.isLoadingError) {
     body = <ErrorState compact message={t("dashboard.moversUnavailable")} onRetry={() => void screenerQ.refetch()} />;
   } else if (!breadth || total === 0) {
     body = <EmptyState compact message={t("dashboard.moversUnavailable")} />;
@@ -205,14 +207,16 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={HEADING_ID} className={className} entranceOrder={2}>
       <CardHeading
         id={HEADING_ID}
         className="border-b-0 pb-2"
         title={t("dashboard.breadth")}
         subtitle={breadth ? t(breadth.scope === "bist100" ? "dashboard.universeBist100" : "dashboard.universeAll") : undefined}
       />
-      {body}
+      <CardBody pending={pending} reveal={!pending && total > 0}>
+        {body}
+      </CardBody>
     </DashboardCard>
   );
 }

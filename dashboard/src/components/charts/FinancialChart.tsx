@@ -37,7 +37,7 @@ import type {
 import { Menu } from "@base-ui/react/menu";
 import { ChevronsRight, Copy, Download, ExternalLink, Minus, RotateCcw, X } from "lucide-react";
 import { useMotionAllowed } from "@/hooks/use-motion-allowed";
-import { motionDuration, moveProgress } from "@/lib/motion";
+import { cubicBezier, motionCurve, motionDuration, moveProgress } from "@/lib/motion";
 import { MotionMenuPopup } from "@/components/ui/motion-surface";
 import { ChartSkeleton } from "@/components/ui/chart-skeleton";
 import { formatChangePercent, formatNumber, getIntlLocale, trendTone } from "@/lib/format";
@@ -139,6 +139,8 @@ export interface FinancialChartProps {
   onUndoStateChange?: (canUndo: boolean) => void;
   onHoverChange?: (index: number | null) => void;
   onViewChange?: (view: ChartView) => void;
+  /** Workspaces share the first plot reveal across their embedded and fullscreen charts. */
+  claimPlotEntrance?: () => boolean;
   /** "modifier": vertical wheel scrolls the page, Ctrl/⌘ + wheel zooms; "always": wheel zooms. */
   wheelZoom?: "modifier" | "always";
   ariaLabel: string;
@@ -520,6 +522,7 @@ export function FinancialChart({
   onUndoStateChange,
   onHoverChange,
   onViewChange,
+  claimPlotEntrance,
   wheelZoom = "modifier",
   ariaLabel,
   symbol,
@@ -550,6 +553,7 @@ export function FinancialChart({
   const shownKeyRef = useRef<string | null>(null);
   const isDefaultRef = useRef(true);
   const zoomFrameRef = useRef(0);
+  const entranceRef = useRef<Animation | null>(null);
   const announceTimerRef = useRef<number | undefined>(undefined);
 
   const [engine, setEngine] = useState<Engine | null>(null);
@@ -675,15 +679,38 @@ export function FinancialChart({
     engine.chart.applyOptions({ kineticScroll: { touch: motionAllowed } });
     const plot = plotRef.current;
     if (!plot) return;
-    const stopZoom = () => cancelAnimationFrame(zoomFrameRef.current);
-    if (!motionAllowed) stopZoom();
-    plot.addEventListener("pointerdown", stopZoom, { capture: true, passive: true });
-    plot.addEventListener("wheel", stopZoom, { capture: true, passive: true });
+    const stopEntrance = () => {
+      entranceRef.current?.cancel();
+      entranceRef.current = null;
+    };
+    const interrupt = () => {
+      cancelAnimationFrame(zoomFrameRef.current);
+      stopEntrance();
+    };
+    if (!motionAllowed) interrupt();
+    plot.addEventListener("pointerdown", interrupt, { capture: true, passive: true });
+    plot.addEventListener("wheel", interrupt, { capture: true, passive: true });
+    plot.addEventListener("focusin", stopEntrance);
     return () => {
-      plot.removeEventListener("pointerdown", stopZoom, true);
-      plot.removeEventListener("wheel", stopZoom, true);
+      stopEntrance();
+      plot.removeEventListener("pointerdown", interrupt, true);
+      plot.removeEventListener("wheel", interrupt, true);
+      plot.removeEventListener("focusin", stopEntrance);
     };
   }, [engine, motionAllowed]);
+
+  const revealPlot = useEffectEvent((host: HTMLDivElement) => {
+    if (claimPlotEntrance?.() === false || !motionAllowed || plotRef.current?.matches(":focus-within")) return;
+    // A mask reveals the canvases together while keeping their dimensions and pointer targets fixed.
+    const mask = {
+      maskImage: "linear-gradient(90deg, black 48%, transparent 52%)",
+      maskSize: "220% 100%",
+    };
+    entranceRef.current = host.animate(
+      [{ ...mask, maskPosition: "100% 0" }, { ...mask, maskPosition: "0% 0" }],
+      { duration: motionDuration.reveal, easing: cubicBezier(motionCurve.easeOut) },
+    );
+  });
 
   const publishBuild = useEffectEvent((main: AnySeries | null, palette: ChartPalette) => {
     setMainSeries(main);
@@ -1223,6 +1250,7 @@ export function FinancialChart({
     timeScale.setVisibleLogicalRange(keepView && previousRange ? previousRange : defaultRange);
     publishBuild(main, palette);
 
+    if (shownKeyRef.current === null) revealPlot(host);
     shownKeyRef.current = dataKey;
     const frame = requestAnimationFrame(() => applyViewChange());
     return () => cancelAnimationFrame(frame);

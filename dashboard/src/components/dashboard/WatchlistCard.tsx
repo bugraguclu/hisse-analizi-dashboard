@@ -65,7 +65,7 @@ export function WatchlistCard({ className }: { className?: string }) {
 
   return (
     // overflow-visible: the add-stock search dropdown must not be clipped by the card.
-    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)}>
+    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)} entranceOrder={1}>
       <CardHeading
         id={HEADING_ID}
         title={t("dashboard.watchlist")}

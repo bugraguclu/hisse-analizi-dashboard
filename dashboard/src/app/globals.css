@@ -356,6 +356,27 @@
   }
 }
 
+@utility motion-data-in {
+  animation: data-in var(--motion-fade) var(--motion-ease-out);
+}
+
+@keyframes data-in {
+  from { opacity: 0.72; }
+}
+
+@utility motion-card-in {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: card-in var(--motion-panel) var(--motion-ease-out) var(--card-delay) backwards;
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0.8;
+    translate: 0 5px;
+  }
+}
+
 /* Numbers that must not jitter while they change. */
 @utility tabular {
   font-variant-numeric: tabular-nums;
