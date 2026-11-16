@@ -13,6 +13,7 @@ import { useEventsI18n } from "./i18n";
 import type { EventsKey } from "./i18n-dict";
 import { eventDate, formatDayKey, groupByDay, MAX_OFFSET, pageWindow, shiftDay, type PageSize } from "./model";
 import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FOCUS_RING } from "./ui";
 
 /** Items published within this window get the "Yeni" marker. */
@@ -23,16 +24,16 @@ function FeedSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <div role="status">
       <span className="sr-only">{t("feed.loading")}</span>
-      <div aria-hidden="true" className="divide-y divide-border">
+      <div aria-hidden="true" className="divide-y divide-border skeleton-rows">
         {Array.from({ length: rows }, (_, index) => (
           <div key={index} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3 px-4 py-3 sm:grid-cols-[6rem_minmax(0,1fr)] sm:px-5">
-            <div className="h-3.5 w-9 rounded-sm bg-muted/60" />
+            <Skeleton className="h-3.5 w-9" />
             <div className="min-w-0 space-y-2">
               <div className="flex items-center gap-2">
-                <div className="h-3.5 w-12 shrink-0 rounded-sm bg-muted/60" />
-                <div className="h-3.5 rounded-sm bg-muted/40" style={{ width: `${[72, 56, 64, 48, 80, 60, 68, 52][index % 8]}%` }} />
+                <Skeleton className="h-3.5 w-12 shrink-0" />
+                <Skeleton className="h-3.5 origin-left" style={{ width: `${[72, 56, 64, 48, 80, 60, 68, 52][index % 8]}%` }} />
               </div>
-              <div className="h-3 rounded-sm bg-muted/40" style={{ width: `${[36, 44, 28, 40, 32, 46, 30, 38][index % 8]}%` }} />
+              <Skeleton className="h-3 origin-left bg-skeleton/70" style={{ width: `${[36, 44, 28, 40, 32, 46, 30, 38][index % 8]}%` }} />
             </div>
           </div>
         ))}
@@ -286,14 +287,14 @@ export const EventsFeed = forwardRef<HTMLElement, EventsFeedProps>(function Even
               <span className="font-mono">{formatNumber(total, 0)}</span>
               {countParts.slice(1).join("")}
             </>
-          ) : (
-            <span aria-hidden="true" className="inline-block h-3.5 w-24 translate-y-0.5 rounded-sm bg-muted/60" />
-          )}
+          ) : isPending ? (
+            <Skeleton as="span" className="inline-block h-3.5 w-24 origin-left translate-y-0.5" />
+          ) : null}
         </p>
         {/* Refetch with data on screen: a hairline progress cue instead of a skeleton flash. */}
         {isFetching && !isPending ? (
           <span aria-hidden="true" className="absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
-            <span className="block h-full w-full bg-primary/60" />
+            <span className="block h-full w-full bg-primary/60 skeleton-pulse" />
           </span>
         ) : null}
       </div>

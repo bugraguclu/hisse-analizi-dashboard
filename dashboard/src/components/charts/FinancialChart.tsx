@@ -39,6 +39,7 @@ import { ChevronsRight, Copy, Download, ExternalLink, Minus, RotateCcw, X } from
 import { useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { motionDuration, moveProgress } from "@/lib/motion";
 import { MotionMenuPopup } from "@/components/ui/motion-surface";
+import { ChartSkeleton } from "@/components/ui/chart-skeleton";
 import { formatChangePercent, formatNumber, getIntlLocale, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChartLegend, IndicatorLegendItem, type LegendCompare } from "./ChartLegend";
@@ -1863,6 +1864,7 @@ export function FinancialChart({
         aria-roledescription={t("chart.roleDescription")}
         aria-label={ariaLabel}
         aria-describedby={helpId}
+        aria-busy={!mainSeries || undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
         onBlur={onBlur}
@@ -1874,6 +1876,11 @@ export function FinancialChart({
         style={height === "fill" ? undefined : { height }}
       >
         <div ref={hostRef} className="absolute inset-0" />
+        {!mainSeries ? (
+          <div className="pointer-events-none absolute inset-0">
+            <ChartSkeleton height="fill" label={t("chart.loading")} />
+          </div>
+        ) : null}
         {paneLegends}
         {geometry && measureInfo ? <MeasureOverlay geometry={geometry} info={measureInfo} /> : null}
         {drawingLayer.overlay}

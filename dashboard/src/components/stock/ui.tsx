@@ -116,7 +116,7 @@ const SKELETON_LABEL_WIDTHS = [46, 62, 38, 56, 42, 58, 50];
 export function SectionSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   const { t } = useStockI18n();
   return (
-    <div className={cn("space-y-3.5 py-1", className)} role="status" aria-live="polite">
+    <div className={cn("space-y-3.5 py-1 skeleton-rows", className)} role="status" aria-live="polite">
       <span className="sr-only">{t("state.loading")}</span>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} aria-hidden className="flex items-center justify-between gap-6">
@@ -359,7 +359,7 @@ function LazyPlaceholder({ minHeight, columns }: { minHeight: number; columns: 1
           <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
             <Skeleton className="h-3 w-32" />
           </div>
-          <div className="space-y-3.5 p-4">
+          <div className="space-y-3.5 p-4 skeleton-rows">
             {SKELETON_LABEL_WIDTHS.slice(0, 4).map((width, row) => (
               <div key={row} className="flex items-center justify-between gap-6">
                 <Skeleton className="h-3" style={{ width: `${width}%` }} />

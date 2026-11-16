@@ -173,7 +173,7 @@ function keepRowInView(event: { currentTarget: HTMLElement }) {
 function CountText({ option, picked }: { option: FilterOption; picked: boolean }) {
   const text = useFilterBarText();
   if (option.loading) {
-    return <Hourglass role="img" aria-label={text.loading} className="h-3 w-3 shrink-0 text-muted-foreground" />;
+    return <Hourglass role="img" aria-label={text.loading} className="h-3 w-3 shrink-0 text-muted-foreground skeleton-pulse" />;
   }
   if (option.count === undefined || option.count === null) return null;
   // aria-hidden: the count changes on every pick and would otherwise become part of

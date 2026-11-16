@@ -11,6 +11,7 @@ import { STALE_TIME } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
 import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist } from "@/hooks/use-watchlists";
 import { useCompanies } from "./queries";
@@ -158,7 +159,7 @@ export function WatchlistCard({ className }: { className?: string }) {
           {snapshotQ.isError && !snapshotQ.data && (
             <ErrorState compact message={t("watchlist.quoteError")} onRetry={() => void snapshotQ.refetch()} />
           )}
-          <ul className="divide-y divide-border" aria-busy={snapshotQ.isFetching}>
+          <ul className="divide-y divide-border skeleton-rows" aria-busy={snapshotQ.isFetching}>
             {tickers.map((ticker) => {
               const quote = snapshotQ.data?.snapshot[ticker];
               const loading = !quote && (snapshotQ.isPending || snapshotQ.isPlaceholderData);
@@ -172,7 +173,13 @@ export function WatchlistCard({ className }: { className?: string }) {
                     {names.get(ticker) && <span className="block truncate text-[11px] text-muted-foreground">{names.get(ticker)}</span>}
                   </Link>
                   {loading ? (
-                    <span className="h-8 w-28 rounded-sm bg-muted/60" aria-hidden="true" />
+                    <span className="flex h-8 w-28 shrink-0 flex-col items-end justify-center gap-1" aria-hidden="true">
+                      <span className="flex items-center gap-2">
+                        <Skeleton as="span" className="h-3.5 w-12 origin-right" />
+                        <Skeleton as="span" className="h-4 w-12 origin-right" />
+                      </span>
+                      <Skeleton as="span" className="h-2.5 w-20 origin-right bg-skeleton/70" />
+                    </span>
                   ) : (
                     <span className="flex flex-col items-end gap-0.5 text-right">
                       <span className="flex items-center gap-2">

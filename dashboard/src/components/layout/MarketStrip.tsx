@@ -13,6 +13,7 @@ import { formatBp, formatMarketValue } from "@/components/makro/format";
 import { marketHref } from "@/components/makro/links";
 import { useMarkets } from "@/components/makro/queries";
 import type { MarketQuote } from "@/components/makro/types";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useMarquee, useMarqueePause } from "./use-marquee";
 
@@ -84,7 +85,7 @@ function TapeItem({ entry, clone }: { entry: TapeEntry; clone: boolean }) {
   const content = entry.pending ? (
     <>
       <span className="text-muted-foreground">{entry.label}</span>
-      <span aria-hidden="true" className="inline-block h-3 w-24 translate-y-0.5 rounded-sm bg-muted skeleton-shimmer" />
+      <Skeleton as="span" className="inline-block h-3 w-24 translate-y-0.5" />
     </>
   ) : (
     <>

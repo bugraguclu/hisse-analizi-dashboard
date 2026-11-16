@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 import { useMakroI18n } from "./i18n";
 import { useFxBulletin } from "./queries";
 import { ApiDataMeta } from "@/components/shared/DataMeta";
-import { Panel, PanelEmpty, PanelError, PriceChange, Shimmer, SourceLine } from "./ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Panel, PanelEmpty, PanelError, PriceChange, SourceLine } from "./ui";
 import type { FxBulletinRate } from "./types";
 
 const COLLAPSED_ROWS = 6;
@@ -49,9 +50,9 @@ export function FxBulletinPanel({ className }: { className?: string }) {
       }
     >
       {bulletinQ.isPending ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 skeleton-rows">
           {Array.from({ length: COLLAPSED_ROWS }, (_, i) => (
-            <Shimmer key={i} className="h-7" />
+            <Skeleton key={i} className="h-7" />
           ))}
         </div>
       ) : bulletinQ.isError && !bulletinQ.data ? (

@@ -39,7 +39,7 @@ function RefreshButton() {
       aria-busy={fetching}
       className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-ring"
     >
-      {fetching ? <Hourglass className="h-3.5 w-3.5" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+      {fetching ? <Hourglass className="h-3.5 w-3.5 skeleton-pulse" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
       {fetching ? t("page.refreshing") : t("page.refresh")}
     </button>
   );

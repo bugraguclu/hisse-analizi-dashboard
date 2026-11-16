@@ -95,14 +95,14 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
               {name}
             </span>
           ) : identity.status === "loading" ? (
-            <span aria-hidden className="inline-block h-4 w-36 rounded-sm bg-muted/70" />
+            <Skeleton as="span" className="inline-block h-4 w-36" />
           ) : null}
         </h1>
       </div>
 
       <div className="min-w-0 md:col-start-2 md:row-span-2 md:row-start-1 md:max-w-[28rem] md:text-right">
         {isPending ? (
-          <div role="status" className="flex flex-col gap-2 md:items-end">
+          <div role="status" className="flex flex-col gap-2 skeleton-rows md:items-end">
             <span className="sr-only">{t("state.loading")}</span>
             <Skeleton className="h-8 w-40" />
             <Skeleton className="h-4 w-32" />

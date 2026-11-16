@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RowSkeleton } from "@/components/dashboard/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenerFilters, type StateUpdate } from "@/components/tarama/ScreenerFilters";
 import { ScreenerResults } from "@/components/tarama/ScreenerResults";
 import type { PinnedRow, TableContext } from "@/components/tarama/ScreenerTable";
@@ -225,7 +226,14 @@ function ScreenerFallback() {
   return (
     <div className="mx-auto max-w-7xl space-y-6" aria-busy="true">
       <Header />
-      <div className="card-surface h-40 bg-muted/40" aria-hidden="true" />
+      <div aria-hidden="true" className="card-surface flex h-40 flex-col justify-center gap-3 px-4">
+        <Skeleton className="h-5 w-28 origin-left" />
+        <div className="flex flex-wrap gap-2 skeleton-rows">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </div>
       <div className="card-surface">
         <RowSkeleton rows={8} />
       </div>

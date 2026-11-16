@@ -430,7 +430,7 @@ export function ChartWorkspace({
             role="status"
             className="pointer-events-none absolute right-0 top-0 inline-flex items-center gap-1 rounded-sm bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground"
           >
-            <Hourglass aria-hidden className="h-3 w-3" />
+            <Hourglass aria-hidden className="h-3 w-3 skeleton-pulse" />
             {t("chart.updating")}
           </span>
         ) : null}

@@ -255,7 +255,7 @@ function KapRow({ item, now, onOpen }: { item: KapItem; now: number | null; onOp
 function KapSkeleton() {
   const { t } = useStockI18n();
   return (
-    <div role="status" className="divide-y divide-border">
+    <div role="status" className="divide-y divide-border skeleton-rows">
       <span className="sr-only">{t("state.loading")}</span>
       {[72, 56, 84, 64, 76, 60].map((width, i) => (
         <div key={i} aria-hidden className="space-y-2 px-4 py-3.5">

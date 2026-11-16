@@ -310,7 +310,7 @@ export function TickerSearch({
         ) : pending ? (
           <Hourglass
             aria-hidden="true"
-            className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground skeleton-pulse"
           />
         ) : query ? (
           <button

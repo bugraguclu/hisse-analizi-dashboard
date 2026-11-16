@@ -10,6 +10,7 @@ import { useNow } from "@/hooks/use-now";
 import { isApiError } from "@/lib/api";
 import { formatMarketDate, formatRelativeTime } from "@/lib/format";
 import { safeExternalUrl } from "@/lib/url";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { Company, EventOut } from "@/types";
 import { EventContentBody } from "./EventContent";
@@ -38,7 +39,7 @@ function Lines({ widths }: { widths: string[] }) {
   return (
     <div aria-hidden="true" className="space-y-2.5">
       {widths.map((width, index) => (
-        <div key={index} className="h-3.5 rounded-sm bg-muted/50" style={{ width }} />
+        <Skeleton key={index} className="h-3.5 origin-left" style={{ width }} />
       ))}
     </div>
   );
@@ -74,7 +75,7 @@ function ContentSection({ id, event, open }: { id: string; event: EventOut; open
           ) : null}
           {!missing ? (
             <button type="button" className={ACTION_CLASS} onClick={() => void contentQ.refetch()} disabled={contentQ.isFetching} aria-busy={contentQ.isFetching}>
-              {contentQ.isFetching ? <Hourglass aria-hidden /> : <RefreshCw aria-hidden />}
+              {contentQ.isFetching ? <Hourglass className="skeleton-pulse" aria-hidden /> : <RefreshCw aria-hidden />}
               {t("common.retry")}
             </button>
           ) : null}
@@ -307,8 +308,14 @@ export function EventDrawer({
     body = (
       <div className="py-12 text-center">
         <Dialog.Title className="text-base font-semibold text-foreground">{t("drawer.loadError")}</Dialog.Title>
-        <button type="button" className={cn(ACTION_CLASS, "mt-4")} onClick={() => void detailQ.refetch()}>
-          <RefreshCw aria-hidden="true" />
+        <button
+          type="button"
+          className={cn(ACTION_CLASS, "mt-4")}
+          onClick={() => void detailQ.refetch()}
+          disabled={detailQ.isFetching}
+          aria-busy={detailQ.isFetching}
+        >
+          {detailQ.isFetching ? <Hourglass className="skeleton-pulse" aria-hidden /> : <RefreshCw aria-hidden />}
           {t("common.retry")}
         </button>
       </div>

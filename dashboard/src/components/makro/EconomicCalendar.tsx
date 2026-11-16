@@ -9,7 +9,8 @@ import { useLocale } from "@/lib/locale-context";
 import { istanbulClock } from "@/lib/market-hours";
 import { useNow } from "@/hooks/use-now";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
-import { PanelEmpty, PanelError, Shimmer } from "@/components/makro/ui";
+import { PanelEmpty, PanelError } from "@/components/makro/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarTable, PAGE_SIZE } from "./calendar/CalendarTable";
 import { DayStrip } from "./calendar/DayStrip";
 import { CalendarFilterBar } from "./calendar/FilterControls";
@@ -85,16 +86,16 @@ export const EconomicCalendar: (props: EconomicCalendarProps) => JSX.Element = f
 
 function CalendarSkeleton() {
   return (
-    <div className="space-y-3 p-4" aria-busy="true">
-      <Shimmer className="h-9 w-full" />
-      <Shimmer className="h-11 w-full" />
-      <div className="flex gap-1">
+    <div className="space-y-3 p-4 skeleton-rows" aria-busy="true">
+      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-11 w-full" />
+      <div className="flex gap-1 overflow-hidden skeleton-rows">
         {Array.from({ length: 12 }, (_, i) => (
-          <Shimmer key={i} className="h-14 w-12 shrink-0" />
+          <Skeleton key={i} className="h-14 w-12 shrink-0" />
         ))}
       </div>
       {Array.from({ length: 6 }, (_, i) => (
-        <Shimmer key={i} className="h-10 w-full" />
+        <Skeleton key={i} className="h-10 w-full" />
       ))}
     </div>
   );
@@ -260,7 +261,7 @@ function CalendarBody() {
           <ToolbarButton
             onClick={() => void query.refetch()}
             label={query.isFetching ? tt("updating") : tt("refresh")}
-            icon={query.isFetching ? <Hourglass className="h-3.5 w-3.5" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+            icon={query.isFetching ? <Hourglass className="h-3.5 w-3.5 skeleton-pulse" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
             iconOnly
           />
           <ToolbarButton
