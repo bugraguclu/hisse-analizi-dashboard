@@ -13,7 +13,7 @@ import { categoryKeys, severityKeys, toCategoryKey, toSeverity, type SeverityKey
 import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/use-now";
 import type { EventOut } from "@/types";
-import { CardHeading, DashboardCard, RowSkeleton } from "./ui";
+import { CardBody, CardHeading, DashboardCard, RowSkeleton, type DashboardPanelProps } from "./ui";
 
 const HEADING_ID = "latest-events-heading";
 const MAX_ITEMS = 6;
@@ -29,7 +29,7 @@ function eventTime(event: EventOut): Date | null {
   return parseDate(event.published_at ?? event.created_at);
 }
 
-export function LatestEventsCard({ className }: { className?: string }) {
+export function LatestEventsCard({ className, fillPanel }: DashboardPanelProps) {
   const { t } = useLocale();
   const now = useNow();
   // KAP disclosures (results, dividends) mostly arrive after the close — refresh around the clock.
@@ -113,7 +113,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={HEADING_ID} className={className} fillPanel={fillPanel}>
       <CardHeading
         id={HEADING_ID}
         title={
@@ -131,7 +131,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
           </Link>
         }
       />
-      {body}
+      <CardBody fillPanel={fillPanel}>{body}</CardBody>
     </DashboardCard>
   );
 }

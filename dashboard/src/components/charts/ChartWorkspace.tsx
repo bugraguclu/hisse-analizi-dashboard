@@ -79,6 +79,8 @@ export interface ChartWorkspaceProps {
   padToSessionEnd?: boolean;
   /** Main pane height in px; every indicator pane adds `paneHeight`. */
   height: number;
+  /** Fit the embedded plot within a height-constrained flex column. */
+  fillCardHeight?: boolean;
   paneHeight?: number;
   /** Line above the toolbar (period change, range...) — follows the crosshair. */
   summary?: (state: SummaryState) => ReactNode;
@@ -143,6 +145,7 @@ export function ChartWorkspace({
   baseline = null,
   padToSessionEnd = false,
   height,
+  fillCardHeight = false,
   paneHeight = 110,
   summary,
   headline,
@@ -353,15 +356,24 @@ export function ChartWorkspace({
   const periodText = periodOptions.find((option) => option.value === (series?.period ?? period))?.title ?? "";
 
   const renderChart = (mode: "card" | "fullscreen") => {
+    const fill = mode === "fullscreen" || fillCardHeight;
     // Only a wait the viewer caused is announced; background refreshes swap the data in silently.
     const busy = status.placeholder || (compareItems.length > 0 && compareQ.pending);
-    if (status.pending && !series) return <ChartSkeleton height={mode === "fullscreen" ? 480 : height + 44} label={t("chart.loading")} />;
+    if (status.pending && !series) {
+      return (
+        <ChartSkeleton
+          height={mode === "fullscreen" ? 480 : height + 44}
+          className={mode === "card" && fillCardHeight ? "min-h-0 flex-1" : undefined}
+          label={t("chart.loading")}
+        />
+      );
+    }
     if (status.error && !series) return <ErrorState compact message={errorMessage} onRetry={status.onRetry} />;
     if (!series || series.bars.length === 0) return <EmptyState compact message={emptyMessage} />;
     return (
-      <div className={cn("relative flex min-h-0 flex-col", mode === "fullscreen" && "flex-1")}>
+      <div className={cn("relative flex min-h-0 flex-col", fill && "flex-1")}>
         <div
-          className={cn("flex min-h-0 flex-col motion-fade", mode === "fullscreen" && "flex-1", status.placeholder && "opacity-50")}
+          className={cn("flex min-h-0 flex-col motion-fade", fill && "flex-1", status.placeholder && "opacity-50")}
           aria-busy={status.placeholder || undefined}
         >
           <FinancialChart
@@ -375,7 +387,7 @@ export function ChartWorkspace({
             onCompareRemove={removeCompare}
             baseline={baseline}
             padToSessionEnd={padToSessionEnd}
-            height={mode === "fullscreen" ? "fill" : totalHeight}
+            height={fill ? "fill" : totalHeight}
             paneHeight={paneHeight}
             extremes={prefs.extremes}
             scale={prefs.scale}
@@ -446,6 +458,7 @@ export function ChartWorkspace({
         {series && series.bars.length > 0 && summary && !(mode === "fullscreen" && short) ? summary({ series, view, hoverIndex, mode }) : null}
         <ChartToolbar
           mode={mode}
+          className={mode === "card" && fillCardHeight ? "shrink-0" : undefined}
           prefs={prefs}
           onPrefsChange={onPrefsChange}
           defaults={defaults}
@@ -533,7 +546,15 @@ export function ChartWorkspace({
         ) : (
           <>
             {renderChart(mode)}
-            {tableOn && series && series.bars.length > 0 ? <ChartDataTable series={series} view={view} symbol={symbol} format={formatter} /> : null}
+            {tableOn && series && series.bars.length > 0 ? (
+              <ChartDataTable
+                series={series}
+                view={view}
+                symbol={symbol}
+                format={formatter}
+                className={fillCardHeight ? "max-h-[40%] shrink-0" : undefined}
+              />
+            ) : null}
           </>
         )}
       </>
@@ -544,7 +565,7 @@ export function ChartWorkspace({
   return (
     <div
       ref={rootRef}
-      className={cn("flex min-w-0 flex-col gap-3", className)}
+      className={cn("flex min-w-0 flex-col gap-3", fillCardHeight && "min-h-0 flex-1", className)}
       onPointerEnter={onIntent}
       onFocusCapture={onIntent}
       onKeyDown={onKeyDown}
@@ -552,8 +573,11 @@ export function ChartWorkspace({
       {fullscreen ? (
         <>
           <div
-            className="flex items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground"
-            style={{ height: totalHeight + 96 }}
+            className={cn(
+              "flex items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground",
+              fillCardHeight && "min-h-0 flex-1",
+            )}
+            style={fillCardHeight ? undefined : { height: totalHeight + 96 }}
           >
             {t("action.fullscreenShort")}…
           </div>

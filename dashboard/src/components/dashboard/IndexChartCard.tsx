@@ -26,9 +26,10 @@ import { formatChangePercent, formatMarketDate, formatNumber, formatSigned } fro
 import type { TranslationKey } from "@/lib/i18n";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock, sessionQuoteTime } from "@/lib/market-hours";
+import { cn } from "@/lib/utils";
 import type { ChartPeriod, IndexQuote } from "@/types";
 import { findQuote, quoteTimeMs, useIndexQuotes } from "./queries";
-import { ChangeLine, DashboardCard, StatItem } from "./ui";
+import { ChangeLine, DashboardCard, StatItem, type DashboardPanelProps } from "./ui";
 
 const SYMBOL = "XU100";
 const HEADING_ID = "bist100-heading";
@@ -92,7 +93,7 @@ function mergeQuote(primary: IndexQuote | null, embedded: Partial<IndexQuote> | 
   };
 }
 
-export function IndexChartCard({ className }: { className?: string }) {
+export function IndexChartCard({ className, fillPanel }: DashboardPanelProps) {
   const { t } = useLocale();
   const { t: tc } = useChartI18n();
   const [period, setPeriod] = useState<ChartPeriod>("1d");
@@ -188,8 +189,8 @@ export function IndexChartCard({ className }: { className?: string }) {
   );
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
-      <div className="px-4 pt-3">
+    <DashboardCard labelledBy={HEADING_ID} className={className} fillPanel={fillPanel}>
+      <div className="shrink-0 px-4 pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 id={HEADING_ID} className="text-[13px] font-semibold text-foreground">
@@ -233,7 +234,7 @@ export function IndexChartCard({ className }: { className?: string }) {
         </div>
       </div>
 
-      <div className="px-4 pt-3">
+      <div className={cn("px-4 pt-3", fillPanel && "flex min-h-0 flex-1 flex-col")}>
         <ChartWorkspace
           title="BIST 100"
           symbol={SYMBOL}
@@ -262,6 +263,7 @@ export function IndexChartCard({ className }: { className?: string }) {
           baseline={baseline}
           padToSessionEnd={live}
           height={240}
+          fillCardHeight={fillPanel}
           onHoverChange={setHoverIndex}
           headline={
             level !== null ? (
@@ -281,13 +283,13 @@ export function IndexChartCard({ className }: { className?: string }) {
         />
       </div>
 
-      <dl className="mx-4 mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-4">
+      <dl className="mx-4 mt-3 grid shrink-0 grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-4">
         {statItems.map(([label, value]) => (
           <StatItem key={label} label={label} value={value == null ? formatNumber(null) : formatLevel(value)} />
         ))}
         {!intraday && <StatItem label={t("index.periodReturn")} value={formatChangePercent(stats?.changePercent)} />}
       </dl>
-      <p className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
+      <p className="shrink-0 border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
         <ChartAttribution />
         <ApiDataMeta path={`/market/index/${SYMBOL}`} className="mt-1" />
       </p>

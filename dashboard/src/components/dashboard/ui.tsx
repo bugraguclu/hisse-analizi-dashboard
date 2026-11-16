@@ -6,22 +6,36 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+export interface DashboardPanelProps {
+  className?: string;
+  /** Fit the panel to the width and height assigned by the dashboard layout. */
+  fillPanel?: boolean;
+}
+
 /** Flat panel used by every home-page section. */
 export function DashboardCard({
   className,
   children,
   labelledBy,
-}: {
-  className?: string;
+  fillPanel,
+}: DashboardPanelProps & {
   children: ReactNode;
   /** id of the heading that names this region. */
   labelledBy?: string;
 }) {
   return (
-    <section aria-labelledby={labelledBy} className={cn("card-surface min-w-0 overflow-hidden", className)}>
+    <section
+      aria-labelledby={labelledBy}
+      className={cn("card-surface min-w-0 overflow-hidden", fillPanel && "flex h-full min-h-0 flex-col", className)}
+    >
       {children}
     </section>
   );
+}
+
+/** Scroll only the content beneath a panel's heading and controls. */
+export function CardBody({ children, fillPanel }: { children: ReactNode; fillPanel?: boolean }) {
+  return <div className={fillPanel ? "min-h-0 flex-1 overflow-y-auto scrollbar-thin" : undefined}>{children}</div>;
 }
 
 /** Panel title row: plain text title, optional one-line subtitle and a right-aligned action. */
@@ -41,7 +55,7 @@ export function CardHeading({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-baseline justify-between gap-3 border-b border-border px-4 py-3", className)}>
+    <div className={cn("flex shrink-0 items-baseline justify-between gap-3 border-b border-border px-4 py-3", className)}>
       <div className="min-w-0">
         <h2 id={id} className="text-[13px] font-semibold text-foreground">
           {title}

@@ -10,7 +10,7 @@ import { SegmentBar } from "@/components/charts/mini";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { presetHref } from "@/components/tarama/model";
 import { useCompanies, useScreenerRows } from "./queries";
-import { CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
+import { CardBody, CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton, type DashboardPanelProps } from "./ui";
 
 const HEADING_ID = "breadth-heading";
 const MOVER_COUNT = 5;
@@ -122,7 +122,7 @@ function MoverList({ title, movers, href }: { title: string; movers: Mover[]; hr
   );
 }
 
-export function MarketBreadthCard({ className }: { className?: string }) {
+export function MarketBreadthCard({ className, fillPanel }: DashboardPanelProps) {
   const { t } = useLocale();
   const screenerQ = useScreenerRows();
   const companiesQ = useCompanies();
@@ -205,14 +205,14 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={HEADING_ID} className={className} fillPanel={fillPanel}>
       <CardHeading
         id={HEADING_ID}
         className="border-b-0 pb-2"
         title={t("dashboard.breadth")}
         subtitle={breadth ? t(breadth.scope === "bist100" ? "dashboard.universeBist100" : "dashboard.universeAll") : undefined}
       />
-      {body}
+      <CardBody fillPanel={fillPanel}>{body}</CardBody>
     </DashboardCard>
   );
 }

@@ -14,11 +14,11 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
 import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist } from "@/hooks/use-watchlists";
 import { useCompanies } from "./queries";
-import { CardHeading, ChangePill, DashboardCard } from "./ui";
+import { CardBody, CardHeading, ChangePill, DashboardCard, type DashboardPanelProps } from "./ui";
 
 const HEADING_ID = "watchlist-heading";
 
-export function WatchlistCard({ className }: { className?: string }) {
+export function WatchlistCard({ className, fillPanel }: DashboardPanelProps) {
   const { t } = useLocale();
   const { lists, createList, deleteList, addTicker, removeTicker } = useWatchlists();
   const [selectedId, setSelectedId] = useState<string>(DEFAULT_WATCHLIST_ID);
@@ -64,7 +64,7 @@ export function WatchlistCard({ className }: { className?: string }) {
 
   return (
     // overflow-visible: the add-stock search dropdown must not be clipped by the card.
-    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)}>
+    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)} fillPanel={fillPanel}>
       <CardHeading
         id={HEADING_ID}
         title={t("dashboard.watchlist")}
@@ -84,7 +84,7 @@ export function WatchlistCard({ className }: { className?: string }) {
       />
 
       {lists.length > 1 && (
-        <div role="group" aria-label={t("watchlist.lists")} className="flex items-center gap-4 overflow-x-auto border-b border-border px-4 scrollbar-none">
+        <div role="group" aria-label={t("watchlist.lists")} className="flex shrink-0 items-center gap-4 overflow-x-auto border-b border-border px-4 scrollbar-none">
           {lists.map((list) => (
             <button
               key={list.id}
@@ -103,7 +103,7 @@ export function WatchlistCard({ className }: { className?: string }) {
       )}
 
       {editing && (
-        <div className="space-y-3 border-b border-border bg-surface/60 px-4 py-3">
+        <div className="shrink-0 space-y-3 border-b border-border bg-surface/60 px-4 py-3">
           <div>
             <p className="mb-1.5 text-[11px] text-muted-foreground">{t("watchlist.addHint")}</p>
             <TickerSearch onSelect={handleAdd} />
@@ -151,57 +151,59 @@ export function WatchlistCard({ className }: { className?: string }) {
         </div>
       )}
 
-      {tickers.length === 0 ? (
-        <p className="px-4 py-8 text-center text-xs text-muted-foreground">{t("watchlist.emptyList")}</p>
-      ) : (
-        <>
-          {snapshotQ.isError && !snapshotQ.data && (
-            <ErrorState compact message={t("watchlist.quoteError")} onRetry={() => void snapshotQ.refetch()} />
-          )}
-          <ul className="divide-y divide-border" aria-busy={snapshotQ.isFetching}>
-            {tickers.map((ticker) => {
-              const quote = snapshotQ.data?.snapshot[ticker];
-              const loading = !quote && (snapshotQ.isPending || snapshotQ.isPlaceholderData);
-              return (
-                <li key={ticker} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40">
-                  <Link
-                    href={`/hisse/${ticker}`}
-                    className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    <span className="block font-mono text-[13px] font-semibold text-foreground">{ticker}</span>
-                    {names.get(ticker) && <span className="block truncate text-[11px] text-muted-foreground">{names.get(ticker)}</span>}
-                  </Link>
-                  {loading ? (
-                    <span className="h-8 w-28 rounded-sm bg-muted/60" aria-hidden="true" />
-                  ) : (
-                    <span className="flex flex-col items-end gap-0.5 text-right">
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-[13px] font-medium tabular-nums text-foreground">{formatNumber(quote?.last_price)}</span>
-                        <ChangePill value={quote?.change_percent} />
-                      </span>
-                      {quote?.day_low != null && quote?.day_high != null && (
-                        <span className="font-mono text-[10px] tabular-nums text-muted-foreground" title={t("watchlist.dayRange")}>
-                          {formatNumber(quote.day_low)} – {formatNumber(quote.day_high)}
-                        </span>
-                      )}
-                    </span>
-                  )}
-                  {editing && (
-                    <button
-                      type="button"
-                      onClick={() => removeTicker(activeList.id, ticker)}
-                      aria-label={t("watchlist.remove", { ticker })}
-                      className="rounded-sm p-1 text-muted-foreground motion-press hover:bg-destructive/10 hover:text-destructive"
+      <CardBody fillPanel={fillPanel}>
+        {tickers.length === 0 ? (
+          <p className="px-4 py-8 text-center text-xs text-muted-foreground">{t("watchlist.emptyList")}</p>
+        ) : (
+          <>
+            {snapshotQ.isError && !snapshotQ.data && (
+              <ErrorState compact message={t("watchlist.quoteError")} onRetry={() => void snapshotQ.refetch()} />
+            )}
+            <ul className="divide-y divide-border" aria-busy={snapshotQ.isFetching}>
+              {tickers.map((ticker) => {
+                const quote = snapshotQ.data?.snapshot[ticker];
+                const loading = !quote && (snapshotQ.isPending || snapshotQ.isPlaceholderData);
+                return (
+                  <li key={ticker} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40">
+                    <Link
+                      href={`/hisse/${ticker}`}
+                      className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
                     >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+                      <span className="block font-mono text-[13px] font-semibold text-foreground">{ticker}</span>
+                      {names.get(ticker) && <span className="block truncate text-[11px] text-muted-foreground">{names.get(ticker)}</span>}
+                    </Link>
+                    {loading ? (
+                      <span className="h-8 w-28 rounded-sm bg-muted/60" aria-hidden="true" />
+                    ) : (
+                      <span className="flex flex-col items-end gap-0.5 text-right">
+                        <span className="flex items-center gap-2">
+                          <span className="font-mono text-[13px] font-medium tabular-nums text-foreground">{formatNumber(quote?.last_price)}</span>
+                          <ChangePill value={quote?.change_percent} />
+                        </span>
+                        {quote?.day_low != null && quote?.day_high != null && (
+                          <span className="font-mono text-[10px] tabular-nums text-muted-foreground" title={t("watchlist.dayRange")}>
+                            {formatNumber(quote.day_low)} – {formatNumber(quote.day_high)}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {editing && (
+                      <button
+                        type="button"
+                        onClick={() => removeTicker(activeList.id, ticker)}
+                        aria-label={t("watchlist.remove", { ticker })}
+                        className="rounded-sm p-1 text-muted-foreground motion-press hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </CardBody>
     </DashboardCard>
   );
 }

@@ -1,0 +1,210 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--grid-gap);
+}
+
+.tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  /* Matches the card surface, so outlines follow its corners. */
+  border-radius: calc(var(--radius) * 1.8);
+}
+
+.tile:focus-within {
+  z-index: 1;
+}
+
+.editing .tile {
+  outline: 1px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color var(--motion-press) var(--motion-ease-out),
+    box-shadow var(--motion-popover) var(--motion-ease-out);
+}
+
+.editing .tile:hover,
+.editing .tile:focus-within {
+  outline-color: color-mix(in oklab, var(--foreground) 26%, transparent);
+}
+
+.handle {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  touch-action: none;
+  user-select: none;
+  transition: color var(--motion-press) var(--motion-ease-out),
+    background-color var(--motion-press) var(--motion-ease-out);
+}
+
+.handle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* Sits on the card's top edge, clear of its title and actions. */
+.grabber {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: -13px;
+  inset-inline-start: 50%;
+  display: flex;
+  translate: -50% 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+}
+
+.grabber .handle {
+  width: 28px;
+  height: 24px;
+}
+
+.grabber .handle:hover,
+.grabber .handle:focus-visible,
+.grabber .handle[data-popup-open] {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.move {
+  cursor: grab;
+}
+
+/* Traces the card's bottom-right corner. */
+.resize {
+  position: absolute;
+  z-index: 2;
+  inset-block-end: -5px;
+  inset-inline-end: -5px;
+  /* The glyph stays on the corner whatever the size of the hit area. */
+  place-items: end;
+  width: 28px;
+  height: 28px;
+  border-radius: calc(var(--radius) * 1.8);
+  cursor: nwse-resize;
+}
+
+.resize:hover,
+.resize:focus-visible,
+.tile[data-gesture="resize"] .resize {
+  color: var(--primary);
+}
+
+/* Touch needs larger targets than a mouse pointer. */
+@media (pointer: coarse) {
+  .grabber {
+    inset-block-start: -17px;
+  }
+
+  .grabber .handle {
+    width: 36px;
+    height: 32px;
+  }
+
+  .resize {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (min-width: 64rem) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+  }
+
+  .grid:not(.positioned) .tile[data-card="index"] {
+    grid-area: 1 / 1 / 3 / 3;
+  }
+
+  .grid:not(.positioned) .tile[data-card="watchlist"] {
+    grid-area: 1 / 3 / 2 / 4;
+  }
+
+  .grid:not(.positioned) .tile[data-card="breadth"] {
+    grid-area: 2 / 3 / 4 / 4;
+  }
+
+  .grid:not(.positioned) .tile[data-card="events"] {
+    grid-area: 3 / 1 / 4 / 3;
+  }
+
+  .grid[data-natural-stacks] {
+    grid-template-rows: auto 1fr;
+  }
+
+  .grid[data-natural-stacks] .tile[data-card="breadth"] {
+    grid-row: 2;
+  }
+
+  .grid[data-natural-stacks] .tile[data-card="events"] {
+    grid-row: 1 / 3;
+    margin-block-start: var(--index-end);
+  }
+
+  .positioned {
+    grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: var(--row-step);
+    row-gap: 0;
+    align-items: stretch;
+    margin-block-end: calc(-1 * var(--grid-gap));
+  }
+
+  .positioned .tile,
+  .destination {
+    grid-column: var(--column) / span var(--columns);
+    grid-row: var(--row) / span var(--rows);
+    margin-block-end: var(--grid-gap);
+  }
+
+  .destination {
+    border: 1.5px dashed color-mix(in oklab, var(--primary) 70%, transparent);
+    border-radius: calc(var(--radius) * 1.8);
+    background: color-mix(in oklab, var(--primary) 9%, transparent);
+    pointer-events: none;
+  }
+
+  .grid[data-gesture] {
+    user-select: none;
+  }
+
+  .editing .tile[data-gesture] {
+    z-index: 4;
+    outline-color: var(--primary);
+    box-shadow: 0 18px 40px -14px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 16%);
+  }
+
+  .tile[data-gesture="move"] {
+    transform: translate3d(var(--offset-x, 0px), var(--offset-y, 0px), 0);
+    will-change: transform;
+  }
+
+  .tile[data-gesture="move"] .move {
+    cursor: grabbing;
+  }
+
+  .tile[data-gesture="resize"] {
+    align-self: start;
+    width: calc(100% + var(--offset-x, 0px));
+    height: calc(100% - var(--grid-gap) + var(--offset-y, 0px));
+  }
+
+  /* Without motion the card stays put and the outline alone shows where it will land. */
+  @media (prefers-reduced-motion: reduce) {
+    .tile[data-gesture="move"] {
+      transform: none;
+    }
+
+    .tile[data-gesture="resize"] {
+      align-self: stretch;
+      width: auto;
+      height: auto;
+    }
+  }
+}
