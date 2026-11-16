@@ -39,6 +39,8 @@
 
 .custom .tile {
   order: var(--order);
+  /* Spacing a dissolved group gave its children (`space-y-*`) no longer applies. */
+  margin-block: 0;
   /* Clear of the sticky site header when a link scrolls to the card. */
   scroll-margin-block-start: 6rem;
 }
