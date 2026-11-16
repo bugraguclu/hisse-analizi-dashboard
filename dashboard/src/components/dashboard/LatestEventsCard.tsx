@@ -13,13 +13,12 @@ import { categoryKeys, severityKeys, toCategoryKey, toSeverity, type SeverityKey
 import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/use-now";
 import type { EventOut } from "@/types";
-import { useFitCount } from "@/components/workspace/panel";
+import { usePanel } from "@/components/workspace/panel";
 import { CardBody, CardHeading, DashboardCard, RowSkeleton } from "./ui";
 
 const HEADING_ID = "latest-events-heading";
-/** Rows shown in the card's default place; in a layout slot the list is as long as the card is tall. */
+/** Rows shown in the card's default place; in a layout slot the whole feed is there to scroll. */
 const MAX_ITEMS = 6;
-const ROW_HEIGHT = 58;
 
 /** Severity is shown as a thin rule at the row's edge plus a word; routine items stay unmarked. */
 const SEVERITY_RULE: Record<SeverityKey, string | null> = { HIGH: "bg-destructive", WATCH: "bg-warn", INFO: null };
@@ -44,8 +43,8 @@ export function LatestEventsCard({ className }: { className?: string }) {
     refetchInterval,
   });
 
-  const [bodyRef, visibleCount] = useFitCount(ROW_HEIGHT, MAX_ITEMS);
-  const events: LatestEvent[] = (eventsQ.data ?? []).slice(0, visibleCount);
+  const { fill } = usePanel();
+  const events: LatestEvent[] = fill ? (eventsQ.data ?? []) : (eventsQ.data ?? []).slice(0, MAX_ITEMS);
   const newest = events.reduce<Date | null>((latest, event) => {
     const time = eventTime(event);
     return time && (!latest || time > latest) ? time : latest;
@@ -135,7 +134,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
           </Link>
         }
       />
-      <CardBody ref={bodyRef}>{body}</CardBody>
+      <CardBody>{body}</CardBody>
     </DashboardCard>
   );
 }

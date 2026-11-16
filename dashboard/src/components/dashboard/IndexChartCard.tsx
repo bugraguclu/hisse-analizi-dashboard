@@ -212,7 +212,7 @@ export function IndexChartCard({ className }: { className?: string }) {
               </div>
             )}
             {updatedAt !== null && (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[11px] text-muted-foreground slot-short:hidden">
                 {t("dashboard.updatedAt", { time: formatMarketDate(updatedAt, "dayMonthTime") })}
               </p>
             )}
@@ -285,13 +285,14 @@ export function IndexChartCard({ className }: { className?: string }) {
         />
       </div>
 
-      <dl className="mx-4 mt-3 grid shrink-0 grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-4">
+      {/* A short card keeps its height for the plot: the figures and the credits go. */}
+      <dl className="mx-4 mt-3 grid shrink-0 grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-4 slot-short:hidden">
         {statItems.map(([label, value]) => (
           <StatItem key={label} label={label} value={value == null ? formatNumber(null) : formatLevel(value)} />
         ))}
         {!intraday && <StatItem label={t("index.periodReturn")} value={formatChangePercent(stats?.changePercent)} />}
       </dl>
-      <p className="shrink-0 border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
+      <p className="shrink-0 border-t border-border px-4 py-2 text-[10px] text-muted-foreground slot-short:hidden">
         <ChartAttribution />
         <ApiDataMeta path={`/market/index/${SYMBOL}`} className="mt-1" />
       </p>

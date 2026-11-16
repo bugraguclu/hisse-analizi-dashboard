@@ -5,7 +5,7 @@ import { createContext, useContext, useId, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { AlertCircle, Inbox, Info, RefreshCw } from "lucide-react";
 import { SegmentBar } from "@/components/charts/mini";
-import { usePanel } from "@/components/workspace/panel";
+import { PANEL_CONTENT, TRANSIENT, usePanel, usePanelBody } from "@/components/workspace/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,8 +35,12 @@ export function SectionHeadingLevel({ level, children }: { level: 2 | 3; childre
  * sit on the right and wrap under the title when the card is narrow), a body that
  * is a size container (children can use `@sm:` / `@md:` / `@lg:` …) and an
  * optional footnote. The body grows, so cards stretched to a shared row height
- * keep their footers on the same line. In a layout slot (see Workspace) the
- * card is as tall as the slot and its body scrolls.
+ * keep their footers on the same line.
+ *
+ * In a layout slot (see Workspace) the card is as tall as the slot. Its content
+ * scrolls with the footnote after it, so a short card shows content rather than
+ * small print, and the slot stops growing where the content ends. `stretch` is
+ * for content that takes whatever height there is (a chart) instead.
  */
 export function SectionCard({
   title,
@@ -45,6 +49,7 @@ export function SectionCard({
   children,
   className,
   bodyClassName,
+  stretch = false,
 }: {
   title: ReactNode;
   /** @deprecated Section titles are text-only; the icon is no longer rendered. */
@@ -54,11 +59,25 @@ export function SectionCard({
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  stretch?: boolean;
 }) {
   const headingId = useId();
   const Heading = useContext(SectionHeadingLevelContext) === 3 ? "h3" : "h2";
-  // In a layout slot the card has a fixed height: the body scrolls, title and footnote stay put.
   const { fill } = usePanel();
+  const bodyRef = usePanelBody();
+  const scrolls = fill && !stretch;
+  const note = footer ? (
+    <footer
+      className={cn(
+        "shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground",
+        scrolls && "mt-auto",
+        // A short chart card gives the small print's room to the plot.
+        fill && stretch && "slot-short:hidden",
+      )}
+    >
+      {footer}
+    </footer>
+  ) : null;
   return (
     <section aria-labelledby={headingId} className={cn("card-surface flex min-w-0 flex-col overflow-hidden", fill && "min-h-0", className)}>
       <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2">
@@ -67,10 +86,16 @@ export function SectionCard({
         </Heading>
         {actions ? <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">{actions}</div> : null}
       </header>
-      <div className={cn("@container min-w-0 grow p-4", fill && "min-h-0 basis-0 overflow-y-auto scrollbar-thin", bodyClassName)}>{children}</div>
-      {footer ? (
-        <footer className="shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
-      ) : null}
+      <div
+        ref={stretch ? undefined : bodyRef}
+        className={cn("flex min-w-0 grow flex-col", fill && "min-h-0 basis-0", scrolls && "overflow-y-auto scrollbar-thin")}
+      >
+        <div {...PANEL_CONTENT} className={cn("flex min-w-0 flex-col", scrolls ? "min-h-full shrink-0" : "min-h-0 grow")}>
+          <div className={cn("@container min-w-0 p-4", scrolls ? "shrink-0" : "min-h-0 grow", bodyClassName)}>{children}</div>
+          {scrolls ? note : null}
+        </div>
+      </div>
+      {scrolls ? null : note}
     </section>
   );
 }
@@ -120,7 +145,7 @@ const SKELETON_LABEL_WIDTHS = [46, 62, 38, 56, 42, 58, 50];
 export function SectionSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   const { t } = useStockI18n();
   return (
-    <div className={cn("space-y-3.5 py-1", className)} role="status" aria-live="polite">
+    <div {...TRANSIENT} className={cn("space-y-3.5 py-1", className)} role="status" aria-live="polite">
       <span className="sr-only">{t("state.loading")}</span>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} aria-hidden className="flex items-center justify-between gap-6">
@@ -160,7 +185,7 @@ export function SectionError({
   const { t } = useStockI18n();
   const detail = showDetail && isApiError(error) && error.status !== null ? error.detail : null;
   return (
-    <div role="alert" className={cn("flex flex-col items-center justify-center gap-2 px-4 text-center", compact ? "py-4" : "py-8")}>
+    <div {...TRANSIENT} role="alert" className={cn("flex flex-col items-center justify-center gap-2 px-4 text-center", compact ? "py-4" : "py-8")}>
       <p className="flex items-start gap-1.5 text-[13px] leading-5 text-foreground">
         <AlertCircle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
         <span>{message ?? t(errorKey(error))}</span>

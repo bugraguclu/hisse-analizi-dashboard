@@ -35,6 +35,8 @@ export function ErrorState({
   return (
     <div
       role="alert"
+      // Stands in for the content: a card in a layout slot keeps its size while it shows.
+      data-transient=""
       className={cn("flex flex-col items-center justify-center gap-2 px-4 text-center", compact ? "py-6" : "py-10", className)}
     >
       <span className="inline-flex items-center gap-1.5 text-[13px] text-foreground">

@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -47,7 +48,7 @@ import {
   type LayoutItem,
   type WorkspaceLayout,
 } from "./layout-model";
-import { PanelProvider, type PanelState } from "./panel";
+import { PanelProvider, TRANSIENT, type PanelState } from "./panel";
 import { useLayoutGesture, type GesturePreview, type GestureRelease } from "./use-layout-gesture";
 import styles from "./workspace.module.css";
 
@@ -66,6 +67,8 @@ export type WorkspaceCard = Partial<CardLimits> & {
 const STORAGE_PREFIX = "hisse.layout.";
 const SAVED_EVENT = "workspace-layout-saved";
 const DESTINATION = "destination";
+/** However little a card has to show, its slot keeps room for a title and a line. */
+const MIN_CEILING = 3;
 const GLIDE_EASING = cubicBezier(motionCurve.easeOut);
 const GRID_STYLE = {
   "--grid-columns": WORKSPACE_COLUMNS,
@@ -140,6 +143,8 @@ type WorkspaceState = {
   nudge: (id: string, kind: LayoutChange, x: number, y: number, control: Control) => void;
   canNudge: (id: string, kind: LayoutChange, x: number, y: number) => boolean;
   reportHeight: (id: string, rows: number) => void;
+  /** The height at which a card shows all it has; `null` when it can use any height. */
+  reportCeiling: (id: string, rows: number | null) => void;
   absent: ReadonlySet<string>;
   reportPresence: (id: string, present: boolean) => void;
   startEditing: () => void;
@@ -193,6 +198,7 @@ export function Workspace({
   );
   const [edit, setEdit] = useState<Edit | null>(null);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const [ceilings, setCeilings] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [absent, setAbsent] = useState<ReadonlySet<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState("");
   const grid = useRef<HTMLDivElement>(null);
@@ -211,21 +217,24 @@ export function Workspace({
     const card = cards[id];
     // A card that hugs its content is as tall as that content, whatever it is.
     if (card?.hug) return { minW: card.minW ?? DEFAULT_LIMITS.minW, minH: 1, maxH: MAX_GRID_ROWS, hug: true };
-    return {
-      minW: card?.minW ?? DEFAULT_LIMITS.minW,
-      minH: card?.minH ?? DEFAULT_LIMITS.minH,
-      maxH: card?.maxH ?? DEFAULT_LIMITS.maxH,
-    };
+    // A card with a finite list stops growing where the list ends, however short that is.
+    const maxH = Math.min(card?.maxH ?? DEFAULT_LIMITS.maxH, ceilings.get(id) ?? MAX_GRID_ROWS);
+    return { minW: card?.minW ?? DEFAULT_LIMITS.minW, minH: Math.min(card?.minH ?? DEFAULT_LIMITS.minH, maxH), maxH };
   };
-  const hugging = new Map([...heights].filter(([id]) => cards[id]?.hug));
   const saved = parseLayout(stored, ids, limits);
   const editing = desktop && edit !== null;
   const draft = editing ? edit.layout : saved;
   // A card with nothing to show (no sector to compare with, say) gives up its slot until it has.
   const missing = draft && absent.size > 0 ? draft.filter(({ id }) => absent.has(id)) : [];
   const present = draft && missing.length > 0 ? packLayout(draft.filter(({ id }) => !absent.has(id))) : draft;
-  // Cards that hug their content report their height once they are on screen.
-  const base = present && fitHeights(present, hugging);
+  // Cards that hug their content report their height once they are on screen;
+  // the others are no taller than what they have to show.
+  const fitted = new Map([...heights].filter(([id]) => cards[id]?.hug));
+  for (const { id, h } of present ?? []) {
+    const ceiling = cards[id]?.hug ? undefined : ceilings.get(id);
+    if (ceiling !== undefined && h > ceiling) fitted.set(id, ceiling);
+  }
+  const base = present && fitHeights(present, fitted);
 
   function commit(layout: WorkspaceLayout, id: string, kind: Control, reveal: boolean) {
     control.current = { id, kind, reveal };
@@ -427,6 +436,15 @@ export function Workspace({
     reportHeight(id, rows) {
       setHeights((current) => (current.get(id) === rows ? current : new Map(current).set(id, rows)));
     },
+    reportCeiling(id, rows) {
+      setCeilings((current) => {
+        if (rows === null ? !current.has(id) : current.get(id) === rows) return current;
+        const next = new Map(current);
+        if (rows === null) next.delete(id);
+        else next.set(id, rows);
+        return next;
+      });
+    },
     absent,
     reportPresence(id, shown) {
       setAbsent((current) => {
@@ -535,7 +553,7 @@ export const DEFAULT_LAYOUT_ONLY = { "data-default-layout-only": "" } as const;
 /** Card-shaped stand-in for a tile that has not been scrolled near yet. */
 function TilePlaceholder({ minHeight }: { minHeight: number }) {
   return (
-    <div aria-hidden className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
+    <div aria-hidden {...TRANSIENT} className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
       <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
         <Skeleton className="h-3 w-32" />
       </div>
@@ -574,7 +592,7 @@ export function Tile({
 }) {
   const { t } = useLocale();
   const workspace = useWorkspace();
-  const { cards, customized, positioned, editing, base, preview, gesture, helpId, reportHeight, reportPresence } = workspace;
+  const { cards, customized, positioned, editing, base, preview, gesture, helpId, reportHeight, reportCeiling, reportPresence } = workspace;
   const element = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(!lazy);
   const card = cards[id];
@@ -587,7 +605,12 @@ export function Tile({
   const fill = positioned && !hug && slot !== undefined;
   const columns = slot?.w ?? 0;
   const rows = slot?.h ?? 0;
-  const panel = useMemo<PanelState>(() => ({ fill, columns, rows }), [fill, columns, rows]);
+  const reportSpare = useCallback((spare: number | null) => {
+    const height = element.current?.offsetHeight ?? 0;
+    reportCeiling(id, spare === null || height === 0 ? null : Math.max(MIN_CEILING, Math.ceil((height - spare + WORKSPACE_GAP) / WORKSPACE_ROW_STEP)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reportCeiling only forwards to a state setter
+  }, [id]);
+  const panel = useMemo<PanelState>(() => ({ fill, columns, rows, reportSpare }), [fill, columns, rows, reportSpare]);
 
   useEffect(() => {
     const tile = element.current;
@@ -619,7 +642,9 @@ export function Tile({
     const tile = element.current;
     if (!tile || !measured) return;
     const report = () => {
-      if (tile.offsetHeight > 0) reportHeight(id, Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP));
+      // A placeholder keeps the height the card had; only real content sets a new one.
+      if (tile.offsetHeight === 0 || tile.querySelector("[data-transient]")) return;
+      reportHeight(id, Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP));
     };
     report();
     const observer = new ResizeObserver(report);

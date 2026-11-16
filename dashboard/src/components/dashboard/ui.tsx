@@ -3,7 +3,7 @@
 import type { ReactNode, Ref } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
-import { usePanel } from "@/components/workspace/panel";
+import { PANEL_CONTENT, TRANSIENT, usePanel, usePanelBody } from "@/components/workspace/panel";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -31,11 +31,28 @@ export function DashboardCard({
 
 /**
  * The content beneath a panel's heading and controls. In a layout slot it is
- * the part that scrolls; pass `ref` to learn how much room it has.
+ * the part that scrolls, and the slot stops growing where the content ends.
+ * `endless` is for content that is cut to the room there is (a list sized to
+ * the card), which has no such end; pass `ref` to learn how much room it has.
  */
-export function CardBody({ children, ref, className }: { children: ReactNode; ref?: Ref<HTMLDivElement>; className?: string }) {
+export function CardBody({
+  children,
+  ref,
+  className,
+  endless = false,
+}: {
+  children: ReactNode;
+  ref?: Ref<HTMLDivElement>;
+  className?: string;
+  endless?: boolean;
+}) {
   const { fill } = usePanel();
-  return <div ref={ref} className={cn(fill && "min-h-0 flex-1 overflow-y-auto scrollbar-thin", className)}>{children}</div>;
+  const bodyRef = usePanelBody();
+  return (
+    <div ref={endless ? ref : bodyRef} className={cn(fill && "min-h-0 flex-1 overflow-y-auto scrollbar-thin", className)}>
+      <div {...PANEL_CONTENT}>{children}</div>
+    </div>
+  );
 }
 
 /** Panel title row: plain text title, optional one-line subtitle and a right-aligned action. */
@@ -158,7 +175,7 @@ export function StatItem({ label, value }: { label: ReactNode; value: ReactNode 
 
 export function RowSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   return (
-    <div className={cn("space-y-2 px-4 py-4", className)} aria-hidden="true">
+    <div {...TRANSIENT} className={cn("space-y-2 px-4 py-4", className)} aria-hidden="true">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="h-9 rounded-sm bg-muted/60" />
       ))}

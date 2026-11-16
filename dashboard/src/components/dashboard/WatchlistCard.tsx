@@ -159,12 +159,16 @@ export function WatchlistCard({ className }: { className?: string }) {
             {snapshotQ.isError && !snapshotQ.data && (
               <ErrorState compact message={t("watchlist.quoteError")} onRetry={() => void snapshotQ.refetch()} />
             )}
-            <ul className="divide-y divide-border" aria-busy={snapshotQ.isFetching}>
+            {/* A wide card lists the stocks in two columns instead of stretching each row. */}
+            <ul className="slot-wide:grid slot-wide:grid-cols-2 slot-wide:gap-x-6" aria-busy={snapshotQ.isFetching}>
               {tickers.map((ticker) => {
                 const quote = snapshotQ.data?.snapshot[ticker];
                 const loading = !quote && (snapshotQ.isPending || snapshotQ.isPlaceholderData);
                 return (
-                  <li key={ticker} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40">
+                  <li
+                    key={ticker}
+                    className="flex items-center gap-3 border-b border-border px-4 py-2.5 transition-colors last:border-b-0 hover:bg-muted/40 slot-wide:last:border-b"
+                  >
                     <Link
                       href={`/hisse/${ticker}`}
                       className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"

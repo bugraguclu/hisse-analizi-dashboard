@@ -10,7 +10,7 @@ import { SegmentBar } from "@/components/charts/mini";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { presetHref } from "@/components/tarama/model";
 import { useCompanies, useScreenerRows } from "./queries";
-import { useFitCount, usePanel } from "@/components/workspace/panel";
+import { usePanelSize } from "@/components/workspace/panel";
 import { CardBody, CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
 
 const HEADING_ID = "breadth-heading";
@@ -20,8 +20,8 @@ const MOVER_ROW_HEIGHT = 26;
 /** The breadth bar and one list heading, which the lists share the card's body with. */
 const BAR_HEIGHT = 52;
 const LIST_HEADING_HEIGHT = 42;
-/** From this many grid columns the two lists sit side by side instead of one under the other. */
-const WIDE_COLUMNS = 4;
+/** From this width the two lists sit side by side instead of one under the other. */
+const WIDE_WIDTH = 560;
 /** Below this many tracked symbols in the screener, fall back to the whole market. */
 const MIN_TRACKED = 20;
 /** Moves smaller than this (in %) round to 0,00 and count as unchanged. */
@@ -137,13 +137,14 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   const rows = screenerQ.data?.results;
   const breadth = useMemo(() => (rows ? computeBreadth(rows, companiesQ.data) : null), [rows, companiesQ.data]);
   const total = breadth ? breadth.up + breadth.down + breadth.flat : 0;
-  // A wide card puts the lists side by side, so the same height shows twice as many movers.
-  const wide = usePanel().columns >= WIDE_COLUMNS;
-  const [bodyRef, moverCount] = useFitCount(
-    wide ? MOVER_ROW_HEIGHT : MOVER_ROW_HEIGHT * 2,
-    MOVER_COUNT,
-    BAR_HEIGHT + (wide ? LIST_HEADING_HEIGHT : LIST_HEADING_HEIGHT * 2),
-  );
+  // In a layout slot both lists are as long as the card has room for. A wide card
+  // puts them side by side, so the same height shows twice as many movers.
+  const [bodyRef, room] = usePanelSize();
+  const wide = room !== null && room.width >= WIDE_WIDTH;
+  const lists = wide ? 1 : 2;
+  const moverCount = room
+    ? Math.max(1, Math.floor((room.height - BAR_HEIGHT - LIST_HEADING_HEIGHT * lists) / (MOVER_ROW_HEIGHT * lists)))
+    : MOVER_COUNT;
   const [highlight, setHighlight] = useState<string | null>(null);
   // The legend uses pointer events like the bar's tooltip, so moving between a label and a segment
   // leaves one before entering the other; a label only clears its own highlight.
@@ -229,7 +230,7 @@ export function MarketBreadthCard({ className }: { className?: string }) {
         title={t("dashboard.breadth")}
         subtitle={breadth ? t(breadth.scope === "bist100" ? "dashboard.universeBist100" : "dashboard.universeAll") : undefined}
       />
-      <CardBody ref={bodyRef}>{body}</CardBody>
+      <CardBody ref={bodyRef} endless>{body}</CardBody>
     </DashboardCard>
   );
 }
