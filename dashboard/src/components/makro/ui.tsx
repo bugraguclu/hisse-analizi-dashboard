@@ -7,13 +7,19 @@ import { isApiError } from "@/lib/api";
 import { formatChangePercent, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
+import { DEFAULT_LAYOUT_ONLY, TileGroup } from "@/components/workspace/Workspace";
+import { usePanel } from "@/components/workspace/panel";
 import { useMakroI18n, type MakroKey } from "./i18n";
 
 // ---------------------------------------------------------------------------
 // Page structure
 // ---------------------------------------------------------------------------
 
-/** One titled block of the page ("Para politikası", "Enflasyon" …) with an anchor id. */
+/**
+ * One titled block of the page ("Para politikası", "Enflasyon" …) with an anchor id.
+ * It groups the tiles of the page's default layout; once the visitor arranges the
+ * cards themselves the heading goes and the tiles stand on their own.
+ */
 export function MacroSection({
   id,
   title,
@@ -27,16 +33,19 @@ export function MacroSection({
 }) {
   const headingId = `${id}-title`;
   return (
-    <section id={id} aria-labelledby={headingId} className={cn("scroll-mt-24 space-y-3", className)}>
-      <h2 id={headingId} className="text-[15px] font-semibold tracking-tight text-foreground">
+    <TileGroup as="section" id={id} aria-labelledby={headingId} className={cn("scroll-mt-24 space-y-3", className)}>
+      <h2 id={headingId} {...DEFAULT_LAYOUT_ONLY} className="text-[15px] font-semibold tracking-tight text-foreground">
         {title}
       </h2>
       {children}
-    </section>
+    </TileGroup>
   );
 }
 
-/** Flat panel with a text title row, optional right-aligned actions and a footnote. */
+/**
+ * Flat panel with a text title row, optional right-aligned actions and a footnote.
+ * In a layout slot (see Workspace) it is as tall as the slot and its body scrolls.
+ */
 export function Panel({
   title,
   subtitle,
@@ -55,9 +64,10 @@ export function Panel({
   bodyClassName?: string;
 }) {
   const headingId = useId();
+  const { fill } = usePanel();
   return (
-    <section aria-labelledby={headingId} className={cn("card-surface flex min-w-0 flex-col overflow-hidden", className)}>
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3">
+    <section aria-labelledby={headingId} className={cn("card-surface flex min-w-0 flex-col overflow-hidden", fill && "min-h-0", className)}>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <h3 id={headingId} className="text-[13px] font-semibold text-foreground">
             {title}
@@ -66,9 +76,9 @@ export function Panel({
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </header>
-      <div className={cn("flex-1 px-4 py-3", bodyClassName)}>{children}</div>
+      <div className={cn("flex-1 px-4 py-3", fill && "min-h-0 overflow-y-auto scrollbar-thin", bodyClassName)}>{children}</div>
       {footer ? (
-        <footer className="border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
+        <footer className="shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
       ) : null}
     </section>
   );

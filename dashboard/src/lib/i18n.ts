@@ -53,7 +53,7 @@ const translations = {
   "dashboard.shorter": { tr: "Yüksekliği azalt", en: "Reduce height", fr: "Réduire la hauteur" },
   "dashboard.taller": { tr: "Yüksekliği artır", en: "Increase height", fr: "Augmenter la hauteur" },
   "dashboard.layoutPosition": { tr: "{card}: sütun {column}, satır {row}, genişlik {width}, yükseklik {height}.", en: "{card}: column {column}, row {row}, width {width}, height {height}.", fr: "{card} : colonne {column}, ligne {row}, largeur {width}, hauteur {height}." },
-  "dashboard.layoutSaved": { tr: "Piyasa Özeti düzeni kaydedildi.", en: "Market Overview layout saved.", fr: "Disposition de l’aperçu du marché enregistrée." },
+  "dashboard.layoutSaved": { tr: "Sayfa düzeni kaydedildi.", en: "Page layout saved.", fr: "Disposition de la page enregistrée." },
   "dashboard.layoutSaveError": { tr: "Tarayıcı düzeni kaydedemedi. Düzen bu oturumda kullanılabilir.", en: "The browser could not save the layout. It is available for this session.", fr: "Le navigateur n’a pas pu enregistrer la disposition. Elle reste disponible pour cette session." },
   "dashboard.marketOpen": { tr: "Piyasa Açık", en: "Market Open", fr: "Marché ouvert" },
   "dashboard.marketClosed": { tr: "Piyasa Kapalı", en: "Market Closed", fr: "Marché fermé" },

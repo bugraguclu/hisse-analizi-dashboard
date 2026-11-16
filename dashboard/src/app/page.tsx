@@ -1,4 +1,4 @@
-import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace";
+import { DashboardView } from "@/components/dashboard/DashboardView";
 
 /**
  * Home, most important first: the BIST 100, the visitor's watchlist, market
@@ -9,7 +9,7 @@ import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace";
 export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <DashboardWorkspace />
+      <DashboardView />
     </div>
   );
 }

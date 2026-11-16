@@ -10,6 +10,7 @@ import { isNotFoundError, useTickerNews } from "./hooks";
 import { useStockI18n, type StockKey } from "./i18n";
 import { useShellIdentity } from "./StockShell";
 import type { NewsItem } from "./types";
+import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionEmpty, SectionError, Segmented } from "./ui";
 
 const WINDOWS: Array<{ hours: number; label: StockKey }> = [
@@ -92,6 +93,8 @@ export function NewsCard({ ticker }: { ticker: string }) {
   const identity = useShellIdentity();
   const [hours, setHours] = useState(DEFAULT_HOURS);
   const [expanded, setExpanded] = useState(false);
+  // In a layout slot the whole list is there to scroll, so a taller card simply shows more of it.
+  const { fill } = usePanel();
   const tracked = identity.status === "found" ? identity.identity.tracked : identity.status === "unknown";
   const newsQ = useTickerNews(ticker, hours, tracked);
   const windowLabel = t(WINDOWS.find((w) => w.hours === hours)?.label ?? "news.window48h");
@@ -115,7 +118,7 @@ export function NewsCard({ ticker }: { ticker: string }) {
       />
     );
   } else {
-    const items = expanded ? newsQ.data : newsQ.data.slice(0, VISIBLE_ITEMS);
+    const items = expanded || fill ? newsQ.data : newsQ.data.slice(0, VISIBLE_ITEMS);
     body = (
       <>
         <ul className="divide-y divide-border">
@@ -125,7 +128,7 @@ export function NewsCard({ ticker }: { ticker: string }) {
             </li>
           ))}
         </ul>
-        {newsQ.data.length > VISIBLE_ITEMS ? (
+        {!fill && newsQ.data.length > VISIBLE_ITEMS ? (
           <div className="border-t border-border px-4 py-2.5">
             <button
               type="button"

@@ -7,6 +7,7 @@ import { useCompanySector, useDividends, useQuote } from "./hooks";
 import { useStockI18n } from "./i18n";
 import { trailingDividendYield } from "./parsers";
 import { useSectorName } from "./sector-ui";
+import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
 
 const VISIBLE_ROWS = 8;
@@ -27,6 +28,8 @@ export function DividendHistory({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
   const now = useNow();
   const [expanded, setExpanded] = useState(false);
+  // In a layout slot the whole table is there to scroll, so a taller card simply shows more of it.
+  const { fill } = usePanel();
   const dividendsQ = useDividends(ticker);
   const { quote } = useQuote(ticker);
   const sectorQ = useCompanySector(ticker);
@@ -34,7 +37,7 @@ export function DividendHistory({ ticker }: { ticker: string }) {
   const dividends = dividendsQ.data ?? [];
   const trailing = now !== null ? trailingDividendYield(dividends, quote?.last ?? null, now) : null;
   const lastPaid = now !== null ? (dividends.find((d) => d.time <= now) ?? null) : null;
-  const visible = expanded ? dividends : dividends.slice(0, VISIBLE_ROWS);
+  const visible = expanded || fill ? dividends : dividends.slice(0, VISIBLE_ROWS);
   // Payers only: in most sectors fewer than half the companies pay, zeros would pull the median to 0.
   const sectorStat = sectorQ.data?.metrics.dividend_yield;
   const sectorLine =
@@ -100,7 +103,7 @@ export function DividendHistory({ ticker }: { ticker: string }) {
               </tbody>
             </table>
           </div>
-          {dividends.length > VISIBLE_ROWS ? (
+          {!fill && dividends.length > VISIBLE_ROWS ? (
             <button
               type="button"
               aria-expanded={expanded}

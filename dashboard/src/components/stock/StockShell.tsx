@@ -114,17 +114,29 @@ export function StockNotFound({ ticker }: { ticker: string | null }) {
  * quote, section tabs and a friendly not-found state. Sections mount right
  * away (they show their own skeletons) — nothing waits for slow endpoints.
  */
-export function StockShell({ ticker, view, children }: { ticker: string; view: StockView; children: ReactNode }) {
+export function StockShell({
+  ticker,
+  view,
+  actions,
+  children,
+}: {
+  ticker: string;
+  view: StockView;
+  /** Shown at the end of the tab row on wide screens (the page's layout controls). */
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   const identity = useStockIdentity(ticker);
   if (identity.status === "notFound") return <StockNotFound ticker={ticker} />;
   return (
     <div className="mx-auto max-w-7xl">
       <StockHeader ticker={ticker} identity={identity} />
-      <div className="mt-5">
+      <div className="relative mt-5">
         <StockTabs ticker={ticker} active={view} />
+        {actions ? <div className="absolute inset-y-0 right-0 flex items-center pb-1">{actions}</div> : null}
       </div>
       <StockIdentityContext.Provider value={identity}>
-        <div className="mt-6 space-y-4">{children}</div>
+        <div className="mt-6">{children}</div>
       </StockIdentityContext.Provider>
     </div>
   );

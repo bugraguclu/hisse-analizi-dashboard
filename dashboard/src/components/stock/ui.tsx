@@ -1,10 +1,11 @@
 "use client";
 
 import { MotionPopoverPopup } from "@/components/ui/motion-surface";
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { AlertCircle, Inbox, Info, RefreshCw } from "lucide-react";
 import { SegmentBar } from "@/components/charts/mini";
+import { usePanel } from "@/components/workspace/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +35,8 @@ export function SectionHeadingLevel({ level, children }: { level: 2 | 3; childre
  * sit on the right and wrap under the title when the card is narrow), a body that
  * is a size container (children can use `@sm:` / `@md:` / `@lg:` …) and an
  * optional footnote. The body grows, so cards stretched to a shared row height
- * keep their footers on the same line.
+ * keep their footers on the same line. In a layout slot (see Workspace) the
+ * card is as tall as the slot and its body scrolls.
  */
 export function SectionCard({
   title,
@@ -55,17 +57,19 @@ export function SectionCard({
 }) {
   const headingId = useId();
   const Heading = useContext(SectionHeadingLevelContext) === 3 ? "h3" : "h2";
+  // In a layout slot the card has a fixed height: the body scrolls, title and footnote stay put.
+  const { fill } = usePanel();
   return (
-    <section aria-labelledby={headingId} className={cn("card-surface flex min-w-0 flex-col overflow-hidden", className)}>
-      <header className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2">
+    <section aria-labelledby={headingId} className={cn("card-surface flex min-w-0 flex-col overflow-hidden", fill && "min-h-0", className)}>
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2">
         <Heading id={headingId} className="min-w-0 text-[13px] font-semibold leading-5 text-foreground">
           {title}
         </Heading>
         {actions ? <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">{actions}</div> : null}
       </header>
-      <div className={cn("@container min-w-0 grow p-4", bodyClassName)}>{children}</div>
+      <div className={cn("@container min-w-0 grow p-4", fill && "min-h-0 basis-0 overflow-y-auto scrollbar-thin", bodyClassName)}>{children}</div>
       {footer ? (
-        <footer className="border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
+        <footer className="shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
       ) : null}
     </section>
   );
@@ -346,72 +350,6 @@ export function Stat({
         {pending ? <Skeleton className="my-1 h-3 w-16" /> : value}
       </dd>
       {sub ? <dd className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</dd> : null}
-    </div>
-  );
-}
-
-/** Card-shaped stand-in for a section that has not mounted yet, so the page keeps its rhythm. */
-function LazyPlaceholder({ minHeight, columns }: { minHeight: number; columns: 1 | 2 }) {
-  return (
-    <div aria-hidden className={cn("grid grid-cols-1 gap-4", columns === 2 && "lg:grid-cols-2")}>
-      {Array.from({ length: columns }, (_, card) => (
-        <div key={card} className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
-          <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
-            <Skeleton className="h-3 w-32" />
-          </div>
-          <div className="space-y-3.5 p-4">
-            {SKELETON_LABEL_WIDTHS.slice(0, 4).map((width, row) => (
-              <div key={row} className="flex items-center justify-between gap-6">
-                <Skeleton className="h-3" style={{ width: `${width}%` }} />
-                <Skeleton className="h-3 w-14 shrink-0" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Mounts its children only once they approach the viewport, so below-the-fold
- * sections don't compete with the header/chart for the browser's connection
- * pool (several fundamentals endpoints take 6-20 s when cold). Until then a
- * card-shaped placeholder holds the space (`columns={2}` for a pair of cards).
- */
-export function LazySection({
-  children,
-  minHeight = 320,
-  className,
-  columns = 1,
-}: {
-  children: ReactNode;
-  minHeight?: number;
-  className?: string;
-  columns?: 1 | 2;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element || visible) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "600px 0px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [visible]);
-
-  return (
-    <div ref={ref} className={cn("min-w-0", className)}>
-      {visible ? children : <LazyPlaceholder minHeight={minHeight} columns={columns} />}
     </div>
   );
 }

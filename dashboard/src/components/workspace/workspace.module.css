@@ -1,19 +1,46 @@
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--grid-gap);
-}
-
+/* By default a tile is an invisible box: it takes the place its card had and the card fills it. */
 .tile {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 0;
   /* Matches the card surface, so outlines follow its corners. */
   border-radius: calc(var(--radius) * 1.8);
 }
 
+.tile > * {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
 .tile:focus-within {
   z-index: 1;
+}
+
+/* A card that rendered nothing leaves no box behind. */
+.tile[data-absent] {
+  display: none;
+}
+
+/* A layout is in effect: wrappers dissolve and the tiles stack in reading order. */
+.custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--grid-gap);
+}
+
+.custom [data-tile-group] {
+  display: contents;
+}
+
+.custom [data-default-layout-only] {
+  display: none;
+}
+
+.custom .tile {
+  order: var(--order);
+  /* Clear of the sticky site header when a link scrolls to the card. */
+  scroll-margin-block-start: 6rem;
 }
 
 .editing .tile {
@@ -51,6 +78,7 @@
   inset-block-start: -13px;
   inset-inline-start: 50%;
   display: flex;
+  flex: none;
   translate: -50% 0;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -80,6 +108,7 @@
   z-index: 2;
   inset-block-end: -5px;
   inset-inline-end: -5px;
+  flex: none;
   /* The glyph stays on the corner whatever the size of the hit area. */
   place-items: end;
   width: 28px;
@@ -112,47 +141,11 @@
 }
 
 @media (min-width: 64rem) {
-  .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto auto 1fr;
-    align-items: start;
-  }
-
-  .grid:not(.positioned) .tile[data-card="index"] {
-    grid-area: 1 / 1 / 3 / 3;
-  }
-
-  .grid:not(.positioned) .tile[data-card="watchlist"] {
-    grid-area: 1 / 3 / 2 / 4;
-  }
-
-  .grid:not(.positioned) .tile[data-card="breadth"] {
-    grid-area: 2 / 3 / 4 / 4;
-  }
-
-  .grid:not(.positioned) .tile[data-card="events"] {
-    grid-area: 3 / 1 / 4 / 3;
-  }
-
-  .grid[data-natural-stacks] {
-    grid-template-rows: auto 1fr;
-  }
-
-  .grid[data-natural-stacks] .tile[data-card="breadth"] {
-    grid-row: 2;
-  }
-
-  .grid[data-natural-stacks] .tile[data-card="events"] {
-    grid-row: 1 / 3;
-    margin-block-start: var(--index-end);
-  }
-
   .positioned {
+    display: grid;
     grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
-    grid-template-rows: none;
     grid-auto-rows: var(--row-step);
-    row-gap: 0;
-    align-items: stretch;
+    gap: 0 var(--grid-gap);
     margin-block-end: calc(-1 * var(--grid-gap));
   }
 
@@ -163,6 +156,21 @@
     margin-block-end: var(--grid-gap);
   }
 
+  /* The card fills its slot and scrolls inside it. */
+  .positioned .tile > * {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  /* A card that hugs its content sets the height of its slot, not the other way round. */
+  .positioned .tile[data-hug] {
+    align-self: start;
+  }
+
+  .positioned .tile[data-hug] > * {
+    flex: 0 0 auto;
+  }
+
   .destination {
     border: 1.5px dashed color-mix(in oklab, var(--primary) 70%, transparent);
     border-radius: calc(var(--radius) * 1.8);
@@ -170,7 +178,7 @@
     pointer-events: none;
   }
 
-  .grid[data-gesture] {
+  .positioned[data-gesture] {
     user-select: none;
   }
 
@@ -189,10 +197,14 @@
     cursor: grabbing;
   }
 
-  .tile[data-gesture="resize"] {
+  .positioned .tile[data-gesture="resize"] {
     align-self: start;
     width: calc(100% + var(--offset-x, 0px));
     height: calc(100% - var(--grid-gap) + var(--offset-y, 0px));
+  }
+
+  .positioned .tile[data-hug][data-gesture="resize"] {
+    height: auto;
   }
 
   /* Without motion the card stays put and the outline alone shows where it will land. */
@@ -201,7 +213,7 @@
       transform: none;
     }
 
-    .tile[data-gesture="resize"] {
+    .positioned .tile[data-gesture="resize"] {
       align-self: stretch;
       width: auto;
       height: auto;

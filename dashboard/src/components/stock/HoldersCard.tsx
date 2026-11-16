@@ -6,6 +6,7 @@ import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useHolders } from "./hooks";
 import { useStockI18n } from "./i18n";
+import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
 
 const LIST_LIMIT = 12;
@@ -19,6 +20,7 @@ export function HoldersCard({ ticker }: { ticker: string }) {
   const holdersQ = useHolders(ticker);
   const holders = holdersQ.data ?? [];
   const [highlight, setHighlight] = useState<string | null>(null);
+  const { fill } = usePanel();
 
   const top = holders.filter((holder) => !holder.isOther).slice(0, TOP_COUNT);
   const restTotal = holders.reduce((sum, holder) => (top.includes(holder) ? sum : sum + holder.percent), 0);
@@ -49,7 +51,7 @@ export function HoldersCard({ ticker }: { ticker: string }) {
             onHighlightChange={setHighlight}
           />
           <ul className="space-y-0.5">
-            {holders.slice(0, LIST_LIMIT).map((holder) => {
+            {(fill ? holders : holders.slice(0, LIST_LIMIT)).map((holder) => {
               const { key: segKey, tone } = segmentOf(holder);
               const dimmed = highlight != null && highlight !== segKey;
               return (

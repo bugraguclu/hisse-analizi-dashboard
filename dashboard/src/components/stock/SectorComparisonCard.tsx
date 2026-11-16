@@ -11,6 +11,7 @@ import { useCompanySector } from "./hooks";
 import { useStockI18n, type StockKey } from "./i18n";
 import type { CompanySector, SectorMetricKey, SectorPeer } from "./sector";
 import { SectorLink, useSectorName } from "./sector-ui";
+import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionError, SectionSkeleton } from "./ui";
 
 /** Companies listed before "Tümünü göster": the largest by market cap. */
@@ -61,6 +62,8 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
   const sector = sectorQ.data ?? null;
   const sectorName = useSectorName(sector);
   const [expanded, setExpanded] = useState(false);
+  // In a layout slot every peer is there to scroll, so a taller card simply shows more of them.
+  const { fill } = usePanel();
 
   // No KAP sector (a handful of listings): nothing to compare, no card.
   if (sectorQ.isSuccess && !sector) return null;
@@ -84,7 +87,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
   const columns = visibleColumns(sector, compact);
   const self = sector.peers.find((peer) => peer.symbol === ticker) ?? null;
   const others = sector.peers.filter((peer) => peer.symbol !== ticker);
-  const shown = expanded ? others : others.slice(0, TOP_PEERS);
+  const shown = expanded || fill ? others : others.slice(0, TOP_PEERS);
   const hasMedian = columns.some((column) => sector.metrics[column.metric]?.median != null);
 
   const value = (peer: SectorPeer, column: Column): ReactNode => {
@@ -192,7 +195,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
           </tbody>
         </table>
       </div>
-      {others.length > TOP_PEERS ? (
+      {!fill && others.length > TOP_PEERS ? (
         <button
           type="button"
           aria-expanded={expanded}

@@ -27,9 +27,10 @@ import type { TranslationKey } from "@/lib/i18n";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock, sessionQuoteTime } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
+import { usePanel } from "@/components/workspace/panel";
 import type { ChartPeriod, IndexQuote } from "@/types";
 import { findQuote, quoteTimeMs, useIndexQuotes } from "./queries";
-import { ChangeLine, DashboardCard, StatItem, type DashboardPanelProps } from "./ui";
+import { ChangeLine, DashboardCard, StatItem } from "./ui";
 
 const SYMBOL = "XU100";
 const HEADING_ID = "bist100-heading";
@@ -93,8 +94,9 @@ function mergeQuote(primary: IndexQuote | null, embedded: Partial<IndexQuote> | 
   };
 }
 
-export function IndexChartCard({ className, fillPanel }: DashboardPanelProps) {
+export function IndexChartCard({ className }: { className?: string }) {
   const { t } = useLocale();
+  const { fill } = usePanel();
   const { t: tc } = useChartI18n();
   const [period, setPeriod] = useState<ChartPeriod>("1d");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -189,7 +191,7 @@ export function IndexChartCard({ className, fillPanel }: DashboardPanelProps) {
   );
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className} fillPanel={fillPanel}>
+    <DashboardCard labelledBy={HEADING_ID} className={className}>
       <div className="shrink-0 px-4 pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
@@ -234,7 +236,7 @@ export function IndexChartCard({ className, fillPanel }: DashboardPanelProps) {
         </div>
       </div>
 
-      <div className={cn("px-4 pt-3", fillPanel && "flex min-h-0 flex-1 flex-col")}>
+      <div className={cn("px-4 pt-3", fill && "flex min-h-0 flex-1 flex-col")}>
         <ChartWorkspace
           title="BIST 100"
           symbol={SYMBOL}
@@ -263,7 +265,7 @@ export function IndexChartCard({ className, fillPanel }: DashboardPanelProps) {
           baseline={baseline}
           padToSessionEnd={live}
           height={240}
-          fillCardHeight={fillPanel}
+          fillCardHeight={fill}
           onHoverChange={setHoverIndex}
           headline={
             level !== null ? (

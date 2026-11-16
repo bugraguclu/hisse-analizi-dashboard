@@ -13,10 +13,13 @@ import { categoryKeys, severityKeys, toCategoryKey, toSeverity, type SeverityKey
 import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/use-now";
 import type { EventOut } from "@/types";
-import { CardBody, CardHeading, DashboardCard, RowSkeleton, type DashboardPanelProps } from "./ui";
+import { useFitCount } from "@/components/workspace/panel";
+import { CardBody, CardHeading, DashboardCard, RowSkeleton } from "./ui";
 
 const HEADING_ID = "latest-events-heading";
+/** Rows shown in the card's default place; in a layout slot the list is as long as the card is tall. */
 const MAX_ITEMS = 6;
+const ROW_HEIGHT = 58;
 
 /** Severity is shown as a thin rule at the row's edge plus a word; routine items stay unmarked. */
 const SEVERITY_RULE: Record<SeverityKey, string | null> = { HIGH: "bg-destructive", WATCH: "bg-warn", INFO: null };
@@ -29,7 +32,7 @@ function eventTime(event: EventOut): Date | null {
   return parseDate(event.published_at ?? event.created_at);
 }
 
-export function LatestEventsCard({ className, fillPanel }: DashboardPanelProps) {
+export function LatestEventsCard({ className }: { className?: string }) {
   const { t } = useLocale();
   const now = useNow();
   // KAP disclosures (results, dividends) mostly arrive after the close — refresh around the clock.
@@ -41,7 +44,8 @@ export function LatestEventsCard({ className, fillPanel }: DashboardPanelProps) 
     refetchInterval,
   });
 
-  const events: LatestEvent[] = (eventsQ.data ?? []).slice(0, MAX_ITEMS);
+  const [bodyRef, visibleCount] = useFitCount(ROW_HEIGHT, MAX_ITEMS);
+  const events: LatestEvent[] = (eventsQ.data ?? []).slice(0, visibleCount);
   const newest = events.reduce<Date | null>((latest, event) => {
     const time = eventTime(event);
     return time && (!latest || time > latest) ? time : latest;
@@ -113,7 +117,7 @@ export function LatestEventsCard({ className, fillPanel }: DashboardPanelProps) 
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className} fillPanel={fillPanel}>
+    <DashboardCard labelledBy={HEADING_ID} className={className}>
       <CardHeading
         id={HEADING_ID}
         title={
@@ -131,7 +135,7 @@ export function LatestEventsCard({ className, fillPanel }: DashboardPanelProps) 
           </Link>
         }
       />
-      <CardBody fillPanel={fillPanel}>{body}</CardBody>
+      <CardBody ref={bodyRef}>{body}</CardBody>
     </DashboardCard>
   );
 }

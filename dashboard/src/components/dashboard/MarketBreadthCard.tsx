@@ -10,10 +10,18 @@ import { SegmentBar } from "@/components/charts/mini";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { presetHref } from "@/components/tarama/model";
 import { useCompanies, useScreenerRows } from "./queries";
-import { CardBody, CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton, type DashboardPanelProps } from "./ui";
+import { useFitCount, usePanel } from "@/components/workspace/panel";
+import { CardBody, CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
 
 const HEADING_ID = "breadth-heading";
+/** Movers per list in the card's default place; in a layout slot both lists grow with the card. */
 const MOVER_COUNT = 5;
+const MOVER_ROW_HEIGHT = 26;
+/** The breadth bar and one list heading, which the lists share the card's body with. */
+const BAR_HEIGHT = 52;
+const LIST_HEADING_HEIGHT = 42;
+/** From this many grid columns the two lists sit side by side instead of one under the other. */
+const WIDE_COLUMNS = 4;
 /** Below this many tracked symbols in the screener, fall back to the whole market. */
 const MIN_TRACKED = 20;
 /** Moves smaller than this (in %) round to 0,00 and count as unchanged. */
@@ -85,8 +93,8 @@ export function computeBreadth(rows: readonly ScreenerRow[], companies: readonly
     up,
     down,
     flat,
-    gainers: movers.filter((m) => m.change >= FLAT_EPSILON).sort(byMove(-1)).slice(0, MOVER_COUNT),
-    losers: movers.filter((m) => m.change <= -FLAT_EPSILON).sort(byMove(1)).slice(0, MOVER_COUNT),
+    gainers: movers.filter((m) => m.change >= FLAT_EPSILON).sort(byMove(-1)),
+    losers: movers.filter((m) => m.change <= -FLAT_EPSILON).sort(byMove(1)),
   };
 }
 
@@ -122,13 +130,20 @@ function MoverList({ title, movers, href }: { title: string; movers: Mover[]; hr
   );
 }
 
-export function MarketBreadthCard({ className, fillPanel }: DashboardPanelProps) {
+export function MarketBreadthCard({ className }: { className?: string }) {
   const { t } = useLocale();
   const screenerQ = useScreenerRows();
   const companiesQ = useCompanies();
   const rows = screenerQ.data?.results;
   const breadth = useMemo(() => (rows ? computeBreadth(rows, companiesQ.data) : null), [rows, companiesQ.data]);
   const total = breadth ? breadth.up + breadth.down + breadth.flat : 0;
+  // A wide card puts the lists side by side, so the same height shows twice as many movers.
+  const wide = usePanel().columns >= WIDE_COLUMNS;
+  const [bodyRef, moverCount] = useFitCount(
+    wide ? MOVER_ROW_HEIGHT : MOVER_ROW_HEIGHT * 2,
+    MOVER_COUNT,
+    BAR_HEIGHT + (wide ? LIST_HEADING_HEIGHT : LIST_HEADING_HEIGHT * 2),
+  );
   const [highlight, setHighlight] = useState<string | null>(null);
   // The legend uses pointer events like the bar's tooltip, so moving between a label and a segment
   // leaves one before entering the other; a label only clears its own highlight.
@@ -198,21 +213,23 @@ export function MarketBreadthCard({ className, fillPanel }: DashboardPanelProps)
             className="mt-2"
           />
         </div>
-        <MoverList title={t("dashboard.topGainers")} movers={breadth.gainers} href={presetHref("top_gainers", screenerIndex)} />
-        <MoverList title={t("dashboard.topLosers")} movers={breadth.losers} href={presetHref("top_losers", screenerIndex)} />
+        <div className={cn(wide && "grid grid-cols-2 divide-x divide-border")}>
+          <MoverList title={t("dashboard.topGainers")} movers={breadth.gainers.slice(0, moverCount)} href={presetHref("top_gainers", screenerIndex)} />
+          <MoverList title={t("dashboard.topLosers")} movers={breadth.losers.slice(0, moverCount)} href={presetHref("top_losers", screenerIndex)} />
+        </div>
       </>
     );
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className} fillPanel={fillPanel}>
+    <DashboardCard labelledBy={HEADING_ID} className={className}>
       <CardHeading
         id={HEADING_ID}
         className="border-b-0 pb-2"
         title={t("dashboard.breadth")}
         subtitle={breadth ? t(breadth.scope === "bist100" ? "dashboard.universeBist100" : "dashboard.universeAll") : undefined}
       />
-      <CardBody fillPanel={fillPanel}>{body}</CardBody>
+      <CardBody ref={bodyRef}>{body}</CardBody>
     </DashboardCard>
   );
 }

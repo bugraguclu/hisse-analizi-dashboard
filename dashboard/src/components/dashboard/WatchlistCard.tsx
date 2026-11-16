@@ -14,11 +14,11 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
 import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist } from "@/hooks/use-watchlists";
 import { useCompanies } from "./queries";
-import { CardBody, CardHeading, ChangePill, DashboardCard, type DashboardPanelProps } from "./ui";
+import { CardBody, CardHeading, ChangePill, DashboardCard } from "./ui";
 
 const HEADING_ID = "watchlist-heading";
 
-export function WatchlistCard({ className, fillPanel }: DashboardPanelProps) {
+export function WatchlistCard({ className }: { className?: string }) {
   const { t } = useLocale();
   const { lists, createList, deleteList, addTicker, removeTicker } = useWatchlists();
   const [selectedId, setSelectedId] = useState<string>(DEFAULT_WATCHLIST_ID);
@@ -64,7 +64,7 @@ export function WatchlistCard({ className, fillPanel }: DashboardPanelProps) {
 
   return (
     // overflow-visible: the add-stock search dropdown must not be clipped by the card.
-    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)} fillPanel={fillPanel}>
+    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)}>
       <CardHeading
         id={HEADING_ID}
         title={t("dashboard.watchlist")}
@@ -151,7 +151,7 @@ export function WatchlistCard({ className, fillPanel }: DashboardPanelProps) {
         </div>
       )}
 
-      <CardBody fillPanel={fillPanel}>
+      <CardBody>
         {tickers.length === 0 ? (
           <p className="px-4 py-8 text-center text-xs text-muted-foreground">{t("watchlist.emptyList")}</p>
         ) : (

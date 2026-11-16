@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { DEFAULT_LAYOUT_ONLY, Tile, TileGroup, Workspace, WorkspaceControls, WorkspaceGrid, type WorkspaceCard } from "@/components/workspace/Workspace";
 import { AllTimeframeSignals } from "./AllTimeframeSignals";
 import { AnalystRecommendations } from "./AnalystRecommendations";
 import { CompanyProfileCard } from "./CompanyProfileCard";
@@ -9,7 +10,7 @@ import { EarningsCalendar } from "./EarningsCalendar";
 import { FinancialHealthScorecard } from "./FinancialHealthScorecard";
 import { FinancialStatements } from "./FinancialStatements";
 import { HoldersCard } from "./HoldersCard";
-import { useStockI18n } from "./i18n";
+import { useStockI18n, type StockKey } from "./i18n";
 import { IndicatorPanel } from "./IndicatorPanel";
 import { KapEventsCard } from "./KapEventsCard";
 import { MovingAveragesTable, PivotsCard } from "./MovingAveragesTable";
@@ -18,9 +19,71 @@ import { PriceChartCard } from "./PriceChartCard";
 import { QuoteStats } from "./QuoteStats";
 import { RatiosCard } from "./RatiosCard";
 import { SectorComparisonCard } from "./SectorComparisonCard";
-import { StockShell } from "./StockShell";
+import { StockShell, type StockView } from "./StockShell";
 import { TechnicalSummary } from "./TechnicalSummary";
-import { LazySection, SectionHeadingLevel } from "./ui";
+import { SectionHeadingLevel } from "./ui";
+
+/**
+ * Every card of the stock pages, by the id its tile uses. The visitor can move
+ * and resize them; each view keeps its own layout, shared by all stocks.
+ */
+const CARDS = {
+  // A strip of figures: it is as tall as its rows, whatever its width.
+  quote: { title: "quote.sectionLabel", hug: true },
+  // Narrower or shorter than this, the chart's controls leave no room for the plot.
+  chart: { title: "chart.title", minW: 3, minH: 14 },
+  scorecard: { title: "score.title" },
+  analysts: { title: "analyst.title" },
+  kap: { title: "kap.title" },
+  news: { title: "news.title" },
+  ratios: { title: "ratios.title" },
+  signals: { title: "tf.title" },
+  sector: { title: "peers.title", minW: 3 },
+  dividends: { title: "div.title" },
+  earnings: { title: "earn.title" },
+  holders: { title: "holders.title" },
+  profile: { title: "profile.title" },
+  statements: { title: "fin.title", minW: 3, minH: 8 },
+  summary: { title: "tech.summaryTitle" },
+  averages: { title: "ma.title" },
+  indicators: { title: "tech.indicatorsTitle", minW: 3 },
+  pivots: { title: "pivots.title" },
+} as const satisfies Record<string, Omit<WorkspaceCard, "label"> & { title: StockKey }>;
+
+type CardId = keyof typeof CARDS;
+
+/** The stock frame with a view's cards inside a workspace; the layout controls sit at the end of the tab row. */
+function StockWorkspace({
+  ticker,
+  view,
+  cards,
+  className,
+  children,
+}: {
+  ticker: string;
+  view: StockView;
+  cards: readonly CardId[];
+  /** The view's default arrangement of its tiles. */
+  className: string;
+  children: ReactNode;
+}) {
+  const { t } = useStockI18n();
+  const offered: Record<string, WorkspaceCard> = {};
+  for (const id of cards) {
+    const { title, ...limits } = CARDS[id];
+    offered[id] = { ...limits, label: t(title) };
+  }
+  return (
+    <Workspace page={`stock-${view}`} cards={offered}>
+      <StockShell ticker={ticker} view={view} actions={<WorkspaceControls compact />}>
+        <WorkspaceGrid className={className}>{children}</WorkspaceGrid>
+      </StockShell>
+    </Workspace>
+  );
+}
+
+/** A view's tiles and groups, one under the other. */
+const PAGE = "space-y-4";
 
 /** Two cards side by side from lg; both stretch to the taller one, so headers and footers line up. */
 const PAIR = "grid grid-cols-1 gap-4 lg:grid-cols-2";
@@ -34,9 +97,6 @@ const PAIR = "grid grid-cols-1 gap-4 lg:grid-cols-2";
  */
 const STACK = "flex min-w-0 flex-col gap-4 [&>*]:shrink-0 [&>*]:grow";
 
-/** A LazySection inside a STACK: the mounted card fills the (growing) wrapper. */
-const STACK_ITEM = "flex flex-col [&>*]:grow";
-
 /*
  * Every stock page runs top to bottom in the order an investor needs it:
  * summaries and verdicts before the figures behind them, fundamentals before
@@ -48,42 +108,61 @@ const STACK_ITEM = "flex flex-col [&>*]:grow";
  * /hisse/[ticker] — overview: key figures and the chart, the verdicts
  * (scorecard, analysts), what is new (KAP, news), ratios and signals, the
  * stock against its sector, dividends and the report calendar, then the
- * statements. Below-the-fold sections mount when scrolled near.
+ * statements. Below-the-fold cards mount when scrolled near.
  */
 export function StockOverviewView({ ticker }: { ticker: string }) {
   return (
-    <StockShell ticker={ticker} view="overview">
-      <QuoteStats ticker={ticker} />
-      <PriceChartCard ticker={ticker} />
-      <div className={PAIR}>
-        <FinancialHealthScorecard ticker={ticker} />
-        <AnalystRecommendations ticker={ticker} />
-      </div>
-      <LazySection columns={2} minHeight={560}>
-        <div className={PAIR}>
+    <StockWorkspace
+      ticker={ticker}
+      view="overview"
+      className={PAGE}
+      cards={["quote", "chart", "scorecard", "analysts", "kap", "news", "ratios", "signals", "sector", "dividends", "earnings", "statements"]}
+    >
+      <Tile id="quote">
+        <QuoteStats ticker={ticker} />
+      </Tile>
+      <Tile id="chart">
+        <PriceChartCard ticker={ticker} />
+      </Tile>
+      <TileGroup className={PAIR}>
+        <Tile id="scorecard">
+          <FinancialHealthScorecard ticker={ticker} />
+        </Tile>
+        <Tile id="analysts">
+          <AnalystRecommendations ticker={ticker} />
+        </Tile>
+      </TileGroup>
+      <TileGroup className={PAIR}>
+        <Tile id="kap" lazy placeholderHeight={560}>
           <KapEventsCard ticker={ticker} />
+        </Tile>
+        <Tile id="news" lazy placeholderHeight={560}>
           <NewsCard ticker={ticker} />
-        </div>
-      </LazySection>
-      <LazySection columns={2} minHeight={480}>
-        <div className={PAIR}>
+        </Tile>
+      </TileGroup>
+      <TileGroup className={PAIR}>
+        <Tile id="ratios" lazy placeholderHeight={480}>
           <RatiosCard ticker={ticker} />
+        </Tile>
+        <Tile id="signals" lazy placeholderHeight={480}>
           <AllTimeframeSignals ticker={ticker} />
-        </div>
-      </LazySection>
-      <LazySection minHeight={420}>
+        </Tile>
+      </TileGroup>
+      <Tile id="sector" lazy placeholderHeight={420}>
         <SectorComparisonCard ticker={ticker} />
-      </LazySection>
-      <LazySection columns={2} minHeight={300}>
-        <div className={PAIR}>
+      </Tile>
+      <TileGroup className={PAIR}>
+        <Tile id="dividends" lazy placeholderHeight={300}>
           <DividendHistory ticker={ticker} />
+        </Tile>
+        <Tile id="earnings" lazy placeholderHeight={300}>
           <EarningsCalendar ticker={ticker} />
-        </div>
-      </LazySection>
-      <LazySection minHeight={480}>
+        </Tile>
+      </TileGroup>
+      <Tile id="statements" lazy placeholderHeight={480}>
         <FinancialStatements ticker={ticker} />
-      </LazySection>
-    </StockShell>
+      </Tile>
+    </StockWorkspace>
   );
 }
 
@@ -96,33 +175,50 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
  */
 export function StockFundamentalView({ ticker }: { ticker: string }) {
   return (
-    <StockShell ticker={ticker} view="fundamental">
-      <div className={PAIR}>
-        <div className={STACK}>
-          <FinancialHealthScorecard ticker={ticker} />
-          <RatiosCard ticker={ticker} />
-        </div>
-        <div className={STACK}>
-          <AnalystRecommendations ticker={ticker} />
-          <CompanyProfileCard ticker={ticker} />
-        </div>
-      </div>
-      <LazySection minHeight={420}>
+    <StockWorkspace
+      ticker={ticker}
+      view="fundamental"
+      className={PAGE}
+      cards={["scorecard", "ratios", "analysts", "profile", "sector", "dividends", "holders", "earnings", "statements"]}
+    >
+      <TileGroup className={PAIR}>
+        <TileGroup className={STACK}>
+          <Tile id="scorecard">
+            <FinancialHealthScorecard ticker={ticker} />
+          </Tile>
+          <Tile id="ratios">
+            <RatiosCard ticker={ticker} />
+          </Tile>
+        </TileGroup>
+        <TileGroup className={STACK}>
+          <Tile id="analysts">
+            <AnalystRecommendations ticker={ticker} />
+          </Tile>
+          <Tile id="profile">
+            <CompanyProfileCard ticker={ticker} />
+          </Tile>
+        </TileGroup>
+      </TileGroup>
+      <Tile id="sector" lazy placeholderHeight={420}>
         <SectorComparisonCard ticker={ticker} />
-      </LazySection>
-      <LazySection columns={2} minHeight={440}>
-        <div className={PAIR}>
+      </Tile>
+      <TileGroup className={PAIR}>
+        <Tile id="dividends" lazy placeholderHeight={440}>
           <DividendHistory ticker={ticker} />
-          <div className={STACK}>
+        </Tile>
+        <TileGroup className={STACK}>
+          <Tile id="holders" lazy placeholderHeight={212}>
             <HoldersCard ticker={ticker} />
+          </Tile>
+          <Tile id="earnings" lazy placeholderHeight={212}>
             <EarningsCalendar ticker={ticker} />
-          </div>
-        </div>
-      </LazySection>
-      <LazySection minHeight={480}>
+          </Tile>
+        </TileGroup>
+      </TileGroup>
+      <Tile id="statements" lazy placeholderHeight={480}>
         <FinancialStatements ticker={ticker} />
-      </LazySection>
-    </StockShell>
+      </Tile>
+    </StockWorkspace>
   );
 }
 
@@ -133,32 +229,42 @@ export function StockFundamentalView({ ticker }: { ticker: string }) {
  */
 export function StockTechnicalView({ ticker }: { ticker: string }) {
   return (
-    <StockShell ticker={ticker} view="technical">
-      <TechnicalSummary ticker={ticker} />
-      <PriceChartCard ticker={ticker} variant="technical" />
-      <div className={PAIR}>
-        <MovingAveragesTable ticker={ticker} />
-        <AllTimeframeSignals ticker={ticker} />
-      </div>
-      <IndicatorPanel ticker={ticker} />
-      <LazySection minHeight={240}>
+    <StockWorkspace ticker={ticker} view="technical" className={PAGE} cards={["summary", "chart", "averages", "signals", "indicators", "pivots"]}>
+      <Tile id="summary">
+        <TechnicalSummary ticker={ticker} />
+      </Tile>
+      <Tile id="chart">
+        <PriceChartCard ticker={ticker} variant="technical" />
+      </Tile>
+      <TileGroup className={PAIR}>
+        <Tile id="averages">
+          <MovingAveragesTable ticker={ticker} />
+        </Tile>
+        <Tile id="signals">
+          <AllTimeframeSignals ticker={ticker} />
+        </Tile>
+      </TileGroup>
+      <Tile id="indicators">
+        <IndicatorPanel ticker={ticker} />
+      </Tile>
+      <Tile id="pivots" lazy placeholderHeight={240}>
         <PivotsCard ticker={ticker} />
-      </LazySection>
-    </StockShell>
+      </Tile>
+    </StockWorkspace>
   );
 }
 
 /** One side of the combined view: a small caps label over a column of cards (their titles become h3). */
 function CombinedColumn({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-3">
-      <h2 id={id} className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+    <TileGroup as="section" aria-labelledby={id} className="flex min-w-0 flex-col gap-3">
+      <h2 id={id} {...DEFAULT_LAYOUT_ONLY} className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {title}
       </h2>
       <SectionHeadingLevel level={3}>
-        <div className={`${STACK} grow`}>{children}</div>
+        <TileGroup className={`${STACK} grow`}>{children}</TileGroup>
       </SectionHeadingLevel>
-    </section>
+    </TileGroup>
   );
 }
 
@@ -170,25 +276,46 @@ function CombinedColumn({ id, title, children }: { id: string; title: string; ch
 export function StockCombinedView({ ticker }: { ticker: string }) {
   const { t } = useStockI18n();
   return (
-    <StockShell ticker={ticker} view="combined">
-      <div className="grid grid-cols-1 gap-x-4 gap-y-8 xl:grid-cols-2">
-        <CombinedColumn id="combined-fundamental" title={t("tabs.fundamental")}>
+    <StockWorkspace
+      ticker={ticker}
+      view="combined"
+      className="grid grid-cols-1 gap-x-4 gap-y-8 xl:grid-cols-2"
+      cards={["scorecard", "analysts", "ratios", "sector", "profile", "holders", "summary", "signals", "indicators", "pivots"]}
+    >
+      <CombinedColumn id="combined-fundamental" title={t("tabs.fundamental")}>
+        <Tile id="scorecard">
           <FinancialHealthScorecard ticker={ticker} />
+        </Tile>
+        <Tile id="analysts">
           <AnalystRecommendations ticker={ticker} />
+        </Tile>
+        <Tile id="ratios">
           <RatiosCard ticker={ticker} />
+        </Tile>
+        <Tile id="sector">
           <SectorComparisonCard ticker={ticker} compact />
+        </Tile>
+        <Tile id="profile">
           <CompanyProfileCard ticker={ticker} />
+        </Tile>
+        <Tile id="holders">
           <HoldersCard ticker={ticker} />
-        </CombinedColumn>
-        <CombinedColumn id="combined-technical" title={t("tabs.technical")}>
+        </Tile>
+      </CombinedColumn>
+      <CombinedColumn id="combined-technical" title={t("tabs.technical")}>
+        <Tile id="summary">
           <TechnicalSummary ticker={ticker} />
+        </Tile>
+        <Tile id="signals">
           <AllTimeframeSignals ticker={ticker} />
+        </Tile>
+        <Tile id="indicators">
           <IndicatorPanel ticker={ticker} compact />
-          <LazySection minHeight={240} className={STACK_ITEM}>
-            <PivotsCard ticker={ticker} />
-          </LazySection>
-        </CombinedColumn>
-      </div>
-    </StockShell>
+        </Tile>
+        <Tile id="pivots" lazy placeholderHeight={240}>
+          <PivotsCard ticker={ticker} />
+        </Tile>
+      </CombinedColumn>
+    </StockWorkspace>
   );
 }

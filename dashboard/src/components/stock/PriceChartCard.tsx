@@ -34,6 +34,7 @@ import { useCompanySector, useDividends, useEarningsCalendar, usePriceTargets, u
 import { useStockI18n, type StockKey } from "./i18n";
 import { rebasedDividends } from "./parsers";
 import type { ChartPeriod } from "./types";
+import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, Segmented } from "./ui";
 
 const PERIOD_LABELS: Record<ChartPeriod, { short: StockKey; long: StockKey }> = {
@@ -129,6 +130,8 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   const { t } = useStockI18n();
   const { t: tc } = useChartI18n();
   const technical = variant === "technical";
+  // In a layout slot the plot takes whatever height the card has left.
+  const { fill } = usePanel();
   const [period, setPeriod] = useState<ChartPeriod>(technical ? "6mo" : "3mo");
   const defaults = technical ? TECHNICAL_DEFAULTS : OVERVIEW_DEFAULTS;
   const [prefs, setPrefs] = useChartPrefs(technical ? "hisse.chart.technical.v2" : "hisse.chart.overview.v2", defaults);
@@ -421,6 +424,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   return (
     <SectionCard
       title={t("chart.title")}
+      bodyClassName={fill ? "flex flex-col overflow-hidden" : undefined}
       actions={
         <div className="contents" onPointerEnter={warmPeriods} onFocusCapture={warmPeriods}>
           <Segmented label={t("chart.periodLabel")} value={period} onChange={setPeriod} size="xs" options={periodOptions} />
@@ -461,6 +465,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
         baseline={baseline}
         padToSessionEnd={live}
         height={technical ? 340 : 300}
+        fillCardHeight={fill}
         summary={summary}
         headline={headline}
         emptyMessage={t("chart.empty")}

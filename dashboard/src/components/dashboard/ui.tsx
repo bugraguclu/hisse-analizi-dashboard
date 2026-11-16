@@ -1,41 +1,41 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
+import { usePanel } from "@/components/workspace/panel";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export interface DashboardPanelProps {
-  className?: string;
-  /** Fit the panel to the width and height assigned by the dashboard layout. */
-  fillPanel?: boolean;
-}
-
-/** Flat panel used by every home-page section. */
+/** Flat panel used by every home-page section. In a layout slot it fills the slot. */
 export function DashboardCard({
   className,
   children,
   labelledBy,
-  fillPanel,
-}: DashboardPanelProps & {
+}: {
+  className?: string;
   children: ReactNode;
   /** id of the heading that names this region. */
   labelledBy?: string;
 }) {
+  const { fill } = usePanel();
   return (
     <section
       aria-labelledby={labelledBy}
-      className={cn("card-surface min-w-0 overflow-hidden", fillPanel && "flex h-full min-h-0 flex-col", className)}
+      className={cn("card-surface min-w-0 overflow-hidden", fill && "flex min-h-0 flex-col", className)}
     >
       {children}
     </section>
   );
 }
 
-/** Scroll only the content beneath a panel's heading and controls. */
-export function CardBody({ children, fillPanel }: { children: ReactNode; fillPanel?: boolean }) {
-  return <div className={fillPanel ? "min-h-0 flex-1 overflow-y-auto scrollbar-thin" : undefined}>{children}</div>;
+/**
+ * The content beneath a panel's heading and controls. In a layout slot it is
+ * the part that scrolls; pass `ref` to learn how much room it has.
+ */
+export function CardBody({ children, ref, className }: { children: ReactNode; ref?: Ref<HTMLDivElement>; className?: string }) {
+  const { fill } = usePanel();
+  return <div ref={ref} className={cn(fill && "min-h-0 flex-1 overflow-y-auto scrollbar-thin", className)}>{children}</div>;
 }
 
 /** Panel title row: plain text title, optional one-line subtitle and a right-aligned action. */
