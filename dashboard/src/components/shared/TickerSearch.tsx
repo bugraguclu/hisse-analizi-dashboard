@@ -3,7 +3,7 @@
 import { useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Search, X } from "lucide-react";
+import { Hourglass, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
 import { STALE_TIME } from "@/lib/queryClient";
@@ -280,6 +280,7 @@ export function TickerSearch({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showRows}
+          aria-busy={pending}
           aria-controls={listboxId}
           aria-activedescendant={nav.active >= 0 ? nav.optionId(nav.active) : undefined}
           aria-keyshortcuts={shortcutHint ? "Meta+K Control+K" : undefined}
@@ -307,9 +308,9 @@ export function TickerSearch({
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         ) : pending ? (
-          <Loader2
+          <Hourglass
             aria-hidden="true"
-            className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
+            className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
           />
         ) : query ? (
           <button

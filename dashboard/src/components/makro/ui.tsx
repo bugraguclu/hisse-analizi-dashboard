@@ -145,7 +145,7 @@ export function PanelEmpty({ message, className }: { message?: string; className
 
 /** Shimmer block sized like the content it stands in for. */
 export function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return <div aria-hidden="true" style={style} className={cn("rounded-sm bg-muted/60 skeleton-shimmer", className)} />;
+  return <div aria-hidden="true" style={style} className={cn("rounded-sm bg-muted/60", className)} />;
 }
 
 // ---------------------------------------------------------------------------

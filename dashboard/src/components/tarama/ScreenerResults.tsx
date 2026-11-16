@@ -75,7 +75,7 @@ export function ScreenerResults({
           </h2>
           <p className="mt-0.5 min-h-4 text-[11px] text-muted-foreground" aria-live="polite">
             {summary}
-            {status === "loading" && <span className="inline-block h-3 w-40 rounded-sm bg-muted skeleton-shimmer align-middle" aria-hidden="true" />}
+            {status === "loading" && <span className="inline-block h-3 w-40 rounded-sm bg-muted align-middle" aria-hidden="true" />}
             {isRefreshing && status === "ready" && <span className="ml-2">{t("results.refreshing")}</span>}
           </p>
         </div>

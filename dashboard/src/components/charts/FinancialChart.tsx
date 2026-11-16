@@ -37,6 +37,8 @@ import type {
 import { Menu } from "@base-ui/react/menu";
 import { ChevronsRight, Copy, Download, ExternalLink, Minus, RotateCcw, X } from "lucide-react";
 import { useMotionAllowed } from "@/hooks/use-motion-allowed";
+import { motionDuration, moveProgress } from "@/lib/motion";
+import { MotionMenuPopup } from "@/components/ui/motion-surface";
 import { formatChangePercent, formatNumber, getIntlLocale, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChartLegend, IndicatorLegendItem, type LegendCompare } from "./ChartLegend";
@@ -115,8 +117,6 @@ export interface FinancialChartProps {
   paneHeight?: number;
   /** Extend an intraday session to 18:00 with empty slots (1D while trading). */
   padToSessionEnd?: boolean;
-  /** Pulse the last price (live intraday data). */
-  live?: boolean;
   /** Label the high/low of the visible range. */
   extremes?: boolean;
   scale?: PriceScaleKind;
@@ -401,7 +401,7 @@ function chartOptions(
       axisPressedMouseMove: { time: true, price: true },
       axisDoubleClickReset: { time: true, price: true },
     },
-    kineticScroll: { mouse: false, touch: true },
+    kineticScroll: { mouse: false },
     trackingMode: { exitMode: lib.TrackingModeExitMode.OnTouchEnd },
     localization: {
       locale: getIntlLocale(),
@@ -504,7 +504,6 @@ export function FinancialChart({
   height,
   paneHeight = 110,
   padToSessionEnd = false,
-  live = false,
   extremes = true,
   scale = "normal",
   onScaleChange,
@@ -574,6 +573,7 @@ export function FinancialChart({
    */
   const pinnedEventRef = useRef<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const coarsePointer = useCoarsePointer();
   const [announcement, setAnnouncement] = useState("");
 
@@ -669,7 +669,20 @@ export function FinancialChart({
     };
   }, []);
 
-  const shouldAnimate = useEffectEvent(() => motionAllowed);
+  useEffect(() => {
+    if (!engine) return;
+    engine.chart.applyOptions({ kineticScroll: { touch: motionAllowed } });
+    const plot = plotRef.current;
+    if (!plot) return;
+    const stopZoom = () => cancelAnimationFrame(zoomFrameRef.current);
+    if (!motionAllowed) stopZoom();
+    plot.addEventListener("pointerdown", stopZoom, { capture: true, passive: true });
+    plot.addEventListener("wheel", stopZoom, { capture: true, passive: true });
+    return () => {
+      plot.removeEventListener("pointerdown", stopZoom, true);
+      plot.removeEventListener("wheel", stopZoom, true);
+    };
+  }, [engine, motionAllowed]);
 
   const publishBuild = useEffectEvent((main: AnySeries | null, palette: ChartPalette) => {
     setMainSeries(main);
@@ -848,7 +861,6 @@ export function FinancialChart({
         crosshairMarkerRadius: 4,
         crosshairMarkerBorderWidth: 2,
         crosshairMarkerBorderColor: ring,
-        lastPriceAnimation: live ? lib.LastPriceAnimationMode.Continuous : lib.LastPriceAnimationMode.Disabled,
       };
       const values = [...bars.map((bar, i) => ({ time: times[i], value: bar.close })), ...pad];
       if (type === "baseline") {
@@ -1210,15 +1222,9 @@ export function FinancialChart({
     timeScale.setVisibleLogicalRange(keepView && previousRange ? previousRange : defaultRange);
     publishBuild(main, palette);
 
-    // The drawing reveal plays for the first data only: a new period, type or comparison swaps in place.
-    const firstShow = shownKeyRef.current === null;
     shownKeyRef.current = dataKey;
-    const cancelReveal = firstShow && shouldAnimate() ? playReveal(host, chart) : undefined;
     const frame = requestAnimationFrame(() => applyViewChange());
-    return () => {
-      cancelAnimationFrame(frame);
-      cancelReveal?.();
-    };
+    return () => cancelAnimationFrame(frame);
     // `eventsKey` stands for `events`, `levelsKey` for `levels`, `upcomingKey` for `upcoming` and the
     // watermark texts for `watermark` (parents pass fresh objects); `targets` and `extraLines` are memoized.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1241,7 +1247,6 @@ export function FinancialChart({
     windowBase,
     lastClose,
     mainTone,
-    live,
     extremes,
     grid,
     watermark?.title,
@@ -1433,7 +1438,7 @@ export function FinancialChart({
       const start = active.start;
       const end = indexAt(event.clientX, null) ?? start;
       active = null;
-      commitMeasure(end === start ? null : { start, end, dragging: false });
+      commitMeasure(event.type === "pointercancel" || end === start ? null : { start, end, dragging: false });
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
@@ -1540,6 +1545,7 @@ export function FinancialChart({
     const logical = inMain ? engine.chart.timeScale().coordinateToLogical(x) : null;
     const index = logical === null ? null : clamp(Math.round(logical), 0, bars.length - 1);
     setContextMenu({ x: clientX, y: clientY, price: price === null || !Number.isFinite(price) ? null : price, time: index === null ? null : bars[index].time });
+    setContextMenuOpen(true);
   });
   useEffect(() => {
     const plot = plotRef.current;
@@ -1581,10 +1587,10 @@ export function FinancialChart({
       return;
     }
     const startedAt = performance.now();
-    const duration = 260;
+    const duration = motionDuration.move;
     const step = (now: number) => {
       const progress = Math.min(1, (now - startedAt) / duration);
-      const eased = 1 - (1 - progress) ** 3;
+      const eased = moveProgress(progress);
       timeScale.setVisibleLogicalRange({
         from: start.from + (target.from - start.from) * eased,
         to: start.to + (target.to - start.to) * eased,
@@ -1919,7 +1925,7 @@ export function FinancialChart({
         {gestureHint || showMeasureHint ? (
           // Over the time axis, not the plot: the top of the plot is where the period high and its label sit.
           <div className="pointer-events-none absolute inset-x-0 bottom-0.5 z-[5] flex justify-center px-2">
-            <span className="animate-fade rounded-md border border-border bg-popover px-2.5 py-1 text-center text-[11px] font-medium leading-4 text-popover-foreground">
+            <span className="rounded-md border border-border bg-popover px-2.5 py-1 text-center text-[11px] font-medium leading-4 text-popover-foreground">
               {showMeasureHint
                 ? t(coarsePointer ? "hint.measureTouch" : "hint.measure")
                 : coarsePointer
@@ -1935,7 +1941,7 @@ export function FinancialChart({
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {announcement}
       </div>
-      <Menu.Root open={contextMenu !== null} onOpenChange={(open) => (open ? undefined : setContextMenu(null))}>
+      <Menu.Root open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
         <Menu.Portal>
           <Menu.Positioner
             anchor={contextMenu ? { getBoundingClientRect: () => DOMRect.fromRect({ x: contextMenu.x, y: contextMenu.y, width: 0, height: 0 }) } : null}
@@ -1945,7 +1951,7 @@ export function FinancialChart({
             collisionPadding={12}
             className="z-[90]"
           >
-            <Menu.Popup aria-label={t("ctx.label")} className={cn(POPUP_CLASS, "min-w-56 p-1")}>
+            <MotionMenuPopup aria-label={t("ctx.label")} className={cn(POPUP_CLASS, "min-w-56 p-1")}>
               <Menu.Item className={MENU_ITEM_CLASS} onClick={resetView}>
                 <RotateCcw aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="flex-1">{t("ctx.reset")}</span>
@@ -2001,7 +2007,7 @@ export function FinancialChart({
                   </Menu.Item>
                 </>
               ) : null}
-            </Menu.Popup>
+            </MotionMenuPopup>
           </Menu.Positioner>
         </Menu.Portal>
       </Menu.Root>
@@ -2109,35 +2115,4 @@ function EventTooltip({
       </ul>
     </div>
   );
-}
-
-/** Left-to-right "drawing" reveal: a card-coloured curtain slides off the plot area. */
-function playReveal(host: HTMLElement, chart: IChartApi): () => void {
-  const container = host.parentElement;
-  if (!container || typeof host.animate !== "function") return () => {};
-  const width = chart.timeScale().width();
-  const height = host.clientHeight - chart.timeScale().height();
-  if (width <= 0 || height <= 0) return () => {};
-  const curtain = document.createElement("div");
-  Object.assign(curtain.style, {
-    position: "absolute",
-    left: "0px",
-    top: "0px",
-    width: `${width}px`,
-    height: `${height}px`,
-    background: "var(--card)",
-    transformOrigin: "right center",
-    pointerEvents: "none",
-    zIndex: "1",
-  });
-  container.appendChild(curtain);
-  const animation = curtain.animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], {
-    duration: 700,
-    easing: "cubic-bezier(0.65, 0, 0.35, 1)",
-    fill: "forwards",
-  });
-  const cleanup = () => curtain.remove();
-  animation.onfinish = cleanup;
-  animation.oncancel = cleanup;
-  return () => animation.cancel();
 }

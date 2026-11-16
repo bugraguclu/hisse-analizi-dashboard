@@ -1,5 +1,6 @@
 "use client";
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import { MARKET_PARAM } from "./links";
@@ -17,8 +18,7 @@ const TAKEOVER_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as con
  * because the sections below are not in yet. A link followed on this page glides there instead.
  */
 function reveal(target: HTMLElement, arrival: boolean) {
-  const glide = !arrival && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  target.scrollIntoView({ block: "start", behavior: glide ? "smooth" : "instant" });
+  target.scrollIntoView({ block: "start", behavior: arrival ? "instant" : motionScrollBehavior() });
   if (!arrival) return;
   const observer = new ResizeObserver(() => target.scrollIntoView({ block: "start", behavior: "instant" }));
   const stop = () => {

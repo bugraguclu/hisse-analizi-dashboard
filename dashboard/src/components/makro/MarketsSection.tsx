@@ -1,5 +1,6 @@
 "use client";
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { Suspense, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { EMPTY_VALUE, formatMarketDate, formatNumber, formatPercent } from "@/lib/format";
@@ -262,7 +263,7 @@ function MarketChartPanel({ selectedKey, className }: { selectedKey: string; cla
             low: value(history?.low),
           })}
           aria-busy={historyQ.isPlaceholderData}
-          className={cn("min-h-0 flex-1 transition-opacity", historyQ.isPlaceholderData && "opacity-60")}
+          className={cn("min-h-0 flex-1 motion-fade", historyQ.isPlaceholderData && "opacity-60")}
           style={{ minHeight: CHART_HEIGHT }}
         >
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 600, height: CHART_HEIGHT }}>
@@ -331,7 +332,7 @@ export function MarketsSection() {
   /** Bond rows live in the yield-curve panel below the chart: bring the chart into view. */
   const selectFromCurve = (key: string) => {
     setSelected(key);
-    chartRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    chartRef.current?.scrollIntoView({ behavior: motionScrollBehavior(), block: "nearest" });
   };
 
   return (

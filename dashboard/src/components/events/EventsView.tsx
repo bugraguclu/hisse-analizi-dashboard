@@ -1,5 +1,6 @@
 "use client";
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -95,7 +96,7 @@ export function EventsView() {
   const items = data?.items;
   const total = data ? data.total : null;
 
-  // Rows that arrived with a background refresh of the same page flash once.
+  // Rows that arrived in the last refresh of the same page receive a new badge.
   const listKey = listParams ? JSON.stringify(listParams) : "";
   const [seen, setSeen] = useState<SeenPage | null>(null);
   if (data && !listQ.isPlaceholderData && seen?.data !== data) {
@@ -128,8 +129,8 @@ export function EventsView() {
     if (!feed) return;
     const { top } = feed.getBoundingClientRect();
     if (top < 0 || top > window.innerHeight * 0.6) {
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      feed.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+
+      feed.scrollIntoView({ block: "start", behavior: motionScrollBehavior() });
     }
   }, [state.page]);
 
@@ -235,8 +236,8 @@ export function EventsViewFallback() {
   return (
     <div aria-hidden="true" className="mx-auto max-w-7xl space-y-5">
       <div className="space-y-2 border-b border-border pb-4">
-        <div className="h-8 w-56 rounded-sm bg-muted/60 skeleton-shimmer" />
-        <div className="h-3.5 w-80 max-w-full rounded-sm bg-muted/40 skeleton-shimmer" />
+        <div className="h-8 w-56 rounded-sm bg-muted/60" />
+        <div className="h-3.5 w-80 max-w-full rounded-sm bg-muted/40" />
       </div>
       <div className="card-surface h-36" />
       <div className="card-surface h-96" />

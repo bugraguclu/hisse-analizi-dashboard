@@ -1,6 +1,5 @@
 "use client";
 
-import { useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { cn } from "@/lib/utils";
 
 export interface MeterBarProps {
@@ -16,8 +15,6 @@ export interface MeterBarProps {
    * on it and is not drawn (the row prints it instead).
    */
   reference?: number | null;
-  /** Stagger the mount animation, e.g. `index * 40`. */
-  delayMs?: number;
   className?: string;
 }
 
@@ -33,8 +30,7 @@ function onBarSide(value: number | null, reference: number): boolean {
  * price-direction up/down since a ratio bar isn't a price move. The reference
  * tick is ink and a little taller than the track, so it reads over any fill.
  */
-export function MeterBar({ value, scale, height = 6, reference, delayMs, className }: MeterBarProps) {
-  const motionAllowed = useMotionAllowed();
+export function MeterBar({ value, scale, height = 6, reference, className }: MeterBarProps) {
   const width = value == null || scale <= 0 ? 0 : Math.min((Math.abs(value) / scale) * 100, 100);
   const refPct =
     reference != null && Number.isFinite(reference) && scale > 0 && onBarSide(value, reference)
@@ -48,9 +44,8 @@ export function MeterBar({ value, scale, height = 6, reference, delayMs, classNa
           className={cn(
             "h-full rounded-full",
             value != null && value < 0 ? "bg-down/70" : "bg-primary/70",
-            motionAllowed && "origin-left animate-grow-x",
           )}
-          style={{ width: `${width}%`, animationDelay: delayMs ? `${delayMs}ms` : undefined }}
+          style={{ width: `${width}%` }}
         />
       </div>
       {refPct != null ? (

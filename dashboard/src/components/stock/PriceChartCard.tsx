@@ -459,7 +459,6 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
         defaults={defaults}
         features={CARD_FEATURES}
         baseline={baseline}
-        live={live}
         padToSessionEnd={live}
         height={technical ? 340 : 300}
         summary={summary}

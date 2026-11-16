@@ -95,7 +95,7 @@ export function RangeGauge({ value, min = 0, max = 100, zones = [], ticks = [], 
             {...valueTrigger}
             role="img"
             aria-label={`${ariaLabel}: ${fmt(value)}${currentZone ? ` · ${currentZone.label}` : ""}`}
-            className="absolute top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/60 motion-safe:transition-[left] motion-safe:duration-300 motion-safe:ease-out"
+            className="absolute top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             style={{ left: `${valuePct}%` }}
           >
             {isBelow ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/locale-context";
@@ -49,7 +50,7 @@ export function DayStrip({
     if (!strip || !firstSelected) return;
     const target = strip.querySelector<HTMLElement>(`[data-day="${firstSelected}"]`) ?? strip.querySelector<HTMLElement>("[data-day]");
     if (!target) return;
-    strip.scrollTo({ left: Math.max(0, target.offsetLeft - strip.clientWidth / 2 + target.clientWidth / 2), behavior: "smooth" });
+    strip.scrollTo({ left: Math.max(0, target.offsetLeft - strip.clientWidth / 2 + target.clientWidth / 2), behavior: motionScrollBehavior() });
   }, [firstSelected, days.length]);
 
   if (days.length === 0) return null;

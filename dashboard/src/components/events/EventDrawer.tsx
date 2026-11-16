@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
-import { Check, ChevronDown, ChevronUp, ExternalLink, LineChart, Link2, ListFilter, RefreshCw, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ExternalLink, LineChart, Link2, ListFilter, Hourglass, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { categoryKeys, SEVERITY_TEXT_CLASS, severityKeys } from "@/components/shared/SeverityBadge";
 import { useNow } from "@/hooks/use-now";
@@ -38,7 +38,7 @@ function Lines({ widths }: { widths: string[] }) {
   return (
     <div aria-hidden="true" className="space-y-2.5">
       {widths.map((width, index) => (
-        <div key={index} className="h-3.5 rounded-sm bg-muted/50 skeleton-shimmer" style={{ width }} />
+        <div key={index} className="h-3.5 rounded-sm bg-muted/50" style={{ width }} />
       ))}
     </div>
   );
@@ -73,8 +73,8 @@ function ContentSection({ id, event, open }: { id: string; event: EventOut; open
             </a>
           ) : null}
           {!missing ? (
-            <button type="button" className={ACTION_CLASS} onClick={() => void contentQ.refetch()} disabled={contentQ.isFetching}>
-              <RefreshCw aria-hidden="true" className={cn(contentQ.isFetching && "animate-spin")} />
+            <button type="button" className={ACTION_CLASS} onClick={() => void contentQ.refetch()} disabled={contentQ.isFetching} aria-busy={contentQ.isFetching}>
+              {contentQ.isFetching ? <Hourglass aria-hidden /> : <RefreshCw aria-hidden />}
               {t("common.retry")}
             </button>
           ) : null}
@@ -332,16 +332,15 @@ export function EventDrawer({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 motion-panel" />
         <Dialog.Popup
           initialFocus={bodyRef}
           finalFocus={finalFocus}
           onKeyDown={handleKeyDown}
           className={cn(
             "fixed inset-0 z-50 flex flex-col bg-card text-foreground outline-none",
-            "transition-transform duration-200 ease-out data-[ending-style]:translate-y-full data-[starting-style]:translate-y-full",
+            "motion-panel motion-panel-slide motion-panel-responsive",
             "md:inset-y-0 md:left-auto md:right-0 md:w-full md:max-w-[44rem] md:border-l md:border-border",
-            "md:data-[ending-style]:translate-x-full md:data-[ending-style]:translate-y-0 md:data-[starting-style]:translate-x-full md:data-[starting-style]:translate-y-0",
           )}
         >
           <div className="flex items-center gap-1 border-b border-border py-2 pl-4 pr-2 sm:pl-6 sm:pr-3">

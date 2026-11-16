@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { Hourglass, RefreshCw } from "lucide-react";
 import { formatMarketDate, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useEventsI18n } from "./i18n";
@@ -46,7 +46,7 @@ export function FeedStatus({
     <div className="flex items-center gap-1.5">
       <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground" title={tooltip || undefined}>
         {health === "loading" ? (
-          <span aria-hidden="true" className="inline-block h-3 w-44 rounded-sm bg-muted/60 skeleton-shimmer" />
+          <span aria-hidden="true" className="inline-block h-3 w-44 rounded-sm bg-muted/60" />
         ) : (
           <>
             <span
@@ -68,7 +68,7 @@ export function FeedStatus({
         )}
       </p>
       <IconButton onClick={onRefresh} aria-label={t("action.refresh")} title={t("action.refresh")} aria-busy={refreshing}>
-        <RefreshCw aria-hidden="true" className={cn("h-4 w-4", refreshing && "animate-spin")} />
+        {refreshing ? <Hourglass aria-hidden className="h-4 w-4" /> : <RefreshCw aria-hidden className="h-4 w-4" />}
       </IconButton>
     </div>
   );

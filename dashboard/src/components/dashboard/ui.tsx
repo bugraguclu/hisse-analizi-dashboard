@@ -146,7 +146,7 @@ export function RowSkeleton({ rows = 4, className }: { rows?: number; className?
   return (
     <div className={cn("space-y-2 px-4 py-4", className)} aria-hidden="true">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-9 rounded-sm bg-muted/60 skeleton-shimmer" />
+        <div key={i} className="h-9 rounded-sm bg-muted/60" />
       ))}
     </div>
   );

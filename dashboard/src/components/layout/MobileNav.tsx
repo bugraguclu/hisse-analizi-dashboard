@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { usePresence } from "@/hooks/use-presence";
+import { exitDuration, motionDuration } from "@/lib/motion";
 import { X } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabi
 /** Off-canvas navigation below the lg breakpoint (the top bar shows the links above it). */
 export function MobileNav() {
   const { mobileNavOpen, closeMobileNav, mobileNavTriggerRef } = useShell();
+  const { present, finishExit } = usePresence(mobileNavOpen, exitDuration(motionDuration.panel));
   const pathname = usePathname();
   const { t } = useLocale();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -68,84 +70,79 @@ export function MobileNav() {
     };
   }, [mobileNavOpen, closeMobileNav, mobileNavTriggerRef]);
 
+  if (!present) return null;
+  const ending = mobileNavOpen ? undefined : "";
   return (
-    <AnimatePresence>
-      {mobileNavOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <motion.div
-            className="absolute inset-0 bg-black/40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+    <div className={cn("fixed inset-0 z-50 lg:hidden", !mobileNavOpen && "pointer-events-none")} inert={!mobileNavOpen} aria-hidden={!mobileNavOpen || undefined}>
+      <div
+        className="motion-panel absolute inset-0 bg-black/40"
+        data-presence=""
+        data-ending-style={ending}
+        onClick={closeMobileNav}
+        aria-hidden="true"
+      />
+      <div
+        ref={panelRef}
+        id="mobile-navigation"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("shell.mainNav")}
+        className="motion-panel motion-panel-slide motion-panel-horizontal absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto border-r border-border bg-background"
+        data-presence=""
+        data-ending-style={ending}
+        onTransitionEnd={finishExit}
+      >
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+          <Link href="/" onClick={closeMobileNav} aria-label={t("shell.home")} className="rounded-sm">
+            <Wordmark />
+          </Link>
+          <button
+            ref={closeButtonRef}
+            type="button"
             onClick={closeMobileNav}
-            aria-hidden="true"
-          />
-          <motion.div
-            ref={panelRef}
-            id="mobile-navigation"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("shell.mainNav")}
-            className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto border-r border-border bg-background"
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            aria-label={t("shell.closeMenu")}
+            className="motion-press -mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
           >
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
-              <Link href="/" onClick={closeMobileNav} aria-label={t("shell.home")} className="rounded-sm">
-                <Wordmark />
-              </Link>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                onClick={closeMobileNav}
-                aria-label={t("shell.closeMenu")}
-                className="-mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
-
-            <nav aria-label={t("shell.mainNav")} className="px-2 py-3">
-              <ul className="flex flex-col">
-                {NAV_ITEMS.map((item) => {
-                  const active = item.isActive(pathname);
-                  return (
-                    <li key={item.key}>
-                      <Link
-                        href={item.href(ticker)}
-                        onClick={closeMobileNav}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "relative flex items-center rounded-md px-3 py-2.5 text-[15px] transition-colors",
-                          "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring",
-                          active ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                        )}
-                      >
-                        {t(item.shortLabelKey)}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-
-            <div className="mt-auto space-y-3 border-t border-border px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-muted-foreground">{t("shell.language")}</span>
-                <LocaleToggle />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-muted-foreground">{t("shell.theme")}</span>
-                <ThemeToggle />
-              </div>
-              <DataStatus variant="panel" />
-            </div>
-          </motion.div>
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
-      )}
-    </AnimatePresence>
+
+        <nav aria-label={t("shell.mainNav")} className="px-2 py-3">
+          <ul className="flex flex-col">
+            {NAV_ITEMS.map((item) => {
+              const active = item.isActive(pathname);
+              return (
+                <li key={item.key}>
+                  <Link
+                    href={item.href(ticker)}
+                    onClick={closeMobileNav}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "relative flex items-center rounded-md px-3 py-2.5 text-[15px] transition-colors",
+                      "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring",
+                      active ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                  >
+                    {t(item.shortLabelKey)}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className="mt-auto space-y-3 border-t border-border px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">{t("shell.language")}</span>
+            <LocaleToggle />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">{t("shell.theme")}</span>
+            <ThemeToggle />
+          </div>
+          <DataStatus variant="panel" />
+        </div>
+      </div>
+    </div>
   );
 }

@@ -56,7 +56,7 @@ export function DrawingOverlay({ edit, hint, coarse, onColor, onDashedToggle, on
         <div className="pointer-events-none absolute inset-x-0 bottom-0.5 z-[3] flex justify-center px-2">
           <span
             role="status"
-            className="animate-fade rounded-md border border-border bg-popover px-2.5 py-1 text-center text-[11px] font-medium leading-4 text-popover-foreground"
+            className="rounded-md border border-border bg-popover px-2.5 py-1 text-center text-[11px] font-medium leading-4 text-popover-foreground"
           >
             {hint}
           </span>
@@ -119,7 +119,7 @@ function EditBar({
               aria-pressed={current}
               onClick={() => onColor(color)}
               className={cn(
-                "inline-flex items-center justify-center rounded-md outline-none transition-colors duration-150 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60",
+                "inline-flex items-center justify-center rounded-md outline-none motion-press hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60",
                 coarse ? "h-8 w-8" : "h-7 w-6",
               )}
             >

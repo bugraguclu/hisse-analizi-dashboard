@@ -196,7 +196,7 @@ export function IndexChartCard({ className }: { className?: string }) {
               BIST 100
             </h2>
             {level === null && (quotesQ.isPending || historyQ.isPending) ? (
-              <div className="mt-2 h-9 w-56 animate-pulse rounded-md bg-muted/60" aria-hidden="true" />
+              <div className="mt-2 h-9 w-56 rounded-md bg-muted/60" aria-hidden="true" />
             ) : (
               <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{level === null ? formatNumber(null) : formatLevel(level)}</span>
@@ -260,7 +260,6 @@ export function IndexChartCard({ className }: { className?: string }) {
           features={CARD_FEATURES}
           fullscreenFeatures={FULLSCREEN_FEATURES}
           baseline={baseline}
-          live={live}
           padToSessionEnd={live}
           height={240}
           onHoverChange={setHoverIndex}

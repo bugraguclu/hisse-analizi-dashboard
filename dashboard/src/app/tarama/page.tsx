@@ -1,5 +1,6 @@
 "use client";
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -153,8 +154,8 @@ function Screener() {
       // Paging from the bottom pager: bring the top of the table back into view.
       const node = resultsRef.current;
       if (node && node.getBoundingClientRect().top < 0) {
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        node.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+
+        node.scrollIntoView({ block: "start", behavior: motionScrollBehavior() });
       }
     },
     [update],
@@ -224,7 +225,7 @@ function ScreenerFallback() {
   return (
     <div className="mx-auto max-w-7xl space-y-6" aria-busy="true">
       <Header />
-      <div className="card-surface h-40 skeleton-shimmer bg-muted/40" aria-hidden="true" />
+      <div className="card-surface h-40 bg-muted/40" aria-hidden="true" />
       <div className="card-surface">
         <RowSkeleton rows={8} />
       </div>

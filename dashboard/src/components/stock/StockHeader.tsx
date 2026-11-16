@@ -1,7 +1,6 @@
 "use client";
 
 import { Info, Minus, TrendingDown, TrendingUp } from "lucide-react";
-import { AnimatedNumber } from "@/components/ui/animated-number";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarketStatus } from "@/hooks/use-market-status";
@@ -96,7 +95,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
               {name}
             </span>
           ) : identity.status === "loading" ? (
-            <span aria-hidden className="skeleton-shimmer inline-block h-4 w-36 rounded-sm bg-muted/70" />
+            <span aria-hidden className="inline-block h-4 w-36 rounded-sm bg-muted/70" />
           ) : null}
         </h1>
       </div>
@@ -112,19 +111,16 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
         ) : quote ? (
           <>
             <p className="flex items-baseline gap-1.5 md:justify-end">
-              <AnimatedNumber
-                value={quote.last}
-                format={formatPrice}
-                flash
-                className="font-mono text-[28px] font-semibold leading-none text-foreground md:text-[32px]"
-              />
+              <span className="font-mono text-[28px] font-semibold leading-none text-foreground md:text-[32px]">
+                {formatPrice(quote.last)}
+              </span>
               <span className="text-sm text-muted-foreground">TL</span>
             </p>
             <p className={cn("mt-2 flex flex-wrap items-center gap-x-1.5 font-mono text-sm font-medium tabular-nums md:justify-end", TREND_TEXT_CLASS[tone])}>
               <TrendIcon aria-hidden className="h-4 w-4 shrink-0" />
-              <AnimatedNumber value={quote.change} format={formatSigned} />
+              <span>{formatSigned(quote.change)}</span>
               <span>
-                (<AnimatedNumber value={quote.changePct} format={formatChangePercent} />)
+                ({formatChangePercent(quote.changePct)})
               </span>
               <span className="font-sans text-xs font-normal text-muted-foreground">{t("header.today")}</span>
             </p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionPopoverPopup } from "@/components/ui/motion-surface";
 import { useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Eye, EyeOff, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -177,7 +178,7 @@ export function IndicatorSettingsPopover({
         aria-label={t("ind.settings", { name: view.label })}
         title={t("ind.settings", { name: view.label })}
         className={cn(
-          "inline-flex items-baseline gap-1 rounded-sm px-0.5 outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[popup-open]:bg-muted",
+          "motion-press inline-flex items-baseline gap-1 rounded-sm px-0.5 outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[popup-open]:bg-muted",
           triggerClassName,
         )}
       >
@@ -185,7 +186,7 @@ export function IndicatorSettingsPopover({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={6} collisionPadding={12} className="z-[90]">
-          <Popover.Popup className={POPUP_CLASS}>
+          <MotionPopoverPopup className={POPUP_CLASS}>
             <IndicatorSettingsPanel
               view={view}
               onChange={onChange}
@@ -194,7 +195,7 @@ export function IndicatorSettingsPopover({
                 onRemove();
               }}
             />
-          </Popover.Popup>
+          </MotionPopoverPopup>
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>

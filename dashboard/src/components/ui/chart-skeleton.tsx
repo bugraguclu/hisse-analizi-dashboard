@@ -4,8 +4,8 @@ import { useLocale } from "@/lib/locale-context";
 import { cn } from "@/lib/utils";
 
 /**
- * Loading placeholder shaped like a chart (gridlines + a ghost series + moving
- * highlight). Give it the chart's exact height so nothing shifts when data lands.
+ * Loading placeholder with gridlines and a sample series. Match the chart’s height
+ * so the surrounding layout stays stable when data lands.
  */
 export function ChartSkeleton({
   height = 240,
@@ -46,7 +46,6 @@ export function ChartSkeleton({
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <div aria-hidden className="skeleton-shimmer absolute inset-0" />
     </div>
   );
 }

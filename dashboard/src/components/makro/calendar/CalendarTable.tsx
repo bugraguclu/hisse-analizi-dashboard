@@ -1,5 +1,6 @@
 "use client";
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -103,8 +104,8 @@ export function CalendarTable(props: TableProps) {
       (scrollTarget === "now" && today ? container?.querySelector<HTMLElement>(`[data-day-header="${today}"]`) : null);
     if (container && target) {
       const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-      container.scrollTo({ top: Math.max(0, offset - 76), behavior: "smooth" });
-      container.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      container.scrollTo({ top: Math.max(0, offset - 76), behavior: motionScrollBehavior() });
+      container.scrollIntoView({ block: "nearest", behavior: motionScrollBehavior() });
     }
     onScrolled();
   }, [scrollTarget, onScrolled, today, shown]);
@@ -437,7 +438,7 @@ function CalendarRowView({
         </td>
         <td className="w-8 py-2 pr-3 align-top">
           <ChevronDown
-            className={cn("mt-0.5 h-3.5 w-3.5 text-muted-foreground transition-transform", expanded && "rotate-180 text-foreground")}
+            className={cn("mt-0.5 h-3.5 w-3.5 text-muted-foreground", expanded && "rotate-180 text-foreground")}
             aria-hidden="true"
           />
         </td>

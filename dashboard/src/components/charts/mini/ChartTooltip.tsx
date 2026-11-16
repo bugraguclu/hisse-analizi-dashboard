@@ -252,7 +252,7 @@ function ChartTooltipPortal({ id, anchor, children }: { id: string; anchor: DOMR
       ref={nodeRef}
       role="tooltip"
       style={style ?? { position: "fixed", top: anchor.top, left: anchor.left, opacity: 0 }}
-      className="pointer-events-none z-50 max-w-[13rem] rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11px] leading-snug text-popover-foreground shadow-none transition-opacity duration-150 ease-out"
+      className="pointer-events-none z-50 max-w-[13rem] rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11px] leading-snug text-popover-foreground shadow-none motion-fade"
     >
       {children}
     </div>,

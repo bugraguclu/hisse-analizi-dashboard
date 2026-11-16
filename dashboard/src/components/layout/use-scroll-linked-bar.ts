@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { usePathname } from "next/navigation";
+import { prefersReducedMotion } from "@/hooks/use-motion-allowed";
 
 /**
  * Scroll-linked top bar, ported from the belif site's header (which copies apple.com's
@@ -19,7 +20,7 @@ import { usePathname } from "next/navigation";
  * content there and no gap opens above it.
  *
  * SETTLES ON RELEASE: a scroll that stops with the bar half out completes it towards the
- * last direction (320 ms, apple.com's menu curve — the transition is on the bar's class).
+ * last direction (the transition is on the bar’s class).
  * A quarter of the bar is the threshold; less counts as jitter and the bar goes back.
  * Scrolling again mid-slide takes the bar over from where it is drawn.
  *
@@ -147,7 +148,7 @@ function attach(bar: HTMLElement, track: HTMLElement) {
     const cut = dir > 0 ? H / 4 : dir < 0 ? (H * 3) / 4 : H / 2;
     const to = -p >= cut ? floor : 0;
     anchor(to, y);
-    slide(p - to);
+    if (!prefersReducedMotion()) slide(p - to);
   };
   // Not while a finger is down: a slow drag that pauses must not have the bar snatched
   // away. Browsers with `scrollend` settle at once, others 150 ms after the last scroll.
@@ -226,6 +227,7 @@ function attach(bar: HTMLElement, track: HTMLElement) {
   };
 
   bar.addEventListener("transitionend", onTransitionEnd);
+  bar.addEventListener("transitioncancel", onTransitionEnd);
   bar.addEventListener("focusin", onPin);
   window.addEventListener("keydown", onKey, true);
   window.addEventListener("pointerdown", onPointer, true);
@@ -243,6 +245,7 @@ function attach(bar: HTMLElement, track: HTMLElement) {
     watch.disconnect();
     resize.disconnect();
     bar.removeEventListener("transitionend", onTransitionEnd);
+    bar.removeEventListener("transitioncancel", onTransitionEnd);
     bar.removeEventListener("focusin", onPin);
     window.removeEventListener("keydown", onKey, true);
     window.removeEventListener("pointerdown", onPointer, true);

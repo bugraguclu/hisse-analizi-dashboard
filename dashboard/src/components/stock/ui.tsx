@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionPopoverPopup } from "@/components/ui/motion-surface";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { AlertCircle, Inbox, Info, RefreshCw } from "lucide-react";
@@ -204,7 +205,7 @@ export function InfoPopover({
       <Popover.Trigger
         aria-label={trigger ? undefined : label}
         className={cn(
-          "inline-flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[popup-open]:bg-muted data-[popup-open]:text-foreground",
+          "inline-flex items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[popup-open]:bg-muted data-[popup-open]:text-foreground",
           trigger ? "gap-1.5" : "h-6 w-6 pointer-coarse:h-8 pointer-coarse:w-8",
           triggerClassName,
         )}
@@ -213,9 +214,9 @@ export function InfoPopover({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} collisionPadding={12} className="z-50">
-          <Popover.Popup className="max-w-[min(22rem,calc(100vw-2rem))] origin-[var(--transform-origin)] rounded-lg border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)] outline-none transition-[opacity,scale] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
+          <MotionPopoverPopup className="max-w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)] outline-none">
             {children}
-          </Popover.Popup>
+          </MotionPopoverPopup>
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>

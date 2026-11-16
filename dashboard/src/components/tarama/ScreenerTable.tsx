@@ -313,7 +313,7 @@ export function ScreenerTable({
             onClick={() => onSort(key as SortKey)}
             title={title}
             className={cn(
-              "inline-flex items-center gap-1 rounded-sm uppercase tracking-wider transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+              "inline-flex items-center gap-1 rounded-sm uppercase tracking-wider motion-press hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
               spec.align === "right" && "flex-row-reverse",
               active && "text-foreground",
             )}
@@ -356,7 +356,7 @@ export function ScreenerTable({
                       aria-label={t(favorite ? "watch.remove" : "watch.add", { ticker: row.symbol })}
                       title={t(favorite ? "watch.remove" : "watch.add", { ticker: row.symbol })}
                       className={cn(
-                        "shrink-0 rounded-sm p-1 transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                        "shrink-0 rounded-sm p-1 motion-press focus-visible:outline-2 focus-visible:outline-ring",
                         favorite ? "text-foreground" : "text-muted-foreground/50 hover:text-foreground",
                       )}
                     >

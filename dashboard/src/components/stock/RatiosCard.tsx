@@ -142,7 +142,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
                 {group.rows.map((row) => {
                   const value = ratios?.values[row.key] ?? null;
                   const rowPeriod = ratios?.periods[row.key] ?? mainPeriod;
-                  const delayMs = rowOrder.indexOf(row.key) * 40;
+
                   const format = (v: number | null) => (row.kind === "percent" ? formatPercent(v) : formatMultiple(v));
                   const formatted = format(value);
                   const stat = sector?.metrics[row.key];
@@ -179,7 +179,7 @@ export function RatiosCard({ ticker }: { ticker: string }) {
                         value={value}
                         scale={row.scale}
                         reference={median}
-                        delayMs={delayMs}
+
                         className={withSector ? "col-span-full row-start-2 @sm:col-span-1 @sm:col-start-2 @sm:row-start-1" : undefined}
                       />
                       <span

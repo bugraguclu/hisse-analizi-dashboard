@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { formatMarketDate, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TooltipNote, TooltipValueRow, useChartTooltip } from "./ChartTooltip";
@@ -66,7 +65,6 @@ const FILL_CLASS: Record<SparklineTone, string> = {
  * Not wired into any card yet — built ahead of that integration.
  */
 export function Sparkline({ data, baseline, tone = "primary", height = 32, formatValue, formatTime, ariaLabel, className }: SparklineProps) {
-  const motionAllowed = useMotionAllowed();
   const { show, hide, activeKey, tooltipId, scopeProp, tooltip } = useChartTooltip();
   const svgRef = useRef<SVGSVGElement>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -186,7 +184,7 @@ export function Sparkline({ data, baseline, tone = "primary", height = 32, forma
             vectorEffect="non-scaling-stroke"
           />
         ) : null}
-        <g className={motionAllowed ? "animate-reveal-x" : undefined}>
+        <g>
           <path d={areaD} className={FILL_CLASS[tone]} opacity={0.08} stroke="none" />
           <path
             d={lineD}

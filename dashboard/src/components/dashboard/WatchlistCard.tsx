@@ -76,7 +76,7 @@ export function WatchlistCard({ className }: { className?: string }) {
               setNotice(null);
             }}
             aria-expanded={editing}
-            className="rounded-sm text-xs text-primary underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            className="rounded-sm text-xs text-primary underline-offset-4 motion-press hover:underline focus-visible:outline-2 focus-visible:outline-ring"
           >
             {editing ? t("watchlist.done") : t("watchlist.editLists")}
           </button>
@@ -92,7 +92,7 @@ export function WatchlistCard({ className }: { className?: string }) {
               onClick={() => setSelectedId(list.id)}
               aria-pressed={list.id === activeList.id}
               className={cn(
-                "-mb-px whitespace-nowrap border-b-2 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                "-mb-px whitespace-nowrap border-b-2 py-2 text-xs font-medium motion-press focus-visible:outline-2 focus-visible:outline-ring",
                 list.id === activeList.id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
@@ -132,7 +132,7 @@ export function WatchlistCard({ className }: { className?: string }) {
             <button
               type="submit"
               disabled={!newListName.trim()}
-              className="inline-flex h-8 items-center gap-1 rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="inline-flex h-8 items-center gap-1 rounded-md bg-foreground px-3 text-xs font-medium text-background motion-press hover:opacity-90 disabled:opacity-40"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               {t("watchlist.newList")}
@@ -142,7 +142,7 @@ export function WatchlistCard({ className }: { className?: string }) {
             <button
               type="button"
               onClick={handleDelete}
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive transition-colors hover:text-destructive/80"
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive motion-press hover:text-destructive/80"
             >
               <Trash2 className="h-3 w-3" aria-hidden="true" />
               {t("watchlist.deleteList")}: {listLabel(activeList)}
@@ -172,7 +172,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                     {names.get(ticker) && <span className="block truncate text-[11px] text-muted-foreground">{names.get(ticker)}</span>}
                   </Link>
                   {loading ? (
-                    <span className="h-8 w-28 rounded-sm bg-muted/60 skeleton-shimmer" aria-hidden="true" />
+                    <span className="h-8 w-28 rounded-sm bg-muted/60" aria-hidden="true" />
                   ) : (
                     <span className="flex flex-col items-end gap-0.5 text-right">
                       <span className="flex items-center gap-2">
@@ -191,7 +191,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                       type="button"
                       onClick={() => removeTicker(activeList.id, ticker)}
                       aria-label={t("watchlist.remove", { ticker })}
-                      className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      className="rounded-sm p-1 text-muted-foreground motion-press hover:bg-destructive/10 hover:text-destructive"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>

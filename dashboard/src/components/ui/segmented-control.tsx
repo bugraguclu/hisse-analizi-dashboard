@@ -2,6 +2,8 @@
 
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { motionCurve, motionDuration } from "@/lib/motion";
+import { useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { cn } from "@/lib/utils";
 
 export interface SegmentedOption<T extends string | number> {
@@ -44,6 +46,7 @@ export function SegmentedControl<T extends string | number>({
   variant?: "pill" | "underline";
   className?: string;
 }) {
+  const motionAllowed = useMotionAllowed();
   const indicatorId = `segmented-${useId()}`;
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndex = options.findIndex((option) => option.value === value);
@@ -104,7 +107,7 @@ export function SegmentedControl<T extends string | number>({
             onClick={() => select(index)}
             onKeyDown={(event) => onKeyDown(event, index)}
             className={cn(
-              "relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium outline-none transition-colors duration-150",
+              "relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium outline-none motion-press",
               "focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-40",
               SIZE_CLASS[size],
               pill ? "rounded-[3px]" : "rounded-t-sm",
@@ -113,7 +116,7 @@ export function SegmentedControl<T extends string | number>({
           >
             {active ? (
               <motion.span
-                layoutId={indicatorId}
+                layoutId={motionAllowed ? indicatorId : undefined}
                 aria-hidden
                 className={cn(
                   "absolute",
@@ -121,7 +124,7 @@ export function SegmentedControl<T extends string | number>({
                     ? "inset-0 rounded-[3px] bg-muted"
                     : "inset-x-1.5 -bottom-px h-0.5 bg-foreground",
                 )}
-                transition={{ type: "spring", stiffness: 520, damping: 40, mass: 0.8 }}
+                transition={{ type: "tween", duration: motionDuration.move / 1000, ease: motionCurve.easeInOut }}
               />
             ) : null}
             <span className="relative">{option.label}</span>

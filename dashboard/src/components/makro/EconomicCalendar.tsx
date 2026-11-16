@@ -2,12 +2,11 @@
 
 import { Suspense, useCallback, useMemo, useState, type JSX, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarPlus, Crosshair, Download, Info, RefreshCw } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Crosshair, Download, Hourglass, Info, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatMarketDate } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock } from "@/lib/market-hours";
-import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/use-now";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
 import { PanelEmpty, PanelError, Shimmer } from "@/components/makro/ui";
@@ -261,7 +260,7 @@ function CalendarBody() {
           <ToolbarButton
             onClick={() => void query.refetch()}
             label={query.isFetching ? tt("updating") : tt("refresh")}
-            icon={<RefreshCw className={cn("h-3.5 w-3.5", query.isFetching && "animate-spin")} aria-hidden="true" />}
+            icon={query.isFetching ? <Hourglass className="h-3.5 w-3.5" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
             iconOnly
           />
           <ToolbarButton

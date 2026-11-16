@@ -26,13 +26,13 @@ function FeedSkeleton({ rows = 8 }: { rows?: number }) {
       <div aria-hidden="true" className="divide-y divide-border">
         {Array.from({ length: rows }, (_, index) => (
           <div key={index} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3 px-4 py-3 sm:grid-cols-[6rem_minmax(0,1fr)] sm:px-5">
-            <div className="h-3.5 w-9 rounded-sm bg-muted/60 skeleton-shimmer" />
+            <div className="h-3.5 w-9 rounded-sm bg-muted/60" />
             <div className="min-w-0 space-y-2">
               <div className="flex items-center gap-2">
-                <div className="h-3.5 w-12 shrink-0 rounded-sm bg-muted/60 skeleton-shimmer" />
-                <div className="h-3.5 rounded-sm bg-muted/40 skeleton-shimmer" style={{ width: `${[72, 56, 64, 48, 80, 60, 68, 52][index % 8]}%` }} />
+                <div className="h-3.5 w-12 shrink-0 rounded-sm bg-muted/60" />
+                <div className="h-3.5 rounded-sm bg-muted/40" style={{ width: `${[72, 56, 64, 48, 80, 60, 68, 52][index % 8]}%` }} />
               </div>
-              <div className="h-3 rounded-sm bg-muted/40 skeleton-shimmer" style={{ width: `${[36, 44, 28, 40, 32, 46, 30, 38][index % 8]}%` }} />
+              <div className="h-3 rounded-sm bg-muted/40" style={{ width: `${[36, 44, 28, 40, 32, 46, 30, 38][index % 8]}%` }} />
             </div>
           </div>
         ))}
@@ -287,18 +287,18 @@ export const EventsFeed = forwardRef<HTMLElement, EventsFeedProps>(function Even
               {countParts.slice(1).join("")}
             </>
           ) : (
-            <span aria-hidden="true" className="inline-block h-3.5 w-24 translate-y-0.5 rounded-sm bg-muted/60 skeleton-shimmer" />
+            <span aria-hidden="true" className="inline-block h-3.5 w-24 translate-y-0.5 rounded-sm bg-muted/60" />
           )}
         </p>
         {/* Refetch with data on screen: a hairline progress cue instead of a skeleton flash. */}
         {isFetching && !isPending ? (
           <span aria-hidden="true" className="absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
-            <span className="block h-full w-full animate-pulse bg-primary/60" />
+            <span className="block h-full w-full bg-primary/60" />
           </span>
         ) : null}
       </div>
 
-      <div aria-busy={isFetching} className={cn("transition-opacity duration-200", isPlaceholder && "opacity-60")}>
+      <div aria-busy={isFetching} className={cn("motion-fade", isPlaceholder && "opacity-60")}>
         {body}
       </div>
 

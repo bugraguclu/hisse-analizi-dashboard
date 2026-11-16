@@ -99,7 +99,7 @@ export interface EventRowProps {
   /** Istanbul year of "today" — older rows show their year. */
   currentYear: string | null;
   selected: boolean;
-  /** Arrived with the last live refresh: flash once. */
+  /** Arrived with the last live refresh. */
   fresh: boolean;
   /** Published within the last minutes. */
   isNew: boolean;
@@ -164,7 +164,7 @@ export const EventRow = memo(function EventRow({
         // against this row (not the truncating <p>), so without it they widen the page.
         "group relative overflow-hidden transition-colors",
         selected ? "bg-muted/70" : "hover:bg-muted/40",
-        fresh && "animate-flash-up",
+        "has-[button:active]:bg-muted/70",
       )}
     >
       {rule ? <span aria-hidden="true" className={cn("pointer-events-none absolute inset-y-0 left-0 w-0.5", rule)} /> : null}
@@ -209,7 +209,7 @@ export const EventRow = memo(function EventRow({
 
         <div className="flex min-w-0 items-baseline gap-1.5 sm:col-start-2 sm:row-start-1">
           <RowTickers className="hidden sm:flex" tickers={tickers} activeTickers={activeTickers} onAddTicker={onAddTicker} />
-          {isNew ? (
+          {isNew || fresh ? (
             <Badge variant="secondary" className="self-center">
               {t("row.new")}
             </Badge>

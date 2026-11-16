@@ -236,7 +236,7 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
             onClick={() => setShowMethod((open) => !open)}
             className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
-            <ChevronDown aria-hidden className={cn("h-3.5 w-3.5 transition-transform", showMethod && "rotate-180")} />
+            <ChevronDown aria-hidden className={cn("h-3.5 w-3.5", showMethod && "rotate-180")} />
             {t("score.howCalculated")}
           </button>
           {showMethod ? (

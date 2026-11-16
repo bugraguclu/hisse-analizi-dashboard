@@ -154,62 +154,148 @@
   }
 }
 
-/* ---------------------------------------------------------------------------
-   Motion — entry/reveal animations used across cards and charts.
-   All are CSS (compositor-driven, no hydration dependency) and are switched
-   off by the prefers-reduced-motion block below. Stagger with an inline
-   `style={{ animationDelay: "80ms" }}`.
-   --------------------------------------------------------------------------- */
-@theme {
-  --animate-enter: enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-fade: fade 0.35s ease-out both;
-  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
-  --animate-reveal-x: reveal-x 1s cubic-bezier(0.65, 0, 0.35, 1) both;
-  --animate-grow-x: grow-x 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-grow-y: grow-y 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-ping-soft: ping-soft 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
-  --animate-flash-up: flash-up 1.4s ease-out;
-  --animate-flash-down: flash-down 1.4s ease-out;
-
-  @keyframes enter {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: none; }
+/* Motion values are set on html by lib/motion.ts. */
+.motion-press {
+  transition: scale var(--motion-press) var(--motion-ease-out),
+    opacity var(--motion-press) var(--motion-ease-out),
+    background-color var(--motion-press) var(--motion-ease-out),
+    border-color var(--motion-press) var(--motion-ease-out),
+    color var(--motion-press) var(--motion-ease-out);
+}
+.motion-press:active:not(:disabled, [aria-disabled="true"]) {
+  scale: var(--motion-scale-press);
+  filter: brightness(.88);
+}
+.motion-fade {
+  transition: opacity var(--motion-fade) var(--motion-ease-out);
+}
+.motion-popover {
+  transform-origin: var(--motion-anchor-origin, var(--transform-origin));
+  transition: scale var(--motion-popover) var(--motion-ease-out),
+    opacity var(--motion-popover) var(--motion-ease-out);
+}
+.motion-popover:is([data-starting-style], [data-ending-style]) {
+  scale: var(--motion-scale-popover);
+  opacity: 0;
+}
+.motion-popover[data-ending-style] {
+  transition-duration: var(--motion-popover-exit);
+  pointer-events: none;
+}
+.motion-popover :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [data-motion-menu-row]) {
+  opacity: var(--motion-row-opacity, 1);
+}
+.motion-popover [data-disabled][role^="menuitem"],
+.motion-popover [aria-disabled="true"][data-motion-menu-row] {
+  --motion-row-opacity: .5;
+}
+.motion-popover[data-open] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [data-motion-menu-row]) {
+  transition: opacity var(--motion-row) var(--motion-ease-out) var(--motion-row-delay, 0ms);
+}
+.motion-popover[data-starting-style] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [data-motion-menu-row]) {
+  opacity: 0;
+}
+.motion-dialog,
+.motion-panel {
+  opacity: 1;
+  transition: opacity var(--motion-surface-duration) var(--motion-ease-out);
+}
+.motion-dialog {
+  --motion-surface-duration: var(--motion-fade);
+  --motion-surface-exit: var(--motion-fade-exit);
+}
+.motion-panel {
+  --motion-surface-duration: var(--motion-panel);
+  --motion-surface-exit: var(--motion-panel-exit);
+}
+:is(.motion-dialog, .motion-panel):is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+:is(.motion-dialog, .motion-panel)[data-ending-style] {
+  transition-duration: var(--motion-surface-exit);
+  pointer-events: none;
+}
+.motion-panel-slide {
+  transition-property: opacity, translate;
+}
+.motion-panel-slide:is([data-starting-style], [data-ending-style]) {
+  translate: var(--motion-panel-offset);
+}
+.motion-panel-responsive {
+  --motion-panel-offset: 0 100%;
+}
+@media (width >= 48rem) {
+  .motion-panel-responsive {
+    --motion-panel-offset: 100% 0;
   }
-  @keyframes fade {
-    from { opacity: 0; }
-    to { opacity: 1; }
+}
+.motion-panel-horizontal {
+  --motion-panel-offset: -100% 0;
+}
+@starting-style {
+  .motion-panel[data-presence] {
+    opacity: 0;
   }
-  @keyframes shimmer {
-    from { background-position: 200% 0; }
-    to { background-position: -200% 0; }
+  .motion-panel-horizontal[data-presence] {
+    translate: var(--motion-panel-offset);
   }
-  /* Left-to-right "drawing" reveal for lines/sparklines/areas. */
-  @keyframes reveal-x {
-    from { clip-path: inset(0 100% 0 0); }
-    to { clip-path: inset(0 0 0 0); }
+}
+[data-sonner-toaster].toaster {
+  transition: none;
+}
+[data-sonner-toaster].toaster .cn-toast,
+[data-sonner-toaster].toaster .cn-toast[data-removed="true"],
+[data-sonner-toaster].toaster .cn-toast > * {
+  transition: opacity var(--motion-fade) var(--motion-ease-out) !important;
+}
+[data-sonner-toaster].toaster .cn-toast[data-removed="true"] {
+  transition-duration: var(--motion-fade-exit) !important;
+}
+[data-sonner-toaster].toaster .cn-toast:not([data-mounted="true"]),
+[data-sonner-toaster].toaster .cn-toast[data-removed="true"]:not([data-swipe-out="true"]) {
+  --y: translateY(0);
+}
+[data-sonner-toaster].toaster .cn-toast[data-removed="true"][data-expanded="true"]:not([data-swipe-out="true"]) {
+  --y: translateY(calc(var(--lift) * var(--offset)));
+}
+[data-sonner-toaster].toaster .cn-toast[data-removed="true"][data-expanded="false"][data-front="false"]:not([data-swipe-out="true"]) {
+  --y: translateY(calc(var(--lift-amount) * var(--toasts-before))) scale(calc(-1 * var(--scale)));
+}
+[data-sonner-toaster].toaster .cn-toast[data-swipe-out="true"] {
+  animation-duration: var(--motion-fade-exit);
+  animation-timing-function: var(--motion-ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-press,
+  .motion-popover,
+  .motion-panel-slide {
+    transition-property: opacity;
   }
-  /* Bars/meters growing from their origin (pair with origin-left / origin-bottom). */
-  @keyframes grow-x {
-    from { transform: scaleX(0); }
-    to { transform: scaleX(1); }
+  .motion-press:active:not(:disabled, [aria-disabled="true"]),
+  .motion-popover:is([data-starting-style], [data-ending-style]) {
+    scale: none;
   }
-  @keyframes grow-y {
-    from { transform: scaleY(0); }
-    to { transform: scaleY(1); }
+  .motion-press:active:not(:disabled, [aria-disabled="true"]) {
+    filter: none;
+    opacity: .8;
   }
-  /* Live-dot halo. */
-  @keyframes ping-soft {
-    0% { transform: scale(1); opacity: 0.5; }
-    80%, 100% { transform: scale(2.6); opacity: 0; }
+  .motion-panel-slide:is([data-starting-style], [data-ending-style]) {
+    translate: none;
   }
-  /* Background flash when a live price ticks up / down. */
-  @keyframes flash-up {
-    from { background-color: color-mix(in oklab, var(--up) 26%, transparent); }
-    to { background-color: transparent; }
+  @starting-style {
+    .motion-panel-horizontal[data-presence] {
+      translate: none;
+    }
   }
-  @keyframes flash-down {
-    from { background-color: color-mix(in oklab, var(--down) 26%, transparent); }
-    to { background-color: transparent; }
+  .motion-popover[data-open] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [data-motion-menu-row]) {
+    transition-delay: 0ms;
+  }
+  [data-sonner-toaster].toaster .cn-toast[data-swiping="true"] {
+    transform: var(--y);
+  }
+  [data-sonner-toaster].toaster .cn-toast[data-swipe-out="true"] {
+    animation: none !important;
+    opacity: 0;
   }
 }
 
@@ -244,16 +330,19 @@
   mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 
-/* Moving highlight for skeletons (combine with bg-muted/40 + rounded-*). */
+/* The market tape retains its loading treatment. */
 @utility skeleton-shimmer {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in oklab, var(--foreground) 7%, transparent) 50%,
-    transparent 100%
-  );
+  background-image: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 7%, transparent), transparent);
   background-size: 200% 100%;
-  animation: var(--animate-shimmer);
+  animation: tape-shimmer 1.8s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}
+@keyframes tape-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 /* Numbers that must not jitter while they change. */
@@ -309,13 +398,12 @@
   }
 }
 
+.motion-header {
+  transition: transform var(--motion-move) var(--motion-ease-in-out);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  .motion-header {
+    transition: none;
   }
 }

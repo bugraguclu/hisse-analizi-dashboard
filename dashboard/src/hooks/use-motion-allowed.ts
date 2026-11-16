@@ -2,10 +2,18 @@
 
 import { useSyncExternalStore } from "react";
 
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+import { reducedMotionQuery } from "@/lib/motion";
+
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(reducedMotionQuery).matches;
+}
+
+export function motionScrollBehavior(): ScrollBehavior {
+  return prefersReducedMotion() ? "instant" : "smooth";
+}
 
 function subscribe(onChange: () => void): () => void {
-  const query = window.matchMedia(REDUCED_MOTION);
+  const query = window.matchMedia(reducedMotionQuery);
   query.addEventListener("change", onChange);
   document.addEventListener("visibilitychange", onChange);
   return () => {
@@ -15,7 +23,7 @@ function subscribe(onChange: () => void): () => void {
 }
 
 function getSnapshot(): boolean {
-  return !window.matchMedia(REDUCED_MOTION).matches && document.visibilityState === "visible";
+  return !prefersReducedMotion() && document.visibilityState === "visible";
 }
 
 function getServerSnapshot(): boolean {
@@ -23,9 +31,9 @@ function getServerSnapshot(): boolean {
 }
 
 /**
- * Whether JS-driven motion (number tweens, chart entry animations) should run:
+ * Whether JS-driven motion should run:
  * false for "reduce motion" users and while the tab is hidden (requestAnimationFrame
- * is paused there, so a tween would freeze on its first frame). Always false during
+ * is paused there, so a transition could stop midway). Always false during
  * SSR/hydration, so server and client markup match.
  */
 export function useMotionAllowed(): boolean {

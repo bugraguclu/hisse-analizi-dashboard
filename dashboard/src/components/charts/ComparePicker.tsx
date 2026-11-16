@@ -1,9 +1,10 @@
 "use client";
 
+import { MotionPopoverPopup } from "@/components/ui/motion-surface";
 import { useId, useMemo, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { useQuery } from "@tanstack/react-query";
-import { Check, GitCompareArrows, Loader2, Search, X } from "lucide-react";
+import { Check, GitCompareArrows, Hourglass, Search, X } from "lucide-react";
 import { foldTr } from "@/components/shared/search/fold";
 import { buildTickerIndex, searchTickers } from "@/components/shared/search/ticker-index";
 import { useListNav } from "@/components/shared/search/use-list-nav";
@@ -140,7 +141,7 @@ export function ComparePicker({
       />
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={6} collisionPadding={12} className="z-[90]">
-          <Popover.Popup initialFocus={inputRef} className={cn(POPUP_CLASS, "flex max-h-[min(30rem,calc(100dvh-6rem))] w-[min(21rem,calc(100vw-1.5rem))] flex-col")}>
+          <MotionPopoverPopup initialFocus={inputRef} className={cn(POPUP_CLASS, "flex max-h-[min(30rem,calc(100dvh-6rem))] w-[min(21rem,calc(100vw-1.5rem))] flex-col")}>
             <div className="flex items-center gap-2 border-b border-border px-3">
               <Search aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <input
@@ -148,6 +149,7 @@ export function ComparePicker({
                 type="search"
                 role="combobox"
                 aria-expanded
+                aria-busy={indexQ.isFetching && Boolean(needle)}
                 aria-controls={listId}
                 aria-activedescendant={nav.active >= 0 ? nav.optionId(nav.active) : undefined}
                 aria-label={t("compare.search")}
@@ -164,7 +166,7 @@ export function ComparePicker({
                 }}
                 className="h-10 min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
               />
-              {indexQ.isFetching && needle ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+              {indexQ.isFetching && needle ? <Hourglass aria-hidden className="h-3.5 w-3.5 text-muted-foreground" /> : null}
             </div>
 
             {suggestions && suggestions.length > 0 && !needle ? (
@@ -244,6 +246,7 @@ export function ComparePicker({
                     <div
                       id={nav.optionId(index)}
                       role="option"
+                      data-motion-menu-row={needle ? undefined : ""}
                       aria-selected={nav.active === index}
                       aria-checked={Boolean(selected)}
                       aria-disabled={disabled || undefined}
@@ -269,7 +272,7 @@ export function ComparePicker({
               ) : null}
             </div>
             {full ? <p className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">{t("compare.limit", { n: MAX_COMPARE })}</p> : null}
-          </Popover.Popup>
+          </MotionPopoverPopup>
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>

@@ -87,7 +87,7 @@ function DesktopNav() {
 }
 
 const ICON_BUTTON =
-  "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+  "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
 
 /**
  * Top navigation: wordmark, section links (lg+), stock search, language and theme.
@@ -145,7 +145,7 @@ export function SiteHeader() {
           data-search={mobileSearchOpen ? "" : undefined}
           className={cn(
             "pointer-events-auto sticky inset-x-0 top-0 border-b border-border bg-background px-4 md:px-6",
-            "transition-transform duration-320 ease-[cubic-bezier(0.4,0,0.6,1)]",
+            "motion-header",
             "data-pin:fixed data-search:fixed has-[input:focus]:fixed data-kbd:has-[:focus-visible]:fixed",
           )}
         >

@@ -1,8 +1,7 @@
 "use client";
 
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Hourglass, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useMakroI18n, type MakroKey } from "@/components/makro/i18n";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
@@ -37,9 +36,10 @@ function RefreshButton() {
       type="button"
       onClick={() => void queryClient.invalidateQueries({ queryKey: MACRO_QUERY_ROOT })}
       disabled={fetching}
+      aria-busy={fetching}
       className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <RefreshCw className={cn("h-3.5 w-3.5", fetching && "animate-spin")} aria-hidden="true" />
+      {fetching ? <Hourglass className="h-3.5 w-3.5" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
       {fetching ? t("page.refreshing") : t("page.refresh")}
     </button>
   );

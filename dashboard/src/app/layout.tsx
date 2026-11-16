@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
+import { motionCss } from "@/lib/motion";
 import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
@@ -66,7 +67,7 @@ export default async function RootLayout({
   // (correct <html lang>, no flash of Turkish text for EN/FR users).
   const locale = await requestLocale();
   return (
-    <html lang={locale} className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang={locale} className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable} h-full antialiased`} style={motionCss as React.CSSProperties} suppressHydrationWarning>
       <body className="min-h-full">
         <Providers initialLocale={locale}>
           <AppShell>{children}</AppShell>

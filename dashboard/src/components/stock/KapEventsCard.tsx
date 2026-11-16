@@ -120,8 +120,8 @@ function EventDetailDialog({ eventId, onClose }: { eventId: string | null; onClo
   return (
     <Dialog.Root open={eventId !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/50 transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
-        <Dialog.Popup className="card-surface fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden shadow-[0_24px_48px_-16px_rgb(0_0_0/0.4)] outline-none transition-[opacity,scale] duration-150 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0">
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/50 motion-dialog" />
+        <Dialog.Popup className="card-surface fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden shadow-[0_24px_48px_-16px_rgb(0_0_0/0.4)] outline-none motion-dialog">
           <div className="flex items-center justify-between gap-3 border-b border-border py-2 pl-5 pr-3">
             <Dialog.Title className="text-[13px] font-semibold text-foreground">{t("kap.detailTitle")}</Dialog.Title>
             <Dialog.Close

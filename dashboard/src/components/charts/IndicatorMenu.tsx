@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionPopoverPopup } from "@/components/ui/motion-surface";
 import { useId, useMemo, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Check, SquareFunction, Plus, Search, X } from "lucide-react";
@@ -154,7 +155,7 @@ export function IndicatorMenu({
       />
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={6} collisionPadding={12} className="z-[90]">
-          <Popover.Popup initialFocus={inputRef} className={cn(POPUP_CLASS, "flex max-h-[min(34rem,calc(100dvh-6rem))] w-[min(24rem,calc(100vw-1.5rem))] flex-col")}>
+          <MotionPopoverPopup initialFocus={inputRef} className={cn(POPUP_CLASS, "flex max-h-[min(34rem,calc(100dvh-6rem))] w-[min(24rem,calc(100vw-1.5rem))] flex-col")}>
             <div className="flex items-center gap-2 border-b border-border px-3">
               <Search aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <input
@@ -203,6 +204,7 @@ export function IndicatorMenu({
                       return (
                         <button
                           key={template.key}
+                          data-motion-menu-row
                           type="button"
                           disabled={disabled}
                           onClick={() => onChange(template.build())}
@@ -261,6 +263,7 @@ export function IndicatorMenu({
                             key={kind}
                             id={nav.optionId(index)}
                             role="option"
+                              data-motion-menu-row={needle ? undefined : ""}
                             aria-selected={nav.active === index}
                             aria-disabled={disabled || undefined}
                             onPointerMove={() => nav.setActive(index)}
@@ -322,7 +325,7 @@ export function IndicatorMenu({
                 </button>
               ) : null}
             </div>
-          </Popover.Popup>
+          </MotionPopoverPopup>
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>

@@ -39,6 +39,7 @@
  * `overflow-auto`) ancestor clips them — leave the bar's containers visible.
  */
 
+import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import {
   Children,
   createContext,
@@ -56,7 +57,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Hourglass, X } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import { formatNumber } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
@@ -158,9 +159,6 @@ function isDimmed(option: FilterOption, picked: boolean): boolean {
 
 const MICRO = "text-[10px] font-semibold uppercase tracking-[0.18em]";
 
-function reducedMotion(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 /**
  * The inputs are visually hidden (1px, clipped), so the browser does not scroll
@@ -175,7 +173,7 @@ function keepRowInView(event: { currentTarget: HTMLElement }) {
 function CountText({ option, picked }: { option: FilterOption; picked: boolean }) {
   const text = useFilterBarText();
   if (option.loading) {
-    return <Loader2 aria-label={text.loading} className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />;
+    return <Hourglass role="img" aria-label={text.loading} className="h-3 w-3 shrink-0 text-muted-foreground" />;
   }
   if (option.count === undefined || option.count === null) return null;
   // aria-hidden: the count changes on every pick and would otherwise become part of
@@ -600,7 +598,7 @@ function nudgeIntoView(menu: HTMLElement, panel: HTMLElement) {
   const header = document.querySelector("header");
   const room = (summary?.getBoundingClientRect().top ?? 0) - (header ? header.getBoundingClientRect().bottom : 0) - 8;
   const by = Math.min(overflow, Math.max(room, 0));
-  if (by > 0) window.scrollBy({ top: by, behavior: reducedMotion() ? "auto" : "smooth" });
+  if (by > 0) window.scrollBy({ top: by, behavior: motionScrollBehavior() });
 }
 
 /**
@@ -1059,7 +1057,7 @@ function GroupSection<V extends string>({
           </span>
         ) : null}
         <ChevronIcon
-          className={cn("ml-auto text-muted-foreground transition-transform duration-200", !folded && "group-open/fg:rotate-180")}
+          className={cn("ml-auto text-muted-foreground", !folded && "group-open/fg:rotate-180")}
         />
       </summary>
       <div role="group" aria-label={group.label} className={cn("pb-1.5", folded && "absolute inset-x-0 top-full")}>
@@ -1289,7 +1287,7 @@ function GroupsPanel({
                 // After the fold lifts, bring the clicked axis to the top of the body.
                 requestAnimationFrame(() => {
                   const top = section.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
-                  body.scrollTo({ top, behavior: reducedMotion() ? "auto" : "smooth" });
+                  body.scrollTo({ top, behavior: motionScrollBehavior() });
                 });
               }}
             />

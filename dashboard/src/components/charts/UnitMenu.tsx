@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionMenuPopup, ReleaseMenu } from "@/components/ui/motion-surface";
 import { Menu } from "@base-ui/react/menu";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,18 +29,15 @@ export function UnitMenu({
   const { t } = useChartI18n();
   const shown = effectiveUnit(value, period);
   return (
-    <Menu.Root>
-      <Menu.Trigger
-        render={
+    <ReleaseMenu trigger={
           <ChipButton pressed={shown !== "TRY"} title={t("unit.title")} aria-label={`${t("unit.label")}: ${t(`unit.long.${shown}`)}`}>
             <span className={cn("font-mono text-[11px]", compact && "text-[10px]")}>{t(`unit.short.${shown}`)}</span>
             <ChevronDown className="!h-3 !w-3 text-muted-foreground" />
           </ChipButton>
-        }
-      />
+        }>
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="start" sideOffset={6} collisionPadding={12} className="z-[90]">
-          <Menu.Popup className={cn(POPUP_CLASS, "max-h-[var(--available-height)] min-w-64 overflow-y-auto overscroll-contain p-1 scrollbar-thin")}>
+          <MotionMenuPopup className={cn(POPUP_CLASS, "max-h-[var(--available-height)] min-w-64 overflow-y-auto overscroll-contain p-1 scrollbar-thin")}>
             <Menu.Group>
               <Menu.GroupLabel className={MENU_GROUP_LABEL_CLASS}>{t("unit.label")}</Menu.GroupLabel>
               <Menu.RadioGroup value={shown} onValueChange={(next: ChartUnit) => onChange(next)}>
@@ -60,9 +58,9 @@ export function UnitMenu({
                 })}
               </Menu.RadioGroup>
             </Menu.Group>
-          </Menu.Popup>
+          </MotionMenuPopup>
         </Menu.Positioner>
       </Menu.Portal>
-    </Menu.Root>
+    </ReleaseMenu>
   );
 }

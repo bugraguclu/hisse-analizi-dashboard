@@ -1,6 +1,5 @@
 "use client";
 
-import { useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TooltipNote, TooltipValueRow, useChartTooltip } from "./ChartTooltip";
@@ -33,7 +32,7 @@ export interface SegmentBarProps {
 }
 
 /**
- * 100%-stacked horizontal bar. Segments grow from the left on mount, the
+ * 100%-stacked horizontal bar. The
  * segment whose tooltip shows gets a hairline outline while the rest dim, and
  * every non-zero segment carries a hover+focus tooltip (value leads, label
  * and share% follow) on top of its own accessible name.
@@ -50,7 +49,6 @@ export function SegmentBar({
   className,
 }: SegmentBarProps) {
   const { t } = useMiniChartI18n();
-  const motionAllowed = useMotionAllowed();
   // The highlight follows the tooltip, so the lifted segment is always the one whose numbers show.
   const { activeKey, getTriggerProps, tooltip } = useChartTooltip({ onActiveKeyChange: onHighlightChange });
 
@@ -76,9 +74,8 @@ export function SegmentBar({
           const dimmed = interactive && effectiveHighlight != null && effectiveHighlight !== segment.key;
           const lifted = interactive && effectiveHighlight === segment.key;
           const segClassName = cn(
-            "h-full transition-opacity duration-150",
+            "h-full motion-fade",
             TONE_BG[segment.tone],
-            motionAllowed && "origin-left animate-grow-x",
             dimmed && "opacity-40",
             lifted && "outline outline-1 -outline-offset-1 outline-foreground/40",
           );

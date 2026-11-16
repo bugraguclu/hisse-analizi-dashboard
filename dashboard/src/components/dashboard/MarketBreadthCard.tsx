@@ -153,7 +153,7 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               role="img"
               aria-label={`${breadth.up} ${t("dashboard.advancers")}`}
               tabIndex={0}
-              className={cn("outline-none transition-opacity", "text-up", highlight != null && highlight !== "up" && "opacity-50")}
+              className={cn("outline-none motion-fade", "text-up", highlight != null && highlight !== "up" && "opacity-50")}
               onPointerEnter={() => setHighlight("up")}
               onPointerLeave={() => clearHighlight("up")}
               onFocus={() => setHighlight("up")}
@@ -165,7 +165,7 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               role="img"
               aria-label={`${breadth.flat} ${t("dashboard.unchanged")}`}
               tabIndex={0}
-              className={cn("outline-none transition-opacity", "text-muted-foreground", highlight != null && highlight !== "flat" && "opacity-50")}
+              className={cn("outline-none motion-fade", "text-muted-foreground", highlight != null && highlight !== "flat" && "opacity-50")}
               onPointerEnter={() => setHighlight("flat")}
               onPointerLeave={() => clearHighlight("flat")}
               onFocus={() => setHighlight("flat")}
@@ -177,7 +177,7 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               role="img"
               aria-label={`${breadth.down} ${t("dashboard.decliners")}`}
               tabIndex={0}
-              className={cn("outline-none transition-opacity", "text-down", highlight != null && highlight !== "down" && "opacity-50")}
+              className={cn("outline-none motion-fade", "text-down", highlight != null && highlight !== "down" && "opacity-50")}
               onPointerEnter={() => setHighlight("down")}
               onPointerLeave={() => clearHighlight("down")}
               onFocus={() => setHighlight("down")}

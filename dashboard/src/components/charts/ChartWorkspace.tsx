@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, RotateCcw, X } from "lucide-react";
+import { Hourglass, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { ChartSkeleton } from "@/components/ui/chart-skeleton";
@@ -76,7 +76,6 @@ export interface ChartWorkspaceProps {
   features: ToolbarFeatures;
   fullscreenFeatures?: ToolbarFeatures;
   baseline?: { price: number; label: string } | null;
-  live?: boolean;
   padToSessionEnd?: boolean;
   /** Main pane height in px; every indicator pane adds `paneHeight`. */
   height: number;
@@ -142,7 +141,6 @@ export function ChartWorkspace({
   features,
   fullscreenFeatures = ALL_FEATURES,
   baseline = null,
-  live = false,
   padToSessionEnd = false,
   height,
   paneHeight = 110,
@@ -363,7 +361,7 @@ export function ChartWorkspace({
     return (
       <div className={cn("relative flex min-h-0 flex-col", mode === "fullscreen" && "flex-1")}>
         <div
-          className={cn("flex min-h-0 flex-col transition-opacity duration-200", mode === "fullscreen" && "flex-1", status.placeholder && "opacity-50")}
+          className={cn("flex min-h-0 flex-col motion-fade", mode === "fullscreen" && "flex-1", status.placeholder && "opacity-50")}
           aria-busy={status.placeholder || undefined}
         >
           <FinancialChart
@@ -376,7 +374,6 @@ export function ChartWorkspace({
             compare={compareSeries}
             onCompareRemove={removeCompare}
             baseline={baseline}
-            live={live}
             padToSessionEnd={padToSessionEnd}
             height={mode === "fullscreen" ? "fill" : totalHeight}
             paneHeight={paneHeight}
@@ -433,7 +430,7 @@ export function ChartWorkspace({
             role="status"
             className="pointer-events-none absolute right-0 top-0 inline-flex items-center gap-1 rounded-sm bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground"
           >
-            <Loader2 aria-hidden className="h-3 w-3 animate-spin" />
+            <Hourglass aria-hidden className="h-3 w-3" />
             {t("chart.updating")}
           </span>
         ) : null}

@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils"
 
-/** Placeholder block with a moving highlight (static under prefers-reduced-motion). */
+/** Static placeholder block. */
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("skeleton-shimmer rounded-sm bg-muted/70", className)}
+      className={cn("rounded-sm bg-muted/70", className)}
       {...props}
     />
   )

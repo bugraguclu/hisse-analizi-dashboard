@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { MotionMenuPopup, ReleaseMenu } from "@/components/ui/motion-surface";
+import { useRef, type ReactNode } from "react";
 import { Menu } from "@base-ui/react/menu";
 import {
   CalendarClock,
@@ -63,9 +64,9 @@ function MenuPopup({ children, align = "end", className }: { children: ReactNode
     <Menu.Portal>
       <Menu.Positioner side="bottom" align={align} sideOffset={6} collisionPadding={12} className="z-[90]">
         {/* Long menus scroll inside the viewport (landscape phones, short windows). */}
-        <Menu.Popup className={cn(POPUP_CLASS, "max-h-[var(--available-height)] min-w-52 overflow-y-auto overscroll-contain p-1 scrollbar-thin", className)}>
+        <MotionMenuPopup className={cn(POPUP_CLASS, "max-h-[var(--available-height)] min-w-52 overflow-y-auto overscroll-contain p-1 scrollbar-thin", className)}>
           {children}
-        </Menu.Popup>
+        </MotionMenuPopup>
       </Menu.Positioner>
     </Menu.Portal>
   );
@@ -78,16 +79,15 @@ function MenuSeparator() {
 function TypeMenu({ value, onChange, compact }: { value: ChartType; onChange: (type: ChartType) => void; compact: boolean }) {
   const { t } = useChartI18n();
   return (
-    <Menu.Root>
-      <Menu.Trigger
-        render={
-          <ChipButton aria-label={`${t("type.label")}: ${t(TYPE_LABEL[value].label)}`} title={t("type.label")} className="border-border">
-            <ChartTypeIcon type={value} />
-            {compact ? null : <span>{t(TYPE_LABEL[value].label)}</span>}
-            <ChevronDown className="!h-3 !w-3 text-muted-foreground" />
-          </ChipButton>
-        }
-      />
+    <ReleaseMenu
+      trigger={
+        <ChipButton aria-label={`${t("type.label")}: ${t(TYPE_LABEL[value].label)}`} title={t("type.label")} className="border-border">
+          <ChartTypeIcon type={value} />
+          {compact ? null : <span>{t(TYPE_LABEL[value].label)}</span>}
+          <ChevronDown className="!h-3 !w-3 text-muted-foreground" />
+        </ChipButton>
+      }
+    >
       <MenuPopup align="start">
         <Menu.Group>
           <Menu.GroupLabel className={GROUP_LABEL_CLASS}>{t("type.label")}</Menu.GroupLabel>
@@ -105,7 +105,7 @@ function TypeMenu({ value, onChange, compact }: { value: ChartType; onChange: (t
           </Menu.RadioGroup>
         </Menu.Group>
       </MenuPopup>
-    </Menu.Root>
+    </ReleaseMenu>
   );
 }
 
@@ -207,6 +207,22 @@ function SnapshotItems({ onSnapshot }: { onSnapshot: (action: "download" | "copy
       </Menu.Item>
     </>
   );
+}
+
+function useMenuHandoff() {
+  const nextSurface = useRef<(() => void) | null>(null);
+  return {
+    queueSurface: (show: () => void) => { nextSurface.current = show; },
+    changeMenu: (open: boolean) => {
+      if (open) nextSurface.current = null;
+    },
+    finishMenu: (open: boolean) => {
+      if (open) return;
+      const show = nextSurface.current;
+      nextSurface.current = null;
+      show?.();
+    },
+  };
 }
 
 /** The viewer's average cost, keyboard shortcuts and "restore the default setup". */
@@ -366,6 +382,7 @@ function SimpleRest({
   fullscreenButton,
 }: RestProps) {
   const { t } = useChartI18n();
+  const { changeMenu, finishMenu, queueSurface } = useMenuHandoff();
   const comparing = (compare?.items.length ?? 0) > 0;
   return (
     <>
@@ -383,15 +400,16 @@ function SimpleRest({
         </ChipButton>
       ) : null}
       <div className="ml-auto flex items-center gap-0.5">
-        <Menu.Root>
-          <Menu.Trigger
-            render={
-              <ChipButton title={t("more.title")} aria-label={t("more.title")} className="px-1.5">
-                <Ellipsis />
-                {compact ? null : <span>{t("more.button")}</span>}
-              </ChipButton>
-            }
-          />
+        <ReleaseMenu
+          onOpenChange={changeMenu}
+          onOpenChangeComplete={finishMenu}
+          trigger={
+            <ChipButton title={t("more.title")} aria-label={t("more.title")} className="px-1.5">
+              <Ellipsis />
+              {compact ? null : <span>{t("more.button")}</span>}
+            </ChipButton>
+          }
+        >
           <MenuPopup className="min-w-64">
             <DisplayGroup prefs={prefs} set={set} hasVolume={hasVolume} events={features.events} targets={targets} watermark={false} label="more.view" />
             <MenuSeparator />
@@ -419,9 +437,13 @@ function SimpleRest({
             <MenuSeparator />
             <SnapshotItems onSnapshot={onSnapshot} />
             <MenuSeparator />
-            <SetupItems onCostEdit={onCostEdit} onShortcuts={onShortcuts} onReset={() => onPrefsChange(defaults)} />
+            <SetupItems
+              onCostEdit={onCostEdit && (() => queueSurface(onCostEdit))}
+              onShortcuts={() => queueSurface(onShortcuts)}
+              onReset={() => onPrefsChange(defaults)}
+            />
           </MenuPopup>
-        </Menu.Root>
+        </ReleaseMenu>
         {fullscreenButton}
       </div>
     </>
@@ -457,6 +479,7 @@ function FullRest({
   fullscreenButton,
 }: RestProps) {
   const { t } = useChartI18n();
+  const { changeMenu, finishMenu, queueSurface } = useMenuHandoff();
   const comparing = (compare?.items.length ?? 0) > 0;
   return (
     <>
@@ -493,22 +516,24 @@ function FullRest({
         <ToolButton label={tableOn ? t("action.hideTable") : t("action.table")} pressed={tableOn} onClick={() => onTableChange(!tableOn)}>
           <Table2 />
         </ToolButton>
-        <Menu.Root>
-          <Menu.Trigger render={<ToolButton label={t("snapshot.button")}><Camera /></ToolButton>} />
+        <ReleaseMenu trigger={<ToolButton label={t("snapshot.button")}><Camera /></ToolButton>}>
           <MenuPopup>
             <SnapshotItems onSnapshot={onSnapshot} />
           </MenuPopup>
-        </Menu.Root>
-        <Menu.Root>
-          <Menu.Trigger render={<ToolButton label={t("settings.button")}><Settings2 /></ToolButton>} />
+        </ReleaseMenu>
+        <ReleaseMenu onOpenChange={changeMenu} onOpenChangeComplete={finishMenu} trigger={<ToolButton label={t("settings.button")}><Settings2 /></ToolButton>}>
           <MenuPopup className="min-w-60">
             <DisplayGroup prefs={prefs} set={set} hasVolume={hasVolume} events={features.events} targets={targets} watermark label="settings.display" />
             <MenuSeparator />
             <ScaleGroup prefs={prefs} set={set} comparing={comparing} />
             <MenuSeparator />
-            <SetupItems onCostEdit={onCostEdit} onShortcuts={onShortcuts} onReset={() => onPrefsChange(defaults)} />
+            <SetupItems
+              onCostEdit={onCostEdit && (() => queueSurface(onCostEdit))}
+              onShortcuts={() => queueSurface(onShortcuts)}
+              onReset={() => onPrefsChange(defaults)}
+            />
           </MenuPopup>
-        </Menu.Root>
+        </ReleaseMenu>
         {fullscreenButton}
       </div>
     </>
