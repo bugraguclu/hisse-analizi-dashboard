@@ -487,34 +487,34 @@ export function Workspace({
 }
 
 /**
- * The Customize button, and Reset / Cancel / Save while arranging. Place it in
- * the page's header. Arranging needs a wide screen, so it is hidden below `lg`.
- * `compact` leaves out the written hint, for rows without room for it.
+ * The Customize button belongs in the page header. The editing controls
+ * follow the viewport so a visitor can save from the card they are arranging.
+ * Arranging needs a wide screen, so the controls are hidden below `lg`.
  */
 export function WorkspaceControls({ compact = false, className }: { compact?: boolean; className?: string }) {
   const { t } = useLocale();
   const { editing, helpId, startEditing, closeEditor, resetLayout, saveLayout, customizeButton, saveButton } = useWorkspace();
   return (
-    <div className={cn("hidden items-center gap-4 lg:flex", className)}>
-      {editing ? (
-        <>
+    <div className={cn("hidden items-center lg:flex", className)}>
+      {/* Keep the header's dimensions stable while the editing controls float. */}
+      <Button ref={customizeButton} variant="outline" size="sm" onClick={startEditing} className={cn(editing && "invisible")}>
+        <Pencil aria-hidden="true" />
+        {t("dashboard.customize")}
+      </Button>
+      {editing && (
+        <div className="fixed inset-x-4 bottom-4 z-40 mx-auto flex w-max items-center gap-4 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-lg">
           {compact ? null : (
-            <p className="max-w-80 text-right text-xs leading-4 text-pretty text-muted-foreground xl:max-w-[30rem]">
+            <p className="max-w-80 pl-2 text-xs leading-4 text-pretty text-muted-foreground xl:max-w-[30rem]">
               {t("dashboard.layoutHint")}
             </p>
           )}
           <span className="sr-only" id={helpId}>{t("dashboard.layoutKeyboard")}</span>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="ghost" size="sm" onClick={resetLayout}>{t("dashboard.resetLayout")}</Button>
             <Button variant="outline" size="sm" onClick={closeEditor}>{t("dashboard.cancelLayout")}</Button>
             <Button ref={saveButton} size="sm" onClick={saveLayout}>{t("dashboard.saveLayout")}</Button>
           </div>
-        </>
-      ) : (
-        <Button ref={customizeButton} variant="outline" size="sm" onClick={startEditing}>
-          <Pencil aria-hidden="true" />
-          {t("dashboard.customize")}
-        </Button>
+        </div>
       )}
     </div>
   );
