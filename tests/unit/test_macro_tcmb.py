@@ -197,7 +197,14 @@ async def test_get_tcmb_calendar_success(monkeypatch, calendar_events):
     async def fake_fetch():
         return calendar_events
 
+    # The fixture's dates are fixed, so "next" and "last" depend on the day the test runs: pin it.
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 9, 15, 12, 0, tzinfo=tz)
+
     monkeypatch.setattr(macro, "_fetch_tcmb_calendar", fake_fetch)
+    monkeypatch.setattr(macro, "datetime", FrozenDatetime)
     result = await macro.get_tcmb_calendar()
 
     assert result["source"] == "TCMB"
