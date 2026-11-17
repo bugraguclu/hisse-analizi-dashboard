@@ -1,11 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useStockIdentity, type IdentityState } from "./hooks";
+import { useStockIdentity } from "./hooks";
+import { StockIdentityContext, useShellIdentity } from "./identity-context";
 import { useStockI18n, type StockKey } from "./i18n";
 import { StockHeader } from "./StockHeader";
 
@@ -19,19 +20,14 @@ const TABS: Array<{ view: StockView; href: (ticker: string) => string; label: St
   { view: "combined", href: (t) => `/analiz/${t}`, label: "tabs.combined" },
 ];
 
-const StockIdentityContext = createContext<IdentityState>({ status: "loading", identity: null });
-
-/** Identity of the stock rendered by the surrounding StockShell. */
-export function useShellIdentity(): IdentityState {
-  return useContext(StockIdentityContext);
-}
+export { useShellIdentity };
 
 /**
  * Section tabs under the stock header. Plain links (the active one has
- * aria-current="page" and an ink underline). On phones the row runs edge to edge
- * and scrolls sideways without a scrollbar; the faded edges hint at the overflow.
+ * aria-current="page" and an ink underline). On phones the row starts at the
+ * viewport edge and scrolls sideways when the tabs overflow.
  */
-function StockTabs({ ticker, active }: { ticker: string; active: StockView }) {
+function StockTabs({ ticker, active, hasActions }: { ticker: string; active: StockView; hasActions: boolean }) {
   const { t } = useStockI18n();
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -51,7 +47,10 @@ function StockTabs({ ticker, active }: { ticker: string; active: StockView }) {
   return (
     <nav
       aria-label={t("tabs.label")}
-      className="relative -mx-4 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border md:mx-0"
+      className={cn(
+        "relative -ml-4 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border md:ml-0",
+        !hasActions && "-mr-4 md:mr-0",
+      )}
     >
       <ul
         ref={listRef}
@@ -111,8 +110,7 @@ export function StockNotFound({ ticker }: { ticker: string | null }) {
 
 /**
  * Shared frame for /hisse, /teknik, /temel and /analiz: header with the daily
- * quote, section tabs and a friendly not-found state. Sections mount right
- * away (they show their own skeletons) — nothing waits for slow endpoints.
+ * quote, section tabs and the not-found state.
  */
 export function StockShell({
   ticker,
@@ -122,7 +120,7 @@ export function StockShell({
 }: {
   ticker: string;
   view: StockView;
-  /** Shown at the end of the tab row on wide screens (the page's layout controls). */
+  /** Page controls at the end of the tab row ("Customize"). */
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -131,9 +129,11 @@ export function StockShell({
   return (
     <div className="mx-auto max-w-7xl">
       <StockHeader ticker={ticker} identity={identity} />
-      <div className="relative mt-5">
-        <StockTabs ticker={ticker} active={view} />
-        {actions ? <div className="absolute inset-y-0 right-0 flex items-center pb-1">{actions}</div> : null}
+      <div className="mt-5 flex items-center gap-2">
+        <div className="min-w-0 grow">
+          <StockTabs ticker={ticker} active={view} hasActions={Boolean(actions)} />
+        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </div>
       <StockIdentityContext.Provider value={identity}>
         <div className="mt-6">{children}</div>

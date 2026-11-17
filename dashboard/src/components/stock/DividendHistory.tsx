@@ -7,6 +7,7 @@ import { useCompanySector, useDividends, useQuote } from "./hooks";
 import { useStockI18n } from "./i18n";
 import { trailingDividendYield } from "./parsers";
 import { useSectorName } from "./sector-ui";
+import { cn } from "@/lib/utils";
 import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
 
@@ -30,6 +31,8 @@ export function DividendHistory({ ticker }: { ticker: string }) {
   const [expanded, setExpanded] = useState(false);
   // In a layout slot the whole table is there to scroll, so a taller card simply shows more of it.
   const { fill } = usePanel();
+  // A narrow slot keeps date, gross amount and total, and drops the two derived columns rather than scroll sideways.
+  const narrowHidden = fill ? "@max-md:hidden" : undefined;
   const dividendsQ = useDividends(ticker);
   const { quote } = useQuote(ticker);
   const sectorQ = useCompanySector(ticker);
@@ -75,13 +78,13 @@ export function DividendHistory({ ticker }: { ticker: string }) {
             <p className="mb-4 text-xs text-muted-foreground">{sectorLine}</p>
           ) : null}
           <div className="relative -mx-4 overflow-x-auto scrollbar-thin sm:-mx-5">
-            <table className="w-full min-w-[30rem] text-xs">
+            <table className={cn("w-full text-xs", fill ? "@md:min-w-[30rem]" : "min-w-[30rem]")}>
               <thead>
                 <tr className="border-b border-border/50 text-[10px] uppercase tracking-wider text-muted-foreground">
                   <th scope="col" className="py-2 pl-4 pr-3 text-left font-semibold sm:pl-5">{t("div.date")}</th>
                   <th scope="col" className="px-3 py-2 text-right font-semibold">{t("div.gross")}</th>
-                  <th scope="col" className="px-3 py-2 text-right font-semibold">{t("div.net")}</th>
-                  <th scope="col" className="px-3 py-2 text-right font-semibold">{t("div.grossRate")}</th>
+                  <th scope="col" className={cn("px-3 py-2 text-right font-semibold", narrowHidden)}>{t("div.net")}</th>
+                  <th scope="col" className={cn("px-3 py-2 text-right font-semibold", narrowHidden)}>{t("div.grossRate")}</th>
                   <th scope="col" className="py-2 pl-3 pr-4 text-right font-semibold sm:pr-5">{t("div.total")}</th>
                 </tr>
               </thead>
@@ -95,8 +98,8 @@ export function DividendHistory({ ticker }: { ticker: string }) {
                       ) : null}
                     </th>
                     <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-foreground">{perShare(d.grossPerShare)}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground/85">{perShare(d.netPerShare)}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground/85">{formatPercent(d.grossRate)}</td>
+                    <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-foreground/85", narrowHidden)}>{perShare(d.netPerShare)}</td>
+                    <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-foreground/85", narrowHidden)}>{formatPercent(d.grossRate)}</td>
                     <td className="py-2 pl-3 pr-4 text-right font-mono tabular-nums text-foreground/85 sm:pr-5">{formatCompact(d.total)}</td>
                   </tr>
                 ))}

@@ -27,6 +27,15 @@ export function usePanel(): PanelState {
 }
 
 /**
+ * Whether the card sits in a layout slot of any kind. Cards use it to arrange
+ * their content by the width they were given (`@container` variants) while the
+ * page's default layout stays exactly as it was written.
+ */
+export function useSlotted(): boolean {
+  return useContext(PanelContext).columns > 0;
+}
+
+/**
  * Marks loading placeholders and error messages: content that stands in for
  * the real thing and says nothing about how tall the card will be.
  */

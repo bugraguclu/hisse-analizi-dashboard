@@ -5,14 +5,26 @@ import { ThemeProvider } from "next-themes";
 import { getQueryClient } from "@/lib/queryClient";
 import { LocaleProvider } from "@/lib/locale-context";
 import type { Locale } from "@/lib/i18n";
+import { CustomLayoutsProvider } from "@/components/widgets/custom-layouts-context";
+import type { BuiltInPage } from "@/components/widgets/defaults";
 
-export function Providers({ children, initialLocale }: { children: React.ReactNode; initialLocale: Locale }) {
+export function Providers({
+  children,
+  initialLocale,
+  customLayouts,
+}: {
+  children: React.ReactNode;
+  initialLocale: Locale;
+  customLayouts?: readonly BuiltInPage[];
+}) {
   const queryClient = getQueryClient();
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
         <LocaleProvider initialLocale={initialLocale}>
-          {children}
+          <CustomLayoutsProvider customLayouts={customLayouts}>
+            {children}
+          </CustomLayoutsProvider>
         </LocaleProvider>
       </QueryClientProvider>
     </ThemeProvider>

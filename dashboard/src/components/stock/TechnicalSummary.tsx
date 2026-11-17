@@ -1,6 +1,8 @@
 "use client";
 
 import { useSignals } from "./hooks";
+import { cn } from "@/lib/utils";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n, type StockKey } from "./i18n";
 import type { SignalGroup } from "./types";
 import { SectionCard, SectionEmpty, SectionError, SectionSkeleton, SignalBadge, VoteBar } from "./ui";
@@ -33,6 +35,7 @@ function GroupTile({ label, hint, group }: { label: string; hint: string; group:
 
 /** TradingView daily technical summary: overall, oscillators and moving averages votes. */
 export function TechnicalSummary({ ticker }: { ticker: string }) {
+  const slotted = useSlotted();
   const { t } = useStockI18n();
   const signalsQ = useSignals(ticker);
   const signals = signalsQ.data ?? null;
@@ -47,7 +50,7 @@ export function TechnicalSummary({ ticker }: { ticker: string }) {
         <SectionEmpty message={t("tech.empty")} />
       ) : (
         <div className="@container">
-          <div className="grid grid-cols-1 gap-3 @4xl:grid-cols-3">
+          <div className={cn("grid grid-cols-1 gap-3", slotted ? "@xl:grid-cols-3" : "@4xl:grid-cols-3")}>
             {GROUPS.map((group) => (
               <GroupTile key={group.key} label={t(group.label)} hint={t(group.hint)} group={signals[group.key]} />
             ))}

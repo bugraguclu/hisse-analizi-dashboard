@@ -8,7 +8,7 @@ import { formatMarketDate, formatRelativeTime, parseDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { isNotFoundError, useTickerNews } from "./hooks";
 import { useStockI18n, type StockKey } from "./i18n";
-import { useShellIdentity } from "./StockShell";
+import { useShellIdentity } from "./identity-context";
 import type { NewsItem } from "./types";
 import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionEmpty, SectionError, Segmented } from "./ui";

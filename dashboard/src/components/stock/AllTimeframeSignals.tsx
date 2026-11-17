@@ -2,8 +2,9 @@
 
 import { cn } from "@/lib/utils";
 import { useTimeframeSignals } from "./hooks";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n, type StockKey } from "./i18n";
-import { SectionCard, SectionEmpty, SectionError, SectionSkeleton, SignalBadge, VoteBar } from "./ui";
+import { SectionCard, SectionEmpty, SectionError, SectionSkeleton, SignalBadge, SPLIT_ROWS, VoteBar } from "./ui";
 
 const TIMEFRAME_LABELS: Record<string, StockKey> = {
   "1m": "tf.1m",
@@ -20,6 +21,7 @@ const TIMEFRAME_LABELS: Record<string, StockKey> = {
 
 /** TradingView technical summary for every timeframe (1 minute → monthly). */
 export function AllTimeframeSignals({ ticker }: { ticker: string }) {
+  const slotted = useSlotted();
   const { t } = useStockI18n();
   const signalsQ = useTimeframeSignals(ticker);
 
@@ -32,7 +34,7 @@ export function AllTimeframeSignals({ ticker }: { ticker: string }) {
       ) : signalsQ.data.length === 0 ? (
         <SectionEmpty message={t("tf.empty")} />
       ) : (
-        <ul className="divide-y divide-border/30">
+        <ul className={cn("divide-y divide-border/30", slotted && SPLIT_ROWS)}>
           {signalsQ.data.map(({ timeframe, summary }) => {
             const labelKey = TIMEFRAME_LABELS[timeframe];
             return (

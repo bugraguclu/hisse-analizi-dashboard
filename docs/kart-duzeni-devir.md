@@ -104,11 +104,11 @@ Boyutlandırmada bir sütun ya da satır değişir. Taşımada dikey adım, **d�
 
 ## 6. Hareket (`use-layout-gesture.ts`)
 
-`useLayoutGesture(grid, enabled, limits, onRelease)` şunları döndürür: `preview`, `start`, `move`, `end`, `cancelPointer`, `cancel`. Tutamaç düğmesi bunları `onPointerDown / Move / Up / Cancel / LostPointerCapture` olaylarına bağlar.
+`useLayoutGesture(grid, enabled, limits, onRelease)` şunları döndürür: `preview`, `start`, `cancel`. Tutamaç düğmesi yalnızca `onPointerDown` ile hareketi **başlatır**. İşaretçinin devamı (`pointermove`, `pointerup`, `pointercancel`, `contextmenu`) `window` üzerinde, yakalama (capture) aşamasında dinlenir. Tutamağın `onMouseDown`'ı `preventDefault` çağırır; basış metin seçimi ya da tarayıcının kendi sürükle-bırakını başlatamaz.
 
 ### Akış
 
-1. **Başlangıç.** Yalnızca birincil işaretçi ve sol tuş. Tutamaç `setPointerCapture` ile işaretçiyi yakalar. İşaretçinin ızgaraya göre konumu, başlangıç düzeni (`base`) ve kartın DOM öğesi bir `ref` içinde tutulur. Henüz hiçbir şey çizilmez.
+1. **Başlangıç.** Yalnızca birincil işaretçi ve sol tuş. Açık kalmış bir hareket varsa önce o iptal edilir (bir basış ancak bir bırakmadan sonra gelir; hareket hâlâ açıksa bırakması kaybolmuştur). Sayfadaki metin seçimi temizlenir. Tutamaç `setPointerCapture` ile işaretçiyi yakalar (yakalama yalnızca işaretçi pencere dışına çıktığında olayların gelmeye devam etmesi içindir; başarısız olsa da hareket çalışır). İşaretçinin ızgaraya göre konumu, başlangıç düzeni (`base`) ve kartın DOM öğesi bir `ref` içinde tutulur. Henüz hiçbir şey çizilmez.
 2. **Eşik.** İşaretçi 4 px oynayana kadar hareket başlamış sayılmaz; böylece tıklama sürüklemeye dönüşmez.
 3. **İzleme.** Her `pointermove` yalnızca son konumu yazar ve bir `requestAnimationFrame` ister. Kare geldiğinde `follow` çalışır:
    - İşaretçinin başlangıca göre kayması hesaplanır. Izgaranın sınırları her karede yeniden okunduğu için sayfa kaydığında da doğru kalır.
@@ -125,7 +125,8 @@ Boyutlandırmada bir sütun ya da satır değişir. Taşımada dikey adım, **d�
 - **Sürüklenen kart başlangıç yuvasında kalır.** Önizleme düzeninde yeri değişmiş olsa bile ızgaradaki yuvası değişmez; kart oradan `transform` ile kaydırılır. Yuvası her önizlemede değişseydi kayma hesabı her seferinde sıfırlanırdı.
 - **İlk karede titreme yok.** Kayma değişkenleri, React kartı "sürükleniyor" olarak işaretlemeden önce yazılır. Bırakmadan sonra da değişkenler, React işareti kaldırana kadar durur (`useLayoutEffect` içinde silinir).
 - **Otomatik kaydırma.** İşaretçi pencerenin üst ya da alt 64 px'lik bandındaysa sayfa kayar (kare başına en fazla 22 px). İki koşul var: işaretçi tutulduğu yerden o kenara doğru en az 4 px gitmiş olmalı ve kartın o yönde gidecek yeri kalmış olmalı. Bu koşullar olmadan, ekranın altındaki bir köşe tutulduğu anda sayfa durmadan kayıyordu.
-- **İptal.** Esc, pencere odağını yitirince, ekran kırılma noktası değişince ve işaretçi yakalaması kaybolunca hareket başlangıç düzenine döner.
+- **İptal.** Esc, pencere odağını yitirince, ekran kırılma noktası değişince, `pointercancel` gelince ve bağlam menüsü açılınca hareket başlangıç düzenine döner.
+- **Kaybolan bırakma.** `pointerup` sayfaya hiç ulaşmayabilir (bağlam menüsü, başka pencere, yakalamanın düşmesi). İlk sürümde olaylar tutamaç düğmesinde dinleniyordu; bırakma kaybolunca kart havada, kesik çerçeve ekranda kalıyor ve **sonraki bütün sürüklemeler reddediliyordu** (`start`, açık hareket varken geri dönüyordu). Şimdi üç emniyet var: olaylar `window`'da dinlenir; tuş basılı değilken gelen ilk `pointermove` (`buttons === 0`) hareketi son görülen konumda bitirir; yeni bir basış açık kalmış hareketi iptal edip kendi hareketini başlatır. `lostpointercapture` artık dinlenmiyor: yakalama düşse de hareket pencere üzerinden sürer.
 - **Lastik bant formülü** (`src/lib/motion.ts`):
 
 ```ts
@@ -190,7 +191,7 @@ draft    = düzenleme açıksa edit.layout, değilse saved
 present  = draft − (hiçbir şey çizmemiş kartlar), sıkıştırılmış
 base     = fitHeights(present, ölçülen yükseklikler) → ekranda geçerli düzen
 preview  = hareket sürüyorsa gesture.preview
-layout   = preview?.layout ?? base
+layout   = preview ? fit(preview.layout) : base     → önizleme de ölçülen yüksekliklere oturtulur
 slots    = her kartın çizileceği yuva; sürüklenen kart base'deki yuvasında kalır
 landing  = sürüklenen kartın oturacağı yer (kesik çerçeve)
 ```
@@ -219,7 +220,7 @@ Bilinen yan etki: kartlar hâlâ yükleniyorken Özelleştir'e basılırsa iskel
 
 ### 7.6 Saklama
 
-- Anahtar: `hisse.layout.<page>`. Değer: `{ "version": 1, "items": [{ id, x, y, w, h }, …] }`.
+- Anahtar: `hisse.layout.<page>` (Piyasa Özeti, ilk sürümdeki kayıtlar kaybolmasın diye eski anahtarı `hisse.dashboard.layout` ile devam eder; `Workspace`'in `storageKey` özelliği bunun içindir). Değer: `{ "version": 1, "items": [{ id, x, y, w, h }, …] }`.
 - Okuma `useSyncExternalStore` ile yapılır; `storage` olayı ve kendi `workspace-layout-saved` olayımız dinlenir, yani başka sekmedeki kayıt da yansır.
 - Sunucu tarafı anlık görüntüsü `null`'dır: sunucudan gelen HTML her zaman varsayılan yerleşimdir, kayıtlı düzen tarayıcıda uygulanır.
 - `localStorage` yazmayı reddederse (gizli pencere, dolu kota) düzen bir `Map` içinde oturum boyunca tutulur ve kullanıcıya uyarı gösterilir.
@@ -300,6 +301,39 @@ Diğer uyarlamalar: "tümünü göster" düğmesi olan listeler `fill` iken heps
 
 Dikkat: veriyi sunucudan sınırla çeken bir liste (`limit=10`) uzayınca daha çok kayıt gösteremez. Sınırı kart boyutuna bağlamak istersen sınır sorgu anahtarının parçası olmalı; bizde değildi, o kartı 10 kayıtta bıraktık.
 
+## 9a. Kartın boyut türü (ikinci tur: boyuta uyumun yeniden kurulması)
+
+İlk sürümde her kart yuvayı dolduruyor ve taşan içerik kayıyordu. Sonuç kötüydü: küçük kartta başlık ile dipnot bütün yüksekliği yiyip içerikten tek satır bırakıyor, büyük kartta içerik uzamadığı için kartın yarısı boş kalıyor, geniş kartta çubuklar 1.200 px'e geriliyordu. Çözüm, her kartı içeriğinin türüne göre üç sınıftan birine koymak oldu:
+
+| Tür | Hangi içerik | Yükseklik | Kayıtta |
+| --- | --- | --- | --- |
+| İçeriğe oturan (`hug: true`) | Sabit bir rakam kümesi: karne, oranlar, analist görüşü, profil, sinyaller | Verilen genişlikte içerik ne kadarsa o. Hiç kaymaz, hiç boşluk kalmaz. Kullanıcı yalnızca genişliği değiştirir. | `hug: true` |
+| Sonu olan liste (varsayılan) | Liste ve tablolar: haberler, temettü, mali tablolar, takip listesi | Kullanıcı belirler; kısa kartta kayar, **içerik bittiği yerde yuva büyümeyi durdurur** (tavan). | — |
+| Esneyen | Grafikler | Kullanıcı belirler; çizim kalan alanı doldurur. Kısa yuvada dipnot ve ikincil rakamlar gizlenir. | kart kabuğunda `stretch` |
+
+Bunu sağlayan parçalar:
+
+- **Tavan.** Kayan gövde `usePanelBody()` ref'ini alır ve içeriğini `PANEL_CONTENT` işaretli tek bir sarmalayıcıya koyar. Hook, gövdede boş kalan pikseli (`reportSpare`) bildirir; `Tile` bunu "kart tüm içeriğini kaç satırda gösterir" değerine çevirir; `Workspace` bu değeri hem kartın `maxH` sınırı yapar hem de yuvayı o yüksekliğe indirir. Kırpma kalıcı değildir: kayıtlı yükseklik durur, içerik uzarsa kart geri uzar. Ancak kullanıcı o sırada düzeni değiştirirse kırpılmış yükseklik taslağa yazılır.
+- **Dipnot içerikle kayar.** Yuvadaki kartta dipnot sabit durmaz, kayan içeriğin son öğesidir. Kısa kart önce içeriği gösterir.
+- **Yüklenirken yükseklik korunur.** İskeletler ve hata mesajları `TRANSIENT` (`data-transient`) ile işaretlidir. İçeriğe oturan kart, içinde böyle bir öğe varken son bilinen yüksekliğini korur (CSS `:has()` ile `min-height`), daha fazlasına ihtiyaç duyarsa büyür ama küçülmez; tavan ölçümü de o sırada bildirilmez. Böylece sayfa açılırken kartlar zıplamaz.
+- **Genişliğe göre dizilim CSS ile.** Kart gövdesi bir `@container`'dır; kartlar `@sm:` / `@3xl:` gibi kapsayıcı sorgularıyla sütun sayısını değiştirir (geniş kartta iki sütun, dar kartta ayrıntı alt satıra). Bu sınıflar yalnızca `useSlotted()` doğruyken eklenir; sayfanın varsayılan görünümü değişmez. JS gerektiren yerlerde (`usePanelSize`) genişlik ve yükseklik canlı izlenir, sürükleme sırasında da güncellenir.
+- **Yuvanın yüksekliğine göre gizleme.** Izgaradaki (içeriğe oturmayan) her kart `container: tile / size` olur. `globals.css`'te dört özel varyant tanımlıdır: `slot-short`, `slot-tall`, `slot-narrow`, `slot-wide`. Örnek: grafik kartında `slot-short:hidden` ile istatistik satırı ve kaynak notu gizlenir. Bu varyantlar varsayılan görünümde hiç eşleşmez.
+
+```css
+@custom-variant slot-short {
+  @container tile (max-height: 25.99rem) {
+    @slot;
+  }
+}
+```
+
+Dikkat edilecekler:
+
+- İçeriğe oturan kartlar yan yana durduğunda alt kenarları hizalı olmaz; varsayılan görünümde eşit yüksekliğe gerilen çiftler düzenleme kipine girince içeriklerine oturur.
+- Kısmen hata gösteren bir kartta (kartın bir bölümü hata, kalanı içerik) yükseklik korunurken içerik yuvadan taşabiliyordu; ölçüm "korunan yükseklikten büyükse yine bildir" kuralıyla düzeltildi.
+- `container-type: size` kartı bir yığın bağlamı ve `position: fixed` için kapsayıcı yapar. Tam ekran grafik ve açılır menüler portal ile çizildiği için sorun olmadı; hedef projede kart içinden `fixed` çizilen bir şey varsa portala taşı.
+- Kayan gövdede `overflow-x: hidden` gerekir; negatif kenar boşluklu tablolar yoksa yatay kaydırma çubuğu çıkarır.
+
 ## 10. Klavye ve erişilebilirlik
 
 - Tutamaçlar gerçek `<button>` öğeleridir; `aria-label` kart adını içerir ("BIST 100 kartını taşı").
@@ -328,6 +362,11 @@ Bunları yeniden yaşamaman için:
 8. **Gizli sekmede animasyon ilerlemez.** `requestAnimationFrame` ve Web Animations gizli sekmede durur; animasyonu sekme görünürken başlat (`useMotionAllowed`). Otomatik testlerde de bu yüzden animasyon yarıda kalmış görünebilir.
 9. **Genişlik değişirken FLIP yanlış kayma üretir.** Önceki yuvalar eski sütun adımına göredir; genişlik değiştiyse animasyonu atla.
 10. **Tek kenarlı yer değiştirme eşiği** bir yönde ağır hissettiriyordu (bölüm 5).
+11. **Bırakma kaybolunca düzenleme kilitleniyordu.** Olayları tutamaçta dinleme; `window`'da dinle, tuşsuz `pointermove`'u bırakma say, yeni basışta açık hareketi kapat (bölüm 6, "Kaybolan bırakma").
+12. **Kesik çerçeve karttan büyük ya da küçük kalıyordu.** Hareket, kartların *başladığı andaki* yüksekliklerinden hesap yapar. İçeriğe oturan kart daraltılırken uzar, genişletilirken kısalır; liste kartının tavanı da genişlikle değişir. Önizleme düzeni bu canlı ölçümlere oturtulmadığında çerçeve eski yükseklikte kalıyordu. Çözüm: `base` için kullanılan aynı `fit()` önizleme düzenine de uygulanır; komşular da tam o yüksekliğe göre yer açar.
+13. **İçeriğe oturan karta bırakma animasyonunda yükseklik verme.** Yalnızca genişliği canlandır; yüksekliği içerik belirler. Sabit yükseklik, kart yeni genişliğinde yeniden akarken içeriği kırpar ve yanlış yükseklik raporlatır.
+14. **Tutamağı ıskalayan sürükleme kartlar boyunca metin seçiyordu.** Düzenleme kipinde `.editing .tile { user-select: none }` (form alanları hariç).
+15. **Hareket sırasında görünür olan ya da gizlenen kart düzenden düşebiliyordu.** Bırakma düzeni hareketin başındaki kart kümesini taşır; `commit` onu kimliğe göre taslakla birleştirir (düzenin yerleştirmediği kartlar taslaktaki yuvalarını korur).
 
 ## 13. Taşırken değiştireceklerin
 
@@ -634,7 +673,7 @@ export function serializeLayout(layout: WorkspaceLayout): string {
 ```ts
 "use client";
 
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { rubberBand } from "@/lib/motion";
 import {
   WORKSPACE_COLUMNS,
@@ -720,6 +759,10 @@ function scrollSpeed(y: number, originY: number) {
  * follows the pointer through CSS variables written once per frame, so React
  * renders only when the previewed layout changes. That layout is always
  * recalculated from the starting positions.
+ *
+ * A handle only starts the gesture. From then on the pointer is followed on
+ * the window, so the gesture ends even when the handle stops hearing about it
+ * (capture lost, the release swallowed by a menu or another window).
  */
 export function useLayoutGesture(
   grid: RefObject<HTMLDivElement | null>,
@@ -791,24 +834,40 @@ export function useLayoutGesture(
     });
   }
 
-  function start(event: PointerEvent<HTMLButtonElement>, item: LayoutItem, kind: LayoutChange, base: WorkspaceLayout) {
-    if (!enabled || gesture.current || !event.isPrimary || event.button !== 0) return;
+  function start(event: ReactPointerEvent<HTMLButtonElement>, item: LayoutItem, kind: LayoutChange, base: WorkspaceLayout) {
+    if (!enabled || !event.isPrimary || event.button !== 0) return;
+    // A press follows a release, so a gesture still open here never heard its own: let it go.
+    if (gesture.current) stop(false);
     const bounds = grid.current?.getBoundingClientRect();
-    const tile = event.currentTarget.closest<HTMLElement>("[data-tile]");
+    const handle = event.currentTarget;
+    const tile = handle.closest<HTMLElement>("[data-tile]");
     if (!bounds || !tile) return;
-    event.currentTarget.focus({ preventScroll: true });
-    event.currentTarget.setPointerCapture(event.pointerId);
+    handle.focus({ preventScroll: true });
+    // Text left selected would be dragged along, or keep growing under the pointer.
+    window.getSelection()?.removeAllRanges();
+    // Capture keeps the events coming while the pointer is outside the window.
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      // The gesture is followed on the window either way.
+    }
     gesture.current = {
-      kind, item, base, tile, handle: event.currentTarget, pointer: event.pointerId,
+      kind, item, base, tile, handle, pointer: event.pointerId,
       startX: event.clientX - bounds.left, startY: event.clientY - bounds.top,
       originY: event.clientY, clientX: event.clientX, clientY: event.clientY, started: false,
       dx: 0, dy: 0, room: { up: true, down: true }, layout: base,
     };
   }
 
-  function move(event: PointerEvent<HTMLButtonElement>) {
+  function move(event: PointerEvent) {
     const current = gesture.current;
     if (!current || current.pointer !== event.pointerId) return;
+    // No button is held any more: the release happened where the page could not
+    // see it. The card drops where it was last seen.
+    if (event.buttons === 0) {
+      stop(true);
+      return;
+    }
     const starting = !current.started;
     if (starting && Math.hypot(event.clientX - current.clientX, event.clientY - current.clientY) < ACTIVATION_DISTANCE) return;
     current.started = true;
@@ -837,6 +896,7 @@ export function useLayoutGesture(
     const { offsetWidth: width, offsetHeight: height } = tile;
     if (commit) follow(current);
     const layout = commit ? current.layout : current.base;
+    setPreview(null);
     onRelease({
       kind: current.kind,
       id: current.item.id,
@@ -847,10 +907,9 @@ export function useLayoutGesture(
       width,
       height,
     });
-    setPreview(null);
   }
 
-  function end(event: PointerEvent<HTMLButtonElement>) {
+  function end(event: PointerEvent) {
     const current = gesture.current;
     if (!current || current.pointer !== event.pointerId) return;
     current.clientX = event.clientX;
@@ -858,11 +917,9 @@ export function useLayoutGesture(
     stop(true);
   }
 
-  function cancelPointer(event: PointerEvent<HTMLButtonElement>) {
-    if (gesture.current?.pointer === event.pointerId) stop(false);
-  }
-
   const cancel = useEffectEvent(() => stop(false));
+  const onMove = useEffectEvent(move);
+  const onEnd = useEffectEvent(end);
   const onScroll = useEffectEvent(schedule);
 
   // The offsets outlive the gesture until React has stopped floating the card.
@@ -886,10 +943,25 @@ export function useLayoutGesture(
     function handleScroll() {
       if (gesture.current?.started) onScroll();
     }
+    function handleMove(event: PointerEvent) {
+      if (gesture.current) onMove(event);
+    }
+    function handleEnd(event: PointerEvent) {
+      if (gesture.current) onEnd(event);
+    }
+    function handleCancel(event: PointerEvent) {
+      if (gesture.current?.pointer === event.pointerId) cancel();
+    }
     breakpoint.addEventListener("change", onCancel);
     window.addEventListener("blur", onCancel);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", handleScroll, { passive: true });
+    // Listened for on the way down, so nothing on the page can keep them from arriving.
+    window.addEventListener("pointermove", handleMove, true);
+    window.addEventListener("pointerup", handleEnd, true);
+    window.addEventListener("pointercancel", handleCancel, true);
+    // A context menu takes the release with it.
+    window.addEventListener("contextmenu", onCancel, true);
     return () => {
       const current = gesture.current;
       gesture.current = null;
@@ -900,10 +972,14 @@ export function useLayoutGesture(
       window.removeEventListener("blur", onCancel);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pointermove", handleMove, true);
+      window.removeEventListener("pointerup", handleEnd, true);
+      window.removeEventListener("pointercancel", handleCancel, true);
+      window.removeEventListener("contextmenu", onCancel, true);
     };
   }, []);
 
-  return { preview: enabled ? preview : null, start, move, end, cancelPointer, cancel: () => stop(false) };
+  return { preview: enabled ? preview : null, start, cancel: () => stop(false) };
 }
 ```
 
@@ -922,15 +998,100 @@ export type PanelState = Readonly<{
   columns: number;
   /** Slot height in grid rows (0 on a page that keeps its default layout). */
   rows: number;
+  /**
+   * Tells the slot how much room its card leaves unused, in pixels (negative
+   * when the content overflows and scrolls). `null` while that is unknown.
+   */
+  reportSpare: (spare: number | null) => void;
 }>;
 
-const NATURAL: PanelState = { fill: false, columns: 0, rows: 0 };
+const NATURAL: PanelState = { fill: false, columns: 0, rows: 0, reportSpare: () => {} };
 const PanelContext = createContext<PanelState>(NATURAL);
 
 export const PanelProvider = PanelContext.Provider;
 
 export function usePanel(): PanelState {
   return useContext(PanelContext);
+}
+
+/**
+ * Whether the card sits in a layout slot of any kind. Cards use it to arrange
+ * their content by the width they were given (`@container` variants) while the
+ * page's default layout stays exactly as it was written.
+ */
+export function useSlotted(): boolean {
+  return useContext(PanelContext).columns > 0;
+}
+
+/**
+ * Marks loading placeholders and error messages: content that stands in for
+ * the real thing and says nothing about how tall the card will be.
+ */
+export const TRANSIENT = { "data-transient": "" } as const;
+
+/** Wraps everything a card's scrolling body shows, so its full height can be read. */
+export const PANEL_CONTENT = { "data-panel-content": "" } as const;
+
+/**
+ * Ref for the scrolling body of a card whose content has an end (a list, a
+ * table, a set of figures). The body holds one element marked `PANEL_CONTENT`,
+ * whose children are the content. In a layout slot the body reports the room
+ * that content leaves unused, so the slot is never taller than the card can fill.
+ */
+export function usePanelBody() {
+  const { fill, reportSpare } = usePanel();
+  return useCallback((body: HTMLElement | null) => {
+    if (!body || !fill) return;
+    const content = body.querySelector<HTMLElement>(":scope > [data-panel-content]");
+    if (!content) return;
+    const measure = () => {
+      if (content.querySelector("[data-transient]")) {
+        reportSpare(null);
+        return;
+      }
+      const style = getComputedStyle(body);
+      let used = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+      for (const child of content.children) used += (child as HTMLElement).offsetHeight;
+      reportSpare(body.clientHeight - used);
+    };
+    const resize = new ResizeObserver(measure);
+    const watch = () => {
+      resize.disconnect();
+      resize.observe(body);
+      for (const child of content.children) resize.observe(child);
+    };
+    // The wrapper is at least as tall as the body, so its children are what changes size.
+    const swap = new MutationObserver(() => {
+      watch();
+      measure();
+    });
+    watch();
+    measure();
+    swap.observe(content, { childList: true, subtree: true });
+    return () => {
+      resize.disconnect();
+      swap.disconnect();
+      reportSpare(null);
+    };
+  }, [fill, reportSpare]);
+}
+
+/** The size of an element in a layout slot, followed live while the card is resized. */
+export function usePanelSize() {
+  const { fill } = usePanel();
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const ref = useCallback((element: HTMLElement | null) => {
+    if (!element || !fill) return;
+    const measure = () => {
+      const { clientWidth: width, clientHeight: height } = element;
+      setSize((current) => (current?.width === width && current.height === height ? current : { width, height }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fill]);
+  return [ref, fill ? size : null] as const;
 }
 
 /**
@@ -942,17 +1103,8 @@ export function usePanel(): PanelState {
  * `reserve` is the height taken by anything else inside that element.
  */
 export function useFitCount(rowHeight: number, natural: number, reserve = 0) {
-  const { fill } = usePanel();
-  const [fit, setFit] = useState<number | null>(null);
-  const ref = useCallback((element: HTMLElement | null) => {
-    if (!element || !fill) return;
-    const measure = () => setFit(Math.max(1, Math.floor((element.clientHeight - reserve) / rowHeight)));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [fill, rowHeight, reserve]);
-  return [ref, fill && fit !== null ? fit : natural] as const;
+  const [ref, size] = usePanelSize();
+  return [ref, size ? Math.max(1, Math.floor((size.height - reserve) / rowHeight)) : natural] as const;
 }
 ```
 
@@ -963,6 +1115,7 @@ export function useFitCount(rowHeight: number, natural: number, reserve = 0) {
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -1008,7 +1161,7 @@ import {
   type LayoutItem,
   type WorkspaceLayout,
 } from "./layout-model";
-import { PanelProvider, type PanelState } from "./panel";
+import { PanelProvider, TRANSIENT, type PanelState } from "./panel";
 import { useLayoutGesture, type GesturePreview, type GestureRelease } from "./use-layout-gesture";
 import styles from "./workspace.module.css";
 
@@ -1027,6 +1180,8 @@ export type WorkspaceCard = Partial<CardLimits> & {
 const STORAGE_PREFIX = "hisse.layout.";
 const SAVED_EVENT = "workspace-layout-saved";
 const DESTINATION = "destination";
+/** However little a card has to show, its slot keeps room for a title and a line. */
+const MIN_CEILING = 3;
 const GLIDE_EASING = cubicBezier(motionCurve.easeOut);
 const GRID_STYLE = {
   "--grid-columns": WORKSPACE_COLUMNS,
@@ -1101,6 +1256,8 @@ type WorkspaceState = {
   nudge: (id: string, kind: LayoutChange, x: number, y: number, control: Control) => void;
   canNudge: (id: string, kind: LayoutChange, x: number, y: number) => boolean;
   reportHeight: (id: string, rows: number) => void;
+  /** The height at which a card shows all it has; `null` when it can use any height. */
+  reportCeiling: (id: string, rows: number | null) => void;
   absent: ReadonlySet<string>;
   reportPresence: (id: string, present: boolean) => void;
   startEditing: () => void;
@@ -1154,6 +1311,7 @@ export function Workspace({
   );
   const [edit, setEdit] = useState<Edit | null>(null);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const [ceilings, setCeilings] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [absent, setAbsent] = useState<ReadonlySet<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState("");
   const grid = useRef<HTMLDivElement>(null);
@@ -1172,25 +1330,33 @@ export function Workspace({
     const card = cards[id];
     // A card that hugs its content is as tall as that content, whatever it is.
     if (card?.hug) return { minW: card.minW ?? DEFAULT_LIMITS.minW, minH: 1, maxH: MAX_GRID_ROWS, hug: true };
-    return {
-      minW: card?.minW ?? DEFAULT_LIMITS.minW,
-      minH: card?.minH ?? DEFAULT_LIMITS.minH,
-      maxH: card?.maxH ?? DEFAULT_LIMITS.maxH,
-    };
+    // A card with a finite list stops growing where the list ends, however short that is.
+    const maxH = Math.min(card?.maxH ?? DEFAULT_LIMITS.maxH, ceilings.get(id) ?? MAX_GRID_ROWS);
+    return { minW: card?.minW ?? DEFAULT_LIMITS.minW, minH: Math.min(card?.minH ?? DEFAULT_LIMITS.minH, maxH), maxH };
   };
-  const hugging = new Map([...heights].filter(([id]) => cards[id]?.hug));
   const saved = parseLayout(stored, ids, limits);
   const editing = desktop && edit !== null;
   const draft = editing ? edit.layout : saved;
   // A card with nothing to show (no sector to compare with, say) gives up its slot until it has.
   const missing = draft && absent.size > 0 ? draft.filter(({ id }) => absent.has(id)) : [];
-  const present = draft && missing.length > 0 ? packLayout(draft.filter(({ id }) => !absent.has(id))) : draft;
-  // Cards that hug their content report their height once they are on screen.
-  const base = present && fitHeights(present, hugging);
+  const present = draft && packLayout(missing.length > 0 ? draft.filter(({ id }) => !absent.has(id)) : draft);
+  // Cards that hug their content report their height once they are on screen;
+  // the others are no taller than what they have to show.
+  function fit(layout: WorkspaceLayout): WorkspaceLayout {
+    const fitted = new Map([...heights].filter(([id]) => cards[id]?.hug));
+    for (const { id, h } of layout) {
+      const ceiling = cards[id]?.hug ? undefined : ceilings.get(id);
+      if (ceiling !== undefined && h > ceiling) fitted.set(id, ceiling);
+    }
+    return fitHeights(layout, fitted);
+  }
+  const base = present && fit(present);
 
   function commit(layout: WorkspaceLayout, id: string, kind: Control, reveal: boolean) {
     control.current = { id, kind, reveal };
-    setEdit({ layout: [...layout, ...missing], status: "changed" });
+    // Cards the layout does not place (hidden now, or shown since it was worked out) keep their slots.
+    const placed = new Set(layout.map((item) => item.id));
+    setEdit({ layout: [...layout, ...(draft ?? []).filter((item) => !placed.has(item.id))], status: "changed" });
     const item = layout.find((entry) => entry.id === id);
     if (item) {
       setAnnouncement(t("dashboard.layoutPosition", {
@@ -1208,7 +1374,10 @@ export function Workspace({
     if (release.changed) commit(release.layout, release.id, release.kind, false);
   });
   const preview = base ? gesture.preview : null;
-  const layout = preview?.layout ?? base;
+  // The gesture works from the heights the cards had when it began. They are
+  // measured again as a card is reshaped, so the outline shows the slot the
+  // card will really take and its neighbours make room for exactly that.
+  const layout = preview ? fit(preview.layout) : base;
   const customized = layout !== null;
   const positioned = desktop && customized;
   const slots = new Map<string, LayoutItem>();
@@ -1245,7 +1414,11 @@ export function Workspace({
     }
     if (!before) return;
     const columnStep = (width + WORKSPACE_GAP) / WORKSPACE_COLUMNS;
-    const pixels = ({ w, h }: LayoutItem) => ({ width: `${w * columnStep - WORKSPACE_GAP}px`, height: `${h * WORKSPACE_ROW_STEP - WORKSPACE_GAP}px` });
+    // A card that hugs its content is never given a height: the content sets it.
+    const pixels = ({ w, h }: LayoutItem, hug = false) => ({
+      width: `${w * columnStep - WORKSPACE_GAP}px`,
+      ...(!hug && { height: `${h * WORKSPACE_ROW_STEP - WORKSPACE_GAP}px` }),
+    });
     for (const [key, slot] of slots) {
       const previous = before.slots.get(key);
       if (!previous) continue;
@@ -1258,16 +1431,19 @@ export function Workspace({
       if (!element) continue;
 
       const flight = glides.current.get(key);
-      let [x, y] = flight?.playState === "running" ? displacement(element) : [0, 0];
+      const flying = flight?.playState === "running";
+      let [x, y] = flying ? displacement(element) : [0, 0];
       x += (previous.x - slot.x) * columnStep;
       y += (previous.y - slot.y) * WORKSPACE_ROW_STEP;
       if (dropped?.kind === "move") {
         x += dropped.dx;
         y += dropped.dy;
       }
+      const hug = Boolean(cards[key]?.hug);
       const resized = dropped?.kind === "resize"
-        ? { width: `${dropped.width}px`, height: `${dropped.height}px` }
-        : needsResize ? pixels(previous) : null;
+        ? { width: `${dropped.width}px`, ...(!hug && { height: `${dropped.height}px` }) }
+        // An outline still changing size carries on from the size it has reached.
+        : needsResize ? (flying ? { width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px` } : pixels(previous)) : null;
       if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && !resized) continue;
 
       flight?.cancel();
@@ -1275,7 +1451,7 @@ export function Workspace({
       const glide = element.animate(
         [
           { translate: `${x}px ${y}px`, ...resized, ...lifted },
-          { translate: "0px 0px", ...(resized && pixels(slot)), ...lifted },
+          { translate: "0px 0px", ...(resized && pixels(slot, hug)), ...lifted },
         ],
         {
           duration: key === DESTINATION ? motionDuration.press : dropped ? motionDuration.popover : motionDuration.move,
@@ -1388,6 +1564,15 @@ export function Workspace({
     reportHeight(id, rows) {
       setHeights((current) => (current.get(id) === rows ? current : new Map(current).set(id, rows)));
     },
+    reportCeiling(id, rows) {
+      setCeilings((current) => {
+        if (rows === null ? !current.has(id) : current.get(id) === rows) return current;
+        const next = new Map(current);
+        if (rows === null) next.delete(id);
+        else next.set(id, rows);
+        return next;
+      });
+    },
     absent,
     reportPresence(id, shown) {
       setAbsent((current) => {
@@ -1496,7 +1681,7 @@ export const DEFAULT_LAYOUT_ONLY = { "data-default-layout-only": "" } as const;
 /** Card-shaped stand-in for a tile that has not been scrolled near yet. */
 function TilePlaceholder({ minHeight }: { minHeight: number }) {
   return (
-    <div aria-hidden className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
+    <div aria-hidden {...TRANSIENT} className="card-surface flex flex-col overflow-hidden" style={{ minHeight }}>
       <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
         <Skeleton className="h-3 w-32" />
       </div>
@@ -1535,7 +1720,7 @@ export function Tile({
 }) {
   const { t } = useLocale();
   const workspace = useWorkspace();
-  const { cards, customized, positioned, editing, base, preview, gesture, helpId, reportHeight, reportPresence } = workspace;
+  const { cards, customized, positioned, editing, base, preview, gesture, helpId, reportHeight, reportCeiling, reportPresence } = workspace;
   const element = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(!lazy);
   const card = cards[id];
@@ -1548,7 +1733,12 @@ export function Tile({
   const fill = positioned && !hug && slot !== undefined;
   const columns = slot?.w ?? 0;
   const rows = slot?.h ?? 0;
-  const panel = useMemo<PanelState>(() => ({ fill, columns, rows }), [fill, columns, rows]);
+  const reportSpare = useCallback((spare: number | null) => {
+    const height = element.current?.offsetHeight ?? 0;
+    reportCeiling(id, spare === null || height === 0 ? null : Math.max(MIN_CEILING, Math.ceil((height - spare + WORKSPACE_GAP) / WORKSPACE_ROW_STEP)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reportCeiling only forwards to a state setter
+  }, [id]);
+  const panel = useMemo<PanelState>(() => ({ fill, columns, rows, reportSpare }), [fill, columns, rows, reportSpare]);
 
   useEffect(() => {
     const tile = element.current;
@@ -1576,11 +1766,20 @@ export function Tile({
   }, [id]);
 
   const measured = positioned && hug;
+  const held = useRef(rows);
+  useLayoutEffect(() => {
+    held.current = rows;
+  }, [rows]);
   useLayoutEffect(() => {
     const tile = element.current;
     if (!tile || !measured) return;
     const report = () => {
-      if (tile.offsetHeight > 0) reportHeight(id, Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP));
+      if (tile.offsetHeight === 0) return;
+      const height = Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP);
+      // A placeholder keeps the height the card had (it may need more, never less);
+      // only real content makes the card shorter.
+      if (height <= held.current && tile.querySelector("[data-transient]")) return;
+      reportHeight(id, height);
     };
     report();
     const observer = new ResizeObserver(report);
@@ -1601,11 +1800,9 @@ export function Tile({
         aria-label={name}
         aria-describedby={helpId}
         title={name}
+        // The press belongs to the gesture: it must not select text or start a native drag.
+        onMouseDown={(event) => event.preventDefault()}
         onPointerDown={(event: PointerEvent<HTMLButtonElement>) => gesture.start(event, item, kind, base)}
-        onPointerMove={gesture.move}
-        onPointerUp={gesture.end}
-        onPointerCancel={gesture.cancelPointer}
-        onLostPointerCapture={gesture.cancelPointer}
         onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
           const adjustment = adjustments.find(({ key, kind: target }) => key === event.key && target === kind);
           if (!adjustment) return;
@@ -1731,6 +1928,17 @@ export function Tile({
     box-shadow var(--motion-popover) var(--motion-ease-out);
 }
 
+/* A drag that misses a handle must not sweep a text selection across the cards. */
+.editing .tile {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.editing .tile :where(input, textarea, [contenteditable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .editing .tile:hover,
 .editing .tile:focus-within {
   outline-color: color-mix(in oklab, var(--foreground) 26%, transparent);
@@ -1843,6 +2051,11 @@ export function Tile({
     min-height: 0;
   }
 
+  /* Cards read the size of their slot (`slot-*` variants) to decide what to show. */
+  .positioned .tile:not([data-hug]) {
+    container: tile / size;
+  }
+
   /* A card that hugs its content sets the height of its slot, not the other way round. */
   .positioned .tile[data-hug] {
     align-self: start;
@@ -1850,6 +2063,15 @@ export function Tile({
 
   .positioned .tile[data-hug] > * {
     flex: 0 0 auto;
+  }
+
+  /* While it loads, such a card keeps the height it had, so the page does not jump. */
+  .positioned .tile[data-hug]:has([data-transient]) {
+    min-height: calc(var(--rows) * var(--row-step) - var(--grid-gap));
+  }
+
+  .positioned .tile[data-hug]:has([data-transient]) > * {
+    flex: 1 0 auto;
   }
 
   .destination {

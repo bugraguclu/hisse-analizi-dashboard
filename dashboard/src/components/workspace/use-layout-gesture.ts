@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { rubberBand } from "@/lib/motion";
 import {
   WORKSPACE_COLUMNS,
@@ -86,6 +86,10 @@ function scrollSpeed(y: number, originY: number) {
  * follows the pointer through CSS variables written once per frame, so React
  * renders only when the previewed layout changes. That layout is always
  * recalculated from the starting positions.
+ *
+ * A handle only starts the gesture. From then on the pointer is followed on
+ * the window, so the gesture ends even when the handle stops hearing about it
+ * (capture lost, the release swallowed by a menu or another window).
  */
 export function useLayoutGesture(
   grid: RefObject<HTMLDivElement | null>,
@@ -157,24 +161,40 @@ export function useLayoutGesture(
     });
   }
 
-  function start(event: PointerEvent<HTMLButtonElement>, item: LayoutItem, kind: LayoutChange, base: WorkspaceLayout) {
-    if (!enabled || gesture.current || !event.isPrimary || event.button !== 0) return;
+  function start(event: ReactPointerEvent<HTMLButtonElement>, item: LayoutItem, kind: LayoutChange, base: WorkspaceLayout) {
+    if (!enabled || !event.isPrimary || event.button !== 0) return;
+    // A press follows a release, so a gesture still open here never heard its own: let it go.
+    if (gesture.current) stop(false);
     const bounds = grid.current?.getBoundingClientRect();
-    const tile = event.currentTarget.closest<HTMLElement>("[data-tile]");
+    const handle = event.currentTarget;
+    const tile = handle.closest<HTMLElement>("[data-tile]");
     if (!bounds || !tile) return;
-    event.currentTarget.focus({ preventScroll: true });
-    event.currentTarget.setPointerCapture(event.pointerId);
+    handle.focus({ preventScroll: true });
+    // Text left selected would be dragged along, or keep growing under the pointer.
+    window.getSelection()?.removeAllRanges();
+    // Capture keeps the events coming while the pointer is outside the window.
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      // The gesture is followed on the window either way.
+    }
     gesture.current = {
-      kind, item, base, tile, handle: event.currentTarget, pointer: event.pointerId,
+      kind, item, base, tile, handle, pointer: event.pointerId,
       startX: event.clientX - bounds.left, startY: event.clientY - bounds.top,
       originY: event.clientY, clientX: event.clientX, clientY: event.clientY, started: false,
       dx: 0, dy: 0, room: { up: true, down: true }, layout: base,
     };
   }
 
-  function move(event: PointerEvent<HTMLButtonElement>) {
+  function move(event: PointerEvent) {
     const current = gesture.current;
     if (!current || current.pointer !== event.pointerId) return;
+    // No button is held any more: the release happened where the page could not
+    // see it. The card drops where it was last seen.
+    if (event.buttons === 0) {
+      stop(true);
+      return;
+    }
     const starting = !current.started;
     if (starting && Math.hypot(event.clientX - current.clientX, event.clientY - current.clientY) < ACTIVATION_DISTANCE) return;
     current.started = true;
@@ -203,6 +223,7 @@ export function useLayoutGesture(
     const { offsetWidth: width, offsetHeight: height } = tile;
     if (commit) follow(current);
     const layout = commit ? current.layout : current.base;
+    setPreview(null);
     onRelease({
       kind: current.kind,
       id: current.item.id,
@@ -213,10 +234,9 @@ export function useLayoutGesture(
       width,
       height,
     });
-    setPreview(null);
   }
 
-  function end(event: PointerEvent<HTMLButtonElement>) {
+  function end(event: PointerEvent) {
     const current = gesture.current;
     if (!current || current.pointer !== event.pointerId) return;
     current.clientX = event.clientX;
@@ -224,11 +244,9 @@ export function useLayoutGesture(
     stop(true);
   }
 
-  function cancelPointer(event: PointerEvent<HTMLButtonElement>) {
-    if (gesture.current?.pointer === event.pointerId) stop(false);
-  }
-
   const cancel = useEffectEvent(() => stop(false));
+  const onMove = useEffectEvent(move);
+  const onEnd = useEffectEvent(end);
   const onScroll = useEffectEvent(schedule);
 
   // The offsets outlive the gesture until React has stopped floating the card.
@@ -252,10 +270,25 @@ export function useLayoutGesture(
     function handleScroll() {
       if (gesture.current?.started) onScroll();
     }
+    function handleMove(event: PointerEvent) {
+      if (gesture.current) onMove(event);
+    }
+    function handleEnd(event: PointerEvent) {
+      if (gesture.current) onEnd(event);
+    }
+    function handleCancel(event: PointerEvent) {
+      if (gesture.current?.pointer === event.pointerId) cancel();
+    }
     breakpoint.addEventListener("change", onCancel);
     window.addEventListener("blur", onCancel);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", handleScroll, { passive: true });
+    // Listened for on the way down, so nothing on the page can keep them from arriving.
+    window.addEventListener("pointermove", handleMove, true);
+    window.addEventListener("pointerup", handleEnd, true);
+    window.addEventListener("pointercancel", handleCancel, true);
+    // A context menu takes the release with it.
+    window.addEventListener("contextmenu", onCancel, true);
     return () => {
       const current = gesture.current;
       gesture.current = null;
@@ -266,8 +299,12 @@ export function useLayoutGesture(
       window.removeEventListener("blur", onCancel);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pointermove", handleMove, true);
+      window.removeEventListener("pointerup", handleEnd, true);
+      window.removeEventListener("pointercancel", handleCancel, true);
+      window.removeEventListener("contextmenu", onCancel, true);
     };
   }, []);
 
-  return { preview: enabled ? preview : null, start, move, end, cancelPointer, cancel: () => stop(false) };
+  return { preview: enabled ? preview : null, start, cancel: () => stop(false) };
 }
