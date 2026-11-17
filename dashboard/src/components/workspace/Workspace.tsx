@@ -226,19 +226,24 @@ export function Workspace({
   const draft = editing ? edit.layout : saved;
   // A card with nothing to show (no sector to compare with, say) gives up its slot until it has.
   const missing = draft && absent.size > 0 ? draft.filter(({ id }) => absent.has(id)) : [];
-  const present = draft && missing.length > 0 ? packLayout(draft.filter(({ id }) => !absent.has(id))) : draft;
+  const present = draft && packLayout(missing.length > 0 ? draft.filter(({ id }) => !absent.has(id)) : draft);
   // Cards that hug their content report their height once they are on screen;
   // the others are no taller than what they have to show.
-  const fitted = new Map([...heights].filter(([id]) => cards[id]?.hug));
-  for (const { id, h } of present ?? []) {
-    const ceiling = cards[id]?.hug ? undefined : ceilings.get(id);
-    if (ceiling !== undefined && h > ceiling) fitted.set(id, ceiling);
+  function fit(layout: WorkspaceLayout): WorkspaceLayout {
+    const fitted = new Map([...heights].filter(([id]) => cards[id]?.hug));
+    for (const { id, h } of layout) {
+      const ceiling = cards[id]?.hug ? undefined : ceilings.get(id);
+      if (ceiling !== undefined && h > ceiling) fitted.set(id, ceiling);
+    }
+    return fitHeights(layout, fitted);
   }
-  const base = present && fitHeights(present, fitted);
+  const base = present && fit(present);
 
   function commit(layout: WorkspaceLayout, id: string, kind: Control, reveal: boolean) {
     control.current = { id, kind, reveal };
-    setEdit({ layout: [...layout, ...missing], status: "changed" });
+    // Cards the layout does not place (hidden now, or shown since it was worked out) keep their slots.
+    const placed = new Set(layout.map((item) => item.id));
+    setEdit({ layout: [...layout, ...(draft ?? []).filter((item) => !placed.has(item.id))], status: "changed" });
     const item = layout.find((entry) => entry.id === id);
     if (item) {
       setAnnouncement(t("dashboard.layoutPosition", {
@@ -256,7 +261,10 @@ export function Workspace({
     if (release.changed) commit(release.layout, release.id, release.kind, false);
   });
   const preview = base ? gesture.preview : null;
-  const layout = preview?.layout ?? base;
+  // The gesture works from the heights the cards had when it began. They are
+  // measured again as a card is reshaped, so the outline shows the slot the
+  // card will really take and its neighbours make room for exactly that.
+  const layout = preview ? fit(preview.layout) : base;
   const customized = layout !== null;
   const positioned = desktop && customized;
   const slots = new Map<string, LayoutItem>();
@@ -293,7 +301,11 @@ export function Workspace({
     }
     if (!before) return;
     const columnStep = (width + WORKSPACE_GAP) / WORKSPACE_COLUMNS;
-    const pixels = ({ w, h }: LayoutItem) => ({ width: `${w * columnStep - WORKSPACE_GAP}px`, height: `${h * WORKSPACE_ROW_STEP - WORKSPACE_GAP}px` });
+    // A card that hugs its content is never given a height: the content sets it.
+    const pixels = ({ w, h }: LayoutItem, hug = false) => ({
+      width: `${w * columnStep - WORKSPACE_GAP}px`,
+      ...(!hug && { height: `${h * WORKSPACE_ROW_STEP - WORKSPACE_GAP}px` }),
+    });
     for (const [key, slot] of slots) {
       const previous = before.slots.get(key);
       if (!previous) continue;
@@ -306,16 +318,19 @@ export function Workspace({
       if (!element) continue;
 
       const flight = glides.current.get(key);
-      let [x, y] = flight?.playState === "running" ? displacement(element) : [0, 0];
+      const flying = flight?.playState === "running";
+      let [x, y] = flying ? displacement(element) : [0, 0];
       x += (previous.x - slot.x) * columnStep;
       y += (previous.y - slot.y) * WORKSPACE_ROW_STEP;
       if (dropped?.kind === "move") {
         x += dropped.dx;
         y += dropped.dy;
       }
+      const hug = Boolean(cards[key]?.hug);
       const resized = dropped?.kind === "resize"
-        ? { width: `${dropped.width}px`, height: `${dropped.height}px` }
-        : needsResize ? pixels(previous) : null;
+        ? { width: `${dropped.width}px`, ...(!hug && { height: `${dropped.height}px` }) }
+        // An outline still changing size carries on from the size it has reached.
+        : needsResize ? (flying ? { width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px` } : pixels(previous)) : null;
       if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && !resized) continue;
 
       flight?.cancel();
@@ -323,7 +338,7 @@ export function Workspace({
       const glide = element.animate(
         [
           { translate: `${x}px ${y}px`, ...resized, ...lifted },
-          { translate: "0px 0px", ...(resized && pixels(slot)), ...lifted },
+          { translate: "0px 0px", ...(resized && pixels(slot, hug)), ...lifted },
         ],
         {
           duration: key === DESTINATION ? motionDuration.press : dropped ? motionDuration.popover : motionDuration.move,
@@ -638,13 +653,20 @@ export function Tile({
   }, [id]);
 
   const measured = positioned && hug;
+  const held = useRef(rows);
+  useLayoutEffect(() => {
+    held.current = rows;
+  }, [rows]);
   useLayoutEffect(() => {
     const tile = element.current;
     if (!tile || !measured) return;
     const report = () => {
-      // A placeholder keeps the height the card had; only real content sets a new one.
-      if (tile.offsetHeight === 0 || tile.querySelector("[data-transient]")) return;
-      reportHeight(id, Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP));
+      if (tile.offsetHeight === 0) return;
+      const height = Math.ceil((tile.offsetHeight + WORKSPACE_GAP) / WORKSPACE_ROW_STEP);
+      // A placeholder keeps the height the card had (it may need more, never less);
+      // only real content makes the card shorter.
+      if (height <= held.current && tile.querySelector("[data-transient]")) return;
+      reportHeight(id, height);
     };
     report();
     const observer = new ResizeObserver(report);
@@ -665,11 +687,9 @@ export function Tile({
         aria-label={name}
         aria-describedby={helpId}
         title={name}
+        // The press belongs to the gesture: it must not select text or start a native drag.
+        onMouseDown={(event) => event.preventDefault()}
         onPointerDown={(event: PointerEvent<HTMLButtonElement>) => gesture.start(event, item, kind, base)}
-        onPointerMove={gesture.move}
-        onPointerUp={gesture.end}
-        onPointerCancel={gesture.cancelPointer}
-        onLostPointerCapture={gesture.cancelPointer}
         onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
           const adjustment = adjustments.find(({ key, kind: target }) => key === event.key && target === kind);
           if (!adjustment) return;

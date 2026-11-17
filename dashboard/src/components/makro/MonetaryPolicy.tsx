@@ -8,7 +8,6 @@ import { useNow } from "@/hooks/use-now";
 import { istanbulClock } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
 import { ChartSkeleton } from "@/components/ui/chart-skeleton";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useMakroI18n, type MakroKey } from "./i18n";
 import { usePolicyRate, useInflation, useTcmbCalendar, useTcmbRates } from "./queries";
 import { daysUntil, formatBpValue, formatPp } from "./format";
@@ -24,7 +23,7 @@ import {
   monthTicks,
   signedAxis,
 } from "./chart-kit";
-import { DataLabel, Panel, PanelEmpty, PanelError, RangePicker, SourceLine, ViewToggle, type ChartView } from "./ui";
+import { DataLabel, Panel, PanelEmpty, PanelError, RangePicker, SourceLine, ViewToggle, Shimmer, type ChartView } from "./ui";
 import type { PolicyRateChange, TcmbEvent, TcmbEventType, TcmbRateRow } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -153,8 +152,8 @@ export function CorridorPanel({ className }: { className?: string }) {
     >
       {ratesQ.isPending ? (
         <div className="space-y-2 skeleton-rows">
-          <Skeleton className="h-9" />
-          <Skeleton className="h-24" />
+          <Shimmer className="h-9" />
+          <Shimmer className="h-24" />
         </div>
       ) : ratesQ.isError && !ratesQ.data ? (
         <PanelError error={ratesQ.error} onRetry={() => void ratesQ.refetch()} />
@@ -175,7 +174,7 @@ export function CorridorPanel({ className }: { className?: string }) {
       <div className="mt-4 space-y-2.5 border-t border-border pt-3">
         <DataLabel>{t("mp.meetings")}</DataLabel>
         {calendarQ.isPending ? (
-          <Skeleton className="h-16" />
+          <Shimmer className="h-16" />
         ) : (
           <dl className="space-y-2 text-xs">
             {lastMeeting ? (
@@ -246,7 +245,7 @@ export function CorridorPanel({ className }: { className?: string }) {
           <DataLabel>{t("mp.decisions")}</DataLabel>
         </div>
         {policyQ.isPending ? (
-          <Skeleton className="h-28" />
+          <Shimmer className="h-28" />
         ) : decisions.length === 0 ? (
           <PanelEmpty className="py-4" />
         ) : (

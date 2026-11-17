@@ -62,7 +62,7 @@ export function CardBody({
     <div
       ref={endless ? ref : bodyRef}
       aria-busy={pending || undefined}
-      className={cn(fill && "min-h-0 flex-1 overflow-y-auto scrollbar-thin", className)}
+      className={cn(fill && "min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin", className)}
     >
       <div {...PANEL_CONTENT} className={reveal ? "motion-data-in" : undefined}>{children}</div>
     </div>

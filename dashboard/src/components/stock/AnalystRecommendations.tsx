@@ -4,6 +4,7 @@ import { TargetRange } from "@/components/charts/mini";
 import { TREND_TEXT_CLASS, formatChangePercent, formatNumber, formatPrice, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePriceTargets, useQuote, useRecommendation } from "./hooks";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n } from "./i18n";
 import { SectionCard, SectionEmpty, SectionError, SectionSkeleton, SignalBadge } from "./ui";
 
@@ -18,6 +19,7 @@ function upsidePct(target: number | null | undefined, price: number | null | und
  * Upside is recomputed from the live quote (upstream figures use a stale price).
  */
 export function AnalystRecommendations({ ticker }: { ticker: string }) {
+  const slotted = useSlotted();
   const { t } = useStockI18n();
   const recQ = useRecommendation(ticker);
   const targetsQ = usePriceTargets(ticker);
@@ -47,7 +49,7 @@ export function AnalystRecommendations({ ticker }: { ticker: string }) {
       ) : !rec && !targets ? (
         <SectionEmpty message={t("analyst.empty")} />
       ) : (
-        <div className="space-y-4">
+        <div className={cn("space-y-4", slotted && rec && targets && "@3xl:grid @3xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] @3xl:items-start @3xl:gap-x-6 @3xl:space-y-0")}>
           {rec ? (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md bg-muted/40 p-3">
               <div>
@@ -104,7 +106,7 @@ export function AnalystRecommendations({ ticker }: { ticker: string }) {
                   }}
                 />
               ) : null}
-              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+              <dl className={cn("mt-2 grid grid-cols-2 gap-x-4 gap-y-2", slotted ? "@sm:grid-cols-4" : "sm:grid-cols-4")}>
                 {[
                   { key: "low", label: t("analyst.low"), value: targets.low },
                   { key: "mean", label: t("analyst.mean"), value: targets.mean },

@@ -4,8 +4,9 @@ import { useNow } from "@/hooks/use-now";
 import { formatDay, formatNumber, formatPercent, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { isNotFoundError, useEarningsCalendar } from "./hooks";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n } from "./i18n";
-import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
+import { SectionCard, SectionEmpty, SectionError, SectionSkeleton, SPLIT_ROWS } from "./ui";
 
 /**
  * Expected financial-report dates from KAP's disclosure calendar. EPS columns
@@ -13,6 +14,7 @@ import { SectionCard, SectionEmpty, SectionError, SectionSkeleton } from "./ui";
  * BIST); an empty calendar is "not available", not an error.
  */
 export function EarningsCalendar({ ticker }: { ticker: string }) {
+  const slotted = useSlotted();
   const { t } = useStockI18n();
   const now = useNow();
   const earningsQ = useEarningsCalendar(ticker);
@@ -30,7 +32,7 @@ export function EarningsCalendar({ ticker }: { ticker: string }) {
       ) : items.length === 0 ? (
         <SectionEmpty message={t("earn.empty")} hint={t("earn.emptyHint")} />
       ) : (
-        <ul className="divide-y divide-border/30">
+        <ul className={cn("divide-y divide-border/30", slotted && SPLIT_ROWS)}>
           {items.map((item) => {
             const isNext = item.time === nextTime;
             const past = now !== null && item.time < now - 86_400_000;

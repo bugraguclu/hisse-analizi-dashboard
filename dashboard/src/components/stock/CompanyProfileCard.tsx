@@ -3,6 +3,8 @@
 import { formatChangePercent, formatCompact, formatMultiple, formatNumber, formatPercent, formatPrice, EMPTY_VALUE } from "@/lib/format";
 import { titleCaseTr } from "@/lib/sectors";
 import { safeExternalUrl } from "@/lib/url";
+import { cn } from "@/lib/utils";
+import { useSlotted } from "@/components/workspace/panel";
 import { useCompanyProfile, useCompanySector, useFastInfo, useQuote, useRatios } from "./hooks";
 import { useStockI18n } from "./i18n";
 import type { SectorMetricKey } from "./sector";
@@ -121,6 +123,9 @@ function sameName(a: string, b: string): boolean {
  * under it. The multiples show their sector medians.
  */
 export function CompanyProfileCard({ ticker }: { ticker: string }) {
+  // In a layout slot the figures take as many columns as the card is wide.
+  const slotted = useSlotted();
+  const statGrid = cn("grid grid-cols-2 gap-x-4 gap-y-3", slotted ? "@md:grid-cols-3 @3xl:grid-cols-4 @5xl:grid-cols-6" : "sm:grid-cols-3");
   const { t } = useStockI18n();
   const identity = useShellIdentity();
   const fastQ = useFastInfo(ticker);
@@ -189,7 +194,7 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
         <SectionError error={fastQ.error} onRetry={() => void fastQ.refetch()} />
       ) : (
         <div className="space-y-5">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 skeleton-rows sm:grid-cols-3">
+          <dl className={cn(statGrid, "skeleton-rows")}>
             {profile.map((item) => (
               <Stat
                 key={item.key}
@@ -203,7 +208,7 @@ export function CompanyProfileCard({ ticker }: { ticker: string }) {
           </dl>
           <div className="border-t border-border/40 pt-4">
             <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("profile.valuation")}</h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 skeleton-rows sm:grid-cols-3">
+            <dl className={cn(statGrid, "skeleton-rows")}>
               {valuation.map((item) => {
                 // Computed ratios are needed for F/S, FD/FAVÖK and as the F/K–PD/DD fallback.
                 const needsRatios =

@@ -102,7 +102,8 @@ export default function MakroPage() {
         // Strips, tile grids and the markets and calendar blocks are as tall as their content:
         // they can be moved, and stay full width because their columns follow the screen.
         kpi: { label: t("kpi.label"), hug: true, minW: 6 },
-        corridor: { label: t("mp.corridor"), minH: 8 },
+        // Rates and the last decisions: a fixed set of figures, as tall as they are.
+        corridor: { label: t("mp.corridor"), hug: true },
         policy: { label: t("mp.chartTitle"), minW: 3, minH: 12 },
         inflation: { label: t("section.inflation"), hug: true, minW: 6 },
         trend: { label: t("inf.trendTitle"), minW: 3, minH: 10 },

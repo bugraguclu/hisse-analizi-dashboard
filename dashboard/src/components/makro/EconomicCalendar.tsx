@@ -9,8 +9,7 @@ import { useLocale } from "@/lib/locale-context";
 import { istanbulClock } from "@/lib/market-hours";
 import { useNow } from "@/hooks/use-now";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
-import { PanelEmpty, PanelError } from "@/components/makro/ui";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PanelEmpty, PanelError, Shimmer } from "@/components/makro/ui";
 import { CalendarTable, PAGE_SIZE } from "./calendar/CalendarTable";
 import { DayStrip } from "./calendar/DayStrip";
 import { CalendarFilterBar } from "./calendar/FilterControls";
@@ -87,15 +86,15 @@ export const EconomicCalendar: (props: EconomicCalendarProps) => JSX.Element = f
 function CalendarSkeleton() {
   return (
     <div className="space-y-3 p-4 skeleton-rows" aria-busy="true">
-      <Skeleton className="h-9 w-full" />
-      <Skeleton className="h-11 w-full" />
+      <Shimmer className="h-9 w-full" />
+      <Shimmer className="h-11 w-full" />
       <div className="flex gap-1 overflow-hidden skeleton-rows">
         {Array.from({ length: 12 }, (_, i) => (
-          <Skeleton key={i} className="h-14 w-12 shrink-0" />
+          <Shimmer key={i} className="h-14 w-12 shrink-0" />
         ))}
       </div>
       {Array.from({ length: 6 }, (_, i) => (
-        <Skeleton key={i} className="h-10 w-full" />
+        <Shimmer key={i} className="h-10 w-full" />
       ))}
     </div>
   );

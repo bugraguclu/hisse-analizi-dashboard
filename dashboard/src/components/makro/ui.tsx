@@ -8,7 +8,7 @@ import { formatChangePercent, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
 import { DEFAULT_LAYOUT_ONLY, TileGroup } from "@/components/workspace/Workspace";
-import { usePanel } from "@/components/workspace/panel";
+import { TRANSIENT, usePanel } from "@/components/workspace/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMakroI18n, type MakroKey } from "./i18n";
 
@@ -45,7 +45,9 @@ export function MacroSection({
 
 /**
  * Flat panel with a text title row, optional right-aligned actions and a footnote.
- * In a layout slot (see Workspace) it is as tall as the slot and its body scrolls.
+ * In a layout slot (see Workspace) it is as tall as the slot: a chart in its
+ * body takes the height there is, and a short slot leaves the footnote out so
+ * the plot keeps its room.
  */
 export function Panel({
   title,
@@ -79,7 +81,9 @@ export function Panel({
       </header>
       <div className={cn("flex-1 px-4 py-3", fill && "min-h-0 overflow-y-auto scrollbar-thin", bodyClassName)}>{children}</div>
       {footer ? (
-        <footer className="shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">{footer}</footer>
+        <footer className={cn("shrink-0 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground", fill && "slot-short:hidden")}>
+          {footer}
+        </footer>
       ) : null}
     </section>
   );
@@ -133,7 +137,7 @@ function errorMessage(error: unknown, fallback: string): string {
 export function PanelError({ error, onRetry, className }: { error: unknown; onRetry?: () => void; className?: string }) {
   const { t } = useMakroI18n();
   return (
-    <div role="alert" className={cn("flex flex-col items-center justify-center gap-2 py-8 text-center", className)}>
+    <div {...TRANSIENT} role="alert" className={cn("flex flex-col items-center justify-center gap-2 py-8 text-center", className)}>
       <p className="text-[13px] text-foreground">{errorMessage(error, t("common.loadError"))}</p>
       {onRetry ? (
         <button
@@ -152,6 +156,14 @@ export function PanelError({ error, onRetry, className }: { error: unknown; onRe
 export function PanelEmpty({ message, className }: { message?: string; className?: string }) {
   const { t } = useMakroI18n();
   return <p className={cn("py-8 text-center text-[13px] text-muted-foreground", className)}>{message ?? t("common.noData")}</p>;
+}
+
+/**
+ * Loading block sized like the content it stands in for. Marked as a
+ * placeholder, so a card in a layout slot keeps its height until the data lands.
+ */
+export function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <Skeleton {...TRANSIENT} style={style} className={className} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,8 +253,8 @@ export function StatTile({
       </div>
       {loading ? (
         <>
-          <Skeleton className={cn("mt-1.5 max-w-full origin-left", size === "lg" ? "h-7 w-24" : "h-6 w-20")} />
-          <Skeleton className="mt-2 h-3 w-28 max-w-full origin-left bg-skeleton/70" />
+          <Shimmer className={cn("mt-1.5 max-w-full origin-left", size === "lg" ? "h-7 w-24" : "h-6 w-20")} />
+          <Shimmer className="mt-2 h-3 w-28 max-w-full origin-left bg-skeleton/70" />
           <span />
         </>
       ) : (

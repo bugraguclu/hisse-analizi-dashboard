@@ -52,6 +52,17 @@
     box-shadow var(--motion-popover) var(--motion-ease-out);
 }
 
+/* A drag that misses a handle must not sweep a text selection across the cards. */
+.editing .tile {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.editing .tile :where(input, textarea, [contenteditable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .editing .tile:hover,
 .editing .tile:focus-within {
   outline-color: color-mix(in oklab, var(--foreground) 26%, transparent);

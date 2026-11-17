@@ -88,7 +88,7 @@ export function SectionCard({
       </header>
       <div
         ref={stretch ? undefined : bodyRef}
-        className={cn("flex min-w-0 grow flex-col", fill && "min-h-0 basis-0", scrolls && "overflow-y-auto scrollbar-thin")}
+        className={cn("flex min-w-0 grow flex-col", fill && "min-h-0 basis-0", scrolls && "overflow-x-hidden overflow-y-auto scrollbar-thin")}
       >
         <div {...PANEL_CONTENT} className={cn("flex min-w-0 flex-col", scrolls ? "min-h-full shrink-0" : "min-h-0 grow")}>
           <div className={cn("@container min-w-0 p-4", scrolls ? "shrink-0" : "min-h-0 grow", bodyClassName)}>{children}</div>
@@ -99,6 +99,12 @@ export function SectionCard({
     </section>
   );
 }
+
+/**
+ * For a list of ruled rows in a layout slot: a wide card sets the rows in two
+ * columns, without rules, instead of stretching each row across the card.
+ */
+export const SPLIT_ROWS = "@3xl:grid @3xl:grid-cols-2 @3xl:gap-x-10 @3xl:[&>li]:border-t-0 @3xl:[&>li]:py-2!";
 
 /**
  * Single-choice picker for card headers: the design-system SegmentedControl

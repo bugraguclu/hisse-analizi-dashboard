@@ -5,9 +5,10 @@ import { Activity, Award, ChevronDown, DollarSign, Scale, Star, TrendingUp } fro
 import { formatMultiple, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useFastInfo, useRatios, useSignals } from "./hooks";
+import { useSlotted } from "@/components/workspace/panel";
 import { useStockI18n, type StockKey } from "./i18n";
 import type { RatioKey, SignalLevel } from "./types";
-import { SectionCard, SectionEmpty, SectionSkeleton, useSignalLabel } from "./ui";
+import { SectionCard, SectionEmpty, SectionSkeleton, SPLIT_ROWS, useSignalLabel } from "./ui";
 
 type Direction = "higher" | "lower";
 
@@ -119,6 +120,7 @@ function StarRating({ score, label }: { score: number; label: string }) {
 }
 
 export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
+  const slotted = useSlotted();
   const { t } = useStockI18n();
   const signalLabel = useSignalLabel();
   const [showMethod, setShowMethod] = useState(false);
@@ -180,7 +182,7 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
         <SectionEmpty message={t("score.empty")} />
       ) : (
         <>
-          <ul className="divide-y divide-border/40">
+          <ul className={cn("divide-y divide-border/40", slotted && SPLIT_ROWS)}>
             {scored.map((category) => {
               const detailText = category.metrics
                 .filter((m) => m.value != null)
@@ -200,7 +202,7 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
                     <>
                       <StarRating score={category.score} label={outOf(category.score)} />
                       <span className="font-mono text-[11px] font-bold tabular-nums text-foreground">{formatNumber(category.score, 1)}</span>
-                      <span className="min-w-0 flex-1 line-clamp-2 text-[11px] text-muted-foreground" title={detailText}>
+                      <span className={cn("min-w-0 flex-1 line-clamp-2 text-[11px] text-muted-foreground", slotted && "@max-md:basis-full")} title={detailText}>
                         {detailText}
                       </span>
                     </>
@@ -219,7 +221,7 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
                 <>
                   <StarRating score={technicalScore} label={outOf(technicalScore)} />
                   <span className="font-mono text-[11px] font-bold tabular-nums text-foreground">{formatNumber(technicalScore, 1)}</span>
-                  <span className="min-w-0 flex-1 line-clamp-2 text-[11px] text-muted-foreground">
+                  <span className={cn("min-w-0 flex-1 line-clamp-2 text-[11px] text-muted-foreground", slotted && "@max-md:basis-full")}>
                     {t("score.technicalInput", { signal: signalLabel(technicalLevel) })}
                   </span>
                 </>
