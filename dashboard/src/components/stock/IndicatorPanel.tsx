@@ -131,7 +131,7 @@ export function IndicatorPanel({ ticker, compact = false }: { ticker: string; co
 
   return (
     <SectionCard title={t("tech.indicatorsTitle")} footer={t("tech.indicatorsFooter")}>
-      <div className={cn("grid grid-cols-1 gap-3 @sm:grid-cols-2", !compact && "@xl:grid-cols-6")}>
+      <div className={cn("grid grid-cols-1 gap-3 skeleton-rows @sm:grid-cols-2", !compact && "@xl:grid-cols-6")}>
         <Tile
           title={data.rsiPeriod ? `RSI (${data.rsiPeriod})` : "RSI"}
           query={queries.rsi}

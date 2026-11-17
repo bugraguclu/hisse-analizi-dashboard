@@ -2,8 +2,10 @@
 
 import { AlertTriangle, Download, Inbox } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Skeleton } from "@/components/ui/skeleton";
 import { RowSkeleton } from "@/components/dashboard/ui";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { useLocale } from "@/lib/locale-context";
 import type { ScreenerUniverseOut } from "@/types";
 import { columnLabel, ScreenerTable, type PinnedRow, type TableContext } from "./ScreenerTable";
 import { Pagination } from "./Pagination";
@@ -55,6 +57,7 @@ export function ScreenerResults({
   onExport: () => void;
 }) {
   const { t } = useTaramaI18n();
+  const { t: common } = useLocale();
   const columns = VIEW_COLUMNS[state.view];
   const sortHidden = state.sort !== "symbol" && !columns.includes(state.sort);
   const sortChanged = state.sort !== DEFAULT_STATE.sort || state.dir !== DEFAULT_STATE.dir;
@@ -75,7 +78,12 @@ export function ScreenerResults({
           </h2>
           <p className="mt-0.5 min-h-4 text-[11px] text-muted-foreground" aria-live="polite">
             {summary}
-            {status === "loading" && <span className="inline-block h-3 w-40 rounded-sm bg-muted align-middle" aria-hidden="true" />}
+            {status === "loading" && (
+              <>
+                <span className="sr-only">{common("common.loading")}</span>
+                <Skeleton as="span" className="inline-block h-3 w-40 origin-left align-middle" />
+              </>
+            )}
             {isRefreshing && status === "ready" && <span className="ml-2">{t("results.refreshing")}</span>}
           </p>
         </div>

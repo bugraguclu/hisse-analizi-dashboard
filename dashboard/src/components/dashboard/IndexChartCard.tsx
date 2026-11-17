@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { CARD_CHART_HEIGHT, useCardChartHeight } from "@/components/charts/chart-height";
 import { ChartAttribution, ChartWorkspace } from "@/components/charts/ChartWorkspace";
 import {
   CHART_PERIODS,
@@ -24,6 +25,7 @@ import { useMarketStatus } from "@/hooks/use-market-status";
 import { useNow } from "@/hooks/use-now";
 import { formatChangePercent, formatMarketDate, formatNumber, formatSigned } from "@/lib/format";
 import type { TranslationKey } from "@/lib/i18n";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock, sessionQuoteTime } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
@@ -33,7 +35,6 @@ import { findQuote, quoteTimeMs, useIndexQuotes } from "./queries";
 import { ChangeLine, DashboardCard, StatItem } from "./ui";
 
 const SYMBOL = "XU100";
-const HEADING_ID = "bist100-heading";
 
 const PERIOD_LABEL: Record<ChartPeriod, TranslationKey> = {
   "1d": "period.1d",
@@ -95,6 +96,8 @@ function mergeQuote(primary: IndexQuote | null, embedded: Partial<IndexQuote> | 
 }
 
 export function IndexChartCard({ className }: { className?: string }) {
+  const headingId = useId();
+  const plotHeight = useCardChartHeight(CARD_CHART_HEIGHT.index);
   const { t } = useLocale();
   const { fill } = usePanel();
   const { t: tc } = useChartI18n();
@@ -143,6 +146,7 @@ export function IndexChartCard({ className }: { className?: string }) {
   // Header: live level and daily/period move, or the hovered bar when scrubbing the chart.
   const hovered = hoverIndex !== null && series ? series.bars[hoverIndex] : undefined;
   const level = hovered?.close ?? (lira || unit === "USD" ? liveLevel : null) ?? stats?.last.close ?? null;
+  const levelPending = level === null && (quotesQ.isPending || historyQ.isPending);
   // Changes keep the level's decimals (1,877 gr → −0,253).
   const formatChange = (change: number | null | undefined) => (lira || change == null || level === null ? formatSigned(change) : formatChartChange(change, level, unit));
   const headerChange = hovered
@@ -166,6 +170,8 @@ export function IndexChartCard({ className }: { className?: string }) {
   const showsPastSession = intraday && stats !== null && todayKey !== null && istanbulClock(stats.last.time).dateKey !== todayKey;
   const hoverLabel = hovered ? formatBarTime(hovered.time, series?.interval === "intraday" ? "dayMonthTime" : "date") : null;
 
+  const statsPending = historyQ.isPending || (intraday && lira && quotesQ.isPending);
+  const statPlaceholder = <Skeleton as="span" className="inline-block h-3 w-16 max-w-full origin-left align-middle" />;
   const statItems: Array<[string, number | null | undefined]> = intraday
     ? [
         [t("index.open"), (lira ? quote.open : null) ?? stats?.first.open],
@@ -191,17 +197,20 @@ export function IndexChartCard({ className }: { className?: string }) {
   );
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className}>
+    <DashboardCard labelledBy={headingId} className={className} entranceOrder={0}>
       <div className="shrink-0 px-4 pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 id={HEADING_ID} className="text-[13px] font-semibold text-foreground">
+          <div className="min-w-0" aria-busy={levelPending || undefined}>
+            <h2 id={headingId} className="text-[13px] font-semibold text-foreground">
               BIST 100
             </h2>
-            {level === null && (quotesQ.isPending || historyQ.isPending) ? (
-              <div className="mt-2 h-9 w-56 rounded-md bg-muted/60" aria-hidden="true" />
+            {levelPending ? (
+              <div className="mt-1 flex h-9 items-center gap-3" aria-hidden="true">
+                <Skeleton className="h-7 w-32 origin-left" />
+                <Skeleton className="h-3.5 w-20 origin-left bg-skeleton/70" />
+              </div>
             ) : (
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 motion-data-in">
                 <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{level === null ? formatNumber(null) : formatLevel(level)}</span>
                 {unitTag}
                 <ChangeLine change={headerChange} percent={headerPercent} formatChange={formatChange} />
@@ -264,7 +273,7 @@ export function IndexChartCard({ className }: { className?: string }) {
           fullscreenFeatures={FULLSCREEN_FEATURES}
           baseline={baseline}
           padToSessionEnd={live}
-          height={240}
+          height={plotHeight}
           fillCardHeight={fill}
           onHoverChange={setHoverIndex}
           headline={
@@ -286,11 +295,17 @@ export function IndexChartCard({ className }: { className?: string }) {
       </div>
 
       {/* A short card keeps its height for the plot: the figures and the credits go. */}
-      <dl className="mx-4 mt-3 grid shrink-0 grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-4 slot-short:hidden">
-        {statItems.map(([label, value]) => (
-          <StatItem key={label} label={label} value={value == null ? formatNumber(null) : formatLevel(value)} />
-        ))}
-        {!intraday && <StatItem label={t("index.periodReturn")} value={formatChangePercent(stats?.changePercent)} />}
+      <dl className="mx-4 mt-3 grid shrink-0 grid-cols-2 gap-x-4 gap-y-2 border-t border-border py-3 skeleton-rows sm:grid-cols-4 slot-short:hidden">
+        {statItems.map(([label, value]) => {
+          const formattedValue = value == null ? formatNumber(null) : formatLevel(value);
+          return <StatItem key={label} label={label} value={statsPending && value == null ? statPlaceholder : formattedValue} />;
+        })}
+        {!intraday && (
+          <StatItem
+            label={t("index.periodReturn")}
+            value={historyQ.isPending ? statPlaceholder : formatChangePercent(stats?.changePercent)}
+          />
+        )}
       </dl>
       <p className="shrink-0 border-t border-border px-4 py-2 text-[10px] text-muted-foreground slot-short:hidden">
         <ChartAttribution />

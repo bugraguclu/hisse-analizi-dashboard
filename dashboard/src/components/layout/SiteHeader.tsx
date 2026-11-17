@@ -61,7 +61,8 @@ function DesktopNav() {
   const ticker = tickerFromPath(pathname) ?? DEFAULT_TICKER;
   return (
     <nav aria-label={t("shell.mainNav")} className="hidden h-full lg:block">
-      <ul className="flex h-full items-stretch gap-6">
+      {/* Seven sections: a little tighter until xl, so the bar fits a 1024px window. */}
+      <ul className="flex h-full items-stretch gap-5 xl:gap-6">
         {NAV_ITEMS.map((item) => {
           const active = item.isActive(pathname);
           return (
@@ -149,7 +150,7 @@ export function SiteHeader() {
             "data-pin:fixed data-search:fixed has-[input:focus]:fixed data-kbd:has-[:focus-visible]:fixed",
           )}
         >
-          <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 lg:gap-8">
+          <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 lg:gap-6 xl:gap-8">
             <button
               ref={mobileNavTriggerRef}
               type="button"

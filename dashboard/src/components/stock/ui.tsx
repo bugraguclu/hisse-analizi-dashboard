@@ -1,7 +1,7 @@
 "use client";
 
 import { MotionPopoverPopup } from "@/components/ui/motion-surface";
-import { createContext, useContext, useId, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { AlertCircle, Inbox, Info, RefreshCw } from "lucide-react";
 import { SegmentBar } from "@/components/charts/mini";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isApiError } from "@/lib/api";
 import { TREND_PILL_CLASS } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SectionHeadingLevel, useSectionHeadingLevel } from "./heading-level";
 import { useStockI18n, type StockKey } from "./i18n";
 import { signalTone } from "./parsers";
 import type { SignalLevel } from "./types";
@@ -20,15 +21,7 @@ import type { SignalLevel } from "./types";
 // Section chrome
 // ---------------------------------------------------------------------------
 
-/**
- * Heading level of SectionCard titles: h2 directly on a page, h3 when the cards
- * sit under a column heading (the combined view's technical/fundamental columns).
- */
-const SectionHeadingLevelContext = createContext<2 | 3>(2);
-
-export function SectionHeadingLevel({ level, children }: { level: 2 | 3; children: ReactNode }) {
-  return <SectionHeadingLevelContext.Provider value={level}>{children}</SectionHeadingLevelContext.Provider>;
-}
+export { SectionHeadingLevel };
 
 /**
  * The flat panel every stock-page section uses: a text-only title row (actions
@@ -62,7 +55,7 @@ export function SectionCard({
   stretch?: boolean;
 }) {
   const headingId = useId();
-  const Heading = useContext(SectionHeadingLevelContext) === 3 ? "h3" : "h2";
+  const Heading = useSectionHeadingLevel() === 3 ? "h3" : "h2";
   const { fill } = usePanel();
   const bodyRef = usePanelBody();
   const scrolls = fill && !stretch;
@@ -151,7 +144,7 @@ const SKELETON_LABEL_WIDTHS = [46, 62, 38, 56, 42, 58, 50];
 export function SectionSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   const { t } = useStockI18n();
   return (
-    <div {...TRANSIENT} className={cn("space-y-3.5 py-1", className)} role="status" aria-live="polite">
+    <div {...TRANSIENT} className={cn("space-y-3.5 py-1 skeleton-rows", className)} role="status" aria-live="polite">
       <span className="sr-only">{t("state.loading")}</span>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} aria-hidden className="flex items-center justify-between gap-6">

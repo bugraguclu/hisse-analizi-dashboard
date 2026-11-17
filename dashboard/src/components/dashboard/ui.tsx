@@ -1,10 +1,12 @@
 "use client";
 
-import type { ReactNode, Ref } from "react";
+import type { CSSProperties, ReactNode, Ref } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
 import { PANEL_CONTENT, TRANSIENT, usePanel, usePanelBody } from "@/components/workspace/panel";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
+import { staggerDelay } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /** Flat panel used by every home-page section. In a layout slot it fills the slot. */
@@ -12,17 +14,21 @@ export function DashboardCard({
   className,
   children,
   labelledBy,
+  entranceOrder,
 }: {
   className?: string;
   children: ReactNode;
   /** id of the heading that names this region. */
   labelledBy?: string;
+  entranceOrder?: number;
 }) {
   const { fill } = usePanel();
+  const entrance = entranceOrder === undefined ? undefined : { "--card-delay": `${staggerDelay(entranceOrder)}ms` } as CSSProperties;
   return (
     <section
+      style={entrance}
       aria-labelledby={labelledBy}
-      className={cn("card-surface min-w-0 overflow-hidden", fill && "flex min-h-0 flex-col", className)}
+      className={cn("card-surface min-w-0 overflow-hidden", entrance && "motion-card-in", fill && "flex min-h-0 flex-col", className)}
     >
       {children}
     </section>
@@ -40,17 +46,25 @@ export function CardBody({
   ref,
   className,
   endless = false,
+  pending = false,
+  reveal = false,
 }: {
   children: ReactNode;
   ref?: Ref<HTMLDivElement>;
   className?: string;
   endless?: boolean;
+  pending?: boolean;
+  reveal?: boolean;
 }) {
   const { fill } = usePanel();
   const bodyRef = usePanelBody();
   return (
-    <div ref={endless ? ref : bodyRef} className={cn(fill && "min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin", className)}>
-      <div {...PANEL_CONTENT}>{children}</div>
+    <div
+      ref={endless ? ref : bodyRef}
+      aria-busy={pending || undefined}
+      className={cn(fill && "min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin", className)}
+    >
+      <div {...PANEL_CONTENT} className={reveal ? "motion-data-in" : undefined}>{children}</div>
     </div>
   );
 }
@@ -175,9 +189,16 @@ export function StatItem({ label, value }: { label: ReactNode; value: ReactNode 
 
 export function RowSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   return (
-    <div {...TRANSIENT} className={cn("space-y-2 px-4 py-4", className)} aria-hidden="true">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-9 rounded-sm bg-muted/60" />
+    <div {...TRANSIENT} className={cn("divide-y divide-border px-4 skeleton-rows", className)} aria-hidden="true">
+      {Array.from({ length: rows }, (_, index) => (
+        <div key={index} className="flex h-11 items-center gap-3">
+          <Skeleton className="h-3 w-10 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3 max-w-64 origin-left" style={{ width: `${[84, 68, 76][index % 3]}%` }} />
+            <Skeleton className="h-2 w-1/3 max-w-24 origin-left bg-skeleton/70" />
+          </div>
+          <Skeleton className="h-3 w-12 shrink-0 bg-skeleton/70" />
+        </div>
       ))}
     </div>
   );

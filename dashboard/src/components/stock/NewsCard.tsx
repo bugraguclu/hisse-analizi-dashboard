@@ -8,7 +8,7 @@ import { formatMarketDate, formatRelativeTime, parseDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { isNotFoundError, useTickerNews } from "./hooks";
 import { useStockI18n, type StockKey } from "./i18n";
-import { useShellIdentity } from "./StockShell";
+import { useShellIdentity } from "./identity-context";
 import type { NewsItem } from "./types";
 import { usePanel } from "@/components/workspace/panel";
 import { SectionCard, SectionEmpty, SectionError, Segmented } from "./ui";
@@ -73,7 +73,7 @@ function NewsRow({ item, now }: { item: NewsItem; now: number | null }) {
 function NewsSkeleton() {
   const { t } = useStockI18n();
   return (
-    <div role="status" className="divide-y divide-border">
+    <div role="status" className="divide-y divide-border skeleton-rows">
       <span className="sr-only">{t("state.loading")}</span>
       {[88, 70, 80, 64, 76].map((width, i) => (
         <div key={i} aria-hidden className="space-y-2 px-4 py-3.5">

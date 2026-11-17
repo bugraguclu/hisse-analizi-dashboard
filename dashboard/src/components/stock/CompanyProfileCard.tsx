@@ -9,7 +9,7 @@ import { useCompanyProfile, useCompanySector, useFastInfo, useQuote, useRatios }
 import { useStockI18n } from "./i18n";
 import type { SectorMetricKey } from "./sector";
 import { SectorLink, SectorMedianSub } from "./sector-ui";
-import { useShellIdentity } from "./StockShell";
+import { useShellIdentity } from "./identity-context";
 import { SectionCard, SectionError, Stat } from "./ui";
 
 function positive(value: number | null | undefined): number | null {
@@ -125,7 +125,7 @@ function sameName(a: string, b: string): boolean {
 export function CompanyProfileCard({ ticker }: { ticker: string }) {
   // In a layout slot the figures take as many columns as the card is wide.
   const slotted = useSlotted();
-  const statGrid = cn("grid grid-cols-2 gap-x-4 gap-y-3", slotted ? "@md:grid-cols-3 @3xl:grid-cols-4 @5xl:grid-cols-6" : "sm:grid-cols-3");
+  const statGrid = cn("grid grid-cols-2 gap-x-4 gap-y-3 skeleton-rows", slotted ? "@md:grid-cols-3 @3xl:grid-cols-4 @5xl:grid-cols-6" : "sm:grid-cols-3");
   const { t } = useStockI18n();
   const identity = useShellIdentity();
   const fastQ = useFastInfo(ticker);

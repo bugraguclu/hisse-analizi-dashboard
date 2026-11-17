@@ -2,6 +2,7 @@
 
 import { formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import motion from "../chart-motion.module.css";
 import { TooltipNote, TooltipValueRow, useChartTooltip } from "./ChartTooltip";
 import { useMiniChartI18n } from "./i18n";
 import { TONE_BG, type Tone } from "./tone";
@@ -64,45 +65,46 @@ export function SegmentBar({
 
   return (
     <div className={cn("w-full", className)}>
-      <div
-        {...(interactive ? { role: "group" as const, "aria-label": ariaLabel } : { "aria-hidden": true as const })}
-        className="flex w-full gap-[2px] overflow-hidden rounded-full bg-surface"
-        style={{ height }}
-      >
-        {visible.map((segment) => {
-          const share = (segment.value / total) * 100;
-          const dimmed = interactive && effectiveHighlight != null && effectiveHighlight !== segment.key;
-          const lifted = interactive && effectiveHighlight === segment.key;
-          const segClassName = cn(
-            "h-full motion-fade",
-            TONE_BG[segment.tone],
-            dimmed && "opacity-40",
-            lifted && "outline outline-1 -outline-offset-1 outline-foreground/40",
-          );
-          const style = { flex: `${segment.value} 0 0%` };
+      <div className="overflow-hidden rounded-full bg-surface" style={{ height }}>
+        <div
+          {...(interactive ? { role: "group" as const, "aria-label": ariaLabel } : { "aria-hidden": true as const })}
+          className={cn("flex size-full gap-[2px]", motion.revealSegments)}
+        >
+          {visible.map((segment) => {
+            const share = (segment.value / total) * 100;
+            const dimmed = interactive && effectiveHighlight != null && effectiveHighlight !== segment.key;
+            const lifted = interactive && effectiveHighlight === segment.key;
+            const segClassName = cn(
+              "h-full motion-fade",
+              TONE_BG[segment.tone],
+              dimmed && "opacity-40",
+              lifted && "outline outline-1 -outline-offset-1 outline-foreground/40",
+            );
+            const style = { flex: `${segment.value} 0 0%` };
 
-          if (!interactive) {
-            return <div key={segment.key} className={segClassName} style={style} />;
-          }
+            if (!interactive) {
+              return <div key={segment.key} className={segClassName} style={style} />;
+            }
 
-          const trigger = getTriggerProps(
-            segment.key,
-            <>
-              <TooltipValueRow value={fmt(segment.value)} label={segment.label} tone={segment.tone} />
-              {showPercent ? <TooltipNote>{t("shareOfTotal", { value: formatPercent(share, 1) })}</TooltipNote> : null}
-            </>,
-          );
-          return (
-            <div
-              key={segment.key}
-              {...trigger}
-              role="img"
-              aria-label={`${segment.label}: ${fmt(segment.value)} (${formatPercent(share, 1)})`}
-              className={segClassName}
-              style={style}
-            />
-          );
-        })}
+            const trigger = getTriggerProps(
+              segment.key,
+              <>
+                <TooltipValueRow value={fmt(segment.value)} label={segment.label} tone={segment.tone} />
+                {showPercent ? <TooltipNote>{t("shareOfTotal", { value: formatPercent(share, 1) })}</TooltipNote> : null}
+              </>,
+            );
+            return (
+              <div
+                key={segment.key}
+                {...trigger}
+                role="img"
+                aria-label={`${segment.label}: ${fmt(segment.value)} (${formatPercent(share, 1)})`}
+                className={segClassName}
+                style={style}
+              />
+            );
+          })}
+        </div>
       </div>
       {interactive ? tooltip : null}
     </div>

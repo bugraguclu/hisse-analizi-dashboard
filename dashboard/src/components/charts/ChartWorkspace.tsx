@@ -165,6 +165,7 @@ export function ChartWorkspace({
 }: ChartWorkspaceProps) {
   const { t, locale } = useChartI18n();
   const chartRef = useRef<FinancialChartHandle>(null);
+  const plotEntranceClaimed = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const nativeFullscreenRef = useRef(false);
@@ -204,6 +205,12 @@ export function ChartWorkspace({
   const handleHover = (index: number | null) => {
     setHoverIndex(index);
     onHoverChange?.(index);
+  };
+
+  const claimPlotEntrance = () => {
+    if (plotEntranceClaimed.current) return false;
+    plotEntranceClaimed.current = true;
+    return true;
   };
 
   const openFullscreen = () => {
@@ -409,6 +416,7 @@ export function ChartWorkspace({
             onUndoStateChange={setCanUndo}
             onHoverChange={handleHover}
             onViewChange={setView}
+            claimPlotEntrance={claimPlotEntrance}
             wheelZoom={mode === "fullscreen" ? "always" : "modifier"}
             ariaLabel={ariaLabel}
             symbol={symbol}
@@ -442,7 +450,7 @@ export function ChartWorkspace({
             role="status"
             className="pointer-events-none absolute right-0 top-0 inline-flex items-center gap-1 rounded-sm bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground"
           >
-            <Hourglass aria-hidden className="h-3 w-3" />
+            <Hourglass aria-hidden className="h-3 w-3 skeleton-pulse" />
             {t("chart.updating")}
           </span>
         ) : null}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { CARD_CHART_HEIGHT, useCardChartHeight } from "@/components/charts/chart-height";
 import { ChartAttribution, ChartWorkspace, type SummaryState } from "@/components/charts/ChartWorkspace";
 import { LineKey } from "@/components/charts/ChartLegend";
 import type { CompareSuggestion } from "@/components/charts/ComparePicker";
@@ -132,6 +133,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
   const technical = variant === "technical";
   // In a layout slot the plot takes whatever height the card has left.
   const { fill } = usePanel();
+  const plotHeight = useCardChartHeight(technical ? CARD_CHART_HEIGHT.stockTechnical : CARD_CHART_HEIGHT.stock);
   const [period, setPeriod] = useState<ChartPeriod>(technical ? "6mo" : "3mo");
   const defaults = technical ? TECHNICAL_DEFAULTS : OVERVIEW_DEFAULTS;
   const [prefs, setPrefs] = useChartPrefs(technical ? "hisse.chart.technical.v2" : "hisse.chart.overview.v2", defaults);
@@ -465,7 +467,7 @@ export function PriceChartCard({ ticker, variant = "overview" }: { ticker: strin
         features={CARD_FEATURES}
         baseline={baseline}
         padToSessionEnd={live}
-        height={technical ? 340 : 300}
+        height={plotHeight}
         fillCardHeight={fill}
         summary={summary}
         headline={headline}

@@ -6,11 +6,12 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { EMPTY_VALUE, formatMarketDate, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChartSkeleton } from "@/components/ui/chart-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMakroI18n, type MakroKey } from "./i18n";
 import { useMarketHistory, useMarkets } from "./queries";
 import { formatBp, formatMarketValue } from "./format";
 import { AXIS_TICK, CURSOR_STYLE, GRID_STROKE, SERIES_COLOR, ChartTable, ChartTooltipBox, niceScale } from "./chart-kit";
-import { DataLabel, NeutralChange, Panel, PanelEmpty, PanelError, PriceChange, RangePicker, Shimmer, SourceLine, ViewToggle, type ChartView } from "./ui";
+import { DataLabel, NeutralChange, Panel, PanelEmpty, PanelError, PriceChange, RangePicker, SourceLine, ViewToggle, type ChartView } from "./ui";
 import { YieldCurvePanel } from "./YieldCurvePanel";
 import { FxBulletinPanel } from "./FxBulletinPanel";
 import { RequestedMarket } from "./RequestedMarket";
@@ -84,9 +85,9 @@ function QuoteBoard({ selected, onSelect, className }: { selected: string; onSel
       }
     >
       {marketsQ.isPending ? (
-        <div className="space-y-1.5 px-4 py-2">
+        <div className="space-y-1.5 px-4 py-2 skeleton-rows">
           {Array.from({ length: 9 }, (_, i) => (
-            <Shimmer key={i} className="h-8" />
+            <Skeleton key={i} className="h-8" />
           ))}
         </div>
       ) : marketsQ.isError && !marketsQ.data ? (
@@ -203,7 +204,7 @@ function MarketChartPanel({ selectedKey, className }: { selectedKey: string; cla
               </div>
             </>
           ) : marketsQ.isPending ? (
-            <Shimmer className="h-12 w-36" />
+            <Skeleton className="h-12 w-36 origin-left" />
           ) : null}
         </div>
         <dl className="grid grid-cols-3 gap-x-5 text-right">
@@ -325,7 +326,8 @@ function MarketChartPanel({ selectedKey, className }: { selectedKey: string; cla
   );
 }
 
-export function MarketsSection() {
+/** `bulletin={false}` leaves out the CBRT rates table (a widget of its own on customised pages). */
+export function MarketsSection({ bulletin = true }: { bulletin?: boolean }) {
   const [selected, setSelected] = useState("usdtry");
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -348,7 +350,7 @@ export function MarketsSection() {
           <YieldCurvePanel selected={selected} onSelect={selectFromCurve} />
         </div>
       </div>
-      <FxBulletinPanel />
+      {bulletin ? <FxBulletinPanel /> : null}
       {/* `/makro?piyasa=<key>` (the market strip's links) charts that instrument. After the
           chart on purpose: React attaches `chartRef` before this sibling's layout effect runs. */}
       <Suspense fallback={null}>

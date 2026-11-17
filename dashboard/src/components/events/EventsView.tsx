@@ -4,6 +4,7 @@ import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useNow } from "@/hooks/use-now";
 import { DEFAULT_WATCHLIST_ID, useWatchlists } from "@/hooks/use-watchlists";
 import type { EventOut } from "@/types";
@@ -236,8 +237,8 @@ export function EventsViewFallback() {
   return (
     <div aria-hidden="true" className="mx-auto max-w-7xl space-y-5">
       <div className="space-y-2 border-b border-border pb-4">
-        <div className="h-8 w-56 rounded-sm bg-muted/60" />
-        <div className="h-3.5 w-80 max-w-full rounded-sm bg-muted/40" />
+        <Skeleton className="h-8 w-56 max-w-full origin-left" />
+        <Skeleton className="h-3.5 w-80 max-w-full origin-left bg-skeleton/70" />
       </div>
       <div className="card-surface h-36" />
       <div className="card-surface h-96" />
