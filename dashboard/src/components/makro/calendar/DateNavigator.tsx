@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { FilterChoiceList, FilterMenu, FilterPanelSection, type FilterOption } from "@/components/ui/filter-bar";
 import { useLocale } from "@/lib/locale-context";
 import { RANGE_LABELS, STATUS_LABELS, useCalendarText } from "./i18n";
@@ -148,19 +149,19 @@ export function DateMenu({
         }
       >
         <div role="group" aria-labelledby={rangeId}>
-          {/* One field per row: a date input needs ~125px, half of the panel does not have it. */}
           <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2">
             <label htmlFor={fromId} className="text-xs text-muted-foreground">
               {tt("from")}
             </label>
-            <input
+            <DatePicker
               id={fromId}
-              type="date"
+              aria-label={tt("from")}
+              today={today}
+              required
               value={range?.from ?? ""}
               min={bounds?.from}
               max={bounds?.to}
-              onChange={(event) => {
-                const from = event.target.value;
+              onChange={(from) => {
                 if (from) selectRange({ from, to: range && range.to >= from ? range.to : from });
               }}
               className={dateInput}
@@ -168,14 +169,15 @@ export function DateMenu({
             <label htmlFor={toId} className="text-xs text-muted-foreground">
               {tt("to")}
             </label>
-            <input
+            <DatePicker
               id={toId}
-              type="date"
+              aria-label={tt("to")}
+              today={today}
+              required
               value={range?.to ?? ""}
               min={range?.from ?? bounds?.from}
               max={bounds?.to}
-              onChange={(event) => {
-                const to = event.target.value;
+              onChange={(to) => {
                 if (to) selectRange({ from: range && range.from <= to ? range.from : to, to });
               }}
               className={dateInput}

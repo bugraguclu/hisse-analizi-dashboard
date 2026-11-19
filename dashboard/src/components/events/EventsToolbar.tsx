@@ -2,6 +2,7 @@
 
 import { useId, useMemo, type RefObject } from "react";
 import { Star } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   FilterBar,
   FilterChoiceList,
@@ -104,31 +105,32 @@ function CustomRangeFields({ state, today, onChange }: { state: EventsUrlState; 
 
   return (
     <FilterPanelSection label={t("date.customRange")}>
-      {/* One field per row: a date input needs ~125px, half of the panel does not have it. */}
       <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2">
         <label htmlFor={fromId} className="text-xs text-muted-foreground">
           {t("date.from")}
         </label>
-        <input
+        <DatePicker
           id={fromId}
-          type="date"
+          aria-label={t("date.from")}
+          today={today}
           className={dateInput}
           value={state.since ?? ""}
           min="2000-01-01"
           max={state.until ?? today ?? undefined}
-          onChange={(event) => setDay("since", event.target.value)}
+          onChange={(value) => setDay("since", value)}
         />
         <label htmlFor={toId} className="text-xs text-muted-foreground">
           {t("date.to")}
         </label>
-        <input
+        <DatePicker
           id={toId}
-          type="date"
+          aria-label={t("date.to")}
+          today={today}
           className={dateInput}
           value={state.until ?? ""}
           min={state.since ?? "2000-01-01"}
           max={today ?? undefined}
-          onChange={(event) => setDay("until", event.target.value)}
+          onChange={(value) => setDay("until", value)}
         />
       </div>
       <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{t("date.timezone")}</p>
