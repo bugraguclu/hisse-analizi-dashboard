@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, TypeVar
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,13 @@ from src.api.limiter import limiter
 from src.core.config import settings
 from src.core.enums import EventType, PriceInterval, parse_event_category, parse_severity
 from src.core.meta import DataMeta
+from src.core.mutations import (
+    IDEMPOTENCY_KEY_HEADER,
+    IDEMPOTENT_REPLAY_HEADER,
+    MutationError,
+    notification_rule_idempotency,
+    validate_idempotency_key,
+)
 from src.core.time import to_utc, utcnow
 from src.db.models import Company
 from src.db.repository import (
@@ -524,7 +531,28 @@ async def backfill(request: Request, body: BackfillRequest, background_tasks: Ba
 
 @admin_router.post("/notification-rules", status_code=status.HTTP_201_CREATED, response_model=NotificationRuleOut)
 @limiter.limit(lambda: settings.rate_limit_admin)
-async def create_notification_rule(request: Request, body: NotificationRuleCreate, db: DB):
+async def create_notification_rule(
+    request: Request,
+    response: Response,
+    body: NotificationRuleCreate,
+    db: DB,
+    idempotency_key: Annotated[str | None, Header(alias=IDEMPOTENCY_KEY_HEADER)] = None,
+):
+    payload_snapshot = body.model_dump(mode="json")
+    try:
+        validated_key = validate_idempotency_key(idempotency_key)
+        if validated_key is not None:
+            replayed = notification_rule_idempotency.lookup(
+                "admin:notification_rules:create",
+                validated_key,
+                payload_snapshot,
+            )
+            if replayed is not None:
+                response.headers[IDEMPOTENT_REPLAY_HEADER] = "true"
+                return NotificationRuleOut(**replayed.body)
+    except MutationError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code})
+
     company = await _company_or_404(db, body.company_ticker)
     rule = await NotificationRuleRepository(db).create(
         company_id=company.id,
@@ -533,13 +561,22 @@ async def create_notification_rule(request: Request, body: NotificationRuleCreat
         source_filters=body.source_filters,
     )
     await db.commit()
-    return NotificationRuleOut(
+    result = NotificationRuleOut(
         id=rule.id,
         email=rule.email,
         company_ticker=company.ticker,
         min_severity=body.min_severity,
         source_filters=body.source_filters,
     )
+    if validated_key is not None:
+        notification_rule_idempotency.record(
+            "admin:notification_rules:create",
+            validated_key,
+            payload_snapshot,
+            status_code=status.HTTP_201_CREATED,
+            body=result.model_dump(mode="json"),
+        )
+    return result
 
 
 @admin_router.post("/notifications/test-send", status_code=status.HTTP_202_ACCEPTED, response_model=TaskAcceptedOut)

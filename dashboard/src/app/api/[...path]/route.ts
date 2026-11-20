@@ -29,6 +29,7 @@ const FORWARDED_REQUEST_HEADERS = [
   "accept",
   "accept-language",
   "content-type",
+  "idempotency-key",
   "if-modified-since",
   "if-none-match",
   "user-agent",
