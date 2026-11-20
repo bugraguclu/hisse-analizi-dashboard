@@ -16,18 +16,18 @@ import { useMarkets } from "@/components/makro/queries";
 import type { MarketQuote } from "@/components/makro/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { indexPageHref } from "@/lib/discovery";
 import { useMarquee, useMarqueePause } from "./use-marquee";
 
 /**
  * Headline BIST indices, in tape order, with their short names. The home page opens with
- * the BIST 100 chart; the others have no page of their own, so they open their stocks in
- * the screener.
+ * the BIST 100 chart; the others link to their permanent canonical discovery pages.
  */
 const STRIP_INDICES = [
   { symbol: "XU100", label: "BIST 100", opens: "home" },
-  { symbol: "XU030", label: "BIST 30", opens: "screener" },
-  { symbol: "XBANK", label: "BIST Banka", opens: "screener" },
-  { symbol: "XUSIN", label: "BIST Sınai", opens: "screener" },
+  { symbol: "XU030", label: "BIST 30", opens: "index" },
+  { symbol: "XBANK", label: "BIST Banka", opens: "index" },
+  { symbol: "XUSIN", label: "BIST Sınai", opens: "index" },
 ] as const;
 
 interface TapeInstrument {
@@ -191,11 +191,11 @@ export function MarketStrip() {
         value: formatNumber(quote.last !== null && quote.last > 0 ? quote.last : null),
         change: quote.change_percent,
         changeText: formatChangePercent(quote.change_percent),
-        href: opens === "home" ? "/" : `/tarama?idx=${symbol}`,
+        href: opens === "home" ? "/" : indexPageHref(symbol),
         title:
           opens === "home"
             ? t("shell.tapeChartAt", { name: label, page: t("nav.dashboard") })
-            : t("shell.tapeStocksAt", { name: label, page: t("nav.screening") }),
+            : t("shell.tapeChartAt", { name: label, page: t("nav.indices") }),
       },
     ];
   });

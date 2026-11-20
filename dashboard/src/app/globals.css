@@ -530,3 +530,153 @@ html[data-soft-keyboard] [data-fb-actions] {
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Breadcrumbs (components/shared/Breadcrumbs.tsx)
+   Decorative slash separator with empty alt text so it stays out of the
+   accessibility tree; forced-colors restores a clear current-page underline.
+   --------------------------------------------------------------------------- */
+.breadcrumb-nav > ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.breadcrumb-nav > ol > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.breadcrumb-nav > ol > li + li::before {
+  content: "/" / "";
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+.breadcrumb-nav > ol > li > a:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+@media (forced-colors: active) {
+  .breadcrumb-nav > ol > li > a[aria-current="page"] {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Native <details> accordion (components/atlas/AtlasHubView.tsx)
+   Progressively enhances open/close height via ::details-content and
+   interpolate-size; degrades cleanly to instant disclosure elsewhere.
+   --------------------------------------------------------------------------- */
+.atlas-accordion details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.atlas-accordion details > summary::-webkit-details-marker {
+  display: none;
+}
+.atlas-accordion details > summary::before {
+  content: "";
+  inline-size: 0.45rem;
+  block-size: 0.45rem;
+  flex-shrink: 0;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  rotate: -45deg;
+  margin-inline-end: 0.25rem;
+  opacity: 0.7;
+}
+.atlas-accordion details[open] > summary::before {
+  rotate: 45deg;
+  translate: 0 -1px;
+}
+.atlas-accordion details::details-content {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  contain: layout;
+}
+.atlas-accordion details:not([open])::details-content {
+  block-size: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .atlas-accordion details > summary::before {
+    transition: rotate var(--motion-fade) var(--motion-ease-out);
+  }
+  .atlas-accordion details::details-content {
+    transition: block-size var(--motion-panel) var(--motion-ease-out),
+      content-visibility var(--motion-panel) var(--motion-ease-out),
+      display var(--motion-panel) var(--motion-ease-out);
+    transition-behavior: allow-discrete;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive discovery table (components/discovery/DiscoveryStockTable.tsx)
+   Container-query driven: sticky column/row headers on wide containers,
+   stacked readable cards on narrow containers (< 560px) with injected labels.
+   --------------------------------------------------------------------------- */
+.discovery-table-wrap {
+  container-type: inline-size;
+  overflow: auto;
+  max-inline-size: 100%;
+}
+.discovery-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.discovery-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+}
+.discovery-table tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+}
+@container (width < 560px) {
+  .discovery-table,
+  .discovery-table thead,
+  .discovery-table tbody,
+  .discovery-table tr,
+  .discovery-table th,
+  .discovery-table td {
+    display: block;
+  }
+  .discovery-table thead {
+    display: none;
+  }
+  .discovery-table tbody tr {
+    border-block-end: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+  }
+  .discovery-table tbody tr:last-child {
+    border-block-end: 0;
+  }
+  .discovery-table tbody th {
+    position: static;
+    border: 0;
+    padding: 0 0 0.5rem 0;
+    background: transparent;
+  }
+  .discovery-table tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 0;
+    padding: 0.25rem 0;
+    text-align: right;
+  }
+  .discovery-table tbody td::before {
+    content: attr(data-label);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--muted-foreground);
+    text-align: left;
+  }
+}

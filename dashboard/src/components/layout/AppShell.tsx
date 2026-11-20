@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale } from "@/lib/locale-context";
+import { StartupRecovery } from "@/components/shared/StartupRecovery";
 import { WorkspaceBackupDialog } from "@/components/workspace/WorkspaceBackupDialog";
 import { LegalNotice } from "./LegalNotice";
 import { MarketStrip } from "./MarketStrip";
@@ -28,6 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SiteHeader />
         <MarketStrip />
         <OfflineBanner />
+        <StartupRecovery />
         <main id="main-content" tabIndex={-1} className="flex-1 px-4 pb-12 pt-6 outline-none md:px-6 md:pt-8">
           {children}
         </main>

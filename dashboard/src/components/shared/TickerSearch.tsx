@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Hourglass, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { atlasHref, searchAtlasConcepts } from "@/lib/atlas";
+import { searchDiscovery } from "@/lib/discovery";
 import { useLocale } from "@/lib/locale-context";
 import type { TranslationKey } from "@/lib/i18n";
 import { STALE_TIME } from "@/lib/queryClient";
@@ -25,15 +27,30 @@ import { useShortcutLabel } from "./search/use-search-hotkey";
 const SERVER_MIN_LENGTH = 2;
 const DEBOUNCE_MS = 250;
 const LIVE_ANNOUNCE_DEBOUNCE_MS = 250;
-const MAX_RESULTS = 10;
+const MAX_RESULTS = 12;
 const MAX_STOCK_ONLY_RESULTS = 8;
+const MAX_DISCOVERY_RESULTS = 4;
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
 
-const KIND_LABEL: Record<SearchResultKind, TranslationKey> = {
+type SearchKind = SearchResultKind | "index" | "sector";
+
+interface SearchRow {
+  readonly id: string;
+  readonly kind: SearchKind;
+  readonly code: string;
+  readonly title: string;
+  readonly subtitle: string;
+  readonly href: string;
+  readonly ticker?: string;
+}
+
+const KIND_LABEL: Record<SearchKind, TranslationKey> = {
   stock: "search.kind.stock",
   tool: "search.kind.tool",
   screen: "search.kind.screen",
   concept: "search.kind.concept",
+  index: "search.kind.index",
+  sector: "search.kind.sector",
 };
 
 export interface TickerSearchHandle {
@@ -177,28 +194,58 @@ export function TickerSearch({
     return list;
   }, [serverQ.data, index, pathname]);
 
+  const exploreRows = useMemo<SearchRow[]>(() => {
+    if (!unified || !hasQuery) return [];
+    const concepts: SearchRow[] = searchAtlasConcepts(trimmed, locale, 3).map((concept) => ({
+      id: `atlas:${concept.slug}`,
+      kind: "concept",
+      code: concept.badge,
+      title: concept.title[locale],
+      subtitle: concept.cardDesc[locale],
+      href: atlasHref(concept.slug),
+    }));
+    const discovery: SearchRow[] = searchDiscovery(trimmed, locale, 3).map((hit) => ({
+      id: hit.id,
+      kind: hit.kind,
+      code: hit.badge,
+      title: hit.label,
+      subtitle: hit.subtitle,
+      href: hit.href,
+    }));
+    return [...concepts, ...discovery].slice(0, MAX_DISCOVERY_RESULTS);
+  }, [hasQuery, unified, locale, trimmed]);
+
   let settled: boolean;
-  if (!hasQuery || localStocks.length > 0) settled = true;
+  if (!hasQuery || localStocks.length > 0 || exploreRows.length > 0) settled = true;
   else if (needServer) settled = serverCurrent && !serverQ.isFetching;
   else settled = indexReady || indexFailed;
-  const pending = hasQuery && !settled && localUnified.length === 0;
+  const pending = hasQuery && !settled && localUnified.length === 0 && exploreRows.length === 0;
 
-  const results = useMemo<UnifiedSearchItem[]>(() => {
+  const results = useMemo<SearchRow[]>(() => {
     if (!hasQuery) return [];
     if (!unified) return localUnified.length > 0 ? localUnified : serverCurrent ? serverItems : [];
-    if (!serverCurrent || serverItems.length === 0) return localUnified;
-    const seen = new Set(localUnified.map((item) => item.id));
-    const merged = [...localUnified];
-    for (const item of serverItems) {
-      if (!seen.has(item.id)) {
-        seen.add(item.id);
-        merged.push(item);
+    const seenIds = new Set<string>();
+    const seenConceptCodes = new Set<string>();
+    const merged: SearchRow[] = [];
+    const append = (item: SearchRow) => {
+      if (seenIds.has(item.id)) return;
+      if (item.kind === "concept") {
+        const key = item.code.trim().toLowerCase();
+        if (seenConceptCodes.has(key)) return;
+        seenConceptCodes.add(key);
       }
+      seenIds.add(item.id);
+      merged.push(item);
+    };
+    for (const item of localUnified) append(item);
+    if (serverCurrent) {
+      for (const item of serverItems) append(item);
     }
+    for (const item of exploreRows) append(item);
     return merged.slice(0, MAX_RESULTS);
-  }, [hasQuery, unified, localUnified, serverCurrent, serverItems]);
+  }, [hasQuery, unified, localUnified, serverCurrent, serverItems, exploreRows]);
 
-  const rows: UnifiedSearchItem[] = hasQuery ? results : [...popularStocks, ...quickAccess];
+  const rows: SearchRow[] = hasQuery ? results : [...popularStocks, ...quickAccess];
   const hasMixedKinds = unified && rows.some((row) => row.kind !== "stock");
   const showRows = panelOpen && rows.length > 0;
   const showStatus = panelOpen && hasQuery && rows.length === 0;
@@ -236,13 +283,14 @@ export function TickerSearch({
     [],
   );
 
-  function choose(item: UnifiedSearchItem) {
+  function choose(item: SearchRow) {
     setQuery("");
     setOpen(false);
     if (overlay) onClose?.();
     else inputRef.current?.blur();
 
     if (item.kind === "stock") {
+      // Tickers are ASCII: a Turkish-locale uppercase would turn "sise" into "SİSE".
       const symbol = (item.ticker ?? item.code).trim().toUpperCase();
       if (onSelect) onSelect(symbol);
       else router.push(tickerHref(pathname, symbol));
@@ -252,6 +300,7 @@ export function TickerSearch({
   }
 
   function chooseTickerFallback(rawTicker: string) {
+    // Tickers are ASCII: a Turkish-locale uppercase would turn "sise" into "SİSE".
     const symbol = rawTicker.trim().toUpperCase();
     setQuery("");
     setOpen(false);
@@ -476,7 +525,7 @@ export function TickerSearch({
                       <div className="flex items-center gap-2.5">
                         <span
                           className={cn(
-                            "w-14 shrink-0 truncate font-mono text-[11px] font-semibold",
+                            "w-16 shrink-0 truncate font-mono text-[11px] font-semibold",
                             isStock ? "text-foreground" : "text-primary",
                           )}
                         >

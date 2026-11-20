@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { isAssetLoadError, recoverStartup } from "@/lib/startup-recovery";
 
 /**
  * Replaces the root layout when it crashes, so no providers, fonts or global
@@ -25,15 +26,19 @@ export default function GlobalError({
 }) {
   // Server/hydration render in Turkish; switch to the saved language right after.
   const locale = useSyncExternalStore(noopSubscribe, detectLocale, serverLocale);
+  const assetError = isAssetLoadError(error);
 
   useEffect(() => {
     console.error(error);
-  }, [error]);
+    if (assetError) {
+      recoverStartup(error);
+    }
+  }, [assetError, error]);
 
   return (
     <html lang={locale}>
       <body>
-        <title>{`${t("error.appTitle", locale)} · Hisse Analizi`}</title>
+        <title>{`${t(assetError ? "error.assetTitle" : "error.appTitle", locale)} · Hisse Analizi`}</title>
         <style>{`
           :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
           body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f6f3; color: #1d1b18; }
@@ -56,12 +61,18 @@ export default function GlobalError({
           }
         `}</style>
         <main role="alert">
-          <h1>{t("error.appTitle", locale)}</h1>
-          <p>{t("error.appDescription", locale)}</p>
+          <h1>{t(assetError ? "error.assetTitle" : "error.appTitle", locale)}</h1>
+          <p>{t(assetError ? "error.assetDescription" : "error.appDescription", locale)}</p>
           <div className="actions">
-            <button type="button" onClick={() => retry()}>
-              {t("common.retry", locale)}
-            </button>
+            {assetError ? (
+              <button type="button" onClick={() => window.location.reload()}>
+                {t("recovery.reload", locale)}
+              </button>
+            ) : (
+              <button type="button" onClick={() => retry()}>
+                {t("common.retry", locale)}
+              </button>
+            )}
             {/* A full reload is the most reliable recovery once the root layout failed. */}
             <button type="button" className="secondary" onClick={() => window.location.assign(window.location.origin)}>
               {t("error.backHome", locale)}
