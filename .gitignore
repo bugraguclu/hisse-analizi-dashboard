@@ -32,4 +32,6 @@ coverage.xml
 # Frontend build artifacts (dashboard/ also has its own .gitignore)
 dashboard/.next/
 dashboard/node_modules/
+mobile/.expo/
+mobile/node_modules/
 .claude/worktrees/
