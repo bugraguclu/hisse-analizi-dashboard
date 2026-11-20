@@ -8,6 +8,7 @@ import { useLocale } from "@/lib/locale-context";
 import type { MarketPhase } from "@/lib/market-hours";
 import type { TranslationKey } from "@/lib/i18n";
 import { useMarketStatus } from "@/hooks/use-market-status";
+import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
 import { findQuote, quoteTimeMs, useIndexQuotes } from "@/components/dashboard/queries";
 import { formatBp, formatMarketValue } from "@/components/makro/format";
 import { marketHref } from "@/components/makro/links";
@@ -163,10 +164,14 @@ export function MarketStrip() {
   const { t, locale } = useLocale();
   const quotesQ = useIndexQuotes();
   const marketsQ = useMarkets();
+  const disconnected = useIsDisconnected();
+  const offlineSummary = useOfflineSummary();
   const [paused, togglePaused] = useMarqueePause(PAUSE_STORAGE_KEY);
   const { viewportRef, trackRef, copyRef, copies } = useMarquee(paused);
 
-  const quotes = quotesQ.data?.quotes;
+  const cachedQuotes = (quotesQ.isError || disconnected) ? offlineSummary?.indices?.quotes : undefined;
+  const quotes = quotesQ.data?.quotes ?? cachedQuotes;
+  const quotesPending = quotesQ.isPending && !quotes;
   const headline = findQuote(quotes, "XU100");
   const quoteAt = quoteTimeMs(headline);
   const status = useMarketStatus(quoteAt);
@@ -175,7 +180,7 @@ export function MarketStrip() {
   const groups: TapeGroup[] = [];
 
   const indexEntries = STRIP_INDICES.flatMap<TapeEntry>(({ symbol, label, opens }) => {
-    if (quotesQ.isPending) return [{ id: symbol, label, pending: true }];
+    if (quotesPending) return [{ id: symbol, label, pending: true }];
     const quote = findQuote(quotes, symbol);
     if (!quote) return [];
     return [
@@ -196,14 +201,16 @@ export function MarketStrip() {
   });
   if (indexEntries.length > 0) groups.push({ id: "indices", label: t("shell.indices"), entries: indexEntries });
 
-  const instruments = marketsQ.data?.instruments;
+  const cachedInstruments = (marketsQ.isError || disconnected) ? offlineSummary?.macroMarkets?.instruments : undefined;
+  const instruments = marketsQ.data?.instruments ?? cachedInstruments;
+  const marketsPending = marketsQ.isPending && !instruments;
   const marketEntries = (list: readonly TapeInstrument[], yields: boolean) =>
     list.flatMap<TapeEntry>((instrument) => {
       const label = instrument.labelKey ? t(instrument.labelKey) : (instrument.label ?? instrument.key);
-      if (marketsQ.isPending) return [{ id: instrument.key, label, pending: true }];
+      if (marketsPending) return [{ id: instrument.key, label, pending: true }];
       const quote: MarketQuote | undefined = instruments?.find((item) => item.key === instrument.key);
       if (!quote || typeof quote.last !== "number" || !Number.isFinite(quote.last)) return [];
-      const updatedAt = quote.updated_at ?? marketsQ.data?.as_of;
+      const updatedAt = quote.updated_at ?? marketsQ.data?.as_of ?? offlineSummary?.macroMarkets?.asOf;
       const source = t(yields ? "shell.tapeYieldSource" : "shell.tapePriceSource");
       const destination = t("shell.tapeChartAt", { name: label, page: t("nav.macroEconomy") });
       return [

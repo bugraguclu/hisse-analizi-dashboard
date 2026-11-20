@@ -8,7 +8,7 @@
  * feed that has not ticked today (or went quiet) reads as "no trading".
  */
 
-import { MARKET_TIME_ZONE, parseDate } from "./format";
+import { MARKET_TIME_ZONE, parseDate } from "./format.ts";
 
 export const SESSION_OPEN_MINUTES = 10 * 60;
 export const SESSION_CLOSE_MINUTES = 18 * 60;

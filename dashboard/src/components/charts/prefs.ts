@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
 import { INDICATORS, sanitizeParams } from "./indicator-catalog";
 import type { ChartType, ChartUnit, IndicatorConfig, IndicatorKind, OverlayKey, PaneKey, PriceScaleKind } from "./types";
 import { isChartUnit } from "./units";
@@ -161,11 +162,18 @@ function readRaw(key: string): string | null {
 }
 
 function subscribe(onChange: () => void): () => void {
+  const onWorkspaceSync = () => {
+    memory.clear();
+    snapshotCache.clear();
+    onChange();
+  };
   listeners.add(onChange);
   window.addEventListener("storage", onChange);
+  window.addEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   return () => {
     listeners.delete(onChange);
     window.removeEventListener("storage", onChange);
+    window.removeEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   };
 }
 

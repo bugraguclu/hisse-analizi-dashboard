@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Archive, Menu, Search } from "lucide-react";
 import { TickerSearch, type TickerSearchHandle } from "@/components/shared/TickerSearch";
 import { SearchOverlay } from "@/components/shared/search/SearchOverlay";
 import { useSearchHotkey } from "@/components/shared/search/use-search-hotkey";
@@ -96,7 +96,7 @@ const ICON_BUTTON =
 export function SiteHeader() {
   const pathname = usePathname();
   const { t } = useLocale();
-  const { openMobileNav, mobileNavOpen, mobileNavTriggerRef } = useShell();
+  const { openMobileNav, mobileNavOpen, mobileNavTriggerRef, openWorkspaceManager } = useShell();
   useDocumentTitle(pathname);
   // Small-screen search sheet, scoped to the page it was opened on (closes on navigation).
   const [searchOpenOn, setSearchOpenOn] = useState<string | null>(null);
@@ -195,7 +195,17 @@ export function SiteHeader() {
               >
                 <Search className="h-5 w-5" aria-hidden="true" />
               </button>
-              <LocaleToggle className="ml-1.5 hidden md:inline-flex" />
+              <button
+                type="button"
+                onClick={() => openWorkspaceManager("backup")}
+                aria-label={t("workspace.openManager")}
+                aria-haspopup="dialog"
+                title={t("workspace.openManager")}
+                className={cn(ICON_BUTTON, "hidden md:inline-flex")}
+              >
+                <Archive className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
+              </button>
+              <LocaleToggle className="ml-1 hidden md:inline-flex" />
               <ThemeToggle className="hidden md:inline-flex" />
             </div>
           </div>

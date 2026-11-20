@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
+import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
 
 /**
  * Watchlists persisted in localStorage (per browser), synced across tabs.
@@ -97,12 +98,23 @@ function getServerSnapshot(): readonly Watchlist[] {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY || event.key === null) listener();
+    if (event.key === STORAGE_KEY || event.key === null) {
+      memoryLists = null;
+      cachedRaw = undefined;
+      listener();
+    }
+  };
+  const onWorkspaceSync = () => {
+    memoryLists = null;
+    cachedRaw = undefined;
+    listener();
   };
   window.addEventListener("storage", onStorage);
+  window.addEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   return () => {
     listeners.delete(listener);
     window.removeEventListener("storage", onStorage);
+    window.removeEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   };
 }
 

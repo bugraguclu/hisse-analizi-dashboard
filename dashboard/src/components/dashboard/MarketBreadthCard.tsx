@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
-import { formatNumber, toFiniteNumber } from "@/lib/format";
+import { formatMarketDate, formatNumber, toFiniteNumber } from "@/lib/format";
+import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
 import { cn } from "@/lib/utils";
 import type { Company, ScreenerRow } from "@/types";
 import { SegmentBar } from "@/components/charts/mini";
@@ -134,8 +135,13 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   const { t } = useLocale();
   const screenerQ = useScreenerRows();
   const companiesQ = useCompanies();
+  const disconnected = useIsDisconnected();
+  const offlineSummary = useOfflineSummary();
   const rows = screenerQ.data?.results;
-  const breadth = useMemo(() => (rows ? computeBreadth(rows, companiesQ.data) : null), [rows, companiesQ.data]);
+  const cachedBreadth = (screenerQ.isError || disconnected) ? offlineSummary?.breadth : undefined;
+  const liveBreadth = useMemo(() => (rows ? computeBreadth(rows, companiesQ.data) : null), [rows, companiesQ.data]);
+  const usingOfflineCache = !liveBreadth && cachedBreadth !== undefined;
+  const breadth = liveBreadth ?? cachedBreadth?.data ?? null;
   const total = breadth ? breadth.up + breadth.down + breadth.flat : 0;
   // In a layout slot both lists are as long as the card has room for. A wide card
   // puts them side by side, so the same height shows twice as many movers.
@@ -150,12 +156,12 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   // leaves one before entering the other; a label only clears its own highlight.
   const clearHighlight = (key: string) => setHighlight((current) => (current === key ? null : current));
 
-  const pending = screenerQ.isPending || companiesQ.isPending;
+  const pending = (screenerQ.isPending || companiesQ.isPending) && !usingOfflineCache;
 
   let body: React.ReactNode;
   if (pending) {
     body = <RowSkeleton rows={6} />;
-  } else if (screenerQ.isLoadingError) {
+  } else if (screenerQ.isLoadingError && !usingOfflineCache) {
     body = <ErrorState compact message={t("dashboard.moversUnavailable")} onRetry={() => void screenerQ.refetch()} />;
   } else if (!breadth || total === 0) {
     body = <EmptyState compact message={t("dashboard.moversUnavailable")} />;
@@ -165,6 +171,11 @@ export function MarketBreadthCard({ className }: { className?: string }) {
     const screenerIndex = breadth.scope === "bist100" ? "XU100" : "";
     body = (
       <>
+        {usingOfflineCache && cachedBreadth && (
+          <p role="status" className="mx-5 mb-3 rounded-sm bg-warn/10 px-2.5 py-1 text-[11px] text-warn">
+            {t("offline.cachedBadge", { time: formatMarketDate(cachedBreadth.savedAt, "dayMonthTime") })}
+          </p>
+        )}
         <div className="px-5 pb-4">
           <div className="flex items-center justify-between gap-2 text-xs font-semibold">
             <span

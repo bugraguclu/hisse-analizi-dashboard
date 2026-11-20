@@ -4,6 +4,7 @@ import { useCallback, useId, useState, useSyncExternalStore } from "react";
 import { Wallet, X } from "lucide-react";
 import { parseDecimal } from "@/components/tarama/model";
 import { formatNumber } from "@/lib/format";
+import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
 import { useChartI18n } from "./i18n";
 
 /** The viewer's average cost per symbol, in lira, kept in this browser only. */
@@ -12,9 +13,11 @@ const listeners = new Set<() => void>();
 function subscribe(onChange: () => void) {
   listeners.add(onChange);
   window.addEventListener("storage", onChange);
+  window.addEventListener(WORKSPACE_STORAGE_EVENT, onChange);
   return () => {
     listeners.delete(onChange);
     window.removeEventListener("storage", onChange);
+    window.removeEventListener(WORKSPACE_STORAGE_EVENT, onChange);
   };
 }
 

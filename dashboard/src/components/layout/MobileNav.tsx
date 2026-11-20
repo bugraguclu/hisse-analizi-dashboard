@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePresence } from "@/hooks/use-presence";
 import { exitDuration, motionDuration } from "@/lib/motion";
-import { X } from "lucide-react";
+import { Archive, X } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { cn } from "@/lib/utils";
 import { LocaleToggle } from "@/components/ui/locale-toggle";
@@ -19,7 +19,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabi
 
 /** Off-canvas navigation below the lg breakpoint (the top bar shows the links above it). */
 export function MobileNav() {
-  const { mobileNavOpen, closeMobileNav, mobileNavTriggerRef } = useShell();
+  const { mobileNavOpen, closeMobileNav, mobileNavTriggerRef, openWorkspaceManager } = useShell();
   const { present, finishExit } = usePresence(mobileNavOpen, exitDuration(motionDuration.panel));
   const pathname = usePathname();
   const { t } = useLocale();
@@ -132,6 +132,18 @@ export function MobileNav() {
         </nav>
 
         <div className="mt-auto space-y-3 border-t border-border px-4 py-4">
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => {
+              closeMobileNav();
+              openWorkspaceManager("backup");
+            }}
+            className="flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground motion-press hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <Archive className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+            {t("workspace.openManager")}
+          </button>
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">{t("shell.language")}</span>
             <LocaleToggle />

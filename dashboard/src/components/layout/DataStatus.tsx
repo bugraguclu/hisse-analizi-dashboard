@@ -8,6 +8,7 @@ import { isPollerStale } from "@/lib/market-hours";
 import { formatMarketDate, formatRelativeTime, parseDate } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import type { TranslationKey } from "@/lib/i18n";
+import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
 import { useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 
@@ -100,18 +101,28 @@ function feedLine(feed: FeedStatus, t: (key: TranslationKey, vars?: Record<strin
 export function DataStatus({ variant, className }: { variant: "inline" | "panel"; className?: string }) {
   const { t } = useLocale();
   const now = useNow();
+  const disconnected = useIsDisconnected();
+  const offlineSummary = useOfflineSummary();
   const { health, feeds, primary } = useDataStatus();
-  const label = t(LABEL_KEY[health]);
-  const detail = now !== null && primary ? feedLine(primary, t, now) : null;
+  const offlineFallback = disconnected && (health === "unknown" || health === "loading");
+  const label = offlineFallback ? t("status.offline") : t(LABEL_KEY[health]);
+  const detail = offlineFallback
+    ? offlineSummary?.updatedAt
+      ? t("offline.lastSaved", { time: formatMarketDate(offlineSummary.updatedAt, "dayMonthTime") })
+      : null
+    : now !== null && primary
+      ? feedLine(primary, t, now)
+      : null;
   const tooltip = now !== null ? feeds.map((feed) => feedLine(feed, t, now)).join("\n") : undefined;
+  const dotClass = offlineFallback ? "bg-warn" : DOT_CLASS[health];
 
   // Only the health label is a live region: the relative times ("3 dk önce") change
   // every minute and would otherwise be re-announced by screen readers each time.
   if (variant === "inline") {
     return (
       <p className={cn("flex min-w-0 items-center gap-2", className)} title={tooltip}>
-        <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT_CLASS[health])} />
-        <span role="status" className={cn(health === "stale" && "text-warn")}>
+        <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
+        <span role="status" className={cn((health === "stale" || offlineFallback) && "text-warn")}>
           {label}
         </span>
         {detail && <span className="truncate">· {detail}</span>}
@@ -123,10 +134,13 @@ export function DataStatus({ variant, className }: { variant: "inline" | "panel"
     <section aria-label={t("status.title")} className={cn("text-xs", className)}>
       <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t("status.title")}</p>
       <p className="flex items-center gap-2 text-foreground" role="status">
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT_CLASS[health])} aria-hidden="true" />
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} aria-hidden="true" />
         {label}
       </p>
-      {now !== null && feeds.length > 0 && (
+      {offlineFallback && detail && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">{detail}</p>
+      )}
+      {!offlineFallback && now !== null && feeds.length > 0 && (
         <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground">
           {feeds.map((feed) => (
             <li key={feed.code} className={cn(feed.stale && "text-warn")}>
