@@ -1,6 +1,6 @@
 import type { Locale } from "./i18n";
 
-const DEFAULT_ORIGIN = "https://hisseanalizi.com";
+const DEFAULT_ORIGIN = "https://hisse-analizi.duckdns.org";
 
 const IN_LANGUAGE: Record<Locale, string> = {
   tr: "tr-TR",
@@ -17,7 +17,8 @@ export function siteOrigin(): string {
   const configured = (process.env.NEXT_PUBLIC_SITE_URL ?? process.env.SITE_URL ?? "").trim();
   if (!configured) return DEFAULT_ORIGIN;
   try {
-    return new URL(configured).origin;
+    const url = new URL(configured);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.origin : DEFAULT_ORIGIN;
   } catch {
     return DEFAULT_ORIGIN;
   }

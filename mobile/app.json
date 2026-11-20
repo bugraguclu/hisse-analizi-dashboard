@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "buildNumber": "1",
       "bundleIdentifier": "com.hisseanalizi.app",
-      "associatedDomains": ["applinks:hisseanalizi.com", "applinks:www.hisseanalizi.com"],
+      "associatedDomains": ["applinks:hisse-analizi.duckdns.org", "applinks:hisseanalizi.com", "applinks:www.hisseanalizi.com"],
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -41,7 +41,6 @@
           }
         }
       ],
-      "expo-status-bar",
       "expo-notifications"
     ]
   }

@@ -104,6 +104,15 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function nullableNumber(value: unknown): boolean {
+  return value === null || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isCachedMover(value: unknown): value is CachedMover {
+  return isPlainRecord(value) && typeof value.ticker === "string" && typeof value.name === "string"
+    && nullableNumber(value.price) && typeof value.change === "number" && Number.isFinite(value.change);
+}
+
 function createEmptySummary(nowMs: number): OfflineMarketSummary {
   return {
     version: OFFLINE_SUMMARY_VERSION,
@@ -138,6 +147,7 @@ export function parseOfflineSummary(raw: string | null): OfflineMarketSummary | 
   if (isPlainRecord(parsed.watchlistQuotes)) {
     for (const [ticker, entry] of Object.entries(parsed.watchlistQuotes)) {
       if (!isPlainRecord(entry) || !isPlainRecord(entry.quote)) continue;
+      if (!nullableNumber(entry.quote.last_price) || !nullableNumber(entry.quote.change_percent)) continue;
       if (typeof entry.savedAt !== "number" || !Number.isFinite(entry.savedAt)) continue;
       watchlistQuotes[ticker] = {
         ticker,
@@ -156,7 +166,8 @@ export function parseOfflineSummary(raw: string | null): OfflineMarketSummary | 
 
   if (isPlainRecord(parsed.indices) && Array.isArray(parsed.indices.quotes) && typeof parsed.indices.savedAt === "number") {
     summary.indices = {
-      quotes: parsed.indices.quotes as IndexQuote[],
+      quotes: parsed.indices.quotes.filter((quote): quote is IndexQuote =>
+        isPlainRecord(quote) && typeof quote.symbol === "string" && nullableNumber(quote.last) && nullableNumber(quote.change_percent)),
       savedAt: parsed.indices.savedAt,
       quoteAt: typeof parsed.indices.quoteAt === "number" && Number.isFinite(parsed.indices.quoteAt) ? parsed.indices.quoteAt : null,
       ...(typeof parsed.indices.source === "string" ? { source: parsed.indices.source } : {}),
@@ -174,24 +185,36 @@ export function parseOfflineSummary(raw: string | null): OfflineMarketSummary | 
 
   if (isPlainRecord(parsed.latestEvents) && Array.isArray(parsed.latestEvents.items) && typeof parsed.latestEvents.savedAt === "number") {
     summary.latestEvents = {
-      items: (parsed.latestEvents.items as EventOut[]).slice(0, MAX_CACHED_EVENTS),
+      items: parsed.latestEvents.items.filter((event): event is EventOut =>
+        isPlainRecord(event) && typeof event.id === "string").slice(0, MAX_CACHED_EVENTS),
       savedAt: parsed.latestEvents.savedAt,
     };
   }
 
   if (isPlainRecord(parsed.macroMarkets) && Array.isArray(parsed.macroMarkets.instruments) && typeof parsed.macroMarkets.savedAt === "number") {
     summary.macroMarkets = {
-      instruments: parsed.macroMarkets.instruments as MarketQuote[],
+      instruments: parsed.macroMarkets.instruments.filter((quote): quote is MarketQuote =>
+        isPlainRecord(quote) && typeof quote.key === "string"),
       asOf: typeof parsed.macroMarkets.asOf === "string" ? parsed.macroMarkets.asOf : null,
       savedAt: parsed.macroMarkets.savedAt,
     };
   }
 
   if (isPlainRecord(parsed.breadth) && isPlainRecord(parsed.breadth.data) && typeof parsed.breadth.savedAt === "number") {
-    summary.breadth = {
-      data: parsed.breadth.data as unknown as CachedBreadth,
-      savedAt: parsed.breadth.savedAt,
-    };
+    const data = parsed.breadth.data;
+    if ((data.scope === "bist100" || data.scope === "all")
+        && [data.up, data.down, data.flat].every((count) => typeof count === "number" && Number.isInteger(count) && count >= 0)
+        && Array.isArray(data.gainers) && Array.isArray(data.losers)) {
+      summary.breadth = {
+        data: {
+          scope: data.scope,
+          up: data.up as number, down: data.down as number, flat: data.flat as number,
+          gainers: data.gainers.filter(isCachedMover).slice(0, MAX_CACHED_MOVERS),
+          losers: data.losers.filter(isCachedMover).slice(0, MAX_CACHED_MOVERS),
+        },
+        savedAt: parsed.breadth.savedAt,
+      };
+    }
   }
 
   return summary;
@@ -404,7 +427,7 @@ export function mergeOfflineSummary(
     changed = true;
   }
 
-  if (patch.latestEvents && patch.latestEvents.length > 0) {
+  if (patch.latestEvents) {
     next.latestEvents = {
       items: patch.latestEvents.slice(0, MAX_CACHED_EVENTS),
       savedAt: nowMs,

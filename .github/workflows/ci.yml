@@ -75,7 +75,7 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
 
   frontend:
-    name: Frontend · Node.js 20
+    name: Frontend · Node.js 24
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -89,7 +89,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
 
@@ -113,11 +113,66 @@ jobs:
         env:
           API_URL: http://localhost:8000
 
-      - name: Release gates (bundle budgets & native iOS readiness)
+      - name: Bundle budgets and iOS configuration
         run: npm run check:budgets && npm run check:ios
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+
+  mobile:
+    name: Expo · TypeScript and iOS bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npx expo install --check
+      - run: npx expo config --type public > /dev/null
+      - run: npx expo export --platform ios --output-dir dist
+      - run: npm audit --omit=dev --audit-level=high
+
+  ios:
+    name: iOS · Expo and widget simulator builds
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install Expo dependencies
+        run: npm ci --prefix mobile
+      - name: Generate Expo native app
+        working-directory: mobile
+        run: npx expo prebuild --platform ios --no-install
+      - name: Install iOS pods
+        run: pod install --project-directory=mobile/ios
+      - name: Compile primary Expo app
+        run: xcodebuild -workspace mobile/ios/HisseAnalizi.xcworkspace -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/hisse-expo-build" CODE_SIGNING_ALLOWED=NO build
+      - name: Check Expo privacy manifest
+        run: test -f "$RUNNER_TEMP/hisse-expo-build/Build/Products/Debug-iphonesimulator/HisseAnalizi.app/PrivacyInfo.xcprivacy"
+      - name: Shared Swift behavior
+        run: |
+          swiftc ios/Shared/WidgetModels.swift ios/Shared/CalendarReminderModel.swift ios/Shared/DeepLinkRouter.swift ios/Tests/verify_shared.swift -o "$RUNNER_TEMP/hisse-ios-tests"
+          "$RUNNER_TEMP/hisse-ios-tests"
+      - name: Compile app and widget
+        run: xcodebuild -project ios/HisseAnalizi.xcodeproj -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/hisse-ios-build" CODE_SIGNING_ALLOWED=NO build
+      - name: Check shipped privacy manifests
+        run: |
+          app="$RUNNER_TEMP/hisse-ios-build/Build/Products/Debug-iphonesimulator/HisseAnalizi.app"
+          test -f "$app/PrivacyInfo.xcprivacy"
+          test -f "$app/PlugIns/HisseAnaliziWidget.appex/PrivacyInfo.xcprivacy"
 
   docker:
     name: Docker build

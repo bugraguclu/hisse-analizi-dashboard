@@ -1,5 +1,11 @@
 # Hisse Analizi — iOS Native Uygulama Temeli (`mobile/`)
 
+Web uygulaması `dashboard/` (Next.js), ana iOS uygulaması bu dizindeki Expo Router uygulamasıdır.
+Expo SDK 58 / React Native 0.88 sürümleri birlikte sabitlenir; `package-lock.json` sürüm kontrolündedir.
+Kökteki `ios/` bağımsız SwiftUI/WidgetKit prototipidir. Ayrı bir üretim uygulaması olarak yayımlanmayacak;
+widget, Keychain ve AppIntents kodu Expo uygulamasına extension/native modül olarak aktarılmalıdır.
+Bu aktarım henüz yapılmadı; Expo uygulamasında QR eşleştirme ve WidgetKit varmış gibi değerlendirmeyin.
+
 TusAnkiM'in Expo Router / React Native mimarisinden uyarlanan iOS native uygulama temeli:
 
 - **Güvenilir başlangıç (`lib/startupCoordinator.ts`, `contexts/AppContext.tsx`, `app/_layout.tsx`):**
@@ -19,5 +25,19 @@ TusAnkiM'in Expo Router / React Native mimarisinden uyarlanan iOS native uygulam
 
 ```bash
 cd mobile
-npm test
+npm ci
+npm run check
+npx expo install --check
+npx expo config --type public
+npx expo export --platform ios --output-dir dist
+npx expo prebuild --platform ios --no-install
 ```
+
+`EXPO_PUBLIC_API_URL`, doğrudan FastAPI kökü (ör. `http://localhost:8000`) veya web'in `/api`
+adresi olabilir. Varsayılan, README'deki üretim adresi `https://hisse-analizi.duckdns.org/api`'dir.
+Geliştirme sırasında gerçek iPhone için bilgisayarın ağ adresini kullanın. `localhost` yalnızca
+simülatör/bilgisayarın kendisini gösterir. Anahtarlar bu public değişkene konmaz.
+
+`mobile/ios/` Expo prebuild çıktısıdır ve Git'e eklenmez. Kalıcı native değişiklikler `app.json`
+ve config plugin'leri üzerinden yapılır. Universal Link'in cihazda çalışması için ilgili sunucuda
+Apple App Site Association dosyası ve imzalı uygulamanın Team ID / bundle ID eşleşmesi ayrıca gerekir.

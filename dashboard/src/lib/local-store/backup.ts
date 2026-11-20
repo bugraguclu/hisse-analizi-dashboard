@@ -212,7 +212,7 @@ export function exportWorkspaceBackup(
  */
 export function validateWorkspaceBackup(rawContents: string): BackupValidationResult {
   if (!rawContents || !rawContents.trim()) return { valid: false, reason: "empty" };
-  if (rawContents.length > MAX_BACKUP_BYTES) return { valid: false, reason: "too-large" };
+  if (new TextEncoder().encode(rawContents).byteLength > MAX_BACKUP_BYTES) return { valid: false, reason: "too-large" };
 
   let parsed: unknown;
   try {
@@ -360,6 +360,7 @@ export function validateWorkspaceBackup(rawContents: string): BackupValidationRe
 function isPersonalStorageKey(key: string): boolean {
   return (
     key === WATCHLISTS_STORAGE_KEY ||
+    key === LOCAL_STORE_META_KEY ||
     isAllowedLayoutKey(key) ||
     isKnownChartPrefKey(key) ||
     key.startsWith(DRAWINGS_STORAGE_PREFIX) ||
@@ -402,7 +403,6 @@ function writeWorkspaceData(
   storage: StorageAdapter,
   data: WorkspaceData,
   now: Date,
-  callbacks: { onApplyLocale?: (locale: Locale) => void; onApplyTheme?: (theme: ThemePreference) => void },
 ): void {
   // Remove previous personal keys that are not present in the imported snapshot.
   for (const key of storage.keys()) {
@@ -456,11 +456,9 @@ function writeWorkspaceData(
   }
   if (data.preferences.locale) {
     storage.setItem(LOCALE_STORAGE_KEY, data.preferences.locale);
-    callbacks.onApplyLocale?.(data.preferences.locale);
   }
   if (data.preferences.theme) {
     storage.setItem(THEME_STORAGE_KEY, data.preferences.theme);
-    callbacks.onApplyTheme?.(data.preferences.theme);
   }
 
   // Stamp schema metadata
@@ -507,7 +505,7 @@ function makeArchiveRecord(
     kind,
     name: customName?.trim() || exported.fileName,
     createdAt: ts,
-    size: exported.json.length,
+    size: new TextEncoder().encode(exported.json).byteLength,
     watchlistCount: exported.preview.counts.watchlists,
     layoutCount: exported.preview.counts.layouts,
     drawingCount: exported.preview.counts.drawings,
@@ -544,10 +542,7 @@ export async function importWorkspaceBackup(
     await d.archive.write(preRestoreRecord);
 
     try {
-      writeWorkspaceData(storage, validation.snapshot.data, now, {
-        onApplyLocale: d.onApplyLocale,
-        onApplyTheme: d.onApplyTheme,
-      });
+      writeWorkspaceData(storage, validation.snapshot.data, now);
     } catch (error) {
       // Compensating rollback: leave the user's previous workspace intact.
       try {
@@ -563,7 +558,10 @@ export async function importWorkspaceBackup(
       };
     }
 
-    await pruneArchive(d.archive);
+    await pruneArchive(d.archive).catch(() => undefined);
+    const { locale, theme } = validation.snapshot.data.preferences;
+    if (locale) d.onApplyLocale?.(locale);
+    if (theme) d.onApplyTheme?.(theme);
     emitWorkspaceStorageChange();
 
     return {

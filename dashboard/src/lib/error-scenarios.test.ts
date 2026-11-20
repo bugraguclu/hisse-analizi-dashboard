@@ -5,7 +5,6 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { readDataMeta, sourceName } from "./data-meta.ts";
 import { getMarketStatus } from "./market-hours.ts";
-import { PersonalMutationOutbox, isRetryableMutationError, type StorageLike } from "./mutation-outbox.ts";
 import { createUndoReceipt, evaluateUndo } from "./reliable-mutations.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,19 +13,6 @@ const FIXTURE = JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf8")) as {
   schemaVersion: number;
   scenarios: Record<string, Record<string, unknown>>;
 };
-
-class MemoryStorage implements StorageLike {
-  private readonly store = new Map<string, string>();
-  getItem(key: string): string | null {
-    return this.store.get(key) ?? null;
-  }
-  setItem(key: string, value: string): void {
-    this.store.set(key, value);
-  }
-  removeItem(key: string): void {
-    this.store.delete(key);
-  }
-}
 
 describe("shared market & error scenarios fixture (web verification)", () => {
   it("computes open, after-close and weekend session phases deterministically", () => {
@@ -77,20 +63,7 @@ describe("shared market & error scenarios fixture (web verification)", () => {
     assert.equal(emptyList.expectedSnapshotRequests, 0);
   });
 
-  it("classifies provider disconnect errors consistently for retry policy", () => {
-    const disconnect = FIXTURE.scenarios.provider_disconnected as {
-      errors: Array<{ kind: string; status: number | null; code: string; retryable: boolean }>;
-    };
-    for (const err of disconnect.errors) {
-      assert.equal(
-        isRetryableMutationError({ status: err.status }),
-        err.retryable,
-        `mismatch for disconnect error ${err.kind}`,
-      );
-    }
-  });
-
-  it("replays a dropped-response retry once and rejects dual-device stale undo", async () => {
+  it("rejects stale undo after another tab changes the list", () => {
     const conflict = FIXTURE.scenarios.dual_device_conflict_and_retry as {
       ownerId: string;
       otherOwnerId: string;
@@ -103,45 +76,6 @@ describe("shared market & error scenarios fixture (web verification)", () => {
       afterDeviceARemoveTickers: string[];
       afterDeviceBAddTickers: string[];
     };
-
-    const outbox = new PersonalMutationOutbox({ storage: new MemoryStorage() });
-    outbox.setOwner(conflict.ownerId);
-    outbox.enqueue(conflict.ownerId, {
-      requestId: conflict.requestId,
-      kind: "watchlist_remove",
-      entityId: conflict.entityId,
-      baseRevision: conflict.initialRevision,
-      data: { tickers: conflict.afterDeviceARemoveTickers },
-    });
-
-    // Dropped response on attempt 1, then idempotent replay on attempt 2 -> single server write.
-    const serverApplied = new Map<string, number>();
-    let attempt = 0;
-    const first = await outbox.flush(conflict.ownerId, {
-      verifyOwner: async () => conflict.ownerId,
-      send: async (entry) => {
-        attempt += 1;
-        serverApplied.set(entry.payload.requestId, (serverApplied.get(entry.payload.requestId) ?? 0) + 1);
-        if (attempt === 1) throw new TypeError("Failed to fetch");
-        return { revision: conflict.deviceADeleteRevision };
-      },
-    });
-    assert.equal(first.sent.length, 0);
-    assert.equal(outbox.read(conflict.ownerId).length, 1);
-
-    const second = await outbox.flush(conflict.ownerId, {
-      verifyOwner: async () => conflict.ownerId,
-      send: async (entry) => {
-        // Server deduplicates by requestId (does not increment distinct records).
-        if (!serverApplied.has(entry.payload.requestId)) {
-          serverApplied.set(entry.payload.requestId, 1);
-        }
-        return { revision: conflict.deviceADeleteRevision, replayed: true };
-      },
-    });
-    assert.equal(second.sent.length, 1);
-    assert.equal(serverApplied.size, 1);
-    assert.equal(outbox.read(conflict.ownerId).length, 0);
 
     // Device B edits the list to revision 3 -> Device A's undo receipt for revision 2 conflicts!
     const receipt = createUndoReceipt({

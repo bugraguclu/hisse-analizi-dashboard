@@ -6,12 +6,28 @@ import {
   evaluateOfflineFreshness,
   latestExpectedBistSessionDateKey,
   mergeOfflineSummary,
+  parseOfflineSummary,
   readOfflineSummary,
 } from "./offline-cache.ts";
 import { WATCHLISTS_STORAGE_KEY } from "./schema.ts";
 import { createMemoryStorage } from "./storage.ts";
 
 describe("offline market summary cache", () => {
+  test("ignores corrupt cached rows that would crash market cards on reload", () => {
+    const cached = parseOfflineSummary(JSON.stringify({
+      version: 1, updatedAt: 1,
+      watchlistQuotes: { THYAO: { quote: { last_price: "invalid" }, savedAt: 1 } },
+      indices: { quotes: [null, { symbol: "XU100", last: 10000, change_percent: 1 }], savedAt: 1 },
+      latestEvents: { items: [null, { id: "event-1" }], savedAt: 1 },
+      macroMarkets: { instruments: [null], savedAt: 1 },
+      breadth: { data: {}, savedAt: 1 },
+    }));
+    assert.deepEqual(cached?.watchlistQuotes, {});
+    assert.equal(cached?.indices?.quotes.length, 1);
+    assert.equal(cached?.latestEvents?.items.length, 1);
+    assert.deepEqual(cached?.macroMarkets?.instruments, []);
+    assert.equal(cached?.breadth, undefined);
+  });
   test("persists and merges per-ticker quotes across watchlists, indices, events and breadth", () => {
     const storage = createMemoryStorage({
       [WATCHLISTS_STORAGE_KEY]: JSON.stringify([{ id: "favorites", name: "", items: [{ ticker: "THYAO" }] }]),

@@ -10,7 +10,7 @@ import { BorderRadius, FontSize, Spacing, useThemeColors } from "../../lib/theme
 const SEVERITIES = [
   { id: "", label: "Tümü" },
   { id: "high", label: "Yüksek önem" },
-  { id: "medium", label: "Orta önem" },
+  { id: "watch", label: "Orta önem" },
 ] as const;
 
 export default function EventsScreen() {

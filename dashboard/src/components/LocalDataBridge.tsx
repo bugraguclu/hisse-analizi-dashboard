@@ -42,7 +42,7 @@ export function LocalDataBridge() {
       migrateLocalStorage(storage);
       if (!readOfflineSummary(storage)) {
         void readIdbOfflineSnapshot<OfflineMarketSummary>("latest-market-summary").then((idbCopy) => {
-          if (!idbCopy) return;
+          if (!idbCopy || readOfflineSummary(storage)) return;
           const verified = parseOfflineSummary(JSON.stringify(idbCopy));
           if (!verified) return;
           try {
@@ -100,7 +100,7 @@ export function LocalDataBridge() {
 
       if (root === "latestEvents") {
         const events = data as EventOut[];
-        if (Array.isArray(events) && events.length > 0) {
+        if (Array.isArray(events)) {
           mergeOfflineSummary({ latestEvents: events });
         }
         return;

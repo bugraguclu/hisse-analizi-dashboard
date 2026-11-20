@@ -33,7 +33,7 @@ export const APP_SCHEME = "hisseanalizi";
 const MAX_URL_LENGTH = 4096;
 const TICKER_RE = /^[A-Z0-9]{1,10}$/;
 const STOCK_SECTIONS = new Set<StockSection>(["hisse", "teknik", "temel", "analiz"]);
-const ALLOWED_WEB_HOSTS = new Set(["hisseanalizi.com", "www.hisseanalizi.com"]);
+const ALLOWED_WEB_HOSTS = new Set(["hisse-analizi.duckdns.org", "hisseanalizi.com", "www.hisseanalizi.com"]);
 
 function cleanValue(value: string | null, maxLength: number): string {
   return (value ?? "").normalize("NFC").trim().slice(0, maxLength);

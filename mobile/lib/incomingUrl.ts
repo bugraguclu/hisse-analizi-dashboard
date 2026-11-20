@@ -7,7 +7,7 @@ import {
 
 /** Minimal subset of React Native's `Linking` API for testability. */
 export interface IncomingUrlSource {
-  getInitialURL(): Promise<string | null>;
+  getInitialURL(): Promise<string | null | undefined>;
   addEventListener(type: "url", listener: (event: { url: string }) => void): { remove(): void };
 }
 

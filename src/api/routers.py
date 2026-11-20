@@ -18,11 +18,11 @@ from src.core.mutations import (
     IDEMPOTENCY_KEY_HEADER,
     IDEMPOTENT_REPLAY_HEADER,
     MutationError,
-    notification_rule_idempotency,
     validate_idempotency_key,
 )
 from src.core.time import to_utc, utcnow
 from src.db.models import Company
+from src.db.repositories.idempotency import IdempotencyRepository
 from src.db.repository import (
     CompanyRepository,
     EventFilters,
@@ -539,17 +539,15 @@ async def create_notification_rule(
     idempotency_key: Annotated[str | None, Header(alias=IDEMPOTENCY_KEY_HEADER)] = None,
 ):
     payload_snapshot = body.model_dump(mode="json")
+    scope = "admin:notification_rules:create"
+    receipts = IdempotencyRepository(db)
     try:
         validated_key = validate_idempotency_key(idempotency_key)
         if validated_key is not None:
-            replayed = notification_rule_idempotency.lookup(
-                "admin:notification_rules:create",
-                validated_key,
-                payload_snapshot,
-            )
+            replayed = await receipts.claim(scope, validated_key, payload_snapshot)
             if replayed is not None:
                 response.headers[IDEMPOTENT_REPLAY_HEADER] = "true"
-                return NotificationRuleOut(**replayed.body)
+                return NotificationRuleOut(**replayed)
     except MutationError as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code})
 
@@ -560,7 +558,6 @@ async def create_notification_rule(
         min_severity=body.min_severity,
         source_filters=body.source_filters,
     )
-    await db.commit()
     result = NotificationRuleOut(
         id=rule.id,
         email=rule.email,
@@ -569,13 +566,8 @@ async def create_notification_rule(
         source_filters=body.source_filters,
     )
     if validated_key is not None:
-        notification_rule_idempotency.record(
-            "admin:notification_rules:create",
-            validated_key,
-            payload_snapshot,
-            status_code=status.HTTP_201_CREATED,
-            body=result.model_dump(mode="json"),
-        )
+        await receipts.complete(scope, validated_key, result.model_dump(mode="json"))
+    await db.commit()
     return result
 
 

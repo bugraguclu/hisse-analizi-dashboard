@@ -7,7 +7,27 @@ import {
   definedTermSchema,
   faqPage,
   serializeJsonLd,
+  siteOrigin,
 } from "./schema.ts";
+
+test("canonical origin defaults to the deployed site and rejects non-web URLs", () => {
+  const previousPublic = process.env.NEXT_PUBLIC_SITE_URL;
+  const previousServer = process.env.SITE_URL;
+  try {
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    delete process.env.SITE_URL;
+    assert.equal(siteOrigin(), "https://hisse-analizi.duckdns.org");
+    process.env.NEXT_PUBLIC_SITE_URL = "javascript:alert(1)";
+    assert.equal(siteOrigin(), "https://hisse-analizi.duckdns.org");
+    process.env.NEXT_PUBLIC_SITE_URL = "https://example.test/app";
+    assert.equal(siteOrigin(), "https://example.test");
+  } finally {
+    if (previousPublic === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+    else process.env.NEXT_PUBLIC_SITE_URL = previousPublic;
+    if (previousServer === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousServer;
+  }
+});
 
 describe("absUrl", () => {
   test("normalizes leading and trailing slashes consistently", () => {

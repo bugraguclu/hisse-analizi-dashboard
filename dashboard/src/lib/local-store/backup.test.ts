@@ -115,6 +115,11 @@ describe("migrateLocalStorage", () => {
 });
 
 describe("validateWorkspaceBackup", () => {
+  test("enforces the size limit in UTF-8 bytes for multilingual files", () => {
+    const raw = JSON.stringify({ ...exportWorkspaceBackup(populatedStorage()).snapshot, note: "ş".repeat(MAX_BACKUP_BYTES / 2) });
+    assert.ok(raw.length < MAX_BACKUP_BYTES);
+    assert.deepEqual(validateWorkspaceBackup(raw), { valid: false, reason: "too-large" });
+  });
   test("accepts valid export and produces accurate preview counts", () => {
     const exported = exportWorkspaceBackup(populatedStorage(), { now: new Date("2026-11-20T09:30:00Z") });
     const validation = validateWorkspaceBackup(exported.json);
@@ -188,6 +193,35 @@ describe("validateWorkspaceBackup", () => {
 });
 
 describe("export / import / rollback", () => {
+  test("keeps locale, theme and metadata unchanged when the final storage write fails", async () => {
+    const storage = populatedStorage();
+    storage.setItem(LOCAL_STORE_META_KEY, "original-meta");
+    const incoming = populatedStorage();
+    incoming.setItem(LOCALE_STORAGE_KEY, "en");
+    incoming.setItem(THEME_STORAGE_KEY, "light");
+    const applied: string[] = [];
+    let failed = false;
+    const result = await importWorkspaceBackup(exportWorkspaceBackup(incoming).json, {
+      storage: {
+        ...storage,
+        setItem(key, value) {
+          if (key === LOCAL_STORE_META_KEY && !failed) {
+            failed = true;
+            throw new Error("QuotaExceededError");
+          }
+          storage.setItem(key, value);
+        },
+      },
+      archive: createMemoryArchiveStore(),
+      onApplyLocale: (value) => applied.push(value),
+      onApplyTheme: (value) => applied.push(value),
+    });
+    assert.equal(result.ok, false);
+    assert.deepEqual(applied, []);
+    assert.equal(storage.getItem(LOCALE_STORAGE_KEY), "tr");
+    assert.equal(storage.getItem(THEME_STORAGE_KEY), "dark");
+    assert.equal(storage.getItem(LOCAL_STORE_META_KEY), "original-meta");
+  });
   test("restores a full workspace into a clean browser and preserves unrelated keys", async () => {
     const source = populatedStorage();
     const exported = exportWorkspaceBackup(source, { now: new Date("2026-11-20T10:00:00Z") });

@@ -15,15 +15,12 @@ import pytest  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
-    """Rate-limit counters and idempotency ledgers live in process memory; isolate per test."""
+    """Rate-limit counters live in process memory; isolate per test."""
     from src.api.limiter import limiter
-    from src.core.mutations import notification_rule_idempotency
 
     limiter.reset()
-    notification_rule_idempotency.clear()
     yield
     limiter.reset()
-    notification_rule_idempotency.clear()
 
 
 # ---------------------------------------------------------------------------

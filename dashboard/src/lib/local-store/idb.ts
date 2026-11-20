@@ -102,16 +102,19 @@ export function createIndexedDbArchiveStore(): BackupArchiveStore {
     async list() {
       const db = await openLocalDb();
       if (!db) return fallbackArchive.list();
+      const memory = await fallbackArchive.list();
       return new Promise((resolve) => {
         try {
           const tx = db.transaction(BACKUPS_STORE, "readonly");
           const req = tx.objectStore(BACKUPS_STORE).getAll();
           req.onsuccess = () => {
             const rows = (req.result as RestorePointRecord[] | undefined) ?? [];
+            const combined = new Map(
+              [...rows.filter((row) => row && typeof row.id === "string").map(toMeta), ...memory]
+                .map((row) => [row.id, row]),
+            );
             resolve(
-              rows
-                .filter((row) => row && typeof row.id === "string")
-                .map(toMeta)
+              [...combined.values()]
                 .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id)),
             );
           };
@@ -124,13 +127,15 @@ export function createIndexedDbArchiveStore(): BackupArchiveStore {
       });
     },
     async read(id) {
+      const memory = await fallbackArchive.read(id);
+      if (memory) return memory;
       const db = await openLocalDb();
       if (!db) return fallbackArchive.read(id);
       return new Promise((resolve) => {
         try {
           const tx = db.transaction(BACKUPS_STORE, "readonly");
           const req = tx.objectStore(BACKUPS_STORE).get(id);
-          req.onsuccess = () => resolve((req.result as RestorePointRecord | undefined) ?? null);
+          req.onsuccess = () => resolve((req.result as RestorePointRecord | undefined) ?? fallbackArchive.read(id));
           req.onerror = () => resolve(fallbackArchive.read(id));
         } catch {
           resolve(fallbackArchive.read(id));
@@ -140,35 +145,27 @@ export function createIndexedDbArchiveStore(): BackupArchiveStore {
       });
     },
     async write(record) {
+      await fallbackArchive.write(record);
       const db = await openLocalDb();
-      if (!db) {
-        await fallbackArchive.write(record);
-        return;
-      }
+      if (!db) return;
       await new Promise<void>((resolve) => {
         try {
           const tx = db.transaction(BACKUPS_STORE, "readwrite");
           tx.objectStore(BACKUPS_STORE).put(record);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => {
-            void fallbackArchive.write(record).finally(resolve);
-          };
-          tx.onabort = () => {
-            void fallbackArchive.write(record).finally(resolve);
-          };
+          tx.oncomplete = () => { void fallbackArchive.remove(record.id).then(resolve); };
+          tx.onerror = () => resolve();
+          tx.onabort = () => resolve();
         } catch {
-          void fallbackArchive.write(record).finally(resolve);
+          resolve();
         } finally {
           db.close();
         }
       });
     },
     async remove(id) {
+      await fallbackArchive.remove(id);
       const db = await openLocalDb();
-      if (!db) {
-        await fallbackArchive.remove(id);
-        return;
-      }
+      if (!db) return;
       await new Promise<void>((resolve) => {
         try {
           const tx = db.transaction(BACKUPS_STORE, "readwrite");

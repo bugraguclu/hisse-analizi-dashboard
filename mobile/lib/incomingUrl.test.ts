@@ -4,7 +4,7 @@ import { IncomingUrlQueue, incomingUrlNavigation, type IncomingUrlSource } from 
 
 describe("IncomingUrlQueue", () => {
   it("queues launch and warm URLs until startup attaches a handler and deduplicates launch URL", async () => {
-    let listener: ((event: { url: string }) => void) | null = null;
+    let listener: (event: { url: string }) => void = () => assert.fail("URL listener was not registered");
     let resolveInitial!: (url: string | null) => void;
     const source: IncomingUrlSource = {
       getInitialURL: () =>
@@ -43,7 +43,7 @@ describe("IncomingUrlQueue", () => {
   });
 
   it("prepends initial launch URL ahead of subsequent URLs when not already seen", async () => {
-    let listener: ((event: { url: string }) => void) | null = null;
+    let listener: (event: { url: string }) => void = () => assert.fail("URL listener was not registered");
     let resolveInitial!: (url: string | null) => void;
     const source: IncomingUrlSource = {
       getInitialURL: () =>

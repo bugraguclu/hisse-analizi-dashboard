@@ -162,7 +162,12 @@ final class ConnectionModel: ObservableObject {
         do {
             let deviceName = UIDevice.current.name.isEmpty ? UIDevice.current.model : UIDevice.current.name
             let paired = try await WidgetAPI.pair(server: url, code: cleaned, name: deviceName)
-            ConnectionStore.pairing = paired
+            do {
+                try ConnectionStore.savePairing(paired)
+            } catch {
+                await WidgetAPI.unpair(paired)
+                throw error
+            }
             self.pairing = paired
             code = ""
             await refresh()
@@ -176,11 +181,13 @@ final class ConnectionModel: ObservableObject {
         guard let pairing else { return }
         do {
             let fresh = try await WidgetAPI.summary(for: pairing)
+            guard self.pairing == pairing else { return }
             ConnectionStore.snapshot = fresh
             snapshot = fresh
             isOffline = false
             message = nil
         } catch WidgetAPIError.unpaired {
+            guard self.pairing == pairing else { return }
             ConnectionStore.forget(removedByServer: true)
             self.pairing = nil
             snapshot = nil
@@ -188,6 +195,7 @@ final class ConnectionModel: ObservableObject {
             message = nil
             selectedTab = .connection
         } catch {
+            guard self.pairing == pairing else { return }
             isOffline = true
             message = error.localizedDescription
         }

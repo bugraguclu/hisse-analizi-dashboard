@@ -3,6 +3,11 @@ import { describe, it } from "node:test";
 import { normalizeTicker, readExternalAppUrl, routeForAction } from "./externalLinking.ts";
 
 describe("externalLinking", () => {
+  it("accepts stock links from the documented production host", () => {
+    const result = readExternalAppUrl("https://hisse-analizi.duckdns.org/hisse/THYAO");
+    assert.ok(result && "action" in result);
+    assert.equal(result.action.kind, "stock");
+  });
   it("normalizes BIST tickers using ASCII uppercasing", () => {
     assert.equal(normalizeTicker("sise"), "SISE");
     assert.equal(normalizeTicker("thyao"), "THYAO");

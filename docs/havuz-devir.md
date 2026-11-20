@@ -1,5 +1,10 @@
 # `havuz` Dalı — AI Devir ve Teknik Bütünleştirme Notu
 
+> **Sonraki kalite incelemesi:** [havuz-kalite-incelemesi.md](./havuz-kalite-incelemesi.md).
+> Bu devir notu `99cc6ad` seviyesinin tarihsel kaydıdır. Sonraki düzeltmelerde idempotency
+> veritabanına taşındı, kullanılmayan outbox/backend undo altyapısı kaldırıldı, QR kodlayıcı
+> değiştirildi ve Expo araç zinciri güncellendi. Güncel mimari ve doğrulamalar için kalite notunu okuyun.
+
 Bu belge, `havuz` dalını devralacak diğer AI ajanları ve geliştiriciler için yazıldı. Belgede bu dalda **neyin yapıldığı, neden yapıldığı, nasıl birleştirildiği, çakışmaların nasıl çözüldüğü, hangi doğrulamalardan geçtiği ve ileride dikkat edilmesi gereken mimari tuzaklar** eksiksiz biçimde yer alır. Kod ile belge çelişirse kaynak kod doğrudur.
 
 ---

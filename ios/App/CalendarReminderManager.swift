@@ -76,10 +76,9 @@ final class CalendarReminderManager: NSObject, ObservableObject, UNUserNotificat
 
     func sync(events: [CalendarEventItem]) async {
         // Serialize concurrent sync requests so old cancellations and new schedules never race.
-        if let active = syncTask {
-            await active.value
-        }
+        let previous = syncTask
         let task = Task { @MainActor in
+            await previous?.value
             await self.performSync(events: events)
         }
         syncTask = task

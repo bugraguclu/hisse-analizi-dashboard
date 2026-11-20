@@ -3,7 +3,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
 import {
-  IdempotentRequestTracker,
   createUndoReceipt,
   evaluateUndo,
   type UndoReceipt,
@@ -84,9 +83,6 @@ let cachedRaw: string | null | undefined;
 let cachedLists: readonly Watchlist[] = DEFAULT_WATCHLISTS;
 /** Session-only copy used when localStorage rejects writes (private mode, quota). */
 let memoryLists: readonly Watchlist[] | null = null;
-
-const createTracker = new IdempotentRequestTracker<string | null>();
-const addTickerTracker = new IdempotentRequestTracker<"added" | "duplicate" | "invalid" | "full">();
 
 function readRaw(): string | null {
   try {
@@ -171,23 +167,20 @@ function nextReceiptId(): string {
 }
 
 export interface WatchlistActions {
-  createList: (name: string, requestId?: string) => string | null;
+  createList: (name: string) => string | null;
   deleteList: (id: string) => WatchlistUndoReceipt | null;
-  addTicker: (listId: string, ticker: string, requestId?: string) => "added" | "duplicate" | "invalid" | "full";
+  addTicker: (listId: string, ticker: string) => "added" | "duplicate" | "invalid" | "full";
   removeTicker: (listId: string, ticker: string) => WatchlistUndoReceipt | null;
   undoChange: (receipt: WatchlistUndoReceipt) => WatchlistUndoOutcome;
 }
 
 const actions: WatchlistActions = {
-  createList(name, requestId) {
+  createList(name) {
     const label = name.trim().slice(0, MAX_NAME_LENGTH);
-    const { result } = createTracker.run(requestId, { action: "createList", label }, () => {
-      if (!label || getSnapshot().length >= MAX_LISTS) return null;
-      const id = `list-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-      update((lists) => [...lists, { id, name: label, tickers: [], rev: 1 }]);
-      return id;
-    });
-    return result;
+    if (!label || getSnapshot().length >= MAX_LISTS) return null;
+    const id = `list-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    update((lists) => [...lists, { id, name: label, tickers: [], rev: 1 }]);
+    return id;
   },
   deleteList(id) {
     const before = getSnapshot();
@@ -207,20 +200,17 @@ const actions: WatchlistActions = {
       afterSnapshot: { kind: "delete_list", index, list: { ...target, tickers: [...target.tickers] }, remainingIds: next.map((l) => l.id) },
     });
   },
-  addTicker(listId, value, requestId) {
+  addTicker(listId, value) {
     const ticker = normalizeTicker(value);
-    const { result } = addTickerTracker.run(requestId, { action: "addTicker", listId, ticker: ticker ?? value }, () => {
-      if (!ticker) return "invalid";
-      const list = getSnapshot().find((l) => l.id === listId);
-      if (!list) return "invalid";
-      if (list.tickers.includes(ticker)) return "duplicate";
-      if (list.tickers.length >= MAX_TICKERS) return "full";
-      update((lists) =>
-        lists.map((l) => (l.id === listId ? { ...l, tickers: [...l.tickers, ticker], rev: l.rev + 1 } : l)),
-      );
-      return "added";
-    });
-    return result;
+    if (!ticker) return "invalid";
+    const list = getSnapshot().find((l) => l.id === listId);
+    if (!list) return "invalid";
+    if (list.tickers.includes(ticker)) return "duplicate";
+    if (list.tickers.length >= MAX_TICKERS) return "full";
+    update((lists) =>
+      lists.map((l) => (l.id === listId ? { ...l, tickers: [...l.tickers, ticker], rev: l.rev + 1 } : l)),
+    );
+    return "added";
   },
   removeTicker(listId, ticker) {
     const beforeLists = getSnapshot();

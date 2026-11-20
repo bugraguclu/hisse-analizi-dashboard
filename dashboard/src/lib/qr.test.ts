@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import jsQR from "jsqr";
 import { encodeQr, qrToSvgPath } from "./qr.ts";
+
+test("independent reader decodes pairing links, UTF-8 and every supported QR version", () => {
+  const payloads = [
+    "hisseanalizi://pair?server=https%3A%2F%2Fhisseanalizi.com&code=ABCD2345",
+    "Türkçe-şirket-İŞ",
+    ...[8, 20, 40, 60, 70, 95, 115, 140, 170, 200].map((length) => "x".repeat(length)),
+  ];
+  const versions = new Set<number>();
+  for (const payload of payloads) {
+    const qr = encodeQr(payload);
+    versions.add(qr.version);
+    const scale = 4;
+    const size = (qr.size + 8) * scale;
+    const pixels = new Uint8ClampedArray(size * size * 4).fill(255);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (!qr.modules[Math.floor(y / scale) - 4]?.[Math.floor(x / scale) - 4]) continue;
+        const offset = (y * size + x) * 4;
+        pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = 0;
+      }
+    }
+    assert.equal(jsQR(pixels, size, size)?.data, payload, `Cannot decode version ${qr.version}`);
+  }
+  assert.equal(versions.size, 10);
+});
 
 test("encodeQr generates valid Version 1 matrix for short payload", () => {
   const qr = encodeQr("ABCD2345");

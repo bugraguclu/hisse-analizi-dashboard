@@ -20,7 +20,8 @@ enum KeychainTokenStore {
     private static let fallbackDefaultsKey = "widgetTokenFallback"
 
     static func readToken() -> String? {
-        var query: [String: Any] = [
+        AppGroup.defaults.removeObject(forKey: fallbackDefaultsKey)
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: AppGroup.keychainService,
             kSecAttrAccount as String: AppGroup.keychainAccount,
@@ -32,27 +33,34 @@ enum KeychainTokenStore {
         if status == errSecSuccess, let data = item as? Data, let token = String(data: data, encoding: .utf8), !token.isEmpty {
             return token
         }
-        // Unsigned local simulator fallback when Keychain sharing entitlements are absent.
-        return AppGroup.defaults.string(forKey: fallbackDefaultsKey)
+        return nil
     }
 
-    static func saveToken(_ token: String) {
+    static func saveToken(_ token: String) throws {
         let data = Data(token.utf8)
         let baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: AppGroup.keychainService,
             kSecAttrAccount as String: AppGroup.keychainAccount,
         ]
-        SecItemDelete(baseQuery as CFDictionary)
-
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        if status == errSecSuccess {
-            AppGroup.defaults.removeObject(forKey: fallbackDefaultsKey)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
+        let status: OSStatus
+        if updateStatus == errSecItemNotFound {
+            let addQuery = baseQuery.merging(attributes) { _, new in new }
+            status = SecItemAdd(addQuery as CFDictionary, nil)
         } else {
-            AppGroup.defaults.set(token, forKey: fallbackDefaultsKey)
+            status = updateStatus
+        }
+        // Remove plaintext credentials left by earlier development builds, even on failure.
+        AppGroup.defaults.removeObject(forKey: fallbackDefaultsKey)
+        guard status == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
+                NSLocalizedDescriptionKey: "Cihaz anahtarı güvenli biçimde kaydedilemedi. Yeniden eşleştirin.",
+            ])
         }
     }
 
@@ -88,16 +96,12 @@ enum ConnectionStore {
             }
             return Pairing(server: meta.server, token: token, deviceName: meta.deviceName)
         }
-        set {
-            if let value = newValue {
-                KeychainTokenStore.saveToken(value.token)
-                write(PairingMeta(server: value.server, deviceName: value.deviceName), metaKey)
-                removed = false
-            } else {
-                KeychainTokenStore.deleteToken()
-                AppGroup.defaults.removeObject(forKey: metaKey)
-            }
-        }
+    }
+
+    static func savePairing(_ value: Pairing) throws {
+        try KeychainTokenStore.saveToken(value.token)
+        write(PairingMeta(server: value.server, deviceName: value.deviceName), metaKey)
+        removed = false
     }
 
     static var snapshot: MarketSnapshot? {
@@ -117,7 +121,8 @@ enum ConnectionStore {
     }
 
     static func forget(removedByServer: Bool) {
-        pairing = nil
+        KeychainTokenStore.deleteToken()
+        AppGroup.defaults.removeObject(forKey: metaKey)
         snapshot = nil
         removed = removedByServer
     }

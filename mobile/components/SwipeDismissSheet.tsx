@@ -219,7 +219,7 @@ export default function SwipeDismissSheet({
  * Scrollable body inside a bottom sheet: owns vertical drags whenever content overflows so
  * scrolling a long filter form never triggers sheet dismissal.
  */
-export const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetScrollView(
+export const SheetScrollView = forwardRef<React.ComponentRef<typeof ScrollView>, ScrollViewProps>(function SheetScrollView(
   props,
   ref,
 ) {
@@ -228,7 +228,7 @@ export const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function 
   return <SheetScrollArea ref={ref} gate={gate} {...props} />;
 });
 
-const SheetScrollArea = forwardRef<ScrollView, ScrollViewProps & { gate: SheetDragGate }>(
+const SheetScrollArea = forwardRef<React.ComponentRef<typeof ScrollView>, ScrollViewProps & { gate: SheetDragGate }>(
   function SheetScrollArea(
     { gate, onLayout, onContentSizeChange, onScroll, scrollEnabled = true, scrollEventThrottle = 16, ...props },
     ref,

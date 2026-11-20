@@ -1,21 +1,10 @@
 /**
  * Client-side reliable mutation helpers:
- * - Idempotent request ledger (prevents duplicate records when a response drops or retries fire).
  * - Revision- and snapshot-checked undo (prevents an old undo toast from clobbering edits made
  *   later in the same session, another tab, or another device).
  */
 
 export const DEFAULT_UNDO_WINDOW_MS = 15 * 60 * 1000;
-
-export class MutationConflictError extends Error {
-  readonly code: "request_conflict" | "undo_conflict";
-
-  constructor(message: string, code: "request_conflict" | "undo_conflict" = "request_conflict") {
-    super(message);
-    this.name = "MutationConflictError";
-    this.code = code;
-  }
-}
 
 export interface UndoReceipt<TSnapshot> {
   readonly id: string;
@@ -101,58 +90,4 @@ export function evaluateUndo<TSnapshot>(input: {
     return { ok: false, reason: "conflict" };
   }
   return { ok: true, restoreSnapshot: input.receipt.beforeSnapshot };
-}
-
-interface CompletedEntry<TResult> {
-  readonly payloadKey: string;
-  readonly result: TResult;
-  readonly recordedAt: number;
-}
-
-/**
- * Deduplicates retried client mutations by `requestId`.
- * Re-submitting the same `requestId` with the identical payload returns the
- * original result without executing the mutator again; reusing the same
- * `requestId` with a different payload throws `MutationConflictError`.
- */
-export class IdempotentRequestTracker<TResult> {
-  private readonly maxEntries: number;
-  private readonly ttlMs: number;
-  private readonly entries = new Map<string, CompletedEntry<TResult>>();
-
-  constructor(options?: { maxEntries?: number; ttlMs?: number }) {
-    this.maxEntries = options?.maxEntries ?? 200;
-    this.ttlMs = options?.ttlMs ?? 24 * 60 * 60 * 1000;
-  }
-
-  private prune(now: number): void {
-    for (const [key, entry] of this.entries) {
-      if (now - entry.recordedAt >= this.ttlMs) this.entries.delete(key);
-    }
-    while (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next().value;
-      if (oldest === undefined) break;
-      this.entries.delete(oldest);
-    }
-  }
-
-  run(requestId: string | undefined, payload: unknown, execute: () => TResult, now = Date.now()): { result: TResult; replayed: boolean } {
-    if (!requestId) return { result: execute(), replayed: false };
-    this.prune(now);
-    const payloadKey = canonicalJson(payload);
-    const existing = this.entries.get(requestId);
-    if (existing) {
-      if (existing.payloadKey !== payloadKey) {
-        throw new MutationConflictError("İstek kimliği farklı bir içerikle zaten kullanıldı.", "request_conflict");
-      }
-      return { result: existing.result, replayed: true };
-    }
-    const result = execute();
-    this.entries.set(requestId, { payloadKey, result, recordedAt: now });
-    return { result, replayed: false };
-  }
-
-  clear(): void {
-    this.entries.clear();
-  }
 }

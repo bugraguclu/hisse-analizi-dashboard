@@ -33,5 +33,6 @@ coverage.xml
 dashboard/.next/
 dashboard/node_modules/
 mobile/.expo/
+mobile/ios/
 mobile/node_modules/
 .claude/worktrees/

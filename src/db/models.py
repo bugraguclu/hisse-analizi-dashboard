@@ -33,6 +33,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
     SmallInteger,
     String,
@@ -832,6 +833,18 @@ class EventOutbox(Base):
 
     normalized_event: Mapped[NormalizedEvent] = relationship(back_populates="outbox_entries")
     notifications: Mapped[list[Notification]] = relationship(back_populates="outbox_entry")
+
+
+class IdempotencyReceipt(Base):
+    """Committed with the write it protects; the primary key serializes retries across workers."""
+
+    __tablename__ = "idempotency_receipts"
+
+    scope: Mapped[str] = mapped_column(String(80), primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_body: Mapped[dict[str, Any] | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
 class NotificationRule(Base):

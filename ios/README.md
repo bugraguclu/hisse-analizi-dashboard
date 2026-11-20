@@ -1,5 +1,11 @@
 # Hisse Analizi · iPhone Uygulaması, Widget'lar, Hatırlatıcılar ve Siri Kestirmeleri
 
+**Mimari durum (20 Kasım 2026):** Ana iOS uygulaması `../mobile/` içindeki Expo uygulamasıdır.
+Bu Xcode projesi WidgetKit/AppIntents ve eşleştirme davranışının bağımsız referans prototipidir;
+ikinci bir üretim uygulaması değildir. İki uygulama aynı URL şemasını kaydettiğinden birlikte
+dağıtılmamalıdır. Widget extension'ı, App Group/Keychain paylaşımı ve QR eşleştirme Expo'ya
+aktarılmadan birleşik iOS ürününün hazır olduğu söylenemez.
+
 BIST 100 özeti, seçili takip listesi hisseleri ve yaklaşan finansal takvim olaylarını (bilanço, temettü, TCMB PPK ve ekonomik açıklamalar) iPhone ana ekranı ve kilit ekranına taşır.
 
 ## Kapsam

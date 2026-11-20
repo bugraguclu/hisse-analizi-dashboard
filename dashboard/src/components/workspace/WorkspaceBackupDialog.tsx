@@ -48,7 +48,7 @@ import {
   evaluateOfflineFreshness,
   hasOfflineSummaryData,
 } from "@/lib/local-store/offline-cache";
-import { readWorkspaceData } from "@/lib/local-store/schema";
+import { MAX_BACKUP_BYTES, readWorkspaceData } from "@/lib/local-store/schema";
 import { createBrowserStorage, subscribeWorkspaceStorage } from "@/lib/local-store/storage";
 import { useLocale } from "@/lib/locale-context";
 import { cn } from "@/lib/utils";
@@ -230,6 +230,10 @@ export function WorkspaceBackupDialog() {
       setPendingImport(null);
 
       try {
+        if (file.size > MAX_BACKUP_BYTES) {
+          setValidationError(t("workspace.err.too-large"));
+          return;
+        }
         const text = await file.text();
         const result = validateWorkspaceBackup(text);
         if (!result.valid) {

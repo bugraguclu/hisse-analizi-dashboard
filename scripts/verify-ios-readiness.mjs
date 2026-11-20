@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Native iOS release readiness verifier for Hisse Analizi.
+ * Native iOS configuration verifier for Hisse Analizi (does not compile or sign an app).
  *
  * Adapted from TusAnkiM's `scripts/verify-ios-readiness.mjs`, supporting both
  * Expo (`mobile/app.json` or `app.json`) and native Xcode (`ios/`) targets.
@@ -288,13 +288,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 
   for (const warning of result.warnings) console.warn(`[WARN] ${warning}`);
   if (!result.ok) {
-    console.error("iOS release readiness check failed:");
+    console.error("iOS configuration check failed:");
     for (const failure of result.failures) console.error(`  - ${failure}`);
     process.exit(1);
   }
   console.log(
     result.checkedTargets.length > 0
-      ? `iOS release readiness verified (${result.checkedTargets.join(", ")}).`
+      ? `iOS configuration verified (${result.checkedTargets.join(", ")}); native build and device tests are separate.`
       : "iOS release contract verified (web-only repository; pass --require-native once ios/ lands).",
   );
 }

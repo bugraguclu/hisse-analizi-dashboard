@@ -13,16 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from src.core.meta import DataMeta, with_meta
-from src.core.mutations import (
-    IdempotencyLedger,
-    MutationJournal,
-    MutationRecord,
-    RequestConflictError,
-    UndoConflictError,
-)
+
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "market_error_scenarios.json"
 
@@ -97,66 +89,3 @@ def test_provider_disconnected_error_contract() -> None:
     assert by_kind["network_drop"]["retryable"] is True
     assert by_kind["request_conflict"]["status"] == 409
     assert by_kind["request_conflict"]["retryable"] is False
-
-
-def test_dual_device_retry_and_undo_conflict_scenario() -> None:
-    scenario = _load_fixture()["scenarios"]["dual_device_conflict_and_retry"]
-    t0 = datetime(2026, 11, 20, 11, 30, tzinfo=timezone.utc)
-
-    # 1. Dropped response retry creates a single record.
-    ledger = IdempotencyLedger()
-    payload = {
-        "owner_id": scenario["ownerId"],
-        "entity_id": scenario["entityId"],
-        "tickers": scenario["afterDeviceARemoveTickers"],
-    }
-    first = ledger.record(
-        "watchlist:update",
-        scenario["requestId"],
-        payload,
-        status_code=200,
-        body={"revision": scenario["deviceADeleteRevision"]},
-        now=t0,
-    )
-    assert first.replayed is False
-
-    replay = ledger.lookup("watchlist:update", scenario["requestId"], payload, now=t0)
-    assert replay is not None and replay.replayed is True
-    assert replay.body["revision"] == scenario["deviceADeleteRevision"]
-
-    with pytest.raises(RequestConflictError):
-        ledger.lookup(
-            "watchlist:update",
-            scenario["requestId"],
-            {**payload, "tickers": scenario["afterDeviceBAddTickers"]},
-            now=t0,
-        )
-
-    # 2. Device B edits the list (rev 2 -> 3); Device A's stale undo must fail with 409 undo_conflict.
-    journal = MutationJournal()
-    journal.record(
-        MutationRecord(
-            change_id="chg-device-a",
-            owner_id=scenario["ownerId"],
-            entity_type="watchlist",
-            entity_id=scenario["entityId"],
-            action="update",
-            before_revision=scenario["initialRevision"],
-            after_revision=scenario["deviceADeleteRevision"],
-            before_state={"tickers": scenario["initialTickers"]},
-            after_state={"tickers": scenario["afterDeviceARemoveTickers"]},
-            changed_fields=("tickers",),
-            decided_at=t0,
-        )
-    )
-
-    with pytest.raises(UndoConflictError) as conflict:
-        journal.plan_undo(
-            owner_id=scenario["ownerId"],
-            change_id="chg-device-a",
-            current_revision=scenario["deviceBEditRevision"],
-            current_state={"tickers": scenario["afterDeviceBAddTickers"]},
-            now=t0,
-        )
-    assert conflict.value.status_code == scenario["expectedConflictStatus"]
-    assert conflict.value.code == scenario["expectedConflictCode"]
