@@ -1,0 +1,423 @@
+{
+  "schemaVersion": 1,
+  "screens": [
+    {
+      "id": "markets",
+      "webPath": "/",
+      "iosRoute": "/(tabs)/markets",
+      "navKey": "dashboard",
+      "title": {
+        "tr": "Piyasalar",
+        "en": "Markets",
+        "fr": "Marchés"
+      }
+    },
+    {
+      "id": "events",
+      "webPath": "/events",
+      "iosRoute": "/(tabs)/events",
+      "navKey": "events",
+      "title": {
+        "tr": "KAP Haberleri ve Takvim",
+        "en": "KAP Disclosures & Calendar",
+        "fr": "Actualités KAP et calendrier"
+      }
+    },
+    {
+      "id": "stock-overview",
+      "webPath": "/hisse/[ticker]",
+      "iosRoute": "/stock/[ticker]",
+      "navKey": "stock",
+      "title": {
+        "tr": "Hisse Özeti",
+        "en": "Stock Overview",
+        "fr": "Aperçu de l'action"
+      }
+    },
+    {
+      "id": "stock-technical",
+      "webPath": "/teknik/[ticker]",
+      "iosRoute": "/stock/[ticker]",
+      "title": {
+        "tr": "Teknik Analiz",
+        "en": "Technical Analysis",
+        "fr": "Analyse technique"
+      }
+    },
+    {
+      "id": "stock-fundamental",
+      "webPath": "/temel/[ticker]",
+      "iosRoute": "/stock/[ticker]",
+      "title": {
+        "tr": "Temel Analiz",
+        "en": "Fundamental Analysis",
+        "fr": "Analyse fondamentale"
+      }
+    },
+    {
+      "id": "stock-combined",
+      "webPath": "/analiz/[ticker]",
+      "iosRoute": "/stock/[ticker]",
+      "navKey": "combined",
+      "title": {
+        "tr": "Birleşik Analiz",
+        "en": "Combined Analysis",
+        "fr": "Analyse combinée"
+      }
+    },
+    {
+      "id": "macro",
+      "webPath": "/makro",
+      "iosRoute": "/makro",
+      "navKey": "macro",
+      "title": {
+        "tr": "Makro Ekonomi",
+        "en": "Macroeconomy",
+        "fr": "Macro-économie"
+      }
+    },
+    {
+      "id": "screener",
+      "webPath": "/tarama",
+      "iosRoute": "/(tabs)/tarama",
+      "navKey": "screening",
+      "title": {
+        "tr": "Hisse Tarama",
+        "en": "Stock Screener",
+        "fr": "Filtrage d'actions"
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "id": "pe",
+      "status": "published",
+      "category": "valuation",
+      "screenerRangeKey": "pe",
+      "screenerPresetIds": ["low_pe", "pe_below_sector", "profitable"],
+      "screenId": "screener",
+      "title": {
+        "tr": "Fiyat / Kazanç (F/K)",
+        "en": "Price / Earnings (P/E)",
+        "fr": "Cours / Bénéfice (PER)"
+      },
+      "summary": {
+        "tr": "Hisse fiyatının son 12 aylık (TTM) hisse başına kâra oranı. Zarar eden şirketlerde tanımsızdır.",
+        "en": "Share price divided by trailing 12-month (TTM) earnings per share. Undefined for loss makers.",
+        "fr": "Cours rapporté au bénéfice par action sur 12 mois glissants (TTM). Non défini en cas de perte."
+      },
+      "source": {
+        "tr": "TradingView ve KAP finansal tabloları (son 12 ay)",
+        "en": "TradingView & KAP financial statements (trailing 12 months)",
+        "fr": "États financiers KAP et TradingView (12 mois glissants)"
+      }
+    },
+    {
+      "id": "pb",
+      "status": "published",
+      "category": "valuation",
+      "screenerRangeKey": "pb",
+      "screenerPresetIds": ["low_pb", "pb_below_sector"],
+      "screenId": "screener",
+      "title": {
+        "tr": "Piyasa Değeri / Defter Değeri (PD/DD)",
+        "en": "Price / Book (P/B)",
+        "fr": "Cours / Valeur comptable (C/VC)"
+      },
+      "summary": {
+        "tr": "Piyasa değerinin ana ortaklığa ait özkaynaklara oranı; özellikle banka ve GYO karşılaştırmalarında temel ölçüttür.",
+        "en": "Market capitalisation divided by shareholders' equity; central when comparing banks and REITs.",
+        "fr": "Capitalisation divisée par les capitaux propres ; repère clé pour les banques et foncières."
+      },
+      "source": {
+        "tr": "TradingView ve KAP bilançoları",
+        "en": "TradingView & KAP balance sheets",
+        "fr": "Bilans KAP et TradingView"
+      }
+    },
+    {
+      "id": "ev_ebitda",
+      "status": "published",
+      "category": "valuation",
+      "screenerRangeKey": "evebitda",
+      "screenerPresetIds": ["low_ev_ebitda"],
+      "screenId": "screener",
+      "title": {
+        "tr": "Firma Değeri / FAVÖK (FD/FAVÖK)",
+        "en": "Enterprise Value / EBITDA (EV/EBITDA)",
+        "fr": "Valeur d'entreprise / EBITDA (VE/EBITDA)"
+      },
+      "summary": {
+        "tr": "Borç ve nakit yapısını da içeren firma değerinin son 12 aylık faaliyet kârına (FAVÖK) oranı.",
+        "en": "Enterprise value (including net debt) divided by trailing 12-month EBITDA.",
+        "fr": "Valeur d'entreprise (dette nette incluse) rapportée à l'EBITDA sur 12 mois."
+      },
+      "source": {
+        "tr": "TradingView ve KAP gelir/nakit akım tabloları",
+        "en": "TradingView & KAP income/cash-flow statements",
+        "fr": "Comptes de résultat KAP et TradingView"
+      }
+    },
+    {
+      "id": "dividend_yield",
+      "status": "published",
+      "category": "valuation",
+      "screenerRangeKey": "dy",
+      "screenerPresetIds": ["high_dividend"],
+      "screenId": "stock-fundamental",
+      "title": {
+        "tr": "Temettü Verimi",
+        "en": "Dividend Yield",
+        "fr": "Rendement du dividende"
+      },
+      "summary": {
+        "tr": "Son 12 ayda dağıtılan nakit temettü toplamının güncel hisse fiyatına oranı.",
+        "en": "Total cash dividends distributed over the past 12 months divided by the current share price.",
+        "fr": "Total des dividendes en espèces versés sur 12 mois rapporté au cours actuel."
+      },
+      "source": {
+        "tr": "KAP temettü bildirimleri ve Borsa İstanbul kapanış fiyatları",
+        "en": "KAP dividend disclosures & Borsa Istanbul closing prices",
+        "fr": "Annonces de dividendes KAP et cours de clôture Borsa Istanbul"
+      }
+    },
+    {
+      "id": "roe",
+      "status": "published",
+      "category": "profitability",
+      "screenerRangeKey": "roe",
+      "screenerPresetIds": ["high_roe", "roe_above_sector"],
+      "screenId": "stock-fundamental",
+      "title": {
+        "tr": "Özkaynak Kârlılığı (ROE)",
+        "en": "Return on Equity (ROE)",
+        "fr": "Rentabilité des capitaux propres (ROE)"
+      },
+      "summary": {
+        "tr": "Son 12 aylık net kârın özkaynaklara oranı; şirketin sermayesini ne kadar verimli kullandığını ölçer.",
+        "en": "Trailing 12-month net income divided by shareholders' equity; measures capital efficiency.",
+        "fr": "Résultat net sur 12 mois divisé par les capitaux propres ; mesure l'efficacité du capital."
+      },
+      "source": {
+        "tr": "KAP dönemsel finansal tabloları",
+        "en": "KAP periodic financial statements",
+        "fr": "États financiers périodiques KAP"
+      }
+    },
+    {
+      "id": "rsi",
+      "status": "published",
+      "category": "technical",
+      "screenerRangeKey": "rsi",
+      "screenerPresetIds": ["rsi_oversold", "rsi_overbought"],
+      "indicatorKind": "rsi",
+      "screenId": "stock-technical",
+      "title": {
+        "tr": "Göreceli Güç Endeksi (RSI 14)",
+        "en": "Relative Strength Index (RSI 14)",
+        "fr": "Indice de force relative (RSI 14)"
+      },
+      "summary": {
+        "tr": "0–100 aralığında momentum osilatörü; 30 altı aşırı satım, 70 üstü aşırı alım bölgesi olarak izlenir.",
+        "en": "Momentum oscillator on a 0–100 scale; below 30 marks oversold and above 70 overbought territory.",
+        "fr": "Oscillateur de momentum de 0 à 100 ; sous 30 indique une survente et au-dessus de 70 un surachat."
+      },
+      "source": {
+        "tr": "14 periyotluk Wilder ortalamasıyla hesaplanan fiyat verisi",
+        "en": "Price series computed with 14-period Wilder smoothing",
+        "fr": "Série de cours calculée par lissage de Wilder sur 14 périodes"
+      }
+    },
+    {
+      "id": "sma",
+      "status": "published",
+      "category": "technical",
+      "screenerRangeKey": "sma50",
+      "screenerPresetIds": ["uptrend", "golden_cross", "death_cross"],
+      "indicatorKind": "sma",
+      "screenId": "stock-technical",
+      "title": {
+        "tr": "Basit Hareketli Ortalama (SMA)",
+        "en": "Simple Moving Average (SMA)",
+        "fr": "Moyenne mobile simple (MM)"
+      },
+      "summary": {
+        "tr": "Son N kapanışın aritmetik ortalaması; SMA 50 ve SMA 200 kesişimleri orta-uzun vadeli trend sinyali olarak izlenir.",
+        "en": "Arithmetic average of the last N closes; SMA 50/200 crosses track medium-to-long-term trend shifts.",
+        "fr": "Moyenne arithmétique des N dernières clôtures ; les croisements MM 50/200 suivent les tendances."
+      },
+      "source": {
+        "tr": "Günlük kapanış verileri üzerinden grafik hesaplaması",
+        "en": "Chart calculation over daily closing prices",
+        "fr": "Calcul graphique sur les cours de clôture quotidiens"
+      }
+    },
+    {
+      "id": "macd",
+      "status": "published",
+      "category": "technical",
+      "indicatorKind": "macd",
+      "screenId": "stock-technical",
+      "title": {
+        "tr": "MACD (12, 26, 9)",
+        "en": "MACD (12, 26, 9)",
+        "fr": "MACD (12, 26, 9)"
+      },
+      "summary": {
+        "tr": "Hızlı ve yavaş üssel ortalamaların farkı ile sinyal çizgisi arasındaki momentum değişimini gösterir.",
+        "en": "Tracks momentum shifts via the spread between fast/slow EMAs and its signal line.",
+        "fr": "Suit l'évolution du momentum via l'écart entre moyennes exponentielles rapide et lente."
+      },
+      "source": {
+        "tr": "Grafik gösterge motoru (EMA 12 / 26 / 9)",
+        "en": "Chart indicator engine (EMA 12 / 26 / 9)",
+        "fr": "Moteur d'indicateurs graphiques (MME 12 / 26 / 9)"
+      }
+    },
+    {
+      "id": "bollinger",
+      "status": "published",
+      "category": "technical",
+      "indicatorKind": "bb",
+      "screenId": "stock-technical",
+      "title": {
+        "tr": "Bollinger Bantları (20, 2)",
+        "en": "Bollinger Bands (20, 2)",
+        "fr": "Bandes de Bollinger (20, 2)"
+      },
+      "summary": {
+        "tr": "20 günlük hareketli ortalamanın ±2 standart sapma etrafında oluşturduğu oynaklık kanalı.",
+        "en": "Volatility envelope drawn ±2 standard deviations around a 20-bar simple moving average.",
+        "fr": "Enveloppe de volatilité tracée à ±2 écarts-types autour d'une moyenne mobile 20 périodes."
+      },
+      "source": {
+        "tr": "Grafik gösterge motoru",
+        "en": "Chart indicator engine",
+        "fr": "Moteur d'indicateurs graphiques"
+      }
+    },
+    {
+      "id": "real_return",
+      "status": "published",
+      "category": "macro",
+      "screenId": "macro",
+      "title": {
+        "tr": "Reel Getiri (TÜFE Arındırılmış)",
+        "en": "Real Return (CPI-Adjusted)",
+        "fr": "Rendement réel (corrigé de l'IPC)"
+      },
+      "summary": {
+        "tr": "Nominal fiyat değişiminin TÜİK aylık TÜFE zincirine göre bugünkü TL alım gücüne çevrilmiş karşılığı.",
+        "en": "Nominal price performance scaled to today's Turkish lira purchasing power using monthly CPI.",
+        "fr": "Performance nominale ramenée au pouvoir d'achat actuel en livre turque via l'IPC mensuel."
+      },
+      "source": {
+        "tr": "TÜİK / TCMB EVDS aylık TÜFE verisi",
+        "en": "TurkStat / CBRT EVDS monthly CPI series",
+        "fr": "Séries mensuelles IPC TurkStat / CBRT EVDS"
+      }
+    }
+  ],
+  "guides": [
+    {
+      "id": "valuation-multiples",
+      "slug": "degerleme-carpanlari-fk-pddd-fdfavok",
+      "status": "published",
+      "screenId": "screener",
+      "metricIds": ["pe", "pb", "ev_ebitda"],
+      "presetIds": ["low_pe", "pe_below_sector", "low_pb", "low_ev_ebitda"],
+      "indicatorKinds": [],
+      "relatedGuideIds": ["profitability-and-dividends"],
+      "title": {
+        "tr": "Değerleme Çarpanları: F/K, PD/DD ve FD/FAVÖK",
+        "en": "Valuation Multiples: P/E, P/B and EV/EBITDA",
+        "fr": "Multiples de valorisation : PER, C/VC et VE/EBITDA"
+      },
+      "summary": {
+        "tr": "Şirketleri aynı KAP sektöründeki emsalleriyle karşılaştırırken hangi çarpanın ne zaman anlamlı olduğunu özetler.",
+        "en": "Explains when each valuation multiple is meaningful when comparing peers within the same KAP sector.",
+        "fr": "Explique quand chaque multiple est pertinent pour comparer des pairs du même secteur KAP."
+      }
+    },
+    {
+      "id": "profitability-and-dividends",
+      "slug": "karlilik-roe-ve-temettu-verimi",
+      "status": "published",
+      "screenId": "stock-fundamental",
+      "metricIds": ["roe", "dividend_yield"],
+      "presetIds": ["high_roe", "roe_above_sector", "high_dividend"],
+      "indicatorKinds": [],
+      "relatedGuideIds": ["valuation-multiples"],
+      "title": {
+        "tr": "Kârlılık (ROE) ve Temettü Verimi",
+        "en": "Profitability (ROE) and Dividend Yield",
+        "fr": "Rentabilité (ROE) et rendement du dividende"
+      },
+      "summary": {
+        "tr": "Özkaynak kârlılığının temettü sürekliliği ve toplam getiriyle ilişkisini anlatır.",
+        "en": "Shows how return on equity relates to dividend sustainability and total return.",
+        "fr": "Montre comment le ROE éclaire la pérennité du dividende et le rendement total."
+      }
+    },
+    {
+      "id": "technical-momentum",
+      "slug": "teknik-gostergeler-rsi-macd-sma",
+      "status": "published",
+      "screenId": "stock-technical",
+      "metricIds": ["rsi", "sma", "macd", "bollinger"],
+      "presetIds": ["rsi_oversold", "rsi_overbought", "uptrend", "golden_cross"],
+      "indicatorKinds": ["rsi", "sma", "macd", "bb"],
+      "relatedGuideIds": ["real-return-and-macro"],
+      "title": {
+        "tr": "Teknik Göstergeler: RSI, MACD, SMA ve Bollinger",
+        "en": "Technical Indicators: RSI, MACD, SMA and Bollinger",
+        "fr": "Indicateurs techniques : RSI, MACD, MM et Bollinger"
+      },
+      "summary": {
+        "tr": "Trend, momentum ve oynaklık göstergelerinin grafikte birlikte nasıl yorumlandığını özetler.",
+        "en": "Summarizes how trend, momentum and volatility indicators work together on stock charts.",
+        "fr": "Résume comment combiner indicateurs de tendance, de momentum et de volatilité sur un graphique."
+      }
+    },
+    {
+      "id": "real-return-and-macro",
+      "slug": "reel-getiri-enflasyon-ve-politika-faizi",
+      "status": "published",
+      "screenId": "macro",
+      "metricIds": ["real_return"],
+      "presetIds": [],
+      "indicatorKinds": [],
+      "relatedGuideIds": ["valuation-multiples"],
+      "title": {
+        "tr": "Reel Getiri, Enflasyon ve Politika Faizi",
+        "en": "Real Return, Inflation and Policy Rate",
+        "fr": "Rendement réel, inflation et taux directeur"
+      },
+      "summary": {
+        "tr": "Yüksek enflasyon dönemlerinde nominal getiriyi TÜFE ve döviz bazlı grafiklerle okumayı açıklar.",
+        "en": "Explains how to read nominal returns alongside CPI-adjusted and FX-converted charts.",
+        "fr": "Explique comment lire les performances nominales avec les graphiques corrigés de l'IPC et en devises."
+      }
+    },
+    {
+      "id": "draft-sector-medians",
+      "slug": "taslak-banka-ve-sanayi-oran-farklari",
+      "status": "draft",
+      "screenId": "screener",
+      "metricIds": ["pe", "pb", "roe"],
+      "presetIds": ["pe_below_sector", "pb_below_sector"],
+      "indicatorKinds": [],
+      "relatedGuideIds": ["valuation-multiples"],
+      "title": {
+        "tr": "Banka ve Sanayi Şirketlerinde Oran Farkları (Taslak)",
+        "en": "Ratio Differences Between Banks and Industrials (Draft)",
+        "fr": "Différences de ratios entre banques et industries (Brouillon)"
+      },
+      "summary": {
+        "tr": "İlerideki editör önizlemesi için taslak kayıt: üretim paketine alınmaz, ancak CI referansları doğrular.",
+        "en": "Draft entry for future editorial preview: omitted from production bundles while still validated in CI.",
+        "fr": "Entrée brouillon pour l'aperçu éditorial : exclue de la production tout en étant vérifiée en CI."
+      }
+    }
+  ]
+}
