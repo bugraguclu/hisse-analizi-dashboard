@@ -16,6 +16,7 @@ export const SECTION_LABELS: Readonly<Record<string, TranslationKey>> = {
   analiz: "nav.combinedAnalysis",
   makro: "nav.macroEconomy",
   tarama: "nav.screening",
+  cihazlar: "nav.devices",
 };
 
 export interface NavItem {

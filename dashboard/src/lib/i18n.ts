@@ -32,6 +32,7 @@ const translations = {
   "nav.combinedAnalysis": { tr: "Kombine Analiz", en: "Combined Analysis", fr: "Analyse combinée" },
   "nav.macroEconomy": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
   "nav.screening": { tr: "Hisse Tarama", en: "Stock Screening", fr: "Filtrage d'actions" },
+  "nav.devices": { tr: "iPhone Widget", en: "iPhone Widget", fr: "Widget iPhone" },
 
   // Dashboard
   "dashboard.marketOverview": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
@@ -300,6 +301,74 @@ const translations = {
   "pivots.resistance": { tr: "Direnç Seviyeleri", en: "Resistance Levels", fr: "Niveaux de résistance" },
 
   // Scorecard
+  // iPhone Widget Pairing & Companion
+  "widgetPairing.pageTitle": { tr: "iPhone Widget ve Cihazlar", en: "iPhone Widgets & Devices", fr: "Widgets iPhone et appareils" },
+  "widgetPairing.pageSubtitle": {
+    tr: "Takip listenizi QR kodla iPhone ana ekranına ve kilit ekranına bağlayın; cihaz erişimini dilediğiniz zaman kaldırın.",
+    en: "Pair your watchlist to iPhone Home Screen and Lock Screen widgets via QR code, and revoke device access anytime.",
+    fr: "Associez votre liste de suivi aux widgets iPhone par code QR et révoquez l'accès à tout moment.",
+  },
+  "widgetPairing.sectionTitle": { tr: "QR ile iPhone widget eşleştirme", en: "QR iPhone widget pairing", fr: "Association du widget iPhone par QR" },
+  "widgetPairing.sectionDesc": {
+    tr: "Cihaz yalnız BIST 100 özeti, seçili takip listesi ve yaklaşan finansal takvim olayları için salt okunur anahtar alır.",
+    en: "The device receives a read-only token scoped to the BIST 100 summary, selected watchlist, and upcoming financial events.",
+    fr: "L'appareil reçoit un jeton en lecture seule pour le BIST 100, la liste choisie et les prochains événements financiers.",
+  },
+  "widgetPairing.selectList": { tr: "Widget'ta gösterilecek takip listesi", en: "Watchlist to show on the widget", fr: "Liste de suivi pour le widget" },
+  "widgetPairing.generateCode": { tr: "Bağlantı kodu oluştur", en: "Generate pairing code", fr: "Générer un code" },
+  "widgetPairing.newCode": { tr: "Yeni kod", en: "New code", fr: "Nouveau code" },
+  "widgetPairing.codeLabel": { tr: "Kod", en: "Code", fr: "Code" },
+  "widgetPairing.codeMeta": { tr: "10 dakika geçerli, tek kullanımlık.", en: "Valid for 10 minutes, single-use.", fr: "Valable 10 minutes, usage unique." },
+  "widgetPairing.codeExpired": { tr: "Kodun süresi doldu.", en: "The pairing code expired.", fr: "Le code a expiré." },
+  "widgetPairing.qrAlt": { tr: "iPhone widget eşleştirme QR kodu", en: "iPhone widget pairing QR code", fr: "Code QR d'association du widget iPhone" },
+  "widgetPairing.desktopHint": {
+    tr: "iPhone kamerasıyla okutun; Hisse Analizi uygulaması açılıp otomatik bağlanır.",
+    en: "Scan with your iPhone camera to open Hisse Analizi and pair automatically.",
+    fr: "Scannez avec l'appareil photo de l'iPhone pour ouvrir Hisse Analizi et associer le widget.",
+  },
+  "widgetPairing.iosHint": {
+    tr: "Aşağıdaki düğmeyle Hisse Analizi uygulamasını açıp bağlanın.",
+    en: "Tap below to open the Hisse Analizi app and complete pairing.",
+    fr: "Appuyez ci-dessous pour ouvrir Hisse Analizi et terminer l'association.",
+  },
+  "widgetPairing.openInApp": { tr: "Uygulamada aç", en: "Open in app", fr: "Ouvrir dans l'app" },
+  "widgetPairing.copy": { tr: "Kopyala", en: "Copy", fr: "Copier" },
+  "widgetPairing.copyCode": { tr: "Eşleştirme kodunu kopyala", en: "Copy pairing code", fr: "Copier le code d'association" },
+  "widgetPairing.copied": { tr: "Kopyalandı", en: "Copied", fr: "Copié" },
+  "widgetPairing.copyFailed": { tr: "Kopyalanamadı", en: "Copy failed", fr: "Échec de la copie" },
+  "widgetPairing.devicesTitle": { tr: "Bağlı cihazlar", en: "Paired devices", fr: "Appareils associés" },
+  "widgetPairing.noDevices": { tr: "Henüz bağlı iPhone yok.", en: "No iPhone paired yet.", fr: "Aucun iPhone associé." },
+  "widgetPairing.lastSeen": { tr: "Son güncelleme {time}", en: "Last refresh {time}", fr: "Dernière mise à jour {time}" },
+  "widgetPairing.pairedAt": { tr: "Bağlandı {time}", en: "Paired {time}", fr: "Associé le {time}" },
+  "widgetPairing.syncSelectedList": { tr: "Seçili listeyi gönder", en: "Sync selected list", fr: "Synchroniser la liste" },
+  "widgetPairing.revoke": { tr: "Erişimi kaldır", en: "Revoke access", fr: "Révoquer l'accès" },
+  "widgetPairing.revokeConfirmTitle": { tr: "Cihaz erişimini kaldırma onayı", en: "Confirm device revocation", fr: "Confirmer la révocation" },
+  "widgetPairing.revokeConfirmMessage": {
+    tr: "{name} cihazının erişimi kaldırılsın mı? Widget kişisel veriye erişmeyi bırakır; yeniden bağlamak için yeni kod gerekir.",
+    en: "Revoke access for {name}? The widget will immediately lose access and require a new code to pair again.",
+    fr: "Révoquer l'accès pour {name} ? Le widget perdra immédiatement l'accès et nécessitera un nouveau code.",
+  },
+  "widgetPairing.pairedToast": { tr: "iPhone başarıyla bağlandı.", en: "iPhone paired successfully.", fr: "iPhone associé avec succès." },
+  "widgetPairing.syncedToast": { tr: "{name} artık “{list}” listesini gösteriyor.", en: "{name} now shows “{list}”.", fr: "{name} affiche désormais « {list} »." },
+  "widgetPairing.revokedToast": { tr: "{name} cihazının erişimi kaldırıldı.", en: "Access revoked for {name}.", fr: "Accès révoqué pour {name}." },
+  "widgetPairing.remindersTitle": { tr: "Takvim hatırlatıcıları (iOS)", en: "Calendar reminders (iOS)", fr: "Rappels de calendrier (iOS)" },
+  "widgetPairing.remindersDesc": {
+    tr: "Bilanço, nakit temettü, TCMB PPK ve önemli ekonomik açıklamalar öncesinde iPhone'da yerel bildirim planlanır; dokununca ilgili hisse veya olaya gider.",
+    en: "Schedules local iPhone notifications before earnings, dividends, CBRT rate decisions, and key economic releases; tapping opens the target stock or event.",
+    fr: "Planifie des notifications locales sur iPhone avant résultats, dividendes, décisions PPK et annonces macro ; un appui ouvre l'écran cible.",
+  },
+  "widgetPairing.remindersCaveat": {
+    tr: "Not: Yerel takvim hatırlatıcıları gerçek zamanlı fiyat eşiği veya anlık KAP push alarmı sağlamaz; bunlar için ayrı sunucu bildirimi gerekir.",
+    en: "Note: Local calendar reminders do not provide real-time price threshold or live KAP push alerts, which require a separate push service.",
+    fr: "Note : les rappels locaux ne fournissent pas d'alertes push de prix ou KAP en temps réel.",
+  },
+  "widgetPairing.shortcutsTitle": { tr: "Siri ve Kestirmeler", en: "Siri & Shortcuts", fr: "Siri et Raccourcis" },
+  "widgetPairing.shortcutsDesc": {
+    tr: "iOS uygulamasından belirli bir hisseyi, takip listesini veya kişisel panoyu tek komutla açan Siri kestirmeleri eklenebilir.",
+    en: "Add Siri Shortcuts from the iOS app to jump straight to a stock, watchlist, or personal dashboard even when the app is closed.",
+    fr: "Ajoutez des raccourcis Siri depuis l'app iOS pour ouvrir une action, une liste de suivi ou votre tableau de bord.",
+  },
+  "widgetPairing.footerLink": { tr: "iPhone Widget & Kestirmeler", en: "iPhone Widgets & Shortcuts", fr: "Widgets iPhone & Raccourcis" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
