@@ -32,6 +32,9 @@ const translations = {
   "nav.combinedAnalysis": { tr: "Kombine Analiz", en: "Combined Analysis", fr: "Analyse combinée" },
   "nav.macroEconomy": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
   "nav.screening": { tr: "Hisse Tarama", en: "Stock Screening", fr: "Filtrage d'actions" },
+  "nav.atlas": { tr: "Kavram Atlası", en: "Concept Atlas", fr: "Atlas des concepts" },
+  "nav.indices": { tr: "BIST Endeksleri", en: "BIST Indices", fr: "Indices BIST" },
+  "nav.sectors": { tr: "KAP Sektörleri", en: "KAP Sectors", fr: "Secteurs KAP" },
 
   // Dashboard
   "dashboard.marketOverview": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
@@ -153,6 +156,28 @@ const translations = {
   "nav.short.combined": { tr: "Kombine", en: "Combined", fr: "Combinée" },
   "nav.short.macro": { tr: "Makro", en: "Macro", fr: "Macro" },
   "nav.short.screening": { tr: "Tarama", en: "Screener", fr: "Filtrage" },
+  "nav.short.atlas": { tr: "Atlas", en: "Atlas", fr: "Atlas" },
+  "search.kind.stock": { tr: "Hisse", en: "Stock", fr: "Action" },
+  "search.kind.concept": { tr: "Kavram", en: "Concept", fr: "Concept" },
+  "search.kind.index": { tr: "Endeks", en: "Index", fr: "Indice" },
+  "search.kind.sector": { tr: "Sektör", en: "Sector", fr: "Secteur" },
+  "search.group.stocks": { tr: "Hisseler", en: "Stocks", fr: "Actions" },
+  "search.group.explore": { tr: "Kavramlar, endeksler ve sektörler", en: "Concepts, indices & sectors", fr: "Concepts, indices et secteurs" },
+  "footer.explore": { tr: "Keşfet", en: "Explore", fr: "Explorer" },
+  "recovery.title": { tr: "Sayfa dosyaları güncellendi", en: "App files were updated", fr: "Les fichiers de l'application ont été mis à jour" },
+  "recovery.description": {
+    tr: "Yeni bir sürüm yayınlandığı veya bağlantı kesildiği için bir bileşen yüklenemedi. Yaptığınız değişiklikleri kaybetmeden hazır olduğunuzda sayfayı yenileyebilirsiniz.",
+    en: "A screen asset could not load after a new deployment or connection drop. Reload the page whenever you are ready without losing control.",
+    fr: "Un composant n'a pas pu être chargé suite à un déploiement ou une coupure. Rechargez la page quand vous êtes prêt.",
+  },
+  "recovery.reload": { tr: "Sayfayı yenile", en: "Reload page", fr: "Recharger la page" },
+  "recovery.dismiss": { tr: "Kapat", en: "Dismiss", fr: "Fermer" },
+  "error.assetTitle": { tr: "Yeni sürüm yayınlanmış olabilir", en: "A new version may be available", fr: "Une nouvelle version est peut-être disponible" },
+  "error.assetDescription": {
+    tr: "Bu ekranın eski sürüm dosyaları artık sunucuda bulunamadı. Sayfayı yenileyerek güncel sürümü yükleyebilirsiniz.",
+    en: "The previous deployment's files for this screen are no longer on the server. Reload the page to load the latest version.",
+    fr: "Les fichiers d'une ancienne version de cet écran ne sont plus disponibles. Rechargez la page pour charger la dernière version.",
+  },
   // The one site-wide disclaimer (components/layout/LegalNotice.tsx); cards carry none of their own.
   "legal.title": { tr: "Yasal uyarı", en: "Legal notice", fr: "Avertissement" },
   "legal.body": {

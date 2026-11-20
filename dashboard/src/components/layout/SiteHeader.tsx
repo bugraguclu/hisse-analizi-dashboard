@@ -10,6 +10,9 @@ import { useSearchHotkey } from "@/components/shared/search/use-search-hotkey";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LocaleToggle } from "@/components/ui/locale-toggle";
 import { useLocale } from "@/lib/locale-context";
+import { getAtlasConcept } from "@/lib/atlas";
+import { resolveIndexSlug, resolveSectorSlug } from "@/lib/discovery";
+import { sectorLabel } from "@/lib/sectors";
 import type { TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { DEFAULT_TICKER, NAV_ITEMS, SECTION_LABELS, tickerFromPath } from "./nav";
@@ -28,13 +31,29 @@ function safeDecode(value: string): string {
 
 /** Client-rendered pages cannot export metadata; keep the tab title in sync with the route. */
 function useDocumentTitle(pathname: string) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const segments = pathname.split("/").filter(Boolean);
   const knownSection = segments.length === 0 || segments[0] in SECTION_LABELS;
   const labels = knownSection
     ? segments.map((segment, index) => {
-        const labelKey: TranslationKey | undefined = index === 0 ? SECTION_LABELS[segment] : undefined;
-        return labelKey ? t(labelKey) : safeDecode(segment).toUpperCase();
+        if (index === 0) {
+          const labelKey: TranslationKey | undefined = SECTION_LABELS[segment];
+          return labelKey ? t(labelKey) : safeDecode(segment).toUpperCase();
+        }
+        const decoded = safeDecode(segment);
+        if (segments[0] === "atlas") {
+          const concept = getAtlasConcept(decoded);
+          return concept ? concept.title[locale] : t("notFound.title");
+        }
+        if (segments[0] === "endeks") {
+          const resolved = resolveIndexSlug(decoded);
+          return resolved ? resolved.entry.name[locale] : t("notFound.title");
+        }
+        if (segments[0] === "sektor") {
+          const resolved = resolveSectorSlug(decoded);
+          return resolved ? sectorLabel(resolved.key, locale) : t("notFound.title");
+        }
+        return decoded.toUpperCase();
       })
     : [t("notFound.title")];
   const current = labels.at(-1);

@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Hourglass, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { atlasHref, searchAtlasConcepts } from "@/lib/atlas";
+import { searchDiscovery } from "@/lib/discovery";
 import { useLocale } from "@/lib/locale-context";
 import { STALE_TIME } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -17,7 +19,12 @@ import { useShortcutLabel } from "./search/use-search-hotkey";
 const SERVER_MIN_LENGTH = 2;
 const DEBOUNCE_MS = 250;
 const MAX_RESULTS = 8;
+const MAX_DISCOVERY_RESULTS = 4;
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
+
+type SearchRow =
+  | { kind: "stock"; key: string; code: string; label: string; ticker: string }
+  | { kind: "concept" | "index" | "sector"; key: string; code: string; label: string; href: string };
 
 export interface TickerSearchHandle {
   /** Focuses the field and opens its list; false when the field is not on screen. */
@@ -70,8 +77,9 @@ export function TickerSearch({
   const headingId = `${baseId}-heading`;
   const router = useRouter();
   const pathname = usePathname();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const shortcut = useShortcutLabel();
+  const includeExplore = !onSelect;
 
   const trimmed = query.trim();
   const hasQuery = trimmed.length > 0;
@@ -129,20 +137,46 @@ export function TickerSearch({
     return list;
   }, [serverQ.data, index]);
 
+  const exploreRows = useMemo<SearchRow[]>(() => {
+    if (!includeExplore || !hasQuery) return [];
+    const concepts: SearchRow[] = searchAtlasConcepts(trimmed, locale, 3).map((concept) => ({
+      kind: "concept",
+      key: `concept:${concept.slug}`,
+      code: concept.badge,
+      label: concept.title[locale],
+      href: atlasHref(concept.slug),
+    }));
+    const discovery: SearchRow[] = searchDiscovery(trimmed, locale, 3).map((hit) => ({
+      kind: hit.kind,
+      key: hit.id,
+      code: hit.badge,
+      label: hit.label,
+      href: hit.href,
+    }));
+    return [...concepts, ...discovery].slice(0, MAX_DISCOVERY_RESULTS);
+  }, [hasQuery, includeExplore, locale, trimmed]);
+
   let settled: boolean;
-  if (!hasQuery || local.length > 0) settled = true;
+  if (!hasQuery || local.length > 0 || exploreRows.length > 0) settled = true;
   else if (needServer) settled = serverCurrent && !serverQ.isFetching;
   else settled = indexReady || indexFailed;
   const pending = hasQuery && !settled;
 
-  const results = local.length > 0 ? local : serverCurrent ? serverOptions : [];
-  const rows: TickerOption[] = hasQuery ? results : popular;
+  const stockResults = local.length > 0 ? local : serverCurrent ? serverOptions : [];
+  const stockRows: SearchRow[] = (hasQuery ? stockResults : popular).map((option) => ({
+    kind: "stock",
+    key: `stock:${option.ticker}`,
+    code: option.ticker,
+    label: option.name,
+    ticker: option.ticker,
+  }));
+  const rows: SearchRow[] = hasQuery ? [...stockRows, ...exploreRows] : stockRows;
   const showRows = panelOpen && rows.length > 0;
   const showStatus = panelOpen && hasQuery && rows.length === 0;
 
   const nav = useListNav({
     count: showRows ? rows.length : 0,
-    listKey: `${trimmed}|${rows.map((row) => row.ticker).join(",")}`,
+    listKey: `${trimmed}|${rows.map((row) => row.key).join(",")}`,
     idPrefix: baseId,
     // The sheet was opened on purpose, so Tab stays in it. The inline field hands
     // Tab back to the page until something is typed: tabbing past the header must
@@ -173,7 +207,7 @@ export function TickerSearch({
     [],
   );
 
-  function choose(ticker: string) {
+  function chooseStock(ticker: string) {
     // Tickers are ASCII: a Turkish-locale uppercase would turn "sise" into "SİSE".
     const symbol = ticker.trim().toUpperCase();
     setQuery("");
@@ -182,6 +216,18 @@ export function TickerSearch({
     else inputRef.current?.blur();
     if (onSelect) onSelect(symbol);
     else router.push(tickerHref(pathname, symbol));
+  }
+
+  function chooseRow(row: SearchRow) {
+    if (row.kind === "stock") {
+      chooseStock(row.ticker);
+      return;
+    }
+    setQuery("");
+    setOpen(false);
+    if (overlay) onClose?.();
+    else inputRef.current?.blur();
+    router.push(row.href);
   }
 
   function openList() {
@@ -203,15 +249,15 @@ export function TickerSearch({
         if (event.nativeEvent.isComposing) return;
         event.preventDefault();
         if (nav.active >= 0) {
-          choose(rows[nav.active].ticker);
+          chooseRow(rows[nav.active]);
         } else if (!hasQuery) {
           // Nothing marked and nothing typed: nothing to take.
         } else if (settled) {
-          if (rows.length > 0) choose(rows[0].ticker);
+          if (rows.length > 0) chooseRow(rows[0]);
         } else {
           // Typed a full ticker faster than the list answered — go straight to it.
           const candidate = trimmed.toUpperCase();
-          if (TICKER_RE.test(candidate)) choose(candidate);
+          if (TICKER_RE.test(candidate)) chooseStock(candidate);
         }
         break;
       }
@@ -359,20 +405,25 @@ export function TickerSearch({
               >
                 {rows.map((option, i) => (
                   <li
-                    key={option.ticker}
+                    key={option.key}
                     id={nav.optionId(i)}
                     role="option"
                     aria-selected={i === nav.active}
                     onMouseDown={(e) => e.preventDefault()}
                     onMouseMove={() => i !== nav.active && nav.setActive(i)}
-                    onClick={() => choose(option.ticker)}
+                    onClick={() => chooseRow(option)}
                     className={cn(
                       "flex cursor-pointer items-baseline gap-3 px-3 py-3 text-sm md:py-2",
                       i === nav.active && "bg-accent",
                     )}
                   >
-                    <span className="w-14 shrink-0 font-mono text-xs font-semibold text-foreground">{option.ticker}</span>
-                    <span className="truncate text-xs text-muted-foreground">{option.name}</span>
+                    <span className="w-16 shrink-0 truncate font-mono text-xs font-semibold text-foreground">{option.code}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{option.label}</span>
+                    {option.kind !== "stock" && (
+                      <span className="shrink-0 rounded-sm border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {t(`search.kind.${option.kind}`)}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
