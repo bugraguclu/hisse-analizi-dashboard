@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "description": "Deterministic cross-platform (Backend, Web, iOS) market and failure scenarios for Hisse Analizi.",
+  "scenarios": {
+    "session_open_fresh": {
+      "clock": "2026-11-20T11:30:00+03:00",
+      "expectedPhase": "open",
+      "expectedIsOpen": true,
+      "snapshot": {
+        "snapshot": {
+          "THYAO": {
+            "last_price": 312.5,
+            "change_percent": 1.85,
+            "day_low": 307.25,
+            "day_high": 314.0,
+            "volume": 14820500,
+            "updated_at": "2026-11-20T11:15:00+03:00"
+          }
+        },
+        "meta": {
+          "source": "tradingview",
+          "as_of": "2026-11-20",
+          "fetched_at": "2026-11-20T11:29:15+03:00",
+          "age_seconds": 45,
+          "served_from": "live",
+          "stale": false,
+          "delay_seconds": 900,
+          "notes": []
+        }
+      }
+    },
+    "session_closed_last_close": {
+      "afterCloseClock": "2026-11-20T19:15:00+03:00",
+      "expectedAfterClosePhase": "afterClose",
+      "weekendClock": "2026-11-21T12:00:00+03:00",
+      "expectedWeekendPhase": "weekend",
+      "snapshot": {
+        "snapshot": {
+          "THYAO": {
+            "last_price": 315.0,
+            "change_percent": 2.67,
+            "day_low": 307.25,
+            "day_high": 316.5,
+            "volume": 28100000,
+            "updated_at": "2026-11-20T18:10:00+03:00"
+          }
+        },
+        "meta": {
+          "source": "isyatirim",
+          "as_of": "2026-11-20",
+          "fetched_at": "2026-11-20T18:12:00+03:00",
+          "age_seconds": 3780,
+          "served_from": "store",
+          "stale": false,
+          "delay_seconds": 0,
+          "notes": []
+        }
+      }
+    },
+    "stale_price_provider_down": {
+      "clock": "2026-11-20T14:00:00+03:00",
+      "snapshot": {
+        "snapshot": {
+          "THYAO": {
+            "last_price": 304.25,
+            "change_percent": -0.45,
+            "day_low": 301.0,
+            "day_high": 306.5,
+            "volume": 19200000,
+            "updated_at": "2026-11-18T18:10:00+03:00"
+          }
+        },
+        "meta": {
+          "source": "tradingview",
+          "as_of": "2026-11-18",
+          "fetched_at": "2026-11-18T18:15:00+03:00",
+          "age_seconds": 157500,
+          "served_from": "stale",
+          "stale": true,
+          "delay_seconds": 900,
+          "notes": [
+            "Sağlayıcıya ulaşılamadı; son kayıtlı veri"
+          ]
+        }
+      }
+    },
+    "missing_balance_sheet": {
+      "ticker": "YENIH",
+      "balanceSheet": {
+        "ticker": "YENIH",
+        "quarterly": false,
+        "statements": [],
+        "meta": {
+          "source": "kap+isyatirim",
+          "as_of": null,
+          "fetched_at": "2026-11-20T10:00:00+03:00",
+          "age_seconds": 120,
+          "served_from": "store",
+          "stale": false,
+          "delay_seconds": null,
+          "notes": [
+            "Dönem bilançosu henüz açıklanmadı"
+          ]
+        }
+      },
+      "ratios": {
+        "ticker": "YENIH",
+        "pe": null,
+        "pb": null,
+        "roe": null,
+        "market_cap": 1250000000
+      }
+    },
+    "provider_disconnected": {
+      "errors": [
+        {
+          "kind": "upstream_unavailable",
+          "status": 502,
+          "code": "upstream_unavailable",
+          "detail": "Backend servisine şu anda ulaşılamıyor.",
+          "retryable": true
+        },
+        {
+          "kind": "upstream_timeout",
+          "status": 504,
+          "code": "upstream_timeout",
+          "detail": "Backend servisi zamanında yanıt vermedi. Lütfen tekrar deneyin.",
+          "retryable": true
+        },
+        {
+          "kind": "network_drop",
+          "status": null,
+          "code": "network",
+          "detail": "API'ye ulaşılamıyor: /market/snapshot",
+          "retryable": true
+        },
+        {
+          "kind": "request_conflict",
+          "status": 409,
+          "code": "request_conflict",
+          "detail": "İstek kimliği farklı bir içerikle zaten kullanıldı.",
+          "retryable": false
+        }
+      ]
+    },
+    "empty_watchlist": {
+      "id": "empty-list",
+      "name": "İzleme Adayları",
+      "tickers": [],
+      "expectedSnapshotRequests": 0
+    },
+    "dual_device_conflict_and_retry": {
+      "ownerId": "investor-01",
+      "otherOwnerId": "investor-02",
+      "entityId": "favorites",
+      "requestId": "sync-req-20261120-01",
+      "initialRevision": 1,
+      "deviceADeleteRevision": 2,
+      "deviceBEditRevision": 3,
+      "initialTickers": ["THYAO", "GARAN", "SISE"],
+      "afterDeviceARemoveTickers": ["GARAN", "SISE"],
+      "afterDeviceBAddTickers": ["GARAN", "SISE", "ASELS"],
+      "expectedConflictStatus": 409,
+      "expectedConflictCode": "undo_conflict"
+    }
+  }
+}

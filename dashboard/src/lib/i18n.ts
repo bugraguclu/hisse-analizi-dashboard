@@ -32,6 +32,7 @@ const translations = {
   "nav.combinedAnalysis": { tr: "Kombine Analiz", en: "Combined Analysis", fr: "Analyse combinée" },
   "nav.macroEconomy": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
   "nav.screening": { tr: "Hisse Tarama", en: "Stock Screening", fr: "Filtrage d'actions" },
+  "nav.guide": { tr: "Kavram Rehberi", en: "Concept Guide", fr: "Guide des notions" },
 
   // Dashboard
   "dashboard.marketOverview": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
@@ -106,11 +107,18 @@ const translations = {
   "common.dataLoadError": { tr: "Veri yüklenemedi", en: "Could not load data", fr: "Impossible de charger les données" },
   "common.searching": { tr: "Aranıyor…", en: "Searching…", fr: "Recherche…" },
   "search.label": { tr: "Hisse ara", en: "Search stocks", fr: "Rechercher une action" },
+  "search.allLabel": { tr: "Hisse, araç, tarama veya kavram ara", en: "Search stocks, tools, screens or guides", fr: "Rechercher actions, outils, filtres ou guides" },
   "search.placeholder": { tr: "Hisse veya şirket ara", en: "Search ticker or company", fr: "Action ou société" },
+  "search.allPlaceholder": { tr: "Hisse, RSI, enflasyon, F/K…", en: "Stock, RSI, inflation, P/E…", fr: "Action, RSI, inflation, PER…" },
   "search.noResultsFor": { tr: "“{q}” için sonuç bulunamadı", en: "No results for “{q}”", fr: "Aucun résultat pour « {q} »" },
   "search.unavailable": { tr: "Arama geçici olarak kullanılamıyor", en: "Search is temporarily unavailable", fr: "La recherche est temporairement indisponible" },
   "search.resultCount": { tr: "{count} sonuç", en: "{count} results", fr: "{count} résultats" },
   "search.mostTraded": { tr: "En çok işlem gören", en: "Most traded", fr: "Les plus échangées" },
+  "search.quickAccess": { tr: "Hızlı erişim", en: "Quick access", fr: "Accès rapide" },
+  "search.kind.stock": { tr: "Hisse", en: "Stock", fr: "Action" },
+  "search.kind.tool": { tr: "Araç", en: "Tool", fr: "Outil" },
+  "search.kind.screen": { tr: "Tarama", en: "Screen", fr: "Filtre" },
+  "search.kind.concept": { tr: "Rehber", en: "Guide", fr: "Guide" },
   "search.clear": { tr: "Aramayı temizle", en: "Clear search", fr: "Effacer la recherche" },
   "shell.openMenu": { tr: "Menüyü aç", en: "Open menu", fr: "Ouvrir le menu" },
   "shell.closeMenu": { tr: "Menüyü kapat", en: "Close menu", fr: "Fermer le menu" },
@@ -279,6 +287,20 @@ const translations = {
   "watchlist.deleteList": { tr: "Listeyi Sil", en: "Delete List", fr: "Supprimer la liste" },
   "watchlist.emptyList": { tr: "Bu listede hisse yok", en: "No stocks in this list", fr: "Aucune action dans cette liste" },
   "watchlist.favorites": { tr: "Favoriler", en: "Favorites", fr: "Favoris" },
+  "watchlist.undo": { tr: "Geri al", en: "Undo", fr: "Annuler" },
+  "watchlist.tickerRemoved": { tr: "{ticker} listeden çıkarıldı", en: "{ticker} removed from list", fr: "{ticker} retiré de la liste" },
+  "watchlist.listDeleted": { tr: "“{name}” listesi silindi", en: "Deleted list “{name}”", fr: "Liste « {name} » supprimée" },
+  "watchlist.undone": { tr: "Değişiklik geri alındı", en: "Change undone", fr: "Modification annulée" },
+  "watchlist.undoConflict": {
+    tr: "Liste sonradan değiştiği için geri alma uygulanmadı",
+    en: "Undo skipped because the list changed in the meantime",
+    fr: "Annulation ignorée car la liste a changé entre-temps",
+  },
+  "watchlist.undoExpired": {
+    tr: "Geri alma süresi doldu",
+    en: "Undo window has expired",
+    fr: "Le délai d'annulation est expiré",
+  },
 
   // Events summary
   "events.summary": { tr: "Ozet", en: "Summary", fr: "Résumé" },

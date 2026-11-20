@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, Plus, Trash2, WifiOff, X } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
 import { formatMarketDate, formatNumber } from "@/lib/format";
@@ -16,7 +17,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
 import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
-import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist } from "@/hooks/use-watchlists";
+import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist, type WatchlistUndoReceipt } from "@/hooks/use-watchlists";
 import { useCompanies } from "./queries";
 import { CardBody, CardHeading, ChangePill, DashboardCard } from "./ui";
 
@@ -25,7 +26,7 @@ const HEADING_ID = "watchlist-heading";
 export function WatchlistCard({ className }: { className?: string }) {
   const { t } = useLocale();
   const { openWorkspaceManager } = useShell();
-  const { lists, createList, deleteList, addTicker, removeTicker } = useWatchlists();
+  const { lists, createList, deleteList, addTicker, removeTicker, undoChange } = useWatchlists();
   const disconnected = useIsDisconnected();
   const offlineSummary = useOfflineSummary();
   const [selectedId, setSelectedId] = useState<string>(DEFAULT_WATCHLIST_ID);
@@ -72,11 +73,39 @@ export function WatchlistCard({ className }: { className?: string }) {
     setNotice(result === "duplicate" ? t("watchlist.alreadyInList", { ticker }) : null);
   }
 
+  function offerUndo(message: string, receipt: WatchlistUndoReceipt | null, onRestored?: () => void) {
+    if (!receipt) return;
+    toast(message, {
+      action: {
+        label: t("watchlist.undo"),
+        onClick: () => {
+          const outcome = undoChange(receipt);
+          if (outcome === "undone") {
+            onRestored?.();
+            toast.success(t("watchlist.undone"));
+          } else if (outcome === "expired") {
+            toast.warning(t("watchlist.undoExpired"));
+          } else {
+            toast.warning(t("watchlist.undoConflict"));
+          }
+        },
+      },
+    });
+  }
+
+  function handleRemoveTicker(listId: string, ticker: string) {
+    const receipt = removeTicker(listId, ticker);
+    offerUndo(t("watchlist.tickerRemoved", { ticker }), receipt);
+  }
+
   function handleDelete() {
     if (lists.length <= 1) return;
-    if (!window.confirm(t("watchlist.deleteConfirm", { name: listLabel(activeList) }))) return;
-    deleteList(activeList.id);
-    setSelectedId(lists.find((l) => l.id !== activeList.id)?.id ?? DEFAULT_WATCHLIST_ID);
+    const deletedId = activeList.id;
+    const deletedName = listLabel(activeList);
+    const receipt = deleteList(deletedId);
+    if (!receipt) return;
+    setSelectedId(lists.find((l) => l.id !== deletedId)?.id ?? DEFAULT_WATCHLIST_ID);
+    offerUndo(t("watchlist.listDeleted", { name: deletedName }), receipt, () => setSelectedId(deletedId));
   }
 
   return (
@@ -239,7 +268,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                     {editing && (
                       <button
                         type="button"
-                        onClick={() => removeTicker(activeList.id, ticker)}
+                        onClick={() => handleRemoveTicker(activeList.id, ticker)}
                         aria-label={t("watchlist.remove", { ticker })}
                         className="rounded-sm p-1 text-muted-foreground motion-press hover:bg-destructive/10 hover:text-destructive"
                       >
