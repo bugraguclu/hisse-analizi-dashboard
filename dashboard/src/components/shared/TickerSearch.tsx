@@ -250,7 +250,7 @@ export function TickerSearch({
 
   return (
     <div ref={containerRef} className={cn("relative", className)} onBlur={overlay ? undefined : handleBlur}>
-      <div className="relative">
+      <div className="relative" data-keyboard-field="">
         <Search
           aria-hidden="true"
           className={cn(
@@ -354,6 +354,7 @@ export function TickerSearch({
               <ul
                 id={listboxId}
                 role="listbox"
+                data-search-listbox=""
                 {...listLabelProps}
                 className={cn("overflow-y-auto overflow-x-hidden overscroll-contain py-1", overlay ? "max-h-[55vh]" : "max-h-80")}
               >

@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Hisse Analizi",
+    "slug": "hisse-analizi",
+    "version": "0.1.0",
+    "scheme": "hisseanalizi",
+    "platforms": ["ios"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "buildNumber": "1",
+      "bundleIdentifier": "com.hisseanalizi.app",
+      "associatedDomains": ["applinks:hisseanalizi.com", "applinks:www.hisseanalizi.com"],
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        }
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyTrackingDomains": []
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f7f6f3",
+          "dark": {
+            "backgroundColor": "#0e0e0e"
+          }
+        }
+      ],
+      "expo-status-bar"
+    ]
+  }
+}
