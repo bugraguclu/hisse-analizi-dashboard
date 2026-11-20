@@ -198,9 +198,9 @@ async def _safe_quotes(symbols: tuple[str, ...]) -> tuple[dict[str, dict[str, An
         meta = result.meta
         return (
             result.quotes,
-            bool(meta.stale),
-            meta.delay_seconds if meta.delay_seconds is not None else DEFAULT_DELAY_SECONDS,
-            meta.as_of,
+            bool(meta.stale) if meta is not None else False,
+            meta.delay_seconds if (meta is not None and meta.delay_seconds is not None) else DEFAULT_DELAY_SECONDS,
+            meta.as_of if meta is not None else None,
         )
     except Exception as exc:
         logger.warning("widget_quotes_unavailable", symbols=list(symbols), error=f"{type(exc).__name__}: {exc}")

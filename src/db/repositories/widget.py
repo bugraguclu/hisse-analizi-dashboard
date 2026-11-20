@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import date, datetime
+from typing import Any, cast
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import CursorResult, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Company, Dividend, ExpectedDisclosure, WidgetDevice, WidgetPairing
@@ -129,7 +130,7 @@ class WidgetRepository:
                 WidgetDevice.owner_hash == owner_hash,
             )
         )
-        return (result.rowcount or 0) > 0
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0
 
     async def get_device_by_token_hash(self, token_hash: str) -> WidgetDevice | None:
         result = await self.db.execute(
@@ -144,7 +145,7 @@ class WidgetRepository:
 
     async def delete_device_by_id(self, device_id: uuid.UUID) -> bool:
         result = await self.db.execute(delete(WidgetDevice).where(WidgetDevice.id == device_id))
-        return (result.rowcount or 0) > 0
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0
 
     async def company_names_for_tickers(self, tickers: Sequence[str]) -> dict[str, str]:
         if not tickers:

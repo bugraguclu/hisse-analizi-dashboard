@@ -114,26 +114,35 @@ function verifyExpoConfig(configPath, contract, failures) {
   }
 }
 
-function findNativeAppDir(iosDir) {
+const APP_INFO_PLIST_NAMES = ["Info.plist", "App-Info.plist"];
+
+function findInfoPlistInDir(dir) {
+  return APP_INFO_PLIST_NAMES.find((name) => fs.existsSync(path.join(dir, name))) ?? null;
+}
+
+function findNativeAppTarget(iosDir) {
   if (!fs.existsSync(iosDir)) return null;
-  if (fs.existsSync(path.join(iosDir, "Info.plist"))) return iosDir;
+  const direct = findInfoPlistInDir(iosDir);
+  if (direct) return { appDir: iosDir, infoPlistName: direct };
   for (const entry of fs.readdirSync(iosDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name === "Pods" || entry.name === "build") continue;
     const candidate = path.join(iosDir, entry.name);
-    if (fs.existsSync(path.join(candidate, "Info.plist"))) return candidate;
+    const found = findInfoPlistInDir(candidate);
+    if (found) return { appDir: candidate, infoPlistName: found };
   }
   return null;
 }
 
 function verifyNativeIosDir(iosDir, contract, failures) {
-  const appDir = findNativeAppDir(iosDir);
+  const target = findNativeAppTarget(iosDir);
   const requireVal = (cond, msg) => {
     if (!cond) failures.push(`[ios] ${msg}`);
   };
-  requireVal(Boolean(appDir), `Native iOS directory (${iosDir}) is missing Info.plist`);
-  if (!appDir) return;
+  requireVal(Boolean(target), `Native iOS directory (${iosDir}) is missing Info.plist`);
+  if (!target) return;
 
-  const infoPlist = fs.readFileSync(path.join(appDir, "Info.plist"), "utf8");
+  const { appDir, infoPlistName } = target;
+  const infoPlist = fs.readFileSync(path.join(appDir, infoPlistName), "utf8");
   const bundleRe = new RegExp(contract.bundleIdentifierPattern);
 
   const bundleId = plistStringValue(infoPlist, "CFBundleIdentifier");
@@ -189,7 +198,11 @@ function verifyNativeIosDir(iosDir, contract, failures) {
     }
   }
 
-  const entitlementName = fs.readdirSync(appDir).find((name) => name.endsWith(".entitlements"));
+  const entitlementFiles = fs.readdirSync(appDir).filter((name) => name.endsWith(".entitlements"));
+  const entitlementName =
+    entitlementFiles.find((name) => name === "App.entitlements") ??
+    entitlementFiles.find((name) => !name.toLowerCase().includes("widget")) ??
+    entitlementFiles[0];
   requireVal(Boolean(entitlementName), "Missing .entitlements file in native iOS app target");
   if (entitlementName) {
     const entitlements = fs.readFileSync(path.join(appDir, entitlementName), "utf8");
