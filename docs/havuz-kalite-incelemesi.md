@@ -1,4 +1,4 @@
-# Havuz kod kalitesi incelemesi — 20 Kasım 2026
+# Havuz kod kalitesi incelemesi — 20–21 Kasım 2026
 
 İncelenen başlangıç: `havuz` @ `99cc6ad`; karşılaştırma tabanı `master` @ `e51cacf`.
 Kapsam: 179 dosya, yaklaşık 26 bin ek satır. Bu not bir üretim/sıfır hata garantisi değildir;
@@ -11,8 +11,8 @@ ve mobil ekranlar backend'de olmayan adresleri çağırıyordu. En önemli hata,
 test edilmesinin çalışan ürünün doğrulanmasıyla eş tutulmasıydı.
 
 Kullanıcının yönlendirmesi doğrultusunda web `dashboard/` (Next.js), ana iOS uygulaması `mobile/`
-(Expo Router) olarak devam eder. Kökteki SwiftUI projesi, widget/native davranışlar için referanstır.
-İki ayrı iOS uygulaması yayımlamak gereksiz bakım yükü ve URL şeması çakışması yaratır.
+(Expo Router) olarak devam eder. İkinci turda ayrı SwiftUI uygulama kabuğu kaldırıldı; WidgetKit,
+Keychain ve AppIntents kaynakları Expo'ya taşındı. İki ayrı iOS uygulaması yayımlanmaz.
 
 ## Düzeltilen gerçek sorunlar
 
@@ -63,19 +63,41 @@ Kullanıcının yönlendirmesi doğrultusunda web `dashboard/` (Next.js), ana iO
 - Bu kullanılmayan soyutlamaları taklit eden testler kaldırıldı; gerçek HTTP/transaction, bağımsız
   QR okuma, API sözleşmesi ve geri yükleme hatası senaryoları eklendi. Tarayıcıdaki liste geri alma korunur.
 
+## İkinci tur: Expo ve widget entegrasyonu
+
+- Tek uygulama: `mobile/`. Eski SwiftUI App/ContentView/Xcode projesi kaldırıldı.
+- Swift ortak modelleri ve Keychain, `mobile/modules/hisse-companion/ios/` yerel Expo modülündedir.
+  Salt okunur cihaz token'ı JavaScript'e veya AsyncStorage'a aktarılmaz.
+- `mobile/targets/HisseWidgets/` widget kaynaklarını, `targets/HisseCompanionIntents.swift` Siri
+  girişlerini tutar. `plugins/with-companion.cjs` prebuild sırasında tek uygulamaya extension'ı gömer.
+- Bundle ID, sürüm, App Group ve Keychain grubu Expo ayarlarından türetilir. Uygulama ve extension
+  aynı grupları kullanır; minimum iOS 17'dir. Üretilen `mobile/ios/` Git'e eklenmez.
+- Takip ekranındaki widget bağlantısı `/companion` ekranını açar. QR bağlantısı sunucu/kodu ekrana
+  getirir; bağlantı kurulmadan önce sunucu adresi kullanıcıya gösterilir ve Bağlan onayı alınır.
+- Hatırlatıcılar native planlayıcıyla kurulur; bildirim izni yalnızca kullanıcı hatırlatıcıyı açınca
+  istenir. Expo Notifications tek notification delegate sahibidir ve bildirim dokunuşlarını ortak
+  açılış kuyruğuna taşır. Siri girişleri de soğuk/sıcak açılışta aynı kuyruğa teslim edilir.
+- Widget web takip listesi salt okunur companion ekranında açılır; Expo'nun yerel listesiyle karışmaz.
+  Eşleştirme kaldırıldığında yerel veri ve planlı hatırlatıcılar temizlenir. Eski ağ yanıtı yeni
+  bağlantının verisini ezemez.
+- F/K, PD/DD, FD/FAVÖK, TTM, ROE, temettü, RSI ve reel getiri rehber metinleri artık Atlas kaydından
+  türetilir. Arama bu kavramları `/atlas/[slug]` adresine götürür; eski rehber ID'leri çalışır.
+- Prebuild sözleşme kontrolü tek uygulama/tek extension, aynı erişim grupları, doğru manifest ve
+  kaynak kopyalarını doğrular. CI, ayrı Swift prototipi yerine birleşik Expo uygulamasını derler.
+- Simülatöre kurulumda bulunan eksik widget `CFBundleExecutable` alanı düzeltildi ve sözleşme
+  kontrolüne eklendi. Expo Router'ın eski başlangıç ayarı güncel `anchor` sözleşmesine taşındı.
+- SwiftUI kabuğuyla birlikte işlevsiz kalan Swift URL ayrıştırıcısı, origin kontrolü ve çift
+  yönlendirme koruması kaldırıldı. Gelen bağlantıyı yalnız Expo doğrular; Swift'te widget'ın
+  kullandığı URL üretimi kaldı. Liste ID'sindeki `/`, `?` ve `#` karakterleri güvenli kodlanır.
+
 ## Yayından önce açık kalan işler
 
-- **Expo + WidgetKit entegrasyonu:** Swift widget extension'ı, App Group/Keychain paylaşımı,
-  eşleştirme ekranı, takvim hatırlatıcıları ve AppIntents henüz Expo uygulamasına aktarılmadı.
-  `/cihazlar` QR akışı Swift prototipini hedefler; Expo için tamamlandı denemez. İki projenin
-  bundle ID'leri farklıdır; tek dağıtım ve entitlement modeli kurulmalıdır.
 - **Mobil ürün kapsamı:** Expo'daki tarama/makro/teknik ekranları hâlâ temel iskelettir; web ile
   işlev eşitliği yoktur. Derlenebilir olmak, bu ekranların tamamlanmış olduğu anlamına gelmez.
 - **Universal Links ve imzalama:** Sunucudaki AASA dosyası, Team ID, provisioning, gerçek cihazda
   Keychain/App Group ve soğuk başlangıç eşleştirme/bildirim testleri yayın öncesi ayrıca gerekir.
-- **İçerik tekrarı:** `GUIDE_ENTRIES`, `ATLAS_CONCEPTS` ve içerik manifesti kısmen aynı bilgiyi
-  ayrı tutuyor. Yeni içerik eklemeden önce tek kanonik kayıt seçilmeli. `/rehber` bağlantıları mevcut
-  olduğu için bu incelemede geçiş planı olmadan silinmedi/yönlendirilmedi.
+- **İçerik sözleşmesi:** Rehberin örtüşen metinleri tekilleştirildi. İçerik manifesti ayrıca yayın
+  ve ekran/metric referans sözleşmesidir; henüz bir editör arayüzü veya CMS değildir.
 - **Paket bütçesi:** Web toplam JS yaklaşık 3.00/3.50 MiB, gzip yaklaşık 983 KiB/1.15 MiB;
   bütçe içinde ama yeni ağır bağımlılıklar için alan sınırlı. Bu değer ilk sayfanın indirme ölçümü değildir.
 
@@ -88,11 +110,22 @@ Kullanıcının yönlendirmesi doğrultusunda web `dashboard/` (Next.js), ana iO
 - Web: 130 test, içerik kontrolü, ESLint (0 uyarı), TypeScript, üretim derlemesi ve paket bütçeleri geçti.
   Yeni atlas/endeks/sektör/cihaz sayfaları ve sitemap üretim sunucusunda HTTP kontrolünden geçti.
 - QR: jsQR otomatik çözme testi ve ZXing bağımsız çapraz kontrolü geçti.
-- Expo: temiz `npm ci`, tip/test kontrolü (21 test), bağımlılık uyumu, config, iOS bundle ve prebuild geçti.
-- Expo ana uygulaması: CocoaPods kurulumu ve `xcodebuild` simülatör derlemesi geçti; ana uygulamanın
-  gizlilik manifesti derlenmiş bundle'da bulundu. Web/Expo testleri CI'daki Node 24 ile de çalıştırıldı.
+- Expo: temiz `npm ci`, tip/test kontrolü (23 test), bağımlılık uyumu, config, iOS bundle ve prebuild geçti.
+- Birleşik Expo uygulaması: CocoaPods yerel HisseCompanion modülünü bağladı; `xcodebuild`
+  arm64 simülatör derlemesi tek uygulama + gömülü `HisseWidgets.appex` ile geçti. İki gizlilik
+  manifesti ve üç Siri girişinin AppIntents metadata'sı derleme çıktısında bulundu.
+  Web/Expo testleri CI'daki Node 24 ile de çalıştırıldı.
+- Temiz bir proje kopyasında farklı bundle ID/sürümle prebuild ve companion kontrolü geçti.
+- iOS 26.5 simülatöründe uygulama kuruldu ve açıldı. Yerel HTTPS test sunucusuyla QR bağlantısının
+  alanları doldurduğu, Bağlan onayından önce istek gitmediği, onay sonrası takip listesi/olayların
+  geldiği doğrulandı. Uygulama sonlandırılıp bağlantıyla yeniden açılınca Keychain eşleştirmesi
+  korundu. Sunucu erişimi iptal edilince yenileme eski veriyi temizleyip yeniden eşleştirme mesajını
+  gösterdi. Son açılışta Metro uygulama hatası/Router uyarısı üretmedi.
+  Bu test geçici simülatör ve yerel imzalı derlemeyle yapıldı; canlı sunucuda cihaz kaydı oluşturulmadı.
 - Bağımlılık güvenliği: web üretim bağımlılıklarında bulgu yok; Expo'da yüksek/kritik bulgu yok.
-- Swift referans projesi: simülatör derlemesi geçti, 22 paylaşılan test geçti; gizlilik dosyaları bundle'da bulundu.
+- Ortak Swift mantığı: kullanılan widget URL'leri, bildirim planlama ve veri etiketleri için
+  14 kontrol geçti. Kaldırılan SwiftUI yönlendirme altyapısını test eden kontroller de kaldırıldı;
+  gelen bağlantılar Expo'nun 23 testi içinde doğrulanır. Ayrı referans projesi kaldırıldı.
 
 İmzalı App Store/TestFlight arşivi ve gerçek cihaz kabul testi yapılmadı.
 

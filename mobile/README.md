@@ -2,9 +2,17 @@
 
 Web uygulaması `dashboard/` (Next.js), ana iOS uygulaması bu dizindeki Expo Router uygulamasıdır.
 Expo SDK 58 / React Native 0.88 sürümleri birlikte sabitlenir; `package-lock.json` sürüm kontrolündedir.
-Kökteki `ios/` bağımsız SwiftUI/WidgetKit prototipidir. Ayrı bir üretim uygulaması olarak yayımlanmayacak;
-widget, Keychain ve AppIntents kodu Expo uygulamasına extension/native modül olarak aktarılmalıdır.
-Bu aktarım henüz yapılmadı; Expo uygulamasında QR eşleştirme ve WidgetKit varmış gibi değerlendirmeyin.
+WidgetKit, Keychain, hatırlatıcılar ve Siri desteği aynı Expo uygulamasına bağlıdır.
+
+- `modules/hisse-companion/ios/`: cihaz token'ını JS'e vermeyen yerel Expo modülü ve ortak Swift modelleri.
+- `targets/HisseWidgets/`: WidgetKit arayüzü ve zaman çizelgesi.
+- `targets/HisseCompanionIntents.swift`: Siri/Kestirmeler girişleri.
+- `plugins/with-companion.cjs`: her prebuild'de tek uygulama + gömülü extension üretir; App Group,
+  Keychain grubu, bundle ID ve sürüm numarası iki hedefte aynı sözleşmeden türetilir.
+- `app/companion.tsx`: QR/kod eşleştirme, web takip listesi özeti ve takvim hatırlatıcısı ayarları.
+
+Minimum iOS sürümü 17.0'dır. Expo Go bu yerel modülü/extension'ı içermez; development build gerekir.
+Ayrı SwiftUI uygulama kabuğu kaldırılmıştır.
 
 TusAnkiM'in Expo Router / React Native mimarisinden uyarlanan iOS native uygulama temeli:
 
@@ -31,6 +39,9 @@ npx expo install --check
 npx expo config --type public
 npx expo export --platform ios --output-dir dist
 npx expo prebuild --platform ios --no-install
+node scripts/check-companion.cjs
+pod install --project-directory=ios
+xcodebuild -workspace ios/HisseAnalizi.xcworkspace -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
 `EXPO_PUBLIC_API_URL`, doğrudan FastAPI kökü (ör. `http://localhost:8000`) veya web'in `/api`
@@ -41,3 +52,19 @@ simülatör/bilgisayarın kendisini gösterir. Anahtarlar bu public değişkene 
 `mobile/ios/` Expo prebuild çıktısıdır ve Git'e eklenmez. Kalıcı native değişiklikler `app.json`
 ve config plugin'leri üzerinden yapılır. Universal Link'in cihazda çalışması için ilgili sunucuda
 Apple App Site Association dosyası ve imzalı uygulamanın Team ID / bundle ID eşleşmesi ayrıca gerekir.
+
+## Widget eşleştirmesini deneme
+
+1. Web'de `/cihazlar` sayfasından takip listesini seçin ve kod üretin.
+2. iPhone Kamerasıyla QR'ı açın veya uygulamada Takip → iPhone widget ve hatırlatıcılar ekranına kodu girin.
+3. Sunucu adresini doğrulayıp Bağlan'a basın. Beklenmeyen sunucuya kendiliğinden bağlanılmaz.
+4. Ana ekrana Hisse Analizi widget'ı ekleyin; uygulama ve widget aynı salt okunur Keychain token'ını kullanır.
+5. İsteğe bağlı hatırlatıcıları etkinleştirin. İzin, kullanıcı bu anahtarı açınca istenir. Takvim tarihleri
+   uygulama açılıp yenilendiğinde yeniden planlanır; uygulama kapalıyken sunucu push'u sağlanmaz.
+6. Web'den cihazı kaldırın ve yenileyin: hem widget hem uygulama eski veriyi temizlemelidir.
+
+Yerel Expo takip listesi ile web'in widget listesi ayrı kapsamdır. Widget'tan web listesine dokunmak
+`companion` ekranındaki salt okunur web listesini açar; yerel listeyi değiştirmez.
+
+İmzalı gerçek cihazda App Group, Keychain paylaşımı, Siri, kilit ekranı ve bildirim kabul testleri
+TestFlight öncesi gerekir. Simülatör derlemesi imzalama/provisioning doğrulaması değildir.

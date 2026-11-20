@@ -3,13 +3,14 @@ import { Tabs } from "expo-router";
 import { StyleSheet } from "react-native";
 import { useThemeColors } from "../../lib/theme";
 
-export const unstable_settings = { initialRouteName: "markets" };
+export const unstable_settings = { anchor: "markets" };
 
 export default function TabsLayout() {
   const colors = useThemeColors();
 
   return (
     <Tabs
+      backBehavior="initialRoute"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.accent,

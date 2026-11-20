@@ -60,9 +60,15 @@ struct MarketTimelineProvider: TimelineProvider {
         }
         do {
             let snapshot = try await WidgetAPI.summary(for: pairing)
+            guard ConnectionStore.pairing == pairing else {
+                return MarketWidgetEntry(date: .now, state: ConnectionStore.pairing == nil ? .notPaired : .unavailable)
+            }
             ConnectionStore.snapshot = snapshot
             return MarketWidgetEntry(date: .now, state: .ready(snapshot, isOffline: false))
         } catch WidgetAPIError.unpaired {
+            guard ConnectionStore.pairing == pairing else {
+                return MarketWidgetEntry(date: .now, state: ConnectionStore.pairing == nil ? .notPaired : .unavailable)
+            }
             ConnectionStore.forget(removedByServer: true)
             return MarketWidgetEntry(date: .now, state: .removed)
         } catch {

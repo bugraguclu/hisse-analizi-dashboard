@@ -31,7 +31,7 @@ describe("unified search catalog", () => {
     const techTool = results.find((r) => r.id === "tool:indicator-rsi");
     assert.equal(techTool?.href, "/teknik/GARAN");
     const rsiConcept = results.find((r) => r.id === "concept:rsi");
-    assert.equal(rsiConcept?.href, "/rehber?konu=rsi");
+    assert.equal(rsiConcept?.href, "/atlas/rsi");
   });
 
   it("finds inflation, policy rate and dividend screen with Turkish folding", () => {
@@ -50,7 +50,7 @@ describe("unified search catalog", () => {
   it("finds F/K explanation and workspace/help entries", () => {
     const fk = searchUnified({ query: "F/K açıklaması", locale: "tr", stocks: SAMPLE_STOCKS });
     assert.equal(fk[0]?.id, "concept:fk");
-    assert.equal(fk[0]?.href, "/rehber?konu=fk");
+    assert.equal(fk[0]?.href, "/atlas/fk-orani");
 
     const layout = searchUnified({ query: "yeni sayfa", locale: "tr", stocks: SAMPLE_STOCKS });
     assert.ok(layout.some((r) => r.id === "concept:kisayollar" || r.id === "tool:markets"));

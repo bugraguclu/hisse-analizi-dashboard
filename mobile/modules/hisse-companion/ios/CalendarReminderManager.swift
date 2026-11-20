@@ -28,38 +28,29 @@ enum NotificationPermissionState: String, Equatable, Sendable {
 /// Adapted from TusAnkiM's `studyNotifications.ts`:
 /// - Serializes async operations so rapid toggles never interleave.
 /// - Cancels/reschedules only notifications tagged with `CalendarReminderPlanner.ownedKind`.
-/// - Routes notification taps (both cold launch and active app) to the target stock or event.
+/// Expo Notifications owns notification delivery and tap routing; this class only schedules.
 @MainActor
-final class CalendarReminderManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
-    @Published private(set) var permissionState: NotificationPermissionState = .undetermined
-    @Published private(set) var scheduledCount: Int = 0
-    @Published var preferences: CalendarReminderPreferences {
+final class CalendarReminderManager: NSObject {
+    private(set) var permissionState: NotificationPermissionState = .undetermined
+    private(set) var scheduledCount: Int = 0
+    var preferences: CalendarReminderPreferences {
         didSet {
             ConnectionStore.reminderPreferences = preferences
         }
     }
 
-    var onOpenDeepLink: ((URL) -> Void)?
-    private var pendingTapURL: URL?
     private var syncTask: Task<Void, Never>?
 
     override init() {
         self.preferences = ConnectionStore.reminderPreferences
         super.init()
-        UNUserNotificationCenter.current().delegate = self
-    }
-
-    func attachDeepLinkHandler(_ handler: @escaping (URL) -> Void) {
-        onOpenDeepLink = handler
-        if let pending = pendingTapURL {
-            pendingTapURL = nil
-            handler(pending)
-        }
     }
 
     func refreshPermissionStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         permissionState = Self.mapStatus(settings)
+        scheduledCount = await UNUserNotificationCenter.current().pendingNotificationRequests()
+            .filter { Self.isOwned($0.content.userInfo) }.count
     }
 
     func requestPermission() async -> NotificationPermissionState {
@@ -135,13 +126,15 @@ final class CalendarReminderManager: NSObject, ObservableObject, UNUserNotificat
                 "deepLink": item.deepLink,
                 "ticker": item.ticker ?? "",
             ]
-            let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: item.fireDate)
+            var comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: item.fireDate)
+            comps.timeZone = MarketFormat.istanbulTimeZone
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             let request = UNNotificationRequest(identifier: item.identifier, content: content, trigger: trigger)
             try? await center.add(request)
         }
 
-        scheduledCount = desired.count
+        let scheduled = await center.pendingNotificationRequests()
+        scheduledCount = scheduled.filter { Self.isOwned($0.content.userInfo) }.count
     }
 
     private static func isOwned(_ userInfo: [AnyHashable: Any]) -> Bool {
@@ -165,30 +158,4 @@ final class CalendarReminderManager: NSObject, ObservableObject, UNUserNotificat
         }
     }
 
-    // MARK: - UNUserNotificationCenterDelegate
-
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
-    }
-
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        let userInfo = response.notification.request.content.userInfo
-        guard let rawLink = userInfo["deepLink"] as? String,
-              let url = URL(string: rawLink) else {
-            return
-        }
-        await MainActor.run {
-            if let handler = self.onOpenDeepLink {
-                handler(url)
-            } else {
-                self.pendingTapURL = url
-            }
-        }
-    }
 }

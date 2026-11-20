@@ -155,24 +155,23 @@ jobs:
         run: npm ci --prefix mobile
       - name: Generate Expo native app
         working-directory: mobile
-        run: npx expo prebuild --platform ios --no-install
+        run: |
+          npx expo prebuild --platform ios --no-install
+          node scripts/check-companion.cjs
       - name: Install iOS pods
         run: pod install --project-directory=mobile/ios
       - name: Compile primary Expo app
         run: xcodebuild -workspace mobile/ios/HisseAnalizi.xcworkspace -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/hisse-expo-build" CODE_SIGNING_ALLOWED=NO build
-      - name: Check Expo privacy manifest
-        run: test -f "$RUNNER_TEMP/hisse-expo-build/Build/Products/Debug-iphonesimulator/HisseAnalizi.app/PrivacyInfo.xcprivacy"
       - name: Shared Swift behavior
         run: |
-          swiftc ios/Shared/WidgetModels.swift ios/Shared/CalendarReminderModel.swift ios/Shared/DeepLinkRouter.swift ios/Tests/verify_shared.swift -o "$RUNNER_TEMP/hisse-ios-tests"
+          shared=mobile/modules/hisse-companion/ios/Shared
+          swiftc "$shared/WidgetModels.swift" "$shared/CalendarReminderModel.swift" "$shared/DeepLinkRouter.swift" mobile/Tests/verify_shared.swift -o "$RUNNER_TEMP/hisse-ios-tests"
           "$RUNNER_TEMP/hisse-ios-tests"
-      - name: Compile app and widget
-        run: xcodebuild -project ios/HisseAnalizi.xcodeproj -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/hisse-ios-build" CODE_SIGNING_ALLOWED=NO build
       - name: Check shipped privacy manifests
         run: |
-          app="$RUNNER_TEMP/hisse-ios-build/Build/Products/Debug-iphonesimulator/HisseAnalizi.app"
+          app="$RUNNER_TEMP/hisse-expo-build/Build/Products/Debug-iphonesimulator/HisseAnalizi.app"
           test -f "$app/PrivacyInfo.xcprivacy"
-          test -f "$app/PlugIns/HisseAnaliziWidget.appex/PrivacyInfo.xcprivacy"
+          test -f "$app/PlugIns/HisseWidgets.appex/PrivacyInfo.xcprivacy"
 
   docker:
     name: Docker build

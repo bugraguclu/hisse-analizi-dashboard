@@ -3,6 +3,24 @@ import { describe, it } from "node:test";
 import { normalizeTicker, readExternalAppUrl, routeForAction } from "./externalLinking.ts";
 
 describe("externalLinking", () => {
+  it("routes widget, pairing and Siri links into Expo", () => {
+    const pairing = readExternalAppUrl("hisseanalizi://pair?server=https%3A%2F%2Fexample.test&code=ABCD-2345");
+    assert.ok(pairing && "action" in pairing);
+    assert.deepEqual(routeForAction(pairing.action), { pathname: "/companion", params: { server: "https://example.test", code: "ABCD2345" }, isTabRoot: false, ensureHomeUnderneath: false });
+    for (const link of ["hisseanalizi://market", "hisseanalizi://dashboard/home", "hisseanalizi://watchlist/favorites", "hisseanalizi://event/dividend-1"]) {
+      const result = readExternalAppUrl(link);
+      assert.ok(result && "action" in result, link);
+    }
+    const list = readExternalAppUrl("hisseanalizi://watchlist/web-favorites");
+    assert.ok(list && "action" in list);
+    assert.equal(routeForAction(list.action).pathname, "/companion");
+  });
+  it("rejects malformed pairing destinations and codes before navigation", () => {
+    for (const query of ["server=http%3A%2F%2Fexample.test&code=ABCD2345", "server=https%3A%2F%2Fuser%3Apass%40example.test&code=ABCD2345", "code=ABCD%26evil"]) {
+      const result = readExternalAppUrl(`hisseanalizi://pair?${query}`);
+      assert.ok(result && "rejected" in result, query);
+    }
+  });
   it("accepts stock links from the documented production host", () => {
     const result = readExternalAppUrl("https://hisse-analizi.duckdns.org/hisse/THYAO");
     assert.ok(result && "action" in result);

@@ -77,7 +77,7 @@ export function sanitizeLocalState(raw: unknown): LocalAppState {
                   item.tickers
                     .filter((t): t is string => typeof t === "string")
                     .map((t) => t.trim().toUpperCase())
-                    .filter((t) => /^[A-Z0-9]{1,10}$/.test(t)),
+                    .filter((t) => /^[A-Z0-9]{2,10}$/.test(t)),
                 ),
               ).slice(0, 40)
             : [],

@@ -15,55 +15,18 @@ enum SharedTests {
     }
 
     static func main() {
-        // 1. DeepLinkRouter parsing & URL round-trip
-        let stockURL = URL(string: "hisseanalizi://stock/thyao.is?tab=financials")!
-        expect(DeepLinkRouter.parse(stockURL) == .stock(ticker: "THYAO", tab: "financials"), "Stock route should normalize ticker")
+        // Widget URLs preserve their payload; incoming validation belongs to the Expo tests.
+        let identifier = "list/banka?x=1#detay"
+        let listURL = DeepLinkRouter.url(for: .watchlist(id: identifier))
+        expect(listURL.host == "watchlist", "Watchlist widget must open the web list route")
+        expect(listURL.query == nil && listURL.fragment == nil, "List IDs cannot inject query or fragment")
+        expect(String(listURL.path.dropFirst()).removingPercentEncoding == identifier, "Encoded list ID must survive URL generation")
+        let pairURL = DeepLinkRouter.url(for: .pair(server: "https://example.test", code: "ABCD2345"))
+        let query = URLComponents(url: pairURL, resolvingAgainstBaseURL: false)!.queryItems!
+        expect(query.first { $0.name == "server" }?.value == "https://example.test", "Pairing destination must be encoded")
+        expect(query.first { $0.name == "code" }?.value == "ABCD2345", "Pairing code must be encoded")
 
-        let pairURL = URL(string: "hisseanalizi://pair?server=https%3A%2F%2Fhisse-analizi.duckdns.org&code=ABCD2345")!
-        expect(
-            DeepLinkRouter.parse(pairURL) == .pair(server: "https://hisse-analizi.duckdns.org", code: "ABCD2345"),
-            "Pair route should decode server and code"
-        )
-
-        let watchlistURL = DeepLinkRouter.url(for: .watchlist(id: "list-banka"))
-        expect(DeepLinkRouter.parse(watchlistURL) == .watchlist(id: "list-banka"), "Watchlist route round-trip")
-
-        let dashboardURL = DeepLinkRouter.url(for: .dashboard(id: "sabah"))
-        expect(DeepLinkRouter.parse(dashboardURL) == .dashboard(id: "sabah"), "Dashboard route round-trip")
-
-        let eventURL = DeepLinkRouter.url(for: .event(id: "tcmb:ppk:2026-11-26"))
-        expect(DeepLinkRouter.parse(eventURL) == .event(id: "tcmb:ppk:2026-11-26"), "Event route round-trip")
-
-        let foreignURL = URL(string: "https://example.com/stock/THYAO")!
-        expect(DeepLinkRouter.parse(foreignURL) == nil, "Non-hisseanalizi scheme must be ignored")
-
-        // 2. TrustedOriginChecker (QR hijacking prevention)
-        let defaultOrigin = "https://hisse-analizi.duckdns.org"
-        expect(
-            TrustedOriginChecker.isTrusted(address: "https://hisse-analizi.duckdns.org/api", defaultServer: defaultOrigin, pairedServer: nil),
-            "Default origin should be trusted"
-        )
-        expect(
-            !TrustedOriginChecker.isTrusted(address: "https://evil.example.com", defaultServer: defaultOrigin, pairedServer: nil),
-            "Untrusted third-party server must NOT auto-pair"
-        )
-        expect(
-            TrustedOriginChecker.isTrusted(address: "http://127.0.0.1:3000", defaultServer: defaultOrigin, pairedServer: "http://127.0.0.1:3000"),
-            "Already-paired server origin should be trusted"
-        )
-        expect(
-            !TrustedOriginChecker.isTrusted(address: "javascript:alert(1)", defaultServer: defaultOrigin, pairedServer: nil),
-            "Non-HTTP(S) scheme must be rejected"
-        )
-
-        // 3. DuplicateRouteGuard (cold-launch double routing protection)
-        var guardState = DuplicateRouteGuard(windowSeconds: 1.5)
-        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
-        expect(guardState.shouldProcess("hisseanalizi://stock/THYAO", now: t0), "First route processed")
-        expect(!guardState.shouldProcess("hisseanalizi://stock/THYAO", now: t0.addingTimeInterval(0.4)), "Duplicate within window blocked")
-        expect(guardState.shouldProcess("hisseanalizi://stock/THYAO", now: t0.addingTimeInterval(2.0)), "Same route after window allowed")
-
-        // 4. CalendarReminderPlanner: Istanbul TZ, 48-cap budget, date-shift reconciliation
+        // CalendarReminderPlanner: Istanbul TZ, 48-cap budget, date-shift reconciliation
         let now = ISO8601DateFormatter().date(from: "2026-11-20T09:00:00+03:00")!
         var events: [CalendarEventItem] = []
         for i in 1...60 {
@@ -112,7 +75,7 @@ enum SharedTests {
         let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
         expect(comps.day == 25 && comps.hour == 9 && comps.minute == 0, "Day-before reminder fires at 09:00 Istanbul time")
 
-        // 5. MarketSnapshot offline & delay labeling
+        // MarketSnapshot offline & delay labeling
         let snap = MarketSnapshot.sample
         expect(snap.dataStampLabel(isOffline: true).hasPrefix("Çevrimdışı · "), "Offline stamp must be explicit")
         expect(snap.dataStampLabel(isOffline: false).contains("15 dk gecikmeli"), "15-min delay must be visible when online")

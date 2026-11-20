@@ -2,8 +2,9 @@ import Foundation
 import Security
 
 enum AppGroup {
-    static let identifier = "group.com.bugraguclu.hisseanalizi"
-    static let keychainService = "com.bugraguclu.hisseanalizi.widget-token"
+    static let identifier = Bundle.main.object(forInfoDictionaryKey: "HisseAppGroup") as? String ?? "group.com.hisseanalizi.app"
+    static let keychainService = "com.hisseanalizi.app.widget-token"
+    static let keychainGroup = Bundle.main.object(forInfoDictionaryKey: "HisseKeychainGroup") as? String
     static let keychainAccount = "paired-device-token"
     static var defaults: UserDefaults { UserDefaults(suiteName: identifier) ?? .standard }
 }
@@ -21,13 +22,14 @@ enum KeychainTokenStore {
 
     static func readToken() -> String? {
         AppGroup.defaults.removeObject(forKey: fallbackDefaultsKey)
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: AppGroup.keychainService,
             kSecAttrAccount as String: AppGroup.keychainAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        if let group = AppGroup.keychainGroup { query[kSecAttrAccessGroup as String] = group }
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecSuccess, let data = item as? Data, let token = String(data: data, encoding: .utf8), !token.isEmpty {
@@ -38,11 +40,12 @@ enum KeychainTokenStore {
 
     static func saveToken(_ token: String) throws {
         let data = Data(token.utf8)
-        let baseQuery: [String: Any] = [
+        var baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: AppGroup.keychainService,
             kSecAttrAccount as String: AppGroup.keychainAccount,
         ]
+        if let group = AppGroup.keychainGroup { baseQuery[kSecAttrAccessGroup as String] = group }
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
@@ -65,11 +68,12 @@ enum KeychainTokenStore {
     }
 
     static func deleteToken() {
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: AppGroup.keychainService,
             kSecAttrAccount as String: AppGroup.keychainAccount,
         ]
+        if let group = AppGroup.keychainGroup { query[kSecAttrAccessGroup as String] = group }
         SecItemDelete(query as CFDictionary)
         AppGroup.defaults.removeObject(forKey: fallbackDefaultsKey)
     }

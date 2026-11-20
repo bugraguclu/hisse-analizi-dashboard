@@ -251,8 +251,8 @@ export function verifyIosReadiness({
 
   const resolvedIosDir =
     iosDir ??
-    [path.join(projectRoot, "ios"), path.join(projectRoot, "mobile", "ios")].find((candidate) =>
-      fs.existsSync(candidate),
+    [path.join(projectRoot, "mobile", "ios"), path.join(projectRoot, "ios")].find((candidate) =>
+      fs.existsSync(candidate) && findNativeAppTarget(candidate),
     ) ??
     null;
 

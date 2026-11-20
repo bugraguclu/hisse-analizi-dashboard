@@ -89,6 +89,11 @@ export function attachIncomingUrlHandler(handler: IncomingUrlHandler): () => voi
   return sharedQueue.attach(handler);
 }
 
+/** Native notification/Siri delivery joins the same startup queue as OS links. */
+export function receiveIncomingUrl(url: string): void {
+  sharedQueue.receive(url);
+}
+
 export type IncomingUrlNavigation =
   | { method: "push" | "replace" | "dismissTo"; route: ResolvedRoute }
   | { method: "reject"; rejection: ExternalLinkRejection };

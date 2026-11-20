@@ -1,3 +1,4 @@
+import { getAtlasConcept, atlasHref } from "../../../lib/atlas.ts";
 import type { Locale } from "@/lib/i18n";
 import { marketHref } from "../../makro/links.ts";
 import { presetHref, type PresetId } from "../../tarama/model.ts";
@@ -55,239 +56,28 @@ export interface GuideEntry {
   readonly actionHref: (ticker: string) => string;
 }
 
+export const ATLAS_GUIDE_SLUGS: Readonly<Record<string, string>> = {
+  fk: "fk-orani", pddd: "pddd-orani", "fd-favok": "fd-favok", ttm: "ttm-son-12-ay",
+  roe: "roe-ozkaynak-karliligi", temettu: "temettu-verimi", rsi: "rsi", "reel-getiri": "reel-getiri",
+};
+
+// Legacy guide IDs remain valid; the Atlas owns their prose, formulas and search metadata.
+const atlasGuides: GuideEntry[] = Object.entries(ATLAS_GUIDE_SLUGS).map(([id, slug]) => {
+  const concept = getAtlasConcept(slug);
+  if (!concept) throw new Error(`Guide references unknown Atlas concept: ${slug}`);
+  const action = concept.actions[0];
+  return {
+    id, code: concept.badge,
+    category: concept.category === "profitability" || concept.category === "sector" ? "valuation" : concept.category,
+    title: concept.title, summary: concept.cardDesc, explanation: concept.intro,
+    formula: concept.formula, methodology: concept.methodology,
+    aliases: [...concept.keywords, `${concept.badge} aciklamasi`, "rehber"],
+    actionLabel: action.label, actionHref: () => action.href,
+  };
+});
+
 export const GUIDE_ENTRIES: readonly GuideEntry[] = [
-  {
-    id: "fk",
-    code: "F/K",
-    category: "valuation",
-    title: { tr: "F/K (Fiyat / Kazanç Oranı)", en: "P/E (Price / Earnings Ratio)", fr: "PER (Cours / Bénéfice)" },
-    summary: {
-      tr: "Hisse fiyatının son 12 aylık hisse başı kâra oranı.",
-      en: "Share price divided by trailing 12-month earnings per share.",
-      fr: "Cours de l'action divisé par le bénéfice par action sur 12 mois glissants.",
-    },
-    explanation: {
-      tr: "Şirketin mevcut piyasa değerinin son 4 çeyrek toplam net kârına (TTM) kaç katı fiyattan işlem gördüğünü gösterir. Aynı sektördeki benzer şirketlerle birlikte okunmalıdır; zarar eden şirketlerde F/K hesaplanmaz.",
-      en: "Shows how many multiples of trailing four-quarter net profit (TTM) the market pays for a company. Compare within the same sector; loss-making firms have no meaningful P/E.",
-      fr: "Indique combien de fois le bénéfice net des 4 derniers trimestres (TTM) le marché paie pour l'entreprise. À comparer au sein du même secteur ; les sociétés déficitaires n'ont pas de PER.",
-    },
-    formula: {
-      tr: "F/K = Piyasa Değeri / Son 12 Ay Net Kârı (TTM)",
-      en: "P/E = Market Cap / Trailing 12-Month Net Income (TTM)",
-      fr: "PER = Capitalisation / Résultat net 12 mois glissants (TTM)",
-    },
-    methodology: {
-      tr: "Kaynak: KAP finansal tabloları (TTM) ve güncel piyasa fiyatı; sektör medyanıyla karşılaştırılır.",
-      en: "Source: KAP financial statements (TTM) and latest market price, benchmarked against sector medians.",
-      fr: "Source : états financiers KAP (TTM) et dernier cours, comparés aux médianes sectorielles.",
-    },
-    aliases: ["f/k", "fk", "fiyat kazanc", "pe", "p/e", "per", "carpan", "ucuz hisse", "f/k aciklamasi", "aciklama", "rehber"],
-    actionLabel: { tr: "Düşük F/K taramasını aç", en: "Open low P/E screen", fr: "Ouvrir le filtre PER faible" },
-    actionHref: () => presetHref("low_pe"),
-  },
-  {
-    id: "pddd",
-    code: "PD/DD",
-    category: "valuation",
-    title: { tr: "PD/DD (Piyasa Değeri / Defter Değeri)", en: "P/B (Price / Book Ratio)", fr: "C/VC (Cours / Valeur comptable)" },
-    summary: {
-      tr: "Şirketin piyasa değerinin özkaynaklarına oranı.",
-      en: "Market capitalization relative to shareholders' equity.",
-      fr: "Capitalisation boursière rapportée aux capitaux propres.",
-    },
-    explanation: {
-      tr: "Bankalar, holdingler ve sermaye yoğun sanayi şirketlerinde temel değerleme ölçütüdür. Özkaynak kârlılığı (ROE) ile birlikte değerlendirilir.",
-      en: "A primary valuation yardstick for banks, holdings and capital-intensive industrials. Best read alongside return on equity (ROE).",
-      fr: "Indicateur clé pour les banques, holdings et valeurs industrielles capitalistiques, à lire avec le ROE.",
-    },
-    formula: {
-      tr: "PD/DD = Piyasa Değeri / Ana Ortaklığa Ait Özkaynaklar",
-      en: "P/B = Market Cap / Parent Shareholders' Equity",
-      fr: "C/VC = Capitalisation / Capitaux propres part du groupe",
-    },
-    methodology: {
-      tr: "Kaynak: Son açıklanan KAP bilançosu özkaynak kalemi ve güncel piyasa değeri.",
-      en: "Source: Latest published KAP balance sheet equity and current market cap.",
-      fr: "Source : capitaux propres du dernier bilan KAP et capitalisation actuelle.",
-    },
-    aliases: ["pd/dd", "pddd", "defter degeri", "pb", "p/b", "price to book", "ozkaynak", "banka orani"],
-    actionLabel: { tr: "Düşük PD/DD taramasını aç", en: "Open low P/B screen", fr: "Ouvrir le filtre C/VC faible" },
-    actionHref: () => presetHref("low_pb"),
-  },
-  {
-    id: "fd-favok",
-    code: "FD/FAVÖK",
-    category: "valuation",
-    title: { tr: "FD/FAVÖK (Firma Değeri / FAVÖK)", en: "EV/EBITDA (Enterprise Value / EBITDA)", fr: "VE/EBITDA (Valeur d'entreprise / EBITDA)" },
-    summary: {
-      tr: "Borç yapısını da dahil ederek operasyonel nakit kârlılığı değerler.",
-      en: "Values operating earnings while accounting for debt and cash.",
-      fr: "Évalue la rentabilité opérationnelle en intégrant dette et trésorerie.",
-    },
-    explanation: {
-      tr: "Farklı borçluluk düzeyindeki sanayi ve hizmet şirketlerini karşılaştırmak için kullanılır. Banka ve finansal kurumlarda standart FAVÖK tanımlı değildir.",
-      en: "Useful when comparing industrial or service companies with different leverage. Not standard for banks and insurers.",
-      fr: "Utile pour comparer des entreprises industrielles ou de services à endettement différent ; non standard pour les banques.",
-    },
-    formula: {
-      tr: "FD/FAVÖK = (Piyasa Değeri + Net Borç) / Yıllıklandırılmış FAVÖK",
-      en: "EV/EBITDA = (Market Cap + Net Debt) / Annualized EBITDA",
-      fr: "VE/EBITDA = (Capitalisation + Dette nette) / EBITDA annualisé",
-    },
-    methodology: {
-      tr: "Kaynak: KAP bilanço net borç kalemleri ve TTM faaliyet kârı + amortisman.",
-      en: "Source: KAP net debt figures and trailing operating profit plus depreciation.",
-      fr: "Source : dette nette KAP et résultat opérationnel TTM augmenté des amortissements.",
-    },
-    aliases: ["fd/favok", "fdfavok", "favok", "ev/ebitda", "ebitda", "firma degeri"],
-    actionLabel: { tr: "Düşük FD/FAVÖK taramasını aç", en: "Open low EV/EBITDA screen", fr: "Ouvrir le filtre VE/EBITDA faible" },
-    actionHref: () => presetHref("low_ev_ebitda"),
-  },
-  {
-    id: "ttm",
-    code: "TTM",
-    category: "valuation",
-    title: { tr: "TTM (Son 12 Ay / Yıllıklandırılmış)", en: "TTM (Trailing Twelve Months)", fr: "TTM (12 mois glissants)" },
-    summary: {
-      tr: "Mevsimselliği gidermek için son dört çeyreğin toplamı.",
-      en: "Sum of the most recent four quarters to remove seasonality.",
-      fr: "Somme des quatre derniers trimestres pour neutraliser la saisonnalité.",
-    },
-    explanation: {
-      tr: "Ara dönem bilançolarında (3, 6 ve 9 aylık) yıllık oranları doğru hesaplayabilmek için son 4 çeyrek gelir ve kâr akışları birleştirilir. IAS 29 enflasyon muhasebesi dönemlerinde uyumlu çeyrekler kullanılır.",
-      en: "Combines the last four quarters of income-statement flows so ratios stay comparable mid-year, respecting IAS 29 inflation-accounting periods.",
-      fr: "Combine les quatre derniers trimestres du compte de résultat afin de garder des ratios comparables en cours d'année, en tenant compte d'IAS 29.",
-    },
-    formula: {
-      tr: "TTM = Cari Kümülatif + Önceki Yıl Sonu − Önceki Yıl Aynı Dönem",
-      en: "TTM = Current YTD + Prior Full Year − Prior Year Same Period",
-      fr: "TTM = Cumul actuel + Exercice précédent − Même période N-1",
-    },
-    methodology: {
-      tr: "Kaynak: KAP çeyreklik gelir tablosu verileri.",
-      en: "Source: KAP quarterly income statement filings.",
-      fr: "Source : comptes de résultat trimestriels KAP.",
-    },
-    aliases: ["ttm", "son 12 ay", "yilliklandirilmis", "trailing twelve months", "ceyrek", "bilanco", "ias 29"],
-    actionLabel: { tr: "Temel analiz sayfasına git", en: "Open fundamental analysis", fr: "Ouvrir l'analyse fondamentale" },
-    actionHref: (ticker) => `/temel/${encodeURIComponent(ticker)}`,
-  },
-  {
-    id: "roe",
-    code: "ROE",
-    category: "valuation",
-    title: { tr: "ROE (Özkaynak Kârlılığı)", en: "ROE (Return on Equity)", fr: "ROE (Rentabilité des capitaux propres)" },
-    summary: {
-      tr: "Şirketin her 100 TL özkaynakla ne kadar yıllık net kâr ürettiği.",
-      en: "Annual net income generated per unit of shareholders' equity.",
-      fr: "Bénéfice net annuel généré par unité de capitaux propres.",
-    },
-    explanation: {
-      tr: "Sermaye verimliliğini ölçer. Enflasyonist dönemlerde yıllık TÜFE ve risksiz faiz oranıyla kıyaslanarak reel sermaye getirisi izlenir.",
-      en: "Measures capital efficiency. In inflationary markets, compare against annual CPI and policy rates to gauge real value creation.",
-      fr: "Mesure l'efficacité du capital ; en période d'inflation, à comparer à l'IPC annuel et au taux directeur.",
-    },
-    formula: {
-      tr: "ROE (%) = (TTM Net Kâr / Ortalama Özkaynak) × 100",
-      en: "ROE (%) = (TTM Net Income / Average Equity) × 100",
-      fr: "ROE (%) = (Résultat net TTM / Capitaux propres moyens) × 100",
-    },
-    methodology: {
-      tr: "Kaynak: KAP gelir tablosu (TTM) ve bilanço özkaynak serisi.",
-      en: "Source: KAP TTM income statement and balance sheet equity.",
-      fr: "Source : compte de résultat TTM et bilan KAP.",
-    },
-    aliases: ["roe", "ozkaynak karliligi", "ozsermaye karliligi", "return on equity", "karlilik"],
-    actionLabel: { tr: "Yüksek ROE taramasını aç", en: "Open high ROE screen", fr: "Ouvrir le filtre ROE élevé" },
-    actionHref: () => presetHref("high_roe"),
-  },
-  {
-    id: "temettu",
-    code: "TEMETTÜ",
-    category: "valuation",
-    title: { tr: "Temettü Verimi", en: "Dividend Yield", fr: "Rendement du dividende" },
-    summary: {
-      tr: "Yıllık hisse başı nakit temettünün güncel hisse fiyatına oranı.",
-      en: "Annual cash dividend per share divided by the current share price.",
-      fr: "Dividende annuel en numéraire par action rapporté au cours actuel.",
-    },
-    explanation: {
-      tr: "Yatırımcının nakit getiri oranını gösterir. Tek seferlik yüksek dağıtımlara karşı geçmiş ödeme sürekliliği ve dağıtma oranı birlikte kontrol edilmelidir.",
-      en: "Indicates cash return on share price. Always check payout consistency and payout ratio to avoid one-off yield traps.",
-      fr: "Indique le rendement en numéraire ; vérifier la régularité et le taux de distribution.",
-    },
-    formula: {
-      tr: "Temettü Verimi (%) = (Yıllık Hisse Başı Nakit Temettü / Hisse Fiyatı) × 100",
-      en: "Dividend Yield (%) = (Annual Cash Dividend per Share / Share Price) × 100",
-      fr: "Rendement (%) = (Dividende annuel par action / Cours) × 100",
-    },
-    methodology: {
-      tr: "Kaynak: KAP temettü bildirimleri ve güncel kapanış fiyatı.",
-      en: "Source: KAP dividend disclosures and latest closing price.",
-      fr: "Source : déclarations de dividendes KAP et dernier cours de clôture.",
-    },
-    aliases: ["temettu", "temettu verimi", "kar payi", "dividend", "dividend yield", "nakit temettu"],
-    actionLabel: { tr: "Temettü taramasını aç", en: "Open dividend screen", fr: "Ouvrir le filtre dividendes" },
-    actionHref: () => presetHref("high_dividend"),
-  },
-  {
-    id: "rsi",
-    code: "RSI",
-    category: "technical",
-    title: { tr: "RSI (Göreceli Güç Endeksi)", en: "RSI (Relative Strength Index)", fr: "RSI (Indice de force relative)" },
-    summary: {
-      tr: "0–100 arasında momentum ölçer; 30 altı aşırı satım, 70 üstü aşırı alım bölgesidir.",
-      en: "Momentum oscillator from 0 to 100; below 30 is oversold, above 70 is overbought.",
-      fr: "Oscillateur de momentum entre 0 et 100 ; sous 30 survente, au-dessus de 70 surachat.",
-    },
-    explanation: {
-      tr: "Son 14 periyottaki ortalama kazanç ve kayıpların oranıyla fiyat ivmesini izler. Güçlü trendlerde RSI uzun süre 70 üstünde veya 30 altında kalabilir; tek başına al/sat kararı değildir.",
-      en: "Tracks price momentum via average gains vs losses over 14 periods. In strong trends RSI can stay overbought or oversold for extended periods; never a standalone signal.",
-      fr: "Suit la dynamique des prix via gains et pertes moyens sur 14 périodes ; en tendance forte, le RSI peut rester extrême durablement.",
-    },
-    formula: {
-      tr: "RSI = 100 − [100 / (1 + Ort. Kazanç / Ort. Kayıp)] (Wilder 14)",
-      en: "RSI = 100 − [100 / (1 + Avg Gain / Avg Loss)] (Wilder 14)",
-      fr: "RSI = 100 − [100 / (1 + Gain moy. / Perte moy.)] (Wilder 14)",
-    },
-    methodology: {
-      tr: "Hesaplama: TradingView ile uyumlu Wilder düzleştirme (varsayılan 14 bar).",
-      en: "Computation: Wilder smoothing matching TradingView defaults (14 bars).",
-      fr: "Calcul : lissage de Wilder aligné sur TradingView (14 périodes par défaut).",
-    },
-    aliases: ["rsi", "goreceli guc", "relative strength", "asiri alim", "asiri satim", "momentum", "oversold", "overbought"],
-    actionLabel: { tr: "RSI aşırı satım taramasını aç", en: "Open RSI oversold screen", fr: "Ouvrir le filtre RSI survente" },
-    actionHref: () => presetHref("rsi_oversold"),
-  },
-  {
-    id: "reel-getiri",
-    code: "REEL",
-    category: "macro",
-    title: { tr: "Reel Getiri (Enflasyondan Arındırılmış)", en: "Real Return (Inflation-Adjusted)", fr: "Rendement réel (corrigé de l'inflation)" },
-    summary: {
-      tr: "Nominal fiyat değişiminin TÜFE enflasyonundan arındırılmış satın alma gücü karşılığı.",
-      en: "Purchasing-power return after removing CPI inflation from nominal prices.",
-      fr: "Rendement en pouvoir d'achat après correction de l'inflation IPC.",
-    },
-    explanation: {
-      tr: "Grafik araç çubuğundaki birim menüsünden «Reel ₺» seçildiğinde geçmiş fiyatlar aylık TÜFE endeksiyle bugünkü lira değerine ölçeklenir.",
-      en: "Selecting «Real ₺» from the chart unit menu rescales historical prices by monthly CPI into today's lira purchasing power.",
-      fr: "En sélectionnant « ₺ réels » dans le menu d'unité du graphique, les cours historiques sont ajustés par l'IPC mensuel.",
-    },
-    formula: {
-      tr: "Reel Fiyat(t) = Nominal Fiyat(t) × [TÜFE(son) / TÜFE(t)]",
-      en: "Real Price(t) = Nominal Price(t) × [CPI(latest) / CPI(t)]",
-      fr: "Cours réel(t) = Cours nominal(t) × [IPC(dernier) / IPC(t)]",
-    },
-    methodology: {
-      tr: "Kaynak: TÜİK / TCMB aylık TÜFE serisi ve günlük hisse/endeks kapanışları.",
-      en: "Source: TurkStat / CBRT monthly CPI series and daily closes.",
-      fr: "Source : séries IPC mensuelles TÜİK / BCRT et clôtures quotidiennes.",
-    },
-    aliases: ["reel getiri", "reel", "real return", "enflasyon arindirilmis", "satin alma gucu", "tufe bazli"],
-    actionLabel: { tr: "Enflasyon bölümünü aç", en: "Open inflation section", fr: "Ouvrir la section inflation" },
-    actionHref: () => "/makro#enflasyon",
-  },
+  ...atlasGuides,
   {
     id: "enflasyon",
     code: "TÜFE",
@@ -809,7 +599,8 @@ export function searchUnified({
     if (score === null) continue;
     // Slight tie-breaker (+0.15) so an actionable screen/tool with an identical exact match
     // appears right next to its concept explanation rather than hiding it.
-    const target = makeTarget("/rehber", { params: { konu: entry.id } });
+    const canonicalSlug = ATLAS_GUIDE_SLUGS[entry.id];
+    const target = canonicalSlug ? makeTarget(atlasHref(canonicalSlug)) : makeTarget("/rehber", { params: { konu: entry.id } });
     ranked.push({
       item: {
         id: `concept:${entry.id}`,

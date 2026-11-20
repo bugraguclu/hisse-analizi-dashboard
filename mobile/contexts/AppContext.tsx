@@ -102,7 +102,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addTickerToWatchlist = useCallback(
     (rawTicker: string, listId = "default") => {
       const ticker = rawTicker.trim().toUpperCase();
-      if (!/^[A-Z0-9]{1,10}$/.test(ticker)) return;
+      if (!/^[A-Z0-9]{2,10}$/.test(ticker)) return;
       persist((prev) => ({
         ...prev,
         watchlists: prev.watchlists.map((list) =>
