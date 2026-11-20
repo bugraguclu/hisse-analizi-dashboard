@@ -102,10 +102,16 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        run: npm test && npm run test:gates
+
       - name: Build
         run: npm run build
         env:
           API_URL: http://localhost:8000
+
+      - name: Release gates (bundle budgets & native iOS readiness)
+        run: npm run check:budgets && npm run check:ios
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
