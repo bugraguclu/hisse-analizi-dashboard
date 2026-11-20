@@ -6,9 +6,17 @@ import { useQuery } from "@tanstack/react-query";
 import { Hourglass, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
+import type { TranslationKey } from "@/lib/i18n";
 import { STALE_TIME } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { tickerHref } from "@/components/layout/nav";
+import { DEFAULT_TICKER, tickerFromPath, tickerHref } from "@/components/layout/nav";
+import {
+  getQuickAccessItems,
+  searchUnified,
+  stockToUnifiedItem,
+  type SearchResultKind,
+  type UnifiedSearchItem,
+} from "./search/catalog";
 import { buildTickerIndex, mostTraded, searchTickers, type TickerOption } from "./search/ticker-index";
 import { useDismissOnLeave } from "./search/use-dismiss";
 import { useListNav } from "./search/use-list-nav";
@@ -16,8 +24,17 @@ import { useShortcutLabel } from "./search/use-search-hotkey";
 
 const SERVER_MIN_LENGTH = 2;
 const DEBOUNCE_MS = 250;
-const MAX_RESULTS = 8;
+const LIVE_ANNOUNCE_DEBOUNCE_MS = 250;
+const MAX_RESULTS = 10;
+const MAX_STOCK_ONLY_RESULTS = 8;
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
+
+const KIND_LABEL: Record<SearchResultKind, TranslationKey> = {
+  stock: "search.kind.stock",
+  tool: "search.kind.tool",
+  screen: "search.kind.screen",
+  concept: "search.kind.concept",
+};
 
 export interface TickerSearchHandle {
   /** Focuses the field and opens its list; false when the field is not on screen. */
@@ -25,44 +42,49 @@ export interface TickerSearchHandle {
 }
 
 /**
- * Stock search, built on the belif site search's mechanics:
+ * Unified local search (stocks, indicators, macro sections, screener presets and
+ * concept guides), built on the belif site search + TusAnkiM quick-search model:
  *
- * - Matches locally against the BIST universe (fetched once, on first focus), so
- *   results follow every keystroke; the upstream symbol search is only a fallback
- *   for when the list is unavailable or has nothing.
- * - Tab / Shift+Tab and the arrows walk the rows while focus stays in the field
- *   (see useListNav); Enter takes the marked row, or the first one.
- * - Opening the empty field (click, ⌘K, ↓) lists the most traded stocks.
- *
- * `inline` is a field with a dropdown: Escape closes the list, then clears; the ✕
- * clears. `overlay` is the body of the small-screen search sheet: the list is
- * always there, Tab never leaves it, and the ✕ and Escape close the sheet.
+ * - Matches locally against the BIST universe and the curated tool/guide catalog
+ *   on every keystroke; exact ticker matches always rank first, and upstream symbol
+ *   search is only a fallback when no stock matched locally.
+ * - When `onSelect` is supplied (or `scope="stocks"`), restricts results to BIST
+ *   stocks so pickers like WatchlistCard only receive tickers.
+ * - Tab / Shift+Tab and arrows walk rows while focus stays in the input.
+ * - Opening the empty field lists the most traded stocks and (in unified mode)
+ *   quick-access shortcuts to popular screens and guides.
  */
 export function TickerSearch({
   ref,
   onSelect,
   onClose,
+  scope,
   variant = "inline",
   autoFocus = false,
   shortcutHint = false,
   className,
 }: {
   ref?: Ref<TickerSearchHandle>;
-  /** Custom selection handler; defaults to navigating (see tickerHref). */
+  /** Custom ticker selection handler; implies stock-only search unless `scope` overrides it. */
   onSelect?: (ticker: string) => void;
   /** Overlay variant: closes the sheet (✕, Escape, a pick). */
   onClose?: () => void;
+  /** `"all"` searches stocks, tools, screens and guides; `"stocks"` searches tickers only. */
+  scope?: "all" | "stocks";
   variant?: "inline" | "overlay";
   autoFocus?: boolean;
   /** Show the ⌘K badge — for the field the site-wide shortcut focuses. */
   shortcutHint?: boolean;
   className?: string;
 }) {
+  const effectiveScope = scope ?? (onSelect ? "stocks" : "all");
+  const unified = effectiveScope === "all";
   const overlay = variant === "overlay";
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [indexWanted, setIndexWanted] = useState(overlay || autoFocus);
   const [debounced, setDebounced] = useState("");
+  const [liveMessage, setLiveMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
@@ -70,8 +92,9 @@ export function TickerSearch({
   const headingId = `${baseId}-heading`;
   const router = useRouter();
   const pathname = usePathname();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const shortcut = useShortcutLabel();
+  const activeTicker = tickerFromPath(pathname) ?? DEFAULT_TICKER;
 
   const trimmed = query.trim();
   const hasQuery = trimmed.length > 0;
@@ -95,11 +118,36 @@ export function TickerSearch({
     staleTime: STALE_TIME.market,
     enabled: panelOpen && !hasQuery,
   });
-  const popular = useMemo(() => mostTraded(popularQ.data?.results), [popularQ.data]);
+  const popularStocks = useMemo(
+    () => mostTraded(popularQ.data?.results, unified ? 4 : 5).map((item) => stockToUnifiedItem(item, pathname)),
+    [popularQ.data, pathname, unified],
+  );
+  const quickAccess = useMemo(
+    () => (unified ? getQuickAccessItems(locale, activeTicker) : []),
+    [unified, locale, activeTicker],
+  );
 
-  const local = useMemo(() => (index && hasQuery ? searchTickers(index, trimmed, MAX_RESULTS) : []), [index, hasQuery, trimmed]);
+  const localStocks = useMemo<TickerOption[]>(
+    () => (index && hasQuery ? searchTickers(index, trimmed, MAX_STOCK_ONLY_RESULTS) : []),
+    [index, hasQuery, trimmed],
+  );
 
-  const needServer = trimmed.length >= SERVER_MIN_LENGTH && local.length === 0 && (indexFailed || indexReady);
+  const localUnified = useMemo<UnifiedSearchItem[]>(() => {
+    if (!hasQuery) return [];
+    if (!unified) return localStocks.map((item) => stockToUnifiedItem(item, pathname));
+    return searchUnified({
+      query: trimmed,
+      locale,
+      stocks: index ?? [],
+      pathname,
+      activeTicker,
+      limit: MAX_RESULTS,
+    });
+  }, [hasQuery, unified, localStocks, pathname, trimmed, locale, index, activeTicker]);
+
+  // Only query upstream symbol search when no local stock matched (even if tools/guides matched,
+  // unless the query already has non-ASCII words unlikely to be a ticker).
+  const needServer = trimmed.length >= SERVER_MIN_LENGTH && localStocks.length === 0 && (indexFailed || indexReady);
   useEffect(() => {
     if (!needServer) return;
     const timer = setTimeout(() => setDebounced(trimmed), DEBOUNCE_MS);
@@ -115,38 +163,53 @@ export function TickerSearch({
     retry: 1,
   });
 
-  const serverOptions = useMemo<TickerOption[]>(() => {
+  const serverItems = useMemo<UnifiedSearchItem[]>(() => {
     const names = new Map((index ?? []).map((entry) => [entry.ticker, entry.name]));
     const seen = new Set<string>();
-    const list: TickerOption[] = [];
+    const list: UnifiedSearchItem[] = [];
     for (const r of serverQ.data?.results ?? []) {
       const ticker = (r.symbol || r.ticker || "").toUpperCase();
       if (!ticker || seen.has(ticker)) continue;
       seen.add(ticker);
-      list.push({ ticker, name: names.get(ticker) ?? r.name ?? r.description ?? "" });
-      if (list.length >= MAX_RESULTS) break;
+      list.push(stockToUnifiedItem({ ticker, name: names.get(ticker) ?? r.name ?? r.description ?? "" }, pathname));
+      if (list.length >= MAX_STOCK_ONLY_RESULTS) break;
     }
     return list;
-  }, [serverQ.data, index]);
+  }, [serverQ.data, index, pathname]);
 
   let settled: boolean;
-  if (!hasQuery || local.length > 0) settled = true;
+  if (!hasQuery || localStocks.length > 0) settled = true;
   else if (needServer) settled = serverCurrent && !serverQ.isFetching;
   else settled = indexReady || indexFailed;
-  const pending = hasQuery && !settled;
+  const pending = hasQuery && !settled && localUnified.length === 0;
 
-  const results = local.length > 0 ? local : serverCurrent ? serverOptions : [];
-  const rows: TickerOption[] = hasQuery ? results : popular;
+  const results = useMemo<UnifiedSearchItem[]>(() => {
+    if (!hasQuery) return [];
+    if (!unified) return localUnified.length > 0 ? localUnified : serverCurrent ? serverItems : [];
+    if (!serverCurrent || serverItems.length === 0) return localUnified;
+    const seen = new Set(localUnified.map((item) => item.id));
+    const merged = [...localUnified];
+    for (const item of serverItems) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        merged.push(item);
+      }
+    }
+    return merged.slice(0, MAX_RESULTS);
+  }, [hasQuery, unified, localUnified, serverCurrent, serverItems]);
+
+  const rows: UnifiedSearchItem[] = hasQuery ? results : [...popularStocks, ...quickAccess];
+  const hasMixedKinds = unified && rows.some((row) => row.kind !== "stock");
   const showRows = panelOpen && rows.length > 0;
   const showStatus = panelOpen && hasQuery && rows.length === 0;
 
   const nav = useListNav({
     count: showRows ? rows.length : 0,
-    listKey: `${trimmed}|${rows.map((row) => row.ticker).join(",")}`,
+    listKey: `${trimmed}|${rows.map((row) => row.id).join(",")}`,
     idPrefix: baseId,
     // The sheet was opened on purpose, so Tab stays in it. The inline field hands
     // Tab back to the page until something is typed: tabbing past the header must
-    // not get stuck in the most-traded list.
+    // not get stuck in the default list.
     tabWalks: overlay || hasQuery,
   });
 
@@ -173,9 +236,23 @@ export function TickerSearch({
     [],
   );
 
-  function choose(ticker: string) {
-    // Tickers are ASCII: a Turkish-locale uppercase would turn "sise" into "SİSE".
-    const symbol = ticker.trim().toUpperCase();
+  function choose(item: UnifiedSearchItem) {
+    setQuery("");
+    setOpen(false);
+    if (overlay) onClose?.();
+    else inputRef.current?.blur();
+
+    if (item.kind === "stock") {
+      const symbol = (item.ticker ?? item.code).trim().toUpperCase();
+      if (onSelect) onSelect(symbol);
+      else router.push(tickerHref(pathname, symbol));
+      return;
+    }
+    router.push(item.href);
+  }
+
+  function chooseTickerFallback(rawTicker: string) {
+    const symbol = rawTicker.trim().toUpperCase();
     setQuery("");
     setOpen(false);
     if (overlay) onClose?.();
@@ -203,15 +280,15 @@ export function TickerSearch({
         if (event.nativeEvent.isComposing) return;
         event.preventDefault();
         if (nav.active >= 0) {
-          choose(rows[nav.active].ticker);
+          choose(rows[nav.active]);
         } else if (!hasQuery) {
           // Nothing marked and nothing typed: nothing to take.
-        } else if (settled) {
-          if (rows.length > 0) choose(rows[0].ticker);
-        } else {
+        } else if (rows.length > 0) {
+          choose(rows[0]);
+        } else if (!settled) {
           // Typed a full ticker faster than the list answered — go straight to it.
           const candidate = trimmed.toUpperCase();
-          if (TICKER_RE.test(candidate)) choose(candidate);
+          if (TICKER_RE.test(candidate)) chooseTickerFallback(candidate);
         }
         break;
       }
@@ -241,12 +318,32 @@ export function TickerSearch({
   let status = "";
   if (showStatus) {
     if (pending) status = t("common.searching");
-    else if (indexFailed && (!needServer || serverQ.isError)) status = t("search.unavailable");
+    else if (!unified && indexFailed && (!needServer || serverQ.isError)) status = t("search.unavailable");
     else status = t("search.noResultsFor", { q: trimmed });
   }
-  const live = showRows && hasQuery ? t("search.resultCount", { count: rows.length }) : status;
 
-  const listLabelProps = hasQuery ? { "aria-label": t("search.label") } : { "aria-labelledby": headingId };
+  // Announce only settled result counts / empty outcomes, debounced so rapid typing
+  // never spams assistive technology (transient loading stays on aria-busy).
+  const candidateAnnouncement =
+    !panelOpen || !hasQuery || pending
+      ? ""
+      : showRows
+        ? t("search.resultCount", { count: rows.length })
+        : status;
+
+  useEffect(() => {
+    if (!candidateAnnouncement) {
+      const clearTimer = setTimeout(() => setLiveMessage(""), 0);
+      return () => clearTimeout(clearTimer);
+    }
+    const timer = setTimeout(() => setLiveMessage(candidateAnnouncement), LIVE_ANNOUNCE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [candidateAnnouncement]);
+
+  const inputLabel = unified ? t("search.allLabel") : t("search.label");
+  const inputPlaceholder = unified ? t("search.allPlaceholder") : t("search.placeholder");
+  const listLabelProps = hasQuery ? { "aria-label": inputLabel } : { "aria-labelledby": headingId };
+  const quickAccessStart = popularStocks.length;
 
   return (
     <div ref={containerRef} className={cn("relative", className)} onBlur={overlay ? undefined : handleBlur}>
@@ -275,8 +372,8 @@ export function TickerSearch({
           // focused brings a closed list back: no focus event fires then (belif f6e3bce).
           onClick={openList}
           onKeyDown={handleKeyDown}
-          placeholder={t("search.placeholder")}
-          aria-label={t("search.label")}
+          placeholder={inputPlaceholder}
+          aria-label={inputLabel}
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showRows}
@@ -286,10 +383,10 @@ export function TickerSearch({
           aria-keyshortcuts={shortcutHint ? "Meta+K Control+K" : undefined}
           autoComplete="off"
           autoCorrect="off"
-          autoCapitalize="characters"
+          autoCapitalize={unified ? "none" : "characters"}
           spellCheck={false}
           enterKeyHint="search"
-          maxLength={40}
+          maxLength={60}
           className={cn(
             "w-full min-w-0 rounded-md border border-input bg-card text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground",
             // One focus signal for pointer and keyboard alike: the border takes the focus
@@ -331,8 +428,8 @@ export function TickerSearch({
         ) : null}
       </div>
 
-      <span className="sr-only" aria-live="polite">
-        {live}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveMessage}
       </span>
 
       {(showRows || showStatus) && (
@@ -341,40 +438,68 @@ export function TickerSearch({
             "overflow-hidden border border-border bg-popover text-popover-foreground",
             overlay
               ? "mt-2 rounded-md"
-              : "absolute right-0 top-full z-50 mt-1 w-full min-w-72 rounded-lg shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]",
+              : "absolute right-0 top-full z-50 mt-1 w-full min-w-80 rounded-lg shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]",
           )}
         >
           {showRows ? (
             <>
               {!hasQuery && (
                 <div id={headingId} className="px-3 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {t("search.mostTraded")}
+                  {popularStocks.length > 0 ? t("search.mostTraded") : t("search.quickAccess")}
                 </div>
               )}
               <ul
                 id={listboxId}
                 role="listbox"
                 {...listLabelProps}
-                className={cn("overflow-y-auto overflow-x-hidden overscroll-contain py-1", overlay ? "max-h-[55vh]" : "max-h-80")}
+                className={cn("overflow-y-auto overflow-x-hidden overscroll-contain py-1", overlay ? "max-h-[55vh]" : "max-h-96")}
               >
-                {rows.map((option, i) => (
-                  <li
-                    key={option.ticker}
-                    id={nav.optionId(i)}
-                    role="option"
-                    aria-selected={i === nav.active}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseMove={() => i !== nav.active && nav.setActive(i)}
-                    onClick={() => choose(option.ticker)}
-                    className={cn(
-                      "flex cursor-pointer items-baseline gap-3 px-3 py-3 text-sm md:py-2",
-                      i === nav.active && "bg-accent",
-                    )}
-                  >
-                    <span className="w-14 shrink-0 font-mono text-xs font-semibold text-foreground">{option.ticker}</span>
-                    <span className="truncate text-xs text-muted-foreground">{option.name}</span>
-                  </li>
-                ))}
+                {rows.map((item, i) => {
+                  const showQuickDivider = !hasQuery && unified && popularStocks.length > 0 && i === quickAccessStart;
+                  const isStock = item.kind === "stock";
+                  return (
+                    <li
+                      key={item.id}
+                      id={nav.optionId(i)}
+                      role="option"
+                      aria-selected={i === nav.active}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseMove={() => i !== nav.active && nav.setActive(i)}
+                      onClick={() => choose(item)}
+                      className={cn(
+                        "cursor-pointer px-3 py-2.5 text-sm md:py-2",
+                        showQuickDivider && "mt-1 border-t border-border pt-2.5",
+                        i === nav.active && "bg-accent",
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={cn(
+                            "w-14 shrink-0 truncate font-mono text-[11px] font-semibold",
+                            isStock ? "text-foreground" : "text-primary",
+                          )}
+                        >
+                          {item.code}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          {isStock ? (
+                            <span className="block truncate text-xs text-muted-foreground">{item.subtitle}</span>
+                          ) : (
+                            <>
+                              <span className="block truncate text-xs font-medium text-foreground">{item.title}</span>
+                              <span className="block truncate text-[11px] text-muted-foreground">{item.subtitle}</span>
+                            </>
+                          )}
+                        </span>
+                        {hasMixedKinds && (
+                          <span className="shrink-0 rounded-sm border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {t(KIND_LABEL[item.kind])}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </>
           ) : (
