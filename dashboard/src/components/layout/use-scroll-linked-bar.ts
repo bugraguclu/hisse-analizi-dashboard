@@ -78,7 +78,8 @@ function attach(bar: HTMLElement, track: HTMLElement) {
   // back does not count as a direction change and does not bring the bar back at the end.
   const readY = () =>
     Math.min(Math.max(window.scrollY, 0), Math.max(document.documentElement.scrollHeight - window.innerHeight, 0));
-  const pinned = () => getComputedStyle(bar).position === "fixed";
+  const pinned = () =>
+    getComputedStyle(bar).position === "fixed" || document.documentElement.hasAttribute("data-soft-keyboard");
   // Where sticky places the bar at y — the formula above.
   const at = (y: number) => Math.max(-y, Math.min(0, B - H - y));
   // Make the bar's top sit at p while the page is at y. p is taken as at most one bar

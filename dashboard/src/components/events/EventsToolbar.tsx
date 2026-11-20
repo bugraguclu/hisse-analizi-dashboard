@@ -98,14 +98,14 @@ function CustomRangeFields({ state, today, onChange }: { state: EventsUrlState; 
   }
 
   const dateInput = cn(
-    "h-9 w-full min-w-0 rounded-md border border-border bg-card px-2 font-mono text-xs text-foreground transition-colors hover:border-foreground/30 [color-scheme:light] dark:[color-scheme:dark]",
+    "h-9 w-full min-w-0 rounded-md border border-border bg-card px-2 font-mono text-base text-foreground transition-colors hover:border-foreground/30 [color-scheme:light] dark:[color-scheme:dark] sm:text-xs",
     FOCUS_RING,
   );
 
   return (
     <FilterPanelSection label={t("date.customRange")}>
       {/* One field per row: a date input needs ~125px, half of the panel does not have it. */}
-      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2">
+      <div data-keyboard-field="" className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2">
         <label htmlFor={fromId} className="text-xs text-muted-foreground">
           {t("date.from")}
         </label>

@@ -169,6 +169,13 @@
     overflow: hidden;
     scrollbar-gutter: stable;
   }
+  dialog[open] {
+    overscroll-behavior: contain;
+  }
+  dialog::backdrop {
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
   /* Page titles are set in the display serif; everything else stays in Plex Sans. */
   h1 {
     font-family: var(--font-display);
@@ -461,6 +468,64 @@
 
 @media (prefers-reduced-motion: reduce) {
   .motion-header {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Soft keyboard & dismissible mobile sheets (lib/soft-keyboard.ts,
+   components/ui/DismissibleSheet.tsx) — keeps focused search/filter fields and
+   primary actions clear of the iPhone Safari virtual keyboard.
+   --------------------------------------------------------------------------- */
+html[data-soft-keyboard] {
+  scroll-padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Toasts lift above the virtual keyboard instead of hiding behind it. */
+html[data-soft-keyboard] [data-sonner-toaster].toaster {
+  top: calc(var(--visible-top, 0px) + var(--visible-height, 100dvh) - 12px) !important;
+  bottom: auto !important;
+  transform: translateY(-100%);
+}
+
+/* Mobile search overlay: constrain height to what stays visible above the keyboard. */
+html[data-soft-keyboard] [data-search-overlay] {
+  bottom: auto;
+  height: max(12rem, calc(var(--visible-top, 0px) + var(--visible-height, 100dvh) - var(--search-top, 57px)));
+}
+html[data-soft-keyboard] [data-search-listbox] {
+  max-height: max(8rem, calc(var(--visible-height, 100dvh) - var(--search-top, 57px) - 7.5rem));
+}
+
+/* Filter bar panels: shrink panel height while typing inside criteria / date inputs
+   so both the focused field and the primary "show N results" footer stay visible. */
+html[data-soft-keyboard] [data-fb-panel] {
+  max-height: min(26rem, max(12rem, calc(var(--visible-height, 100dvh) - 6.5rem)));
+}
+html[data-soft-keyboard] [data-fb-body] {
+  scroll-padding-bottom: 4.75rem;
+}
+html[data-soft-keyboard] [data-fb-actions] {
+  padding-bottom: 0.75rem;
+}
+
+[data-sheet-header] {
+  touch-action: pan-x pinch-zoom;
+}
+[data-dismiss-sheet][data-sheet-state] {
+  translate: 0 var(--sheet-offset, 0px);
+}
+[data-sheet-state="dragging"] {
+  will-change: translate;
+  user-select: none;
+}
+[data-sheet-state="settling"],
+[data-sheet-state="dismissing"] {
+  transition: translate 260ms var(--motion-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sheet-state="settling"],
+  [data-sheet-state="dismissing"] {
     transition: none;
   }
 }
