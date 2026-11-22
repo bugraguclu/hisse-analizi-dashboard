@@ -582,7 +582,11 @@ describe("widget minimum sizes", () => {
       ] }],
     }, () => true);
     assert.ok(layout);
-    for (const r of layout.rows) assert.ok(r.columns.reduce((sum, c) => sum + c.width, 0) <= 12);
-    assert.deepEqual(layout.rows.map((r) => r.columns.length), [2, 1]);
+    // Each chart grows to its minimum; the split-off part of the full row fills the width.
+    assert.deepEqual(shape(layout), ["6:stock.chart 6:stock.chart", "12:stock.news"]);
+    const partial = sanitizeLayout({
+      rows: [{ id: "r", columns: [{ id: "a", width: 3, widgets: [{ id: "x", type: "stock.chart" }] }] }],
+    }, () => true);
+    assert.deepEqual(partial && shape(partial), ["6:stock.chart"]);
   }));
 });

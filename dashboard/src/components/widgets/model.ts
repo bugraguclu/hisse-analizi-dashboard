@@ -826,18 +826,28 @@ export function sanitizeLayout(raw: unknown, isKnownType: (type: string) => bool
     }
     if (columns.length === 0) continue;
     // A row with more columns than the grid holds continues in the next one.
+    // Columns saved narrower than their cards allow (an older layout) grow to
+    // their minimum; when the row is split for it, a split-off part of a full
+    // row fills the width instead of leaving a gap.
+    const wasFull = columns.reduce((sum, column) => sum + column.width, 0) >= GRID_COLUMNS;
+    const parts: Row[] = [];
     let current: Row = { id: uniqueId((rawRow as { id?: unknown }).id, "r"), columns: [] };
     if (isRail) current.rail = true;
     for (const column of columns) {
       const neededMin = current.columns.reduce((sum, c) => sum + columnMinWidth(c), 0) + columnMinWidth(column);
       if (current.columns.length > 0 && neededMin > GRID_COLUMNS) {
-        rows.push(current);
+        parts.push(current);
         current = { id: newId("r"), columns: [] };
       }
+      column.width = Math.max(column.width, columnMinWidth(column));
       current.columns.push(column);
       fitRow(current, null);
     }
-    rows.push(current);
+    parts.push(current);
+    if (wasFull && parts.length > 1) {
+      for (const part of parts) part.columns[part.columns.length - 1].width += GRID_COLUMNS - rowWidth(part);
+    }
+    rows.push(...parts);
   }
   return rows.length > 0 ? { rows } : null;
 }
