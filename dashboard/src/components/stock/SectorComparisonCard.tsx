@@ -64,8 +64,8 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
   const [expanded, setExpanded] = useState(false);
   // In a layout slot every peer is there to scroll, so a taller card simply shows more of them.
   const { fill, columns: slotColumns } = usePanel();
-  // A narrow slot shows the short column set, like the combined view's column.
-  const short = compact || (fill && slotColumns <= 3);
+  // A narrow slot (fixed height or not) shows the short column set, like the combined view's column.
+  const short = compact || (slotColumns > 0 && slotColumns <= 3);
 
   // No KAP sector (a handful of listings): nothing to compare, no card.
   if (sectorQ.isSuccess && !sector) return null;

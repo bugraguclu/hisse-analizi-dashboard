@@ -1,7 +1,7 @@
 "use client";
 
 import { motionScrollBehavior } from "@/hooks/use-motion-allowed";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -317,7 +317,8 @@ function CalendarRowView({
   const soon = untilMs !== null && untilMs <= SOON_MS;
   const change = changeVsPrevious(row, locale);
   const period = formatPeriod(row, locale);
-  const detailId = `cal-detail-${row.id}`;
+  // Unique per calendar, so two calendar widgets on one page never share an id.
+  const detailId = `${useId()}-detail-${row.id}`;
   const visibleTags = row.tags.filter((tag) => tag !== "other").slice(0, 2);
 
   return (

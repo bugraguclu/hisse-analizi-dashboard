@@ -16,6 +16,7 @@ import {
   row,
   sanitizeLayout,
   setWidgetHeight,
+  setWidgetLimits,
   setWidgetWidth,
   updateWidget,
   widgetsInOrder,
@@ -528,4 +529,60 @@ describe("A6: full width preset on card with stack-mates", () => {
     const next = setWidgetWidth(layout, chartId, 12);
     assert.deepEqual(shape(next), ["6:general.note 6:stock.news", "12:stock.chart"]);
   });
+});
+
+describe("widget minimum sizes", () => {
+  const withMinimums = (run: () => void) => {
+    setWidgetLimits((type) => (type === "stock.chart" ? { minWidth: 6, minHeight: 352 } : undefined));
+    try {
+      run();
+    } finally {
+      setWidgetLimits(() => undefined);
+    }
+  };
+
+  test("a resize stops at the widget's minimum, on its own edge and its neighbour's", () => withMinimums(() => {
+    const layout = buildLayout("t", [row([6, "stock.chart"], [6, "stock.news"])]);
+    const chart = layout.rows[0].columns[0];
+    const news = layout.rows[0].columns[1];
+    assert.deepEqual(shape(resizeColumn(layout, chart.id, 2)), ["6:stock.chart 6:stock.news"]);
+    assert.deepEqual(shape(resizeColumn(layout, news.id, 10)), ["6:stock.chart 6:stock.news"]);
+    assert.deepEqual(shape(resizeColumn(layout, chart.id, 10)), ["10:stock.chart 2:stock.news"]);
+  }));
+
+  test("a fixed height never goes below the widget's own minimum", () => withMinimums(() => {
+    const layout = buildLayout("t", [row([12, "stock.chart", "stock.news"])]);
+    const chart = idOf(layout, "stock.chart");
+    assert.equal(findWidget(setWidgetHeight(layout, chart, 120), chart)?.widget.height, 352);
+    assert.equal(findWidget(setWidgetHeight(layout, idOf(layout, "stock.news"), 120), idOf(layout, "stock.news"))?.widget.height, 120);
+    const stored = sanitizeLayout({ rows: [{ columns: [{ width: 12, widgets: [{ id: "c", type: "stock.chart", height: 200 }] }] }] }, () => true);
+    assert.equal(stored?.rows[0].columns[0].widgets[0].height, 352);
+  }));
+
+  test("width presets below the minimum keep the minimum", () => withMinimums(() => {
+    const layout = buildLayout("t", [row([8, "stock.chart"], [4, "stock.news"])]);
+    assert.deepEqual(shape(setWidgetWidth(layout, idOf(layout, "stock.chart"), 3)), ["6:stock.chart 4:stock.news"]);
+  }));
+
+  test("a row that can't fit the newcomer at its minimum sends it to a row of its own", () => withMinimums(() => {
+    const layout = buildLayout("t", [row([6, "stock.chart"], [6, "stock.chart"])]);
+    const added = insertWidget(layout, { type: "stock.chart" }, 2, { kind: "column", rowId: layout.rows[0].id, beforeColumnId: null });
+    assert.deepEqual(shape(added.layout), ["6:stock.chart 6:stock.chart", "6:stock.chart"]);
+    const roomy = buildLayout("t", [row([4, "stock.news"], [4, "stock.kap"])]);
+    const fitted = insertWidget(roomy, { type: "stock.chart" }, 2, { kind: "column", rowId: roomy.rows[0].id, beforeColumnId: null });
+    assert.deepEqual(shape(fitted.layout), ["3:stock.news 3:stock.kap 6:stock.chart"]);
+  }));
+
+  test("stored rows are split where their minimums can't share the grid", () => withMinimums(() => {
+    const layout = sanitizeLayout({
+      rows: [{ id: "r", columns: [
+        { id: "a", width: 4, widgets: [{ id: "x", type: "stock.chart" }] },
+        { id: "b", width: 4, widgets: [{ id: "y", type: "stock.chart" }] },
+        { id: "c", width: 4, widgets: [{ id: "z", type: "stock.news" }] },
+      ] }],
+    }, () => true);
+    assert.ok(layout);
+    for (const r of layout.rows) assert.ok(r.columns.reduce((sum, c) => sum + c.width, 0) <= 12);
+    assert.deepEqual(layout.rows.map((r) => r.columns.length), [2, 1]);
+  }));
 });

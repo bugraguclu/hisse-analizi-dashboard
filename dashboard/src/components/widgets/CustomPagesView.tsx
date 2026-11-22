@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { MENU_ITEM_CLASS, POPUP_CLASS } from "@/components/charts/controls";
 import { DEFAULT_TICKER } from "@/components/layout/nav";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useStockIdentity } from "@/components/stock/hooks";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -249,7 +250,12 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
       />
 
       <PageTabs pages={pages} active={page.id} onNew={() => setDialog("new")} />
-      {stockUsage.followingPage > 0 ? <p className="mt-3 text-xs text-muted-foreground">{t("pages.stockHint")}</p> : null}
+      {stockUsage.followingPage > 0 ? (
+        <>
+          <p className="mt-3 text-xs text-muted-foreground">{t("pages.stockHint")}</p>
+          <PageStockNotice ticker={page.ticker} />
+        </>
+      ) : null}
 
       <div className="mt-6">
         <WidgetBoard editor={editor} context={{ ticker: page.ticker, tickerOverrides: true }} galleryCategories={["stock", "market", "macro", "general"]} scopeSections />
@@ -278,6 +284,22 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
         />
       </PageDialog>
     </div>
+  );
+}
+
+/**
+ * One line for a page stock that doesn't exist (a page saved before a
+ * delisting, or a symbol typed while the company list was unavailable), instead
+ * of an error on every card. Nothing while the lookup itself is unavailable.
+ */
+function PageStockNotice({ ticker }: { ticker: string }) {
+  const { t } = useWidgetI18n();
+  const identity = useStockIdentity(ticker);
+  if (identity.status !== "notFound") return null;
+  return (
+    <p role="status" className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs font-medium text-destructive">
+      {t("pages.stockNotFound", { ticker })}
+    </p>
   );
 }
 

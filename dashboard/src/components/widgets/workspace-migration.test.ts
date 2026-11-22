@@ -31,12 +31,49 @@ describe("workspace layout migration", () => {
     });
     assert.ok(layout);
     assert.deepEqual(layout.rows.map(({ columns }) => columns.map(({ width, widgets }) => [
-      width, widgets[0].type, widgets[0].height,
+      width, ...widgets.map((widget) => `${widget.type}@${widget.height}`),
     ])), [
-      [[4, "market.watchlist", 240], [8, "market.index", 432]],
-      [[4, "market.breadth", 368]],
-      [[8, "market.events", 304]],
+      [[4, "market.watchlist@240", "market.breadth@368"], [8, "market.index@432"]],
+      [[8, "market.events@304"]],
     ]);
+  });
+
+  test("keeps cards stacked in an old column together, as the home rail", () => {
+    const layout = readWorkspaceLayout("home", DEFAULT_LAYOUTS.home, () => JSON.stringify({
+      version: 1,
+      items: [
+        { id: "index", x: 0, y: 0, w: 4, h: 14 },
+        { id: "watchlist", x: 4, y: 0, w: 2, h: 10 },
+        { id: "breadth", x: 4, y: 10, w: 2, h: 16 },
+        { id: "events", x: 0, y: 14, w: 4, h: 12 },
+      ],
+    }));
+    assert.ok(layout);
+    assert.equal(layout.rows.length, 1);
+    assert.equal(layout.rows[0].rail, true);
+    assert.deepEqual(layout.rows[0].columns.map(({ width, widgets }) => [width, widgets.map(({ type }) => type)]), [
+      [8, ["market.index", "market.events"]],
+      [4, ["market.watchlist", "market.breadth"]],
+    ]);
+  });
+
+  test("leaves cards that sized to their content at auto height", () => {
+    const layout = readWorkspaceLayout("stock.fundamental", DEFAULT_LAYOUTS["stock.fundamental"], () => JSON.stringify({
+      version: 1,
+      items: [
+        { id: "scorecard", x: 0, y: 0, w: 3, h: 14 },
+        { id: "holders", x: 3, y: 0, w: 3, h: 9 },
+        { id: "statements", x: 0, y: 14, w: 6, h: 16 },
+      ],
+    }));
+    assert.ok(layout);
+    const byType = new Map(widgetsInOrder(layout).map((widget) => [widget.type, widget]));
+    assert.equal(byType.get("stock.scorecard")?.height, undefined);
+    assert.equal(byType.get("stock.holders")?.height, undefined);
+    assert.equal(byType.get("stock.statements")?.height, 496);
+    // Cards the old layout lacked never split the row the visitor built.
+    const first = layout.rows.find((row) => row.columns.some(({ widgets }) => widgets.some(({ type }) => type === "stock.scorecard")));
+    assert.deepEqual(first?.columns.map(({ widgets }) => widgets[0].type), ["stock.scorecard", "stock.holders"]);
   });
 
   test("retains the macro heading anchors, new cards, and natural-height widgets", () => {

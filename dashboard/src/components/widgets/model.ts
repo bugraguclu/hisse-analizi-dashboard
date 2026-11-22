@@ -134,6 +134,44 @@ function clampWidth(width: number): number {
   return Math.min(GRID_COLUMNS, Math.max(MIN_WIDTH, Math.round(width)));
 }
 
+/**
+ * Smallest size per widget type. The model knows no widget types: the
+ * catalogue registers this lookup (charts and wide tables stay at least half
+ * the page wide, a chart keeps room for its plot). Unregistered, every widget
+ * can go down to MIN_WIDTH and MIN_HEIGHT.
+ */
+export interface WidgetLimits {
+  /** Columns of 12. */
+  minWidth?: number;
+  /** Pixels, for a fixed height. */
+  minHeight?: number;
+}
+
+let limitsOfType: (type: string) => WidgetLimits | undefined = () => undefined;
+
+export function setWidgetLimits(lookup: (type: string) => WidgetLimits | undefined): void {
+  limitsOfType = lookup;
+}
+
+export function widgetMinWidth(widget: Pick<WidgetInstance, "type">): number {
+  const min = limitsOfType(widget.type)?.minWidth ?? MIN_WIDTH;
+  return Math.min(GRID_COLUMNS, Math.max(MIN_WIDTH, Math.round(min)));
+}
+
+export function widgetMinHeight(widget: Pick<WidgetInstance, "type">): number {
+  return clampHeight(limitsOfType(widget.type)?.minHeight ?? MIN_HEIGHT);
+}
+
+/** A fixed height for this widget: on the grid's steps, within its own and the page's bounds. */
+export function clampWidgetHeight(widget: Pick<WidgetInstance, "type">, height: number): number {
+  return Math.max(widgetMinHeight(widget), clampHeight(height));
+}
+
+/** A column is as narrow as its widest-needing widget allows. */
+export function columnMinWidth(column: Column): number {
+  return column.widgets.reduce((min, widget) => Math.max(min, widgetMinWidth(widget)), MIN_WIDTH);
+}
+
 export function clampHeight(height: number): number {
   const snapped = Math.round(height / HEIGHT_STEP) * HEIGHT_STEP;
   return Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, snapped));
@@ -147,17 +185,17 @@ export function clampHeight(height: number): number {
  * Shrinks the columns of an over-full row one step at a time, always the
  * widest, so a 12-wide newcomer beside a 4-wide card ends up 8 wide and three
  * halves become thirds. On a tie `keepId` gives way last; when `pinned` it
- * only shrinks once nothing else can. False when even MIN_WIDTH columns don't fit.
+ * only shrinks once nothing else can. False when even the narrowest allowed columns don't fit.
  */
 function fitRow(row: Row, keepId: string | null, pinned = false): boolean {
   let excess = rowWidth(row) - GRID_COLUMNS;
   while (excess > 0) {
     let target: Column | null = null;
     for (const column of row.columns) {
-      if (column.width <= MIN_WIDTH || (pinned && column.id === keepId)) continue;
+      if (column.width <= columnMinWidth(column) || (pinned && column.id === keepId)) continue;
       if (!target || column.width > target.width || (column.width === target.width && target.id === keepId)) target = column;
     }
-    if (!target && pinned) target = row.columns.find((column) => column.id === keepId && column.width > MIN_WIDTH) ?? null;
+    if (!target && pinned) target = row.columns.find((column) => column.id === keepId && column.width > columnMinWidth(column)) ?? null;
     if (!target) return false;
     target.width -= 1;
     excess -= 1;
@@ -232,12 +270,12 @@ function insertAt(layout: Layout, widget: WidgetInstance, width: number, target:
     const row = layout.rows[rowIndex];
     const index = target.beforeColumnId === null ? row.columns.length : row.columns.findIndex((c) => c.id === target.beforeColumnId);
     if (index < 0) return null;
-    const column: Column = { id: newId("c"), width: clampWidth(width), widgets: [widget] };
+    const column: Column = { id: newId("c"), width: Math.max(clampWidth(width), widgetMinWidth(widget)), widgets: [widget] };
     row.columns.splice(index, 0, column);
     if (!fitRow(row, column.id)) {
       // Too many columns for this row: the widget opens a new row below it instead.
       row.columns.splice(index, 1);
-      column.width = clampWidth(width);
+      column.width = Math.max(clampWidth(width), widgetMinWidth(widget));
       layout.rows.splice(rowIndex + 1, 0, { id: newId("r"), columns: [column] });
     }
     return layout;
@@ -245,7 +283,7 @@ function insertAt(layout: Layout, widget: WidgetInstance, width: number, target:
 
   const index = target.beforeRowId === null ? layout.rows.length : layout.rows.findIndex((r) => r.id === target.beforeRowId);
   if (index < 0) return null;
-  layout.rows.splice(index, 0, { id: newId("r"), columns: [{ id: newId("c"), width: clampWidth(width), widgets: [widget] }] });
+  layout.rows.splice(index, 0, { id: newId("r"), columns: [{ id: newId("c"), width: Math.max(clampWidth(width), widgetMinWidth(widget)), widgets: [widget] }] });
   return layout;
 }
 
@@ -381,10 +419,10 @@ export function moveWidgetStep(layout: Layout, widgetId: string, direction: Move
         return next;
       }
       const free = freeWidth(rowAbove);
-      if (free >= MIN_WIDTH) {
+      if (free >= widgetMinWidth(at.widget)) {
         const next = clone(layout);
         const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
-        const joinWidth = Math.min(column.width, free);
+        const joinWidth = Math.max(widgetMinWidth(widget), Math.min(column.width, free));
         next.rows[rowIndex - 1].columns.push({ id: newId("c"), width: joinWidth, widgets: [widget] });
         return prune(next);
       }
@@ -423,10 +461,10 @@ export function moveWidgetStep(layout: Layout, widgetId: string, direction: Move
       }
       const rowBelow = layout.rows[rowIndex + 1];
       const free = freeWidth(rowBelow);
-      if (free >= MIN_WIDTH) {
+      if (free >= widgetMinWidth(at.widget)) {
         const next = clone(layout);
         const [widget] = next.rows[rowIndex].columns[columnIndex].widgets.splice(widgetIndex, 1);
-        const joinWidth = Math.min(column.width, free);
+        const joinWidth = Math.max(widgetMinWidth(widget), Math.min(column.width, free));
         next.rows[rowIndex + 1].columns.push({ id: newId("c"), width: joinWidth, widgets: [widget] });
         return prune(next);
       }
@@ -509,20 +547,22 @@ export function setWidgetWidth(layout: Layout, widgetId: string, width: number):
     target.column.width = GRID_COLUMNS;
     return moved;
   }
-  if (at.column.width === wanted) return layout;
-  const others = at.row.columns.length - 1;
-  if (others * MIN_WIDTH + wanted > GRID_COLUMNS) {
+  // Never narrower than what the column's widgets need.
+  const span = Math.max(wanted, columnMinWidth(at.column));
+  if (at.column.width === span) return layout;
+  const othersMin = at.row.columns.reduce((sum, column) => (column === at.column ? sum : sum + columnMinWidth(column)), 0);
+  if (othersMin + span > GRID_COLUMNS) {
     // No room beside the other columns: a row of its own, right below this one.
     const moved = clone(moveWidget(layout, widgetId, { kind: "row", beforeRowId: layout.rows[at.rowIndex + 1]?.id ?? null }));
     const target = findWidget(moved, widgetId);
     if (!target) return layout;
-    target.column.width = wanted;
+    target.column.width = Math.max(wanted, widgetMinWidth(target.widget));
     return moved;
   }
   const next = clone(layout);
   const target = findWidget(next, widgetId);
   if (!target) return layout;
-  target.column.width = wanted;
+  target.column.width = span;
   fitRow(target.row, target.column.id, true);
   return next;
 }
@@ -541,8 +581,8 @@ export function resizeColumn(layout: Layout, columnId: string, width: number): L
     const after = row.columns.slice(index + 1);
     const full = rowWidth(row) >= GRID_COLUMNS;
     const free = GRID_COLUMNS - rowWidth(row);
-    const room = free + after.reduce((sum, c) => sum + (c.width - MIN_WIDTH), 0);
-    const wanted = Math.min(column.width + room, clampWidth(width));
+    const room = free + after.reduce((sum, c) => sum + Math.max(0, c.width - columnMinWidth(c)), 0);
+    const wanted = Math.min(column.width + room, Math.max(clampWidth(width), columnMinWidth(column)));
     if (wanted === column.width) return layout;
     const delta = wanted - column.width;
     column.width = wanted;
@@ -550,7 +590,7 @@ export function resizeColumn(layout: Layout, columnId: string, width: number): L
       let take = full ? delta : delta - free;
       for (const other of after) {
         if (take <= 0) break;
-        const give = Math.min(take, other.width - MIN_WIDTH);
+        const give = Math.min(take, Math.max(0, other.width - columnMinWidth(other)));
         other.width -= give;
         take -= give;
       }
@@ -566,7 +606,7 @@ export function setWidgetHeight(layout: Layout, widgetId: string, height: number
   const next = clone(layout);
   const at = findWidget(next, widgetId);
   if (!at) return layout;
-  const value = height === null ? undefined : clampHeight(height);
+  const value = height === null ? undefined : clampWidgetHeight(at.widget, height);
   if (at.widget.height === value) return layout;
   if (value === undefined) delete at.widget.height;
   else at.widget.height = value;
@@ -632,7 +672,7 @@ export function addWidget(layout: Layout, widget: Omit<WidgetInstance, "id">, wi
   const id = newId("w");
   const instance: WidgetInstance = { ...widget, id };
   const next = clone(layout);
-  const w = clampWidth(width);
+  const w = Math.max(clampWidth(width), widgetMinWidth(instance));
   const last = next.rows[next.rows.length - 1];
   if (last && rowWidth(last) + w <= GRID_COLUMNS) {
     last.columns.push({ id: newId("c"), width: w, widgets: [instance] });
@@ -772,7 +812,7 @@ export function sanitizeLayout(raw: unknown, isKnownType: (type: string) => bool
         const w = rawWidget as Record<string, unknown>;
         if (typeof w.type !== "string" || !isKnownType(w.type)) continue;
         const instance: WidgetInstance = { id: uniqueId(w.id, "w"), type: w.type };
-        if (typeof w.height === "number" && Number.isFinite(w.height)) instance.height = clampHeight(w.height);
+        if (typeof w.height === "number" && Number.isFinite(w.height)) instance.height = clampWidgetHeight(instance, w.height);
         const ticker = normalizeTicker(w.ticker);
         if (ticker) instance.ticker = ticker;
         const options = sanitizeOptions(w.options);
@@ -789,7 +829,8 @@ export function sanitizeLayout(raw: unknown, isKnownType: (type: string) => bool
     let current: Row = { id: uniqueId((rawRow as { id?: unknown }).id, "r"), columns: [] };
     if (isRail) current.rail = true;
     for (const column of columns) {
-      if ((current.columns.length + 1) * MIN_WIDTH > GRID_COLUMNS) {
+      const neededMin = current.columns.reduce((sum, c) => sum + columnMinWidth(c), 0) + columnMinWidth(column);
+      if (current.columns.length > 0 && neededMin > GRID_COLUMNS) {
         rows.push(current);
         current = { id: newId("r"), columns: [] };
       }

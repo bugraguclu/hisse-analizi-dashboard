@@ -35,14 +35,14 @@ import { useWidgetI18n } from "./i18n";
 import {
   addWidget,
   canMoveStep,
-  clampHeight,
+  clampWidgetHeight,
+  columnMinWidth,
   findWidget,
   freeWidth,
   GRID_COLUMNS,
   insertWidget,
   isNoopMove,
   MAX_WIDGETS,
-  MIN_HEIGHT,
   MAX_HEIGHT,
   MIN_WIDTH,
   moveWidget,
@@ -53,6 +53,7 @@ import {
   setWidgetWidth,
   updateWidget,
   widgetCount,
+  widgetMinHeight,
   widgetsInOrder,
   type Column,
   type DropTarget,
@@ -66,7 +67,7 @@ import type { LayoutEditor } from "./use-layout-editor";
 import { WidgetFrame } from "./WidgetFrame";
 import { WidgetGallery } from "./WidgetGallery";
 import { WidgetScopeCards } from "./WidgetScopeCards";
-import { addWidgetInScope, rowScope, type WidgetScope } from "./widget-scope";
+import { addWidgetInScope, groupWidgetsByScope, rowScopes, type WidgetScope } from "./widget-scope";
 import { WidgetSettingsDialog } from "./WidgetSettings";
 import styles from "./widget-board.module.css";
 
@@ -235,9 +236,10 @@ function LazyMount({
 }
 
 /**
- * A chart card given a fixed height: measures the card at its current plot
- * height, and sets the plot to what fills the height exactly (chrome = card −
- * plot, so one step settles it). At the smallest plot the card scrolls.
+ * A chart card given a fixed height: measures the card's content at its
+ * current plot height, and sets the plot to what fills the height exactly
+ * (chrome = content − plot, so one step settles it), taller or shorter. At
+ * the smallest plot the card scrolls.
  */
 function FittedChart({
   height,
@@ -269,7 +271,9 @@ function FittedChart({
   }, [height, basePlot]);
 
   return (
-    <div ref={ref} inert={inert} className="flex min-w-0 shrink-0 grow flex-col [&>*:last-child]:grow">
+    // With a fixed height the wrapper keeps its content's own height (stretched,
+    // it would always measure the slot and a taller slot could never grow the plot).
+    <div ref={ref} inert={inert} className={cn("flex min-w-0 shrink-0 flex-col", height === null && "grow [&>*:last-child]:grow")}>
       <ChartHeightContext.Provider value={height === null ? null : plot}>{children}</ChartHeightContext.Provider>
     </div>
   );
@@ -443,12 +447,14 @@ export function WidgetBoard({
   const { layout, editing, commit } = editor;
   const wide = useMediaQuery(WIDE_QUERY[stackBelow]);
   const interactive = editing && wide;
-  const slotted = editing || editor.customized || !editor.reset;
+  // Cards arrange themselves by their slot once the page is the visitor's own
+  // (custom pages always are). Entering edit mode alone changes nothing, so
+  // what is edited is what was shown.
+  const slotted = editor.customized || !editor.reset;
   const motionAllowed = useMotionAllowed();
   const pageTicker = context.ticker ?? DEFAULT_TICKER;
 
   const boardRef = useRef<HTMLDivElement>(null);
-  const floatedRef = useRef<HTMLElement | null>(null);
   const layoutRef = useRef(layout);
   const previousPositions = useRef<Map<string, DOMRect> | null>(null);
   const moves = useRef(new Map<HTMLElement, Animation>());
@@ -463,7 +469,9 @@ export function WidgetBoard({
   const [galleryScope, setGalleryScope] = useState<WidgetScope | "all">("all");
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
-  const [announcement, setAnnouncement] = useState("");
+  // A counter, so the same message twice in a row is still read out.
+  const [announcement, setAnnouncement] = useState({ text: "", n: 0 });
+  const announce = useCallback((text: string) => setAnnouncement((previous) => ({ text, n: previous.n + 1 })), []);
 
   const shown = preview ?? layout;
 
@@ -491,6 +499,16 @@ export function WidgetBoard({
     moves.current.clear();
   }, []);
 
+  // Personal pages keep each scope's rows under its heading. Every change is
+  // settled there before it is compared or saved, so a move that would only
+  // cross into the other section is no move at all.
+  const settle = useCallback((next: Layout) => (scopeSections ? groupWidgetsByScope(next, widgetMeta) : next), [scopeSections]);
+  const commitLayout = useCallback((next: Layout) => commit(settle(next)), [commit, settle]);
+  const changes = useCallback((next: Layout) => {
+    const settled = settle(next);
+    return settled !== layout && JSON.stringify(settled) !== JSON.stringify(layout);
+  }, [layout, settle]);
+
   const commitMove = useCallback((next: Layout) => {
     const board = boardRef.current;
     if (board && motionAllowed && wide) {
@@ -501,8 +519,8 @@ export function WidgetBoard({
         ]),
       );
     }
-    commit(next);
-  }, [commit, motionAllowed, wide]);
+    commitLayout(next);
+  }, [commitLayout, motionAllowed, wide]);
 
   useLayoutEffect(() => {
     const before = previousPositions.current;
@@ -529,20 +547,22 @@ export function WidgetBoard({
 
   useEffect(() => cancelMoves, [cancelMoves]);
 
-  // Keep the last floating position until React removes its moving state.
-  useLayoutEffect(() => {
-    if (drag || !floatedRef.current) return;
-    floatedRef.current.style.removeProperty("--drag-x");
-    floatedRef.current.style.removeProperty("--drag-y");
-    floatedRef.current = null;
-  }, [drag]);
-
-  // After a keyboard move the widget re-mounts elsewhere: give its grip the focus back.
+  // After a move, a removal or an undo the card re-mounts elsewhere (or is
+  // gone): the grip named here gets the focus, and its card is scrolled into
+  // view once it has glided to its new place.
   useEffect(() => {
     const id = focusAfterRef.current;
     if (!id) return;
     focusAfterRef.current = null;
-    boardRef.current?.querySelector<HTMLElement>(`[data-grip="${CSS.escape(id)}"]`)?.focus();
+    const grip = boardRef.current?.querySelector<HTMLElement>(`[data-grip="${CSS.escape(id)}"]`);
+    if (!grip) return;
+    grip.focus({ preventScroll: true });
+    const card = grip.closest<HTMLElement>("[data-widget-id]");
+    if (!card) return;
+    const reveal = () => card.scrollIntoView({ block: "nearest", behavior: motionScrollBehavior() });
+    const glide = moves.current.get(card);
+    if (glide) glide.finished.then(reveal, () => {});
+    else reveal();
   }, [layout]);
 
   // A widget just added: bring it into view and flash it.
@@ -583,12 +603,24 @@ export function WidgetBoard({
       let needsMeasure = true;
       let hit: DropHit | null = null;
       let observer: ResizeObserver | null = null;
+      // On personal pages a line is only offered where the card would really land.
+      const verdicts = new Map<string, boolean>();
+      const lands = (target: DropTarget) => {
+        if (!scopeSections) return true;
+        const key = JSON.stringify(target);
+        let verdict = verdicts.get(key);
+        if (verdict === undefined) {
+          const moved = moveWidget(base, widgetId, target);
+          verdict = settle(moved) === moved;
+          verdicts.set(key, verdict);
+        }
+        return verdict;
+      };
       cleanupRef.current = beginPointerGesture(event, {
         mediaQuery: WIDE_QUERY[stackBelow],
         cursor: "grabbing",
         onStart: () => {
           cancelMoves();
-          floatedRef.current = cell;
           // Observe the boxes used for hit testing; late-loaded cards can resize
           // inside a row without changing the board's total height.
           observer = new ResizeObserver(() => { needsMeasure = true; });
@@ -609,7 +641,7 @@ export function WidgetBoard({
             needsMeasure = false;
           }
           const next = hitTest(measured, clientX + window.scrollX, clientY + window.scrollY, GAP);
-          hit = next && !isNoopMove(base, widgetId, next.target) ? next : null;
+          hit = next && !isNoopMove(base, widgetId, next.target) && lands(next.target) ? next : null;
           cell.style.setProperty("--drag-x", `${gestureResistance(deltaX, boardBox.left - cellBox.left, boardBox.right - cellBox.right)}px`);
           cell.style.setProperty("--drag-y", `${gestureResistance(deltaY, boardBox.top - cellBox.top, boardBox.bottom - cellBox.top)}px`);
           const origin = { left: measured.box.left, top: measured.box.top };
@@ -627,13 +659,16 @@ export function WidgetBoard({
             if (next !== current) {
               if (fromGrip) focusAfterRef.current = widgetId;
               commitMove(next);
-              setAnnouncement(t("announce.moved", { name: nameOf(findWidget(current, widgetId)?.widget) }));
+              announce(t("announce.moved", { name: nameOf(findWidget(current, widgetId)?.widget) }));
             }
           }
+          // The glide (if any) has measured the dropped position: the card can let go of the pointer.
+          cell.style.removeProperty("--drag-x");
+          cell.style.removeProperty("--drag-y");
         },
       });
     },
-    [cancelMoves, commitMove, interactive, nameOf, stackBelow, t],
+    [announce, cancelMoves, commitMove, interactive, nameOf, scopeSections, settle, stackBelow, t],
   );
 
   // -------------------------------------------------------------------------
@@ -675,11 +710,11 @@ export function WidgetBoard({
           cleanupRef.current = null;
           setPreview(null);
           setResize(null);
-          if (apply && next !== base) commit(next);
+          if (apply && next !== base) commitLayout(next);
         },
       });
     },
-    [cancelMoves, commit, interactive, stackBelow],
+    [cancelMoves, commitLayout, interactive, stackBelow],
   );
 
   const startHeightResize = useCallback(
@@ -696,16 +731,19 @@ export function WidgetBoard({
       let rawHeight = startHeight;
       let moved = false;
       let next = base;
+      const widget = findWidget(base, widgetId)?.widget;
+      if (!widget) return;
+      const lowest = widgetMinHeight(widget);
       cleanupRef.current = beginPointerGesture(event, {
         mediaQuery: WIDE_QUERY[stackBelow],
         cursor: "row-resize",
-        scrollRoom: () => ({ up: rawHeight > MIN_HEIGHT, down: rawHeight < MAX_HEIGHT }),
+        scrollRoom: () => ({ up: rawHeight > lowest, down: rawHeight < MAX_HEIGHT }),
         onStart: cancelMoves,
         onFrame: ({ deltaY }) => {
           if (!moved && Math.abs(deltaY) < 3) return;
           moved = true;
           rawHeight = startHeight + deltaY;
-          const height = clampHeight(rawHeight);
+          const height = clampWidgetHeight(widget, rawHeight);
           if (height === previousHeight) return;
           previousHeight = height;
           next = setWidgetHeight(base, widgetId, height);
@@ -716,51 +754,67 @@ export function WidgetBoard({
           cleanupRef.current = null;
           setPreview(null);
           setResize(null);
-          if (apply && next !== base) commit(next);
+          if (apply && next !== base) commitLayout(next);
         },
       });
     },
-    [cancelMoves, commit, interactive, stackBelow],
+    [cancelMoves, commitLayout, interactive, stackBelow],
   );
 
   // -------------------------------------------------------------------------
   // Commands (menu, keyboard, gallery)
   // -------------------------------------------------------------------------
 
+  const canMove = useCallback(
+    (widgetId: string, direction: MoveDirection) => canMoveStep(layout, widgetId, direction) && changes(moveWidgetStep(layout, widgetId, direction)),
+    [changes, layout],
+  );
+
   const moveStep = useCallback(
     (widgetId: string, direction: MoveDirection) => {
       const next = moveWidgetStep(layout, widgetId, direction);
-      if (next === layout) return;
+      if (!changes(next)) return;
       focusAfterRef.current = widgetId;
       commitMove(next);
-      setAnnouncement(t("announce.moved", { name: nameOf(findWidget(layout, widgetId)?.widget) }));
+      announce(t("announce.moved", { name: nameOf(findWidget(layout, widgetId)?.widget) }));
     },
-    [commitMove, layout, nameOf, t],
+    [announce, changes, commitMove, layout, nameOf, t],
   );
 
   const setWidth = useCallback(
     (widgetId: string, width: number) => {
-      commit(setWidgetWidth(layout, widgetId, width));
-      setAnnouncement(t("announce.width", { name: nameOf(findWidget(layout, widgetId)?.widget), span: width }));
+      const next = setWidgetWidth(layout, widgetId, width);
+      if (!changes(next)) return;
+      const before = findWidget(layout, widgetId);
+      const after = findWidget(next, widgetId);
+      // A width with no room beside the others moves the card to a row of its own.
+      if (after && after.column.id !== before?.column.id) focusAfterRef.current = widgetId;
+      commitMove(next);
+      announce(t("announce.width", { name: nameOf(before?.widget), span: after?.column.width ?? width }));
     },
-    [commit, layout, nameOf, t],
+    [announce, changes, commitMove, layout, nameOf, t],
   );
 
   const setHeight = useCallback(
     (widgetId: string, height: number | null) => {
       const next = setWidgetHeight(layout, widgetId, height);
-      commit(next);
+      if (next === layout) return;
+      commitLayout(next);
       const value = findWidget(next, widgetId)?.widget.height;
-      setAnnouncement(t("announce.height", { name: nameOf(findWidget(layout, widgetId)?.widget), height: value === undefined ? t("height.autoShort") : t("height.px", { px: value }) }));
+      announce(t("announce.height", { name: nameOf(findWidget(layout, widgetId)?.widget), height: value === undefined ? t("height.autoShort") : t("height.px", { px: value }) }));
     },
-    [commit, layout, nameOf, t],
+    [announce, commitLayout, layout, nameOf, t],
   );
 
   const remove = useCallback(
     (widgetId: string) => {
       const name = nameOf(findWidget(layout, widgetId)?.widget);
       const next = removeWidget(layout, widgetId);
-      commit(next);
+      // Focus goes on to the next card (or back to the previous one), not to the page.
+      const order = widgetsInOrder(layout);
+      const index = order.findIndex((widget) => widget.id === widgetId);
+      focusAfterRef.current = (order[index + 1] ?? order[index - 1])?.id ?? null;
+      commitLayout(next);
       const nextJson = JSON.stringify(next);
       if (removalRef.current) {
         toast.dismiss(removalRef.current.toastId);
@@ -770,6 +824,7 @@ export function WidgetBoard({
           label: t("edit.undo"),
           onClick: () => {
             if (JSON.stringify(layoutRef.current) === nextJson) {
+              focusAfterRef.current = widgetId;
               editor.undo();
             }
           },
@@ -777,7 +832,7 @@ export function WidgetBoard({
       });
       removalRef.current = { toastId, json: nextJson };
     },
-    [commit, editor, layout, nameOf, t],
+    [commitLayout, editor, layout, nameOf, t],
   );
 
   const onColumnKey = useCallback(
@@ -787,11 +842,11 @@ export function WidgetBoard({
       event.preventDefault();
       const next = resizeColumn(layout, column.id, column.width + step);
       if (next === layout) return;
-      commit(next);
+      commitLayout(next);
       const width = next.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width;
-      setAnnouncement(t("announce.width", { name: nameOf(column.widgets[0]), span: width }));
+      announce(t("announce.width", { name: nameOf(column.widgets[0]), span: width }));
     },
-    [commit, layout, nameOf, t],
+    [announce, commitLayout, layout, nameOf, t],
   );
 
   const onHeightKey = useCallback(
@@ -811,8 +866,8 @@ export function WidgetBoard({
     [setHeight],
   );
 
-  const openGallery = useCallback((target: DropTarget | null = null, width: number | null = null) => {
-    setGalleryScope("all");
+  const openGallery = useCallback((target: DropTarget | null = null, width: number | null = null, scope: WidgetScope | "all" = "all") => {
+    setGalleryScope(scope);
     setGallery({ open: true, target, width });
   }, []);
 
@@ -826,14 +881,14 @@ export function WidgetBoard({
       }
       const { target, width } = gallery;
       const added = target ? insertWidget(layout, { type }, width ?? meta.defaultWidth, target)
-        : scopeSections ? addWidgetInScope(layout, { type }, meta.defaultWidth, widgetMeta)
+        : scopeSections ? addWidgetInScope(layout, { type }, meta.defaultWidth, widgetMeta, galleryScope === "all" ? undefined : galleryScope)
         : addWidget(layout, { type }, meta.defaultWidth);
-      commit(added.layout);
+      commitLayout(added.layout);
       setGallery({ open: false, target: null, width: null });
       setHighlight(added.id);
-      setAnnouncement(t("gallery.added", { name: t(meta.name) }));
+      announce(t("gallery.added", { name: t(meta.name) }));
     },
-    [commit, gallery, layout, scopeSections, t],
+    [announce, commitLayout, gallery, galleryScope, layout, scopeSections, t],
   );
 
   const counts = useMemo(() => {
@@ -841,6 +896,9 @@ export function WidgetBoard({
     for (const widget of widgetsInOrder(layout)) map.set(widget.type, (map.get(widget.type) ?? 0) + 1);
     return map;
   }, [layout]);
+
+  // Personal pages: the section each row is drawn under.
+  const scopes = scopeSections ? rowScopes(shown, widgetMeta) : null;
 
   const settingsWidget = settingsFor ? (findWidget(layout, settingsFor)?.widget ?? null) : null;
   const total = widgetCount(shown);
@@ -878,7 +936,7 @@ export function WidgetBoard({
           tabIndex={0}
           aria-label={t("resize.width", { name: nameOf(column.widgets[0]) })}
           aria-valuenow={column.width}
-          aria-valuemin={MIN_WIDTH}
+          aria-valuemin={columnMinWidth(column)}
           aria-valuemax={GRID_COLUMNS}
           aria-valuetext={t("width.value", { span: column.width })}
           onPointerDown={(event) => startColumnResize(event, column)}
@@ -941,7 +999,8 @@ export function WidgetBoard({
           columnWidth={column.width}
           slotted={slotted}
           wide={wide}
-          nested={nested}
+          // On a custom page every card sits under its section's heading.
+          nested={nested || scopeSections}
           eager={eager}
           editing={editing}
           emptyLabel={editing ? t("board.noData") : undefined}
@@ -957,7 +1016,9 @@ export function WidgetBoard({
             interactive={interactive}
             dragging={drag?.widgetId === widget.id}
             highlighted={highlight === widget.id}
-            canMove={(direction) => canMoveStep(layout, widget.id, direction)}
+            minWidth={columnMinWidth(column)}
+            minHeight={widgetMinHeight(widget)}
+            canMove={(direction) => canMove(widget.id, direction)}
             hasSettings={!!meta && ((meta.options?.length ?? 0) > 0 || (!!meta.stock && !!context.tickerOverrides))}
             onPointerDownSurface={(event) => startDrag(event, widget.id, false)}
             onPointerDownGrip={(event) => (interactive ? startDrag(event, widget.id, true) : undefined)}
@@ -978,7 +1039,7 @@ export function WidgetBoard({
             tabIndex={0}
             aria-label={t("resize.height", { name })}
             aria-valuenow={widget.height}
-            aria-valuemin={MIN_HEIGHT}
+            aria-valuemin={widgetMinHeight(widget)}
             aria-valuemax={MAX_HEIGHT}
             aria-valuetext={fixed ? t("height.px", { px: widget.height ?? 0 }) : t("height.autoShort")}
             onPointerDown={(event) => startHeightResize(event, widget.id)}
@@ -1056,7 +1117,7 @@ export function WidgetBoard({
             <button
               type="button"
               style={{ ...spanStyle(free), "--start": main.width + rail.width + 1 } as CSSProperties}
-              onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
+              onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free, scopes?.[rowIndex] ?? "all")}
               className={cn(
                 "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
                 RAIL_FREE_CLASS[stackBelow],
@@ -1106,7 +1167,7 @@ export function WidgetBoard({
           <button
             type="button"
             style={spanStyle(free)}
-            onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
+            onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free, scopes?.[rowIndex] ?? "all")}
             className={cn(
               "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
               SPAN_CLASS[stackBelow],
@@ -1127,7 +1188,7 @@ export function WidgetBoard({
           <>
             {shown.rows.length === 0 ? <WidgetScopeCards /> : null}
             {(["stock", "general"] as const).map((scope) => {
-              const rows = shown.rows.filter((row) => rowScope(row, widgetMeta) === scope);
+              const rows = shown.rows.filter((_, index) => scopes?.[index] === scope);
               return (
                 <Fragment key={scope}>
                   <h2 data-scope-heading={scope} className="border-b border-border pb-2 pt-3 text-[15px] font-semibold tracking-tight text-foreground">
@@ -1183,7 +1244,8 @@ export function WidgetBoard({
         {drag?.hit ? <DropIndicator hit={drag.hit} origin={drag.origin} label={t("drop.newRow")} /> : null}
 
         <p className="sr-only" aria-live="polite">
-          {announcement}
+          {announcement.text}
+          {announcement.n % 2 ? "\u00a0" : ""}
         </p>
       </div>
 
@@ -1205,7 +1267,7 @@ export function WidgetBoard({
         pageTicker={pageTicker}
         pageHasTicker={context.ticker != null}
         tickerOverrides={!!context.tickerOverrides}
-        onSave={(patch) => settingsFor && commit(updateWidget(layout, settingsFor, patch))}
+        onSave={(patch) => settingsFor && commitLayout(updateWidget(layout, settingsFor, patch))}
         onClose={() => setSettingsFor(null)}
       />
     </>

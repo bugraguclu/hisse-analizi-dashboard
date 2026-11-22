@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { CATEGORIES, WIDGETS, type WidgetCategory } from "./catalog";
 import { useWidgetI18n } from "./i18n";
 import type { WidgetKey } from "./i18n-dict";
-import { widgetScope, type WidgetScope } from "./widget-scope";
+import { isNeutral, widgetScope, type WidgetScope } from "./widget-scope";
 
 /**
  * The widget catalogue as a dialog: search, a category filter and a grid of
@@ -54,7 +54,7 @@ export function WidgetGallery({
   const availableCategories = order.filter((c) => scope === "all" || (c === "stock" ? "stock" : "general") === scope);
   const results = useMemo(() => {
     const needle = foldTr(query.trim());
-    return WIDGETS.filter((meta) => scope === "all" || widgetScope(meta) === scope)
+    return WIDGETS.filter((meta) => scope === "all" || widgetScope(meta) === scope || isNeutral(meta))
       .filter((meta) => category === "all" || meta.category === category)
       .filter(
         (meta) =>

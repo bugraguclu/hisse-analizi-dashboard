@@ -28,6 +28,13 @@ type GestureOptions = {
 };
 
 const EDGE = 64;
+
+/** Gestures between press and release, so keyboard shortcuts can wait for them. */
+let activeGestures = 0;
+
+export function pointerGestureActive(): boolean {
+  return activeGestures > 0;
+}
 const MAX_SCROLL = 22;
 
 /** Shared edge resistance for a card dragged beyond its grid. */
@@ -113,6 +120,7 @@ export function beginPointerGesture(event: GesturePress, options: GestureOptions
   function finish(apply: boolean) {
     if (finished) return;
     finished = true;
+    activeGestures--;
     window.cancelAnimationFrame(frame);
     frame = 0;
     window.removeEventListener("pointermove", move, true);
@@ -156,6 +164,7 @@ export function beginPointerGesture(event: GesturePress, options: GestureOptions
     if (document.visibilityState === "hidden") cancel();
   }
 
+  activeGestures++;
   try {
     handle.setPointerCapture(pointer);
   } catch {

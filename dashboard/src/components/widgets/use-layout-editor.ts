@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pointerGestureActive } from "@/components/workspace/pointer-gesture";
 import type { Layout } from "./model";
 
 const HISTORY_LIMIT = 60;
@@ -69,9 +70,12 @@ export function useLayoutEditor({
         past.current = [...past.current, before];
       }
       save(next);
+      // Two changes before the next render each see the one before them.
+      if (next) current.current = { layout: next, customized: resettable ? true : current.current.customized };
+      else current.current = { ...current.current, customized: false };
       setCounts({ past: past.current.length, future: future.current.length });
     },
-    [save, snapshot],
+    [resettable, save, snapshot],
   );
 
   const commit = useCallback(
@@ -111,6 +115,8 @@ export function useLayoutEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
       if (document.querySelector('[role="dialog"]')) return;
+      // A drag or resize in progress commits its own base on release; undoing under it would be lost.
+      if (pointerGestureActive()) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, [contenteditable='true']")) return;
       const key = event.key.toLowerCase();

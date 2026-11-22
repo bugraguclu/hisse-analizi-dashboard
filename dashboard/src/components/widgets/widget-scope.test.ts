@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Layout, WidgetInstance } from "./model.ts";
-import { addWidgetInScope, groupWidgetsByScope, pageStockUsage, rowScope } from "./widget-scope.ts";
+import { addWidgetInScope, groupWidgetsByScope, pageStockUsage, rowScopes } from "./widget-scope.ts";
 
 const metadata: Record<string, { stock?: boolean }> = {
   chart: { stock: true },
@@ -52,7 +52,7 @@ test("scope sections split mixed stacks without changing widget sizes or stock s
   );
   const before = JSON.stringify(page);
   const grouped = groupWidgetsByScope(page, (type) => metadata[type]);
-  assert.deepEqual(grouped.rows.map((row) => rowScope(row, (type) => metadata[type])), ["stock", "general"]);
+  assert.deepEqual(rowScopes(grouped, (type) => metadata[type]), ["stock", "general"]);
   assert.deepEqual(grouped.rows[0].columns[0].widgets, [page.rows[0].columns[0].widgets[1]]);
   assert.deepEqual(grouped.rows[1].columns[0].widgets.map((widget) => widget.id), ["note", "calendar"]);
   assert.equal(grouped.rows[0].columns[0].width, 12);
@@ -68,7 +68,7 @@ test("alternating additions always land beneath the matching scope heading", () 
   for (const type of ["note", "chart", "calendar", "dividends", "index"]) {
     page = addWidgetInScope(page, { type }, 6, lookup).layout;
   }
-  assert.deepEqual(page.rows.map((row) => rowScope(row, lookup)), ["stock", "general", "general"]);
+  assert.deepEqual(rowScopes(page, lookup), ["stock", "general", "general"]);
   assert.deepEqual(page.rows.flatMap((row) => row.columns.flatMap((column) => column.widgets.map((widget) => widget.type))), [
     "chart", "dividends", "note", "calendar", "index",
   ]);
@@ -92,4 +92,36 @@ test("grouping preserves rows, column widths and order inside each scope", () =>
   ]);
   assert.equal(grouped.rows[1], page.rows[2]);
   assert.equal(grouped.rows[2], page.rows[0]);
+});
+
+test("headings and notes stay with the cards around them", () => {
+  const lookup = (type: string) => ({
+    chart: { stock: true },
+    calendar: {},
+    heading: { category: "general" },
+    note: { category: "general" },
+  } as Record<string, { stock?: boolean; category?: string }>)[type];
+  const page: Layout = { rows: [
+    { id: "a", columns: [{ id: "a1", width: 12, widgets: [{ id: "h", type: "heading" }, { id: "c", type: "chart" }, { id: "n", type: "note" }] }] },
+    { id: "b", columns: [{ id: "b1", width: 12, widgets: [{ id: "cal", type: "calendar" }] }] },
+    { id: "c", columns: [{ id: "c1", width: 12, widgets: [{ id: "n2", type: "note" }] }] },
+  ] };
+  assert.equal(groupWidgetsByScope(page, lookup), page);
+  assert.deepEqual(rowScopes(page, lookup), ["stock", "general", "general"]);
+
+  // A heading added under the stock section's button stays there, also once
+  // the general section has cards after it.
+  const added = addWidgetInScope(page, { type: "heading" }, 12, lookup, "stock");
+  const grouped = groupWidgetsByScope(added.layout, lookup);
+  assert.equal(grouped, added.layout);
+  assert.deepEqual(rowScopes(grouped, lookup), ["stock", "stock", "general", "general"]);
+
+  // Splitting a rail row by section keeps the rail on the part that keeps its id.
+  const rail: Layout = { rows: [{ id: "r", rail: true, columns: [
+    { id: "m", width: 8, widgets: [{ id: "x", type: "chart" }, { id: "y", type: "chart" }, { id: "z", type: "calendar" }] },
+    { id: "s", width: 4, widgets: [{ id: "q", type: "chart" }] },
+  ] }] };
+  const split = groupWidgetsByScope(rail, lookup);
+  assert.equal(split.rows[0].rail, true);
+  assert.equal(split.rows[1].rail, undefined);
 });

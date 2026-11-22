@@ -59,6 +59,8 @@ export function WidgetFrame({
   name,
   icon,
   columnWidth,
+  minWidth,
+  minHeight,
   height,
   interactive,
   dragging,
@@ -77,6 +79,10 @@ export function WidgetFrame({
   name: string;
   icon: ReactNode;
   columnWidth: number;
+  /** Narrowest width preset offered (columns of 12). */
+  minWidth: number;
+  /** Lowest height preset offered (px). */
+  minHeight: number;
   height: number | undefined;
   /** Drag and resize available (wide screens). */
   interactive: boolean;
@@ -94,7 +100,7 @@ export function WidgetFrame({
 }) {
   const { t } = useWidgetI18n();
   const heightValue = height === undefined ? "auto" : String(height);
-  const heights: number[] = [...HEIGHT_PRESETS];
+  const heights: number[] = HEIGHT_PRESETS.filter((px) => px >= minHeight);
   if (height !== undefined && !heights.includes(height)) heights.push(height);
   heights.sort((a, b) => a - b);
 
@@ -150,7 +156,7 @@ export function WidgetFrame({
           <MenuPopup>
             <Submenu label={t("widget.width")} icon={<StretchHorizontal />}>
               <Menu.RadioGroup value={String(columnWidth)} onValueChange={(value: string) => onWidth(Number(value))}>
-                {WIDTH_PRESETS.map((width) => (
+                {WIDTH_PRESETS.filter((width) => width >= minWidth).map((width) => (
                   <Menu.RadioItem key={width} value={String(width)} className={MENU_ITEM_CLASS} closeOnClick>
                     <RadioMark checked={columnWidth === width} />
                     <span className="grow">{t(`width.${width}` as WidgetKey)}</span>

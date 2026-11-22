@@ -26,6 +26,7 @@ import { useNow } from "@/hooks/use-now";
 import { formatChangePercent, formatMarketDate, formatNumber, formatSigned } from "@/lib/format";
 import type { TranslationKey } from "@/lib/i18n";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSectionHeadingLevel } from "@/components/stock/heading-level";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock, sessionQuoteTime } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
@@ -97,6 +98,7 @@ function mergeQuote(primary: IndexQuote | null, embedded: Partial<IndexQuote> | 
 
 export function IndexChartCard({ className }: { className?: string }) {
   const headingId = useId();
+  const Heading = useSectionHeadingLevel() === 3 ? "h3" : "h2";
   const plotHeight = useCardChartHeight(CARD_CHART_HEIGHT.index);
   const { t } = useLocale();
   const { fill } = usePanel();
@@ -201,9 +203,9 @@ export function IndexChartCard({ className }: { className?: string }) {
       <div className="shrink-0 px-4 pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0" aria-busy={levelPending || undefined}>
-            <h2 id={headingId} className="text-[13px] font-semibold text-foreground">
+            <Heading id={headingId} className="text-[13px] font-semibold text-foreground">
               BIST 100
-            </h2>
+            </Heading>
             {levelPending ? (
               <div className="mt-1 flex h-9 items-center gap-3" aria-hidden="true">
                 <Skeleton className="h-7 w-32 origin-left" />

@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { CARD_CHART_HEIGHT } from "@/components/charts/chart-height";
 import type { WidgetKey } from "./i18n-dict";
-import type { OptionValue } from "./model";
+import { setWidgetLimits, type OptionValue } from "./model";
 
 /**
  * The widget catalogue: what can be put on a page, its name and description,
@@ -59,6 +59,10 @@ export interface WidgetMeta {
   description: WidgetKey;
   /** Columns (of 12) it takes when added. */
   defaultWidth: number;
+  /** Narrowest it can be made (columns of 12); MIN_WIDTH when absent. */
+  minWidth?: number;
+  /** Lowest fixed height (px); MIN_HEIGHT when absent. */
+  minHeight?: number;
   /** Placeholder height (px) while it waits to mount below the fold. */
   estimatedHeight: number;
   /** Plain text keywords for gallery search. */
@@ -172,51 +176,66 @@ function plain(category: Exclude<WidgetCategory, "stock">, type: string, icon: L
   };
 }
 
+/**
+ * Smallest sizes, as the page editor before widgets had them: charts and wide
+ * tables stay at least half the page wide, the macro blocks laid out as a
+ * full-width board (tiles, quote boards, the calendar) keep the full width,
+ * and a fixed height leaves a chart its plot and a list a few rows.
+ */
+const HALF = 6;
+const FULL = 12;
+/** Old editor rows (32px pitch, 16px gap) as pixels. */
+const rows = (count: number) => count * 32 - 16;
+
 export const WIDGETS: readonly WidgetMeta[] = [
   stock("stock.quote", Gauge, 12, 140),
   {
     ...stock("stock.chart", ChartCandlestick, 12, 560, [VIEW_OPTION]),
     plotHeight: (options) => (options.view === "technical" ? CARD_CHART_HEIGHT.stockTechnical : CARD_CHART_HEIGHT.stock),
+    minWidth: HALF,
+    minHeight: rows(11),
   },
   stock("stock.scorecard", ClipboardCheck, 6, 420),
   stock("stock.analysts", Star, 6, 420),
-  stock("stock.kap", Megaphone, 6, 560),
-  stock("stock.news", Newspaper, 6, 560),
+  { ...stock("stock.kap", Megaphone, 6, 560), minHeight: rows(6) },
+  { ...stock("stock.news", Newspaper, 6, 560), minHeight: rows(6) },
   stock("stock.ratios", Percent, 6, 480),
   stock("stock.signals", Signal, 6, 480),
-  stock("stock.sector", Scale, 12, 420, [COMPACT_OPTION]),
-  stock("stock.dividends", Coins, 6, 360),
+  { ...stock("stock.sector", Scale, 12, 420, [COMPACT_OPTION]), minWidth: HALF, minHeight: rows(7) },
+  { ...stock("stock.dividends", Coins, 6, 360), minHeight: rows(6) },
   stock("stock.earnings", CalendarClock, 6, 300),
-  stock("stock.statements", Table2, 12, 520),
+  { ...stock("stock.statements", Table2, 12, 520), minWidth: HALF, minHeight: rows(8) },
   stock("stock.profile", Building2, 6, 360),
   stock("stock.holders", PieChart, 6, 320),
   stock("stock.technicalSummary", Activity, 12, 220),
-  stock("stock.movingAverages", Waves, 6, 480),
-  stock("stock.indicators", ChartLine, 12, 420, [COMPACT_OPTION]),
+  { ...stock("stock.movingAverages", Waves, 6, 480), minWidth: HALF },
+  { ...stock("stock.indicators", ChartLine, 12, 420, [COMPACT_OPTION]), minWidth: HALF },
   stock("stock.pivots", Crosshair, 12, 260),
 
-  { ...plain("market", "market.index", TrendingUp, 8, 420), plotHeight: () => CARD_CHART_HEIGHT.index },
+  { ...plain("market", "market.index", TrendingUp, 8, 420), plotHeight: () => CARD_CHART_HEIGHT.index, minWidth: HALF, minHeight: rows(11) },
   { ...plain("market", "market.watchlist", ListOrdered, 4, 360), grow: 0 },
   plain("market", "market.breadth", BarChart3, 4, 420),
   plain("market", "market.events", Newspaper, 8, 480),
 
-  plain("macro", "macro.kpis", Gauge, 12, 140),
+  { ...plain("macro", "macro.kpis", Gauge, 12, 140), minWidth: FULL },
   plain("macro", "macro.corridor", Landmark, 4, 360),
-  plain("macro", "macro.policyInflation", ChartLine, 8, 360),
-  { ...plain("macro", "macro.inflationTiles", Thermometer, 12, 140), snug: true },
-  plain("macro", "macro.inflationTrend", TrendingUp, 8, 360),
+  { ...plain("macro", "macro.policyInflation", ChartLine, 8, 360), minWidth: HALF, minHeight: rows(12) },
+  { ...plain("macro", "macro.inflationTiles", Thermometer, 12, 140), snug: true, minWidth: FULL },
+  { ...plain("macro", "macro.inflationTrend", TrendingUp, 8, 360), minWidth: HALF, minHeight: rows(10) },
   plain("macro", "macro.monthlyCpi", ChartNoAxesColumn, 4, 360),
-  plain("macro", "macro.markets", ArrowLeftRight, 12, 620),
-  plain("macro", "macro.fxBulletin", Coins, 12, 420),
-  plain("macro", "macro.calendar", CalendarDays, 12, 640),
-  plain("macro", "macro.activity", Layers, 12, 300),
-  plain("macro", "macro.external", Globe, 12, 300),
+  { ...plain("macro", "macro.markets", ArrowLeftRight, 12, 620), minWidth: FULL },
+  { ...plain("macro", "macro.fxBulletin", Coins, 12, 420), minWidth: HALF },
+  { ...plain("macro", "macro.calendar", CalendarDays, 12, 640), minWidth: FULL },
+  { ...plain("macro", "macro.activity", Layers, 12, 300), minWidth: FULL },
+  { ...plain("macro", "macro.external", Globe, 12, 300), minWidth: FULL },
 
   { ...plain("general", "general.heading", Heading, 12, 48, HEADING_OPTIONS), rigid: true },
   plain("general", "general.note", StickyNote, 4, 200, NOTE_OPTIONS),
 ];
 
 const BY_TYPE = new Map(WIDGETS.map((meta) => [meta.type, meta]));
+
+setWidgetLimits((type) => BY_TYPE.get(type));
 
 export function widgetMeta(type: string): WidgetMeta | undefined {
   return BY_TYPE.get(type);
