@@ -71,7 +71,7 @@ describe("native iOS release readiness gate", () => {
               config: { usesNonExemptEncryption: false },
               privacyManifests: { NSPrivacyTracking: false },
               entitlements: {
-                "com.apple.developer.default-data-protection": "NSFileProtectionComplete",
+                "com.apple.developer.default-data-protection": "NSFileProtectionCompleteUntilFirstUserAuthentication",
               },
               infoPlist: {
                 NSAppTransportSecurity: {
@@ -153,8 +153,27 @@ describe("native iOS release readiness gate", () => {
       assert.ok(result.failures.some((m) => m.includes("NSAllowsArbitraryLoads")));
       assert.ok(result.failures.some((m) => m.includes("URL scheme")));
       assert.ok(result.failures.some((m) => m.includes("notification")));
+      assert.ok(result.failures.some((m) => m.includes("default-data-protection")));
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+  it("rejects data protection weaker than first-unlock", () => {
+    for (const level of ["NSFileProtectionNone", undefined]) {
+      const tmp = makeTempDir("hisse-ios-protection-");
+      try {
+        const mobileDir = path.join(tmp, "mobile");
+        fs.mkdirSync(mobileDir, { recursive: true });
+        const entitlements = level ? { "com.apple.developer.default-data-protection": level } : {};
+        fs.writeFileSync(path.join(mobileDir, "app.json"), JSON.stringify({ expo: { ios: { entitlements } } }));
+        const result = verifyIosReadiness({ projectRoot: tmp, contract: loadIosReleaseContract(), requireNative: false });
+        assert.ok(
+          result.failures.some((m) => m.includes("default-data-protection")),
+          `expected a data-protection failure for ${level}`,
+        );
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
     }
   });
 });

@@ -6,7 +6,7 @@
     "hisseanalizi"
   ],
   "requireAssociatedDomains": true,
-  "requireCompleteDataProtection": true,
+  "minimumDataProtection": "NSFileProtectionCompleteUntilFirstUserAuthentication",
   "requireDarkModeAutomatic": true,
   "requireNoArbitraryLoads": true,
   "requireNoLocalNetworking": true,

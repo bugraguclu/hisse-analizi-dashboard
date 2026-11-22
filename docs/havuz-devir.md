@@ -155,7 +155,7 @@ Aşağıdaki 9 dal `git merge-base --is-ancestor <dal> havuz` doğrulaması sonr
 - `tests/fixtures/market_error_scenarios.json`: Python ve TypeScript tarafından ortak okunan 7 kanonik hata/durum senaryosu (`session_open_fresh`, `session_closed_last_close`, `stale_price_provider_down`, `missing_balance_sheet`, `provider_disconnected`, `empty_watchlist`, `dual_device_conflict_and_retry`).
 - `dashboard/src/lib/data-meta.ts` (saf mantık `DataMeta.tsx` içinden ayrıştırıldı) + `error-scenarios.test.ts` + `tests/unit/test_market_error_scenarios.py`.
 - `scripts/bundle-budgets.config.mjs` & `scripts/check-bundle-budgets.mjs` (`npm run check:budgets`): Üretim JS/CSS/toplam `.next/static` ve gönderilen medya boyut bütçeleri + yasaklı uzantı kontrolü (`.env`, `.pem`, `.key`, `.sqlite`, `.db`, `.p12`, `.mobileprovision`).
-- `scripts/ios-release-contract.json` & `scripts/verify-ios-readiness.mjs` (`npm run check:ios`): Hem `mobile/app.json` (Expo) hem `ios/` (native Xcode) hedeflerinde Bundle ID, build number, ATS (`NSAllowsArbitraryLoads=false`, `NSAllowsLocalNetworking=false`), `ITSAppUsesNonExemptEncryption=false`, `PrivacyInfo.xcprivacy`, `NSFileProtectionComplete`, `associatedDomains` (`applinks:`), `hisseanalizi` URL şeması ve bildirim yapılandırmasını denetler.
+- `scripts/ios-release-contract.json` & `scripts/verify-ios-readiness.mjs` (`npm run check:ios`): Hem `mobile/app.json` (Expo) hem `ios/` (native Xcode) hedeflerinde Bundle ID, build number, ATS (`NSAllowsArbitraryLoads=false`, `NSAllowsLocalNetworking=false`), `ITSAppUsesNonExemptEncryption=false`, `PrivacyInfo.xcprivacy`, en az `NSFileProtectionCompleteUntilFirstUserAuthentication` veri koruması (kilit ekranı widget'ları kilitliyken okuyabilsin diye; `NSFileProtectionNone` reddedilir), `associatedDomains` (`applinks:`), `hisseanalizi` URL şeması ve bildirim yapılandırmasını denetler.
 - `scripts/release-gates.test.mjs` (`npm run test:gates`) ve `.github/workflows/ci.yml` entegrasyonu.
 
 ---
@@ -252,7 +252,7 @@ Dallar tek başlarına test edilirken yakalanmayan **iki gerçek çapraz dal hat
 1. **iOS yayın kapısı (`npm run check:ios`):**
    - `havuz-arama-degisiklik-kontrol` dalı `scripts/verify-ios-readiness.mjs` yazdığında repoda henüz `mobile/app.json` veya `ios/` yoktu; birleşince her ikisi de denetlendi ve 4 kapı hatası verdi.
    - **Yapılan düzeltmeler:**
-     - `mobile/app.json`: `NSAllowsLocalNetworking: false`, `ios.entitlements["com.apple.developer.default-data-protection"] = "NSFileProtectionComplete"`, `plugins` içine `"expo-notifications"` eklendi.
+     - `mobile/app.json`: `NSAllowsLocalNetworking: false`, `ios.entitlements["com.apple.developer.default-data-protection"] = "NSFileProtectionCompleteUntilFirstUserAuthentication"` (önce `NSFileProtectionComplete` idi; kilitli cihazda widget okuyamadığı için bir kademe gevşetildi), `plugins` içine `"expo-notifications"` eklendi.
      - `ios/Config/App-Info.plist`: `CFBundleIdentifier`, `CFBundleVersion`, `ITSAppUsesNonExemptEncryption=false`, `NSAllowsArbitraryLoads=false`, `NSAllowsLocalNetworking=false`, `NSUserNotificationsUsageDescription` eklendi.
      - `ios/Config/App.entitlements`: `com.apple.developer.default-data-protection = NSFileProtectionComplete` ve `com.apple.developer.associated-domains` (`applinks:hisseanalizi.com`, `applinks:www.hisseanalizi.com`) eklendi.
      - `ios/Config/PrivacyInfo.xcprivacy`: Apple Privacy Manifest dosyası oluşturuldu (`NSPrivacyTracking = false`, `NSPrivacyAccessedAPICategoryUserDefaults` / `1C8F.1`).

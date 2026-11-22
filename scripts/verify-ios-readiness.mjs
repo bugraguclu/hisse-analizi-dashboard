@@ -32,6 +32,20 @@ function plistBooleanValue(contents, key) {
   return match[1] === "true";
 }
 
+// Strictest first. Widgets and Lock Screen accessories read shared files while the device is
+// locked, so the floor is "until first unlock"; NSFileProtectionNone is never accepted.
+const DATA_PROTECTION_LEVELS = [
+  "NSFileProtectionComplete",
+  "NSFileProtectionCompleteUnlessOpen",
+  "NSFileProtectionCompleteUntilFirstUserAuthentication",
+];
+
+function meetsDataProtection(actual, minimum) {
+  const actualRank = DATA_PROTECTION_LEVELS.indexOf(actual);
+  const minimumRank = DATA_PROTECTION_LEVELS.indexOf(minimum);
+  return actualRank !== -1 && minimumRank !== -1 && actualRank <= minimumRank;
+}
+
 export function loadIosReleaseContract(contractPath = DEFAULT_CONTRACT_PATH) {
   const raw = JSON.parse(fs.readFileSync(contractPath, "utf8"));
   if (raw?.schemaVersion !== 1) {
@@ -49,6 +63,10 @@ function verifyContractShape(contract, failures) {
   requireVal(Array.isArray(contract?.requiredUrlSchemes) && contract.requiredUrlSchemes.length > 0, "Contract must declare at least one URL scheme");
   requireVal(contract?.requirePrivacyManifest === true, "Contract must enforce PrivacyInfo.xcprivacy / privacyManifests");
   requireVal(contract?.requireNoArbitraryLoads === true, "Contract must enforce ATS (NSAllowsArbitraryLoads = false)");
+  requireVal(
+    DATA_PROTECTION_LEVELS.includes(contract?.minimumDataProtection),
+    "Contract must set minimumDataProtection to a file protection class (never NSFileProtectionNone)",
+  );
 }
 
 function verifyExpoConfig(configPath, contract, failures) {
@@ -86,10 +104,10 @@ function verifyExpoConfig(configPath, contract, failures) {
       "NSAppTransportSecurity.NSAllowsLocalNetworking must be false",
     );
   }
-  if (contract.requireCompleteDataProtection) {
+  if (contract.minimumDataProtection) {
     requireVal(
-      app?.ios?.entitlements?.["com.apple.developer.default-data-protection"] === "NSFileProtectionComplete",
-      "ios.entitlements must enable NSFileProtectionComplete",
+      meetsDataProtection(app?.ios?.entitlements?.["com.apple.developer.default-data-protection"], contract.minimumDataProtection),
+      `ios.entitlements default-data-protection must be ${contract.minimumDataProtection} or stricter`,
     );
   }
   if (contract.requireAssociatedDomains) {
@@ -206,10 +224,13 @@ function verifyNativeIosDir(iosDir, contract, failures) {
   requireVal(Boolean(entitlementName), "Missing .entitlements file in native iOS app target");
   if (entitlementName) {
     const entitlements = fs.readFileSync(path.join(appDir, entitlementName), "utf8");
-    if (contract.requireCompleteDataProtection) {
+    if (contract.minimumDataProtection) {
       requireVal(
-        plistStringValue(entitlements, "com.apple.developer.default-data-protection") === "NSFileProtectionComplete",
-        "Entitlements must enable NSFileProtectionComplete",
+        meetsDataProtection(
+          plistStringValue(entitlements, "com.apple.developer.default-data-protection"),
+          contract.minimumDataProtection,
+        ),
+        `Entitlements default-data-protection must be ${contract.minimumDataProtection} or stricter`,
       );
     }
     if (contract.requireAssociatedDomains) {
