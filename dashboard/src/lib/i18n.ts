@@ -32,6 +32,7 @@ const translations = {
   "nav.combinedAnalysis": { tr: "Kombine Analiz", en: "Combined Analysis", fr: "Analyse combinée" },
   "nav.macroEconomy": { tr: "Makro Ekonomi", en: "Macroeconomy", fr: "Macro-économie" },
   "nav.screening": { tr: "Hisse Tarama", en: "Stock Screening", fr: "Filtrage d'actions" },
+  "nav.myPages": { tr: "Sayfalarım", en: "My Pages", fr: "Mes pages" },
 
   // Dashboard
   "dashboard.marketOverview": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
@@ -153,6 +154,7 @@ const translations = {
   "nav.short.combined": { tr: "Kombine", en: "Combined", fr: "Combinée" },
   "nav.short.macro": { tr: "Makro", en: "Macro", fr: "Macro" },
   "nav.short.screening": { tr: "Tarama", en: "Screener", fr: "Filtrage" },
+  "nav.short.myPages": { tr: "Sayfalarım", en: "My pages", fr: "Mes pages" },
   // The one site-wide disclaimer (components/layout/LegalNotice.tsx); cards carry none of their own.
   "legal.title": { tr: "Yasal uyarı", en: "Legal notice", fr: "Avertissement" },
   "legal.body": {
