@@ -15,6 +15,15 @@ const dict = {
   "category.macro": { tr: "Makro", en: "Macro", fr: "Macro" },
   "category.general": { tr: "Genel", en: "General", fr: "Général" },
 
+  // A widget's data scope, separate from its subject category.
+  "scope.label": { tr: "Widget türü", en: "Widget scope", fr: "Type de widget" },
+  "scope.stock": { tr: "Hisseye bağlı", en: "Stock-specific", fr: "Liés à une action" },
+  "scope.general": { tr: "Genel widget'lar", en: "General widgets", fr: "Widgets généraux" },
+  "scope.stockHint": { tr: "Fiyat, grafik, bilanço ve temettü gibi kartlar seçtiğiniz hisseye göre değişir. Her karta ayrı hisse de seçebilirsiniz.", en: "Prices, charts, statements and dividends follow the selected stock. Each card can also follow its own stock.", fr: "Cours, graphiques, comptes et dividendes suivent l'action choisie. Chaque carte peut aussi suivre sa propre action." },
+  "scope.generalHint": { tr: "Piyasa, makro ekonomi, takvim, başlık ve notlar hisse seçiminden etkilenmez.", en: "Market, macro, calendar, heading and note widgets are independent of the selected stock.", fr: "Marchés, macroéconomie, calendrier, titres et notes ne dépendent pas de l'action choisie." },
+  "scope.stockAdd": { tr: "Hisse widget'ı ekle", en: "Add stock widget", fr: "Ajouter un widget d'action" },
+  "scope.generalAdd": { tr: "Genel widget ekle", en: "Add general widget", fr: "Ajouter un widget général" },
+
   // Stock widgets
   "w.stock.quote": { tr: "Fiyat özeti", en: "Key figures", fr: "Chiffres clés" },
   "w.stock.quote.desc": { tr: "Son fiyat, gün aralığı, hacim, piyasa değeri ve çarpanlar", en: "Last price, day range, volume, market cap and multiples", fr: "Dernier cours, fourchette, volume, capitalisation et multiples" },
@@ -166,7 +175,7 @@ const dict = {
   "announce.width": { tr: "{name}: {span}/12 sütun", en: "{name}: {span}/12 columns", fr: "{name} : {span}/12 colonnes" },
   "announce.height": { tr: "{name}: {height}", en: "{name}: {height}", fr: "{name} : {height}" },
   "board.empty": { tr: "Bu sayfada henüz widget yok", en: "No widgets on this page yet", fr: "Aucun widget sur cette page" },
-  "board.emptyHint": { tr: "Temettü, bilanço, grafik… İstediğiniz kartları ekleyerek başlayın.", en: "Dividends, statements, charts… Start by adding the cards you want.", fr: "Dividendes, états financiers, graphiques… Commencez par ajouter vos cartes." },
+  "board.emptyHint": { tr: "Hisseye bağlı kartlar veya genel widget'larla başlayın; ikisini aynı sayfada kullanabilirsiniz.", en: "Start with stock-specific or general widgets; you can use both on the same page.", fr: "Commencez par des widgets liés à une action ou généraux ; vous pouvez les combiner sur la même page." },
   "board.stockFor": { tr: "{ticker} için", en: "for {ticker}", fr: "pour {ticker}" },
   "board.noData": { tr: "Bu hisse için veri yok", en: "No data for this stock", fr: "Aucune donnée pour cette action" },
 
@@ -176,6 +185,7 @@ const dict = {
   "settings.tickerDefault": { tr: "Varsayılan hisse ({ticker})", en: "Default stock ({ticker})", fr: "Action par défaut ({ticker})" },
   "settings.tickerPick": { tr: "Başka bir hisse seçin", en: "Pick another stock", fr: "Choisir une autre action" },
   "settings.tickerHint": { tr: "Bu kart sayfanın hissesi yerine seçtiğiniz hisseyi gösterir.", en: "This card shows the stock you pick instead of the page's.", fr: "Cette carte affiche l'action choisie au lieu de celle de la page." },
+  "settings.generalHint": { tr: "Bu genel widget hisse seçiminden etkilenmez.", en: "This general widget is independent of the selected stock.", fr: "Ce widget général ne dépend pas de l'action choisie." },
   "settings.none": { tr: "Bu widget'ın ayarı yok.", en: "This widget has no settings.", fr: "Ce widget n'a pas de réglages." },
   "settings.close": { tr: "Kapat", en: "Close", fr: "Fermer" },
   "ticker.notFound": { tr: "{ticker} bulunamadı", en: "{ticker} not found", fr: "{ticker} introuvable" },
@@ -198,7 +208,7 @@ const dict = {
   "pages.defaultName": { tr: "Sayfam {n}", en: "My page {n}", fr: "Ma page {n}" },
   "pages.introTitle": { tr: "Kendi sayfanızı oluşturun", en: "Build your own page", fr: "Créez votre propre page" },
   "pages.startBlank": { tr: "Boş sayfa", en: "Blank page", fr: "Page vierge" },
-  "pages.startBlankDesc": { tr: "Widget'ları tek tek kendiniz seçin", en: "Pick every widget yourself", fr: "Choisissez chaque widget vous-même" },
+  "pages.startBlankDesc": { tr: "Hisseye bağlı ve genel widget'ları kendiniz seçin", en: "Choose your stock-specific and general widgets", fr: "Choisissez vos widgets liés à une action et généraux" },
   "pages.templates": { tr: "ya da bir şablonla başlayın", en: "or start from a template", fr: "ou partez d'un modèle" },
   "pages.template.overview": { tr: "Hisse özeti", en: "Stock overview", fr: "Vue d'ensemble de l'action" },
   "pages.template.fundamental": { tr: "Temel analiz", en: "Fundamentals", fr: "Fondamentaux" },
@@ -218,7 +228,7 @@ const dict = {
   "pages.copyName": { tr: "{name} (kopya)", en: "{name} (copy)", fr: "{name} (copie)" },
   "pages.limit": { tr: "En fazla {max} sayfa oluşturabilirsiniz", en: "You can create up to {max} pages", fr: "Vous pouvez créer jusqu'à {max} pages" },
   "pages.stock": { tr: "Hisse", en: "Stock", fr: "Action" },
-  "pages.stockHint": { tr: "Hisse kartları bu hisseyi gösterir; her kart kendi ayarından başka bir hisseye bağlanabilir.", en: "Stock cards show this stock; each card can follow another one from its settings.", fr: "Les cartes d'action affichent cette action ; chacune peut en suivre une autre via ses réglages." },
+  "pages.stockHint": { tr: "Sayfanın hissesi yalnızca hisseye bağlı widget'ları değiştirir. Her karta ayarlarından ayrı hisse seçebilirsiniz; genel widget'lar bu seçimden etkilenmez.", en: "The page's stock only changes stock-specific widgets. Each card can follow its own stock in settings; general widgets stay independent.", fr: "L'action de la page modifie uniquement les widgets liés à une action. Chaque carte peut suivre sa propre action dans ses réglages ; les widgets généraux restent indépendants." },
   "pages.changeStock": { tr: "Sayfanın hissesini değiştir", en: "Change the page's stock", fr: "Changer l'action de la page" },
   "pages.storageNote": { tr: "Sayfalar yalnızca bu tarayıcıda saklanır.", en: "Pages are stored in this browser only.", fr: "Les pages sont stockées dans ce navigateur uniquement." },
   "pages.loading": { tr: "Sayfalar yükleniyor…", en: "Loading pages…", fr: "Chargement des pages…" },

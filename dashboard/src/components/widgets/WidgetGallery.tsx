@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Plus, Search, X } from "lucide-react";
 import { foldTr } from "@/components/shared/search/fold";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { CATEGORIES, WIDGETS, type WidgetCategory } from "./catalog";
 import { useWidgetI18n } from "./i18n";
 import type { WidgetKey } from "./i18n-dict";
+import { widgetScope, type WidgetScope } from "./widget-scope";
 
 /**
  * The widget catalogue as a dialog: search, a category filter and a grid of
@@ -21,6 +22,7 @@ export function WidgetGallery({
   onPick,
   counts,
   categories = CATEGORIES,
+  initialScope = "all",
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,25 +31,41 @@ export function WidgetGallery({
   counts: ReadonlyMap<string, number>;
   /** Categories offered first; the rest stay reachable under "All". */
   categories?: readonly WidgetCategory[];
+  /** Blank-page shortcuts open directly on the selected kind of widget. */
+  initialScope?: WidgetScope | "all";
 }) {
   const { t } = useWidgetI18n();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<WidgetCategory | "all">("all");
+  const [scope, setScope] = useState<WidgetScope | "all">(initialScope);
+  const [previousOpen, setPreviousOpen] = useState(open);
   const searchRef = useRef<HTMLInputElement>(null);
+  const headingId = useId();
+
+  if (open !== previousOpen) {
+    setPreviousOpen(open);
+    if (open) {
+      setScope(initialScope);
+      setCategory("all");
+    }
+  }
 
   const order = useMemo(() => [...categories, ...CATEGORIES.filter((c) => !categories.includes(c))], [categories]);
+  const availableCategories = order.filter((c) => scope === "all" || (c === "stock" ? "stock" : "general") === scope);
   const results = useMemo(() => {
     const needle = foldTr(query.trim());
-    return WIDGETS.filter((meta) => category === "all" || meta.category === category)
+    return WIDGETS.filter((meta) => scope === "all" || widgetScope(meta) === scope)
+      .filter((meta) => category === "all" || meta.category === category)
       .filter(
         (meta) =>
           !needle ||
-          foldTr(`${t(meta.name)} ${t(meta.description)} ${t(`category.${meta.category}` as WidgetKey)} ${meta.keywords ?? ""}`).includes(needle),
+          foldTr(`${t(meta.name)} ${t(meta.description)} ${t(`scope.${widgetScope(meta)}`)} ${t(`category.${meta.category}` as WidgetKey)} ${meta.keywords ?? ""}`).includes(needle),
       )
       .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
-  }, [query, category, order, t]);
+  }, [query, category, scope, order, t]);
 
   const grouped = useMemo(() => order.map((c) => ({ category: c, items: results.filter((meta) => meta.category === c) })).filter((group) => group.items.length > 0), [order, results]);
+  const scopes = [...new Set(order.map((c): WidgetScope => c === "stock" ? "stock" : "general"))];
 
   return (
     <Dialog.Root
@@ -99,22 +117,40 @@ export function WidgetGallery({
               />
             </label>
             <SegmentedControl
+              label={t("scope.label")}
+              size="sm"
+              value={scope}
+              onChange={(next) => { setScope(next); setCategory("all"); }}
+              options={[
+                { value: "all" as const, label: t("category.all") },
+                { value: "stock" as const, label: t("scope.stock") },
+                { value: "general" as const, label: t("scope.general") },
+              ]}
+            />
+          </div>
+          {availableCategories.length > 1 ? <div className="border-b border-border px-5 py-2">
+            <SegmentedControl
               label={t("gallery.categories")}
               size="sm"
               value={category}
               onChange={setCategory}
               className="max-w-full overflow-x-auto scrollbar-none"
-              options={[{ value: "all" as const, label: t("category.all") }, ...order.map((c) => ({ value: c, label: t(`category.${c}` as WidgetKey) }))]}
+              options={[{ value: "all" as const, label: t("category.all") }, ...availableCategories.map((c) => ({ value: c, label: t(`category.${c}` as WidgetKey) }))]}
             />
-          </div>
+          </div> : null}
 
           <div className="min-h-0 grow overflow-y-auto overscroll-contain px-5 pb-6 pt-2 scrollbar-thin">
             {grouped.length === 0 ? <p className="py-10 text-center text-[13px] text-muted-foreground">{t("gallery.empty")}</p> : null}
-            {grouped.map((group) => (
-              <section key={group.category} aria-labelledby={`gallery-${group.category}`} className="pt-3">
-                <h3 id={`gallery-${group.category}`} className="pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {t(`category.${group.category}` as WidgetKey)}
-                </h3>
+            {scopes.map((sectionScope) => {
+              const sectionGroups = grouped.filter((group) => (group.category === "stock" ? "stock" : "general") === sectionScope);
+              if (sectionGroups.length === 0) return null;
+              return <section key={sectionScope} aria-labelledby={`${headingId}-${sectionScope}`} className="pt-4">
+                <h3 id={`${headingId}-${sectionScope}`} className="text-[13px] font-semibold text-foreground">{t(`scope.${sectionScope}`)}</h3>
+                <p className="mb-3 mt-1 text-xs leading-relaxed text-muted-foreground">{t(`scope.${sectionScope}Hint`)}</p>
+                {sectionGroups.map((group) => <div key={group.category} className="mt-3">
+                  {sectionScope === "general" ? <h4 className="pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    {t(`category.${group.category}` as WidgetKey)}
+                  </h4> : null}
                 <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {group.items.map((meta) => {
                     const Icon = meta.icon;
@@ -144,8 +180,9 @@ export function WidgetGallery({
                     );
                   })}
                 </ul>
-              </section>
-            ))}
+                </div>)}
+              </section>;
+            })}
           </div>
         </Dialog.Popup>
       </Dialog.Portal>

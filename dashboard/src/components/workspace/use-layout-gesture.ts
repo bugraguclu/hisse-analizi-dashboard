@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { rubberBand } from "@/lib/motion";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { beginPointerGesture, gestureResistance } from "./pointer-gesture";
 import {
   WORKSPACE_COLUMNS,
   WORKSPACE_DESKTOP_QUERY,
@@ -37,15 +37,11 @@ type Gesture = {
   kind: LayoutChange;
   item: LayoutItem;
   base: WorkspaceLayout;
-  handle: HTMLButtonElement;
   tile: HTMLElement;
-  pointer: number;
   startX: number;
   startY: number;
-  originY: number;
   clientX: number;
   clientY: number;
-  started: boolean;
   dx: number;
   dy: number;
   /** Whether the card can still travel up or down; the page stops scrolling once it cannot. */
@@ -53,32 +49,8 @@ type Gesture = {
   layout: WorkspaceLayout;
 };
 
-const EDGE = 64;
-const ACTIVATION_DISTANCE = 4;
-/** How far a card can be pulled past the grid or its size limits before it stops. */
-const OVERSHOOT = 56;
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
-}
-
-/** Follow the pointer inside the range and resist it outside. */
-function resist(value: number, min: number, max: number) {
-  if (value < min) return min + rubberBand(value - min, OVERSHOOT);
-  if (value > max) return max + rubberBand(value - max, OVERSHOOT);
-  return value;
-}
-
-/**
- * Scroll while the pointer is held near the top or bottom of the window.
- * A handle that was picked up inside that band scrolls only once the pointer
- * has travelled toward the edge, so grabbing a low corner does not move the page.
- */
-function scrollSpeed(y: number, originY: number) {
-  const height = window.innerHeight;
-  if (y < EDGE && y < originY - ACTIVATION_DISTANCE) return -clamp((EDGE - y) / 4, 0, 22);
-  if (y > height - EDGE && y > originY + ACTIVATION_DISTANCE) return clamp((y - height + EDGE) / 4, 0, 22);
-  return 0;
 }
 
 /**
@@ -100,7 +72,7 @@ export function useLayoutGesture(
   const [preview, setPreview] = useState<GesturePreview | null>(null);
   const gesture = useRef<Gesture | null>(null);
   const floated = useRef<HTMLElement | null>(null);
-  const frame = useRef(0);
+  const cleanup = useRef<(() => void) | null>(null);
 
   function follow(current: Gesture) {
     const bounds = grid.current?.getBoundingClientRect();
@@ -127,8 +99,8 @@ export function useLayoutGesture(
 
     const columns = Math.round(clamp(rawX, minX, maxX) / columnStep);
     const rows = Math.round(clamp(rawY, minY, maxY) / WORKSPACE_ROW_STEP);
-    current.dx = resist(rawX, minX, maxX);
-    current.dy = resist(rawY, minY, maxY);
+    current.dx = gestureResistance(rawX, minX, maxX);
+    current.dy = gestureResistance(rawY, minY, maxY);
     current.room = { up: rawY > minY, down: rawY < maxY };
     const layout = kind === "move"
       ? moveCard(base, item.id, item.x + columns, item.y + rows)
@@ -147,107 +119,43 @@ export function useLayoutGesture(
         : { kind: current.kind, id: current.item.id, layout: current.layout });
   }
 
-  function schedule() {
-    if (frame.current) return;
-    frame.current = requestAnimationFrame(() => {
-      frame.current = 0;
-      const current = gesture.current;
-      if (!current?.started) return;
-      const speed = scrollSpeed(current.clientY, current.originY);
-      const before = window.scrollY;
-      if (speed < 0 ? current.room.up : speed > 0 && current.room.down) window.scrollBy({ top: speed, behavior: "instant" });
-      show(current);
-      if (window.scrollY !== before) schedule();
-    });
-  }
-
   function start(event: ReactPointerEvent<HTMLButtonElement>, item: LayoutItem, kind: LayoutChange, base: WorkspaceLayout) {
     if (!enabled || !event.isPrimary || event.button !== 0) return;
-    // A press follows a release, so a gesture still open here never heard its own: let it go.
-    if (gesture.current) stop(false);
+    cleanup.current?.();
     const bounds = grid.current?.getBoundingClientRect();
     const handle = event.currentTarget;
     const tile = handle.closest<HTMLElement>("[data-tile]");
     if (!bounds || !tile) return;
     handle.focus({ preventScroll: true });
-    // Text left selected would be dragged along, or keep growing under the pointer.
-    window.getSelection()?.removeAllRanges();
-    // Capture keeps the events coming while the pointer is outside the window.
-    try {
-      handle.setPointerCapture(event.pointerId);
-    } catch {
-      // The gesture is followed on the window either way.
-    }
-    gesture.current = {
-      kind, item, base, tile, handle, pointer: event.pointerId,
+    const current: Gesture = {
+      kind, item, base, tile,
       startX: event.clientX - bounds.left, startY: event.clientY - bounds.top,
-      originY: event.clientY, clientX: event.clientX, clientY: event.clientY, started: false,
+      clientX: event.clientX, clientY: event.clientY,
       dx: 0, dy: 0, room: { up: true, down: true }, layout: base,
     };
-  }
-
-  function move(event: PointerEvent) {
-    const current = gesture.current;
-    if (!current || current.pointer !== event.pointerId) return;
-    // No button is held any more: the release happened where the page could not
-    // see it. The card drops where it was last seen.
-    if (event.buttons === 0) {
-      stop(true);
-      return;
-    }
-    const starting = !current.started;
-    if (starting && Math.hypot(event.clientX - current.clientX, event.clientY - current.clientY) < ACTIVATION_DISTANCE) return;
-    current.started = true;
-    current.clientX = event.clientX;
-    current.clientY = event.clientY;
-    if (!starting) {
-      schedule();
-      return;
-    }
-    // Position the card before React marks it as floating, so it never flashes at a stale offset.
-    floated.current = current.tile;
-    show(current);
-  }
-
-  function stop(commit: boolean) {
-    const current = gesture.current;
-    gesture.current = null;
-    cancelAnimationFrame(frame.current);
-    frame.current = 0;
-    if (!current) return;
-    if (current.handle.hasPointerCapture(current.pointer)) current.handle.releasePointerCapture(current.pointer);
-    if (!current.started) return;
-    // The final pointer position decides the destination, while the glide
-    // starts at the last geometry shown on screen.
-    const { dx, dy, tile } = current;
-    const { offsetWidth: width, offsetHeight: height } = tile;
-    if (commit) follow(current);
-    const layout = commit ? current.layout : current.base;
-    setPreview(null);
-    onRelease({
-      kind: current.kind,
-      id: current.item.id,
-      layout,
-      changed: layout !== current.base,
-      dx,
-      dy,
-      width,
-      height,
+    gesture.current = current;
+    cleanup.current = beginPointerGesture(event, {
+      mediaQuery: WORKSPACE_DESKTOP_QUERY,
+      cursor: kind === "move" ? "grabbing" : "nwse-resize",
+      scrollRoom: () => current.room,
+      onStart: () => { floated.current = tile; },
+      onFrame: ({ clientX, clientY }) => {
+        current.clientX = clientX;
+        current.clientY = clientY;
+        show(current);
+      },
+      onFinish: (apply, started) => {
+        cleanup.current = null;
+        if (gesture.current !== current) return;
+        gesture.current = null;
+        if (!started) return;
+        const layout = apply ? current.layout : current.base;
+        const { offsetWidth: width, offsetHeight: height } = tile;
+        setPreview(null);
+        onRelease({ kind, id: item.id, layout, changed: layout !== base, dx: current.dx, dy: current.dy, width, height });
+      },
     });
   }
-
-  function end(event: PointerEvent) {
-    const current = gesture.current;
-    if (!current || current.pointer !== event.pointerId) return;
-    current.clientX = event.clientX;
-    current.clientY = event.clientY;
-    stop(true);
-  }
-
-  const cancel = useEffectEvent(() => stop(false));
-  const onMove = useEffectEvent(move);
-  const onEnd = useEffectEvent(end);
-  const onScroll = useEffectEvent(schedule);
 
   // The offsets outlive the gesture until React has stopped floating the card.
   useLayoutEffect(() => {
@@ -258,53 +166,15 @@ export function useLayoutGesture(
   }, [preview]);
 
   useEffect(() => {
-    const breakpoint = window.matchMedia(WORKSPACE_DESKTOP_QUERY);
-    function onCancel() {
-      if (gesture.current) cancel();
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape" || !gesture.current) return;
-      event.preventDefault();
-      onCancel();
-    }
-    function handleScroll() {
-      if (gesture.current?.started) onScroll();
-    }
-    function handleMove(event: PointerEvent) {
-      if (gesture.current) onMove(event);
-    }
-    function handleEnd(event: PointerEvent) {
-      if (gesture.current) onEnd(event);
-    }
-    function handleCancel(event: PointerEvent) {
-      if (gesture.current?.pointer === event.pointerId) cancel();
-    }
-    breakpoint.addEventListener("change", onCancel);
-    window.addEventListener("blur", onCancel);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    // Listened for on the way down, so nothing on the page can keep them from arriving.
-    window.addEventListener("pointermove", handleMove, true);
-    window.addEventListener("pointerup", handleEnd, true);
-    window.addEventListener("pointercancel", handleCancel, true);
-    // A context menu takes the release with it.
-    window.addEventListener("contextmenu", onCancel, true);
-    return () => {
-      const current = gesture.current;
-      gesture.current = null;
-      cancelAnimationFrame(frame.current);
-      frame.current = 0;
-      if (current?.handle.hasPointerCapture(current.pointer)) current.handle.releasePointerCapture(current.pointer);
-      breakpoint.removeEventListener("change", onCancel);
-      window.removeEventListener("blur", onCancel);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("pointermove", handleMove, true);
-      window.removeEventListener("pointerup", handleEnd, true);
-      window.removeEventListener("pointercancel", handleCancel, true);
-      window.removeEventListener("contextmenu", onCancel, true);
-    };
+    if (!enabled) cleanup.current?.();
+  }, [enabled]);
+
+  useEffect(() => () => {
+    gesture.current = null;
+    cleanup.current?.();
+    floated.current?.style.removeProperty("--offset-x");
+    floated.current?.style.removeProperty("--offset-y");
   }, []);
 
-  return { preview: enabled ? preview : null, start, cancel: () => stop(false) };
+  return { preview: enabled ? preview : null, start, cancel: () => cleanup.current?.() };
 }

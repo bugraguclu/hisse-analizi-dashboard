@@ -117,7 +117,7 @@ function SettingsForm({
       const isDefault = field.kind === "text" ? value === "" : value === field.default;
       patch[field.key] = isDefault ? null : value;
     }
-    onSave({ ticker, options: patch });
+    onSave({ ticker: meta.stock ? ticker : null, options: patch });
   };
 
   return (
@@ -138,6 +138,7 @@ function SettingsForm({
       </div>
 
       <div className="space-y-5 px-5 py-4">
+        {!meta.stock ? <p className="text-xs leading-relaxed text-muted-foreground">{t("settings.generalHint")}</p> : null}
         {showTicker ? (
           <fieldset className="space-y-2">
             <legend className={FIELD_LABEL}>{t("settings.ticker")}</legend>

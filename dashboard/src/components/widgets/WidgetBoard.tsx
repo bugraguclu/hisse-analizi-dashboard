@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -22,6 +23,7 @@ import { SectionHeadingLevel } from "@/components/stock/heading-level";
 import { StockIdentityScope } from "@/components/stock/identity-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PanelProvider } from "@/components/workspace/panel";
+import { beginPointerGesture, gestureResistance } from "@/components/workspace/pointer-gesture";
 import { motionScrollBehavior, useMotionAllowed } from "@/hooks/use-motion-allowed";
 import { cubicBezier, motionCurve, motionDuration } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,8 @@ import {
   insertWidget,
   isNoopMove,
   MAX_WIDGETS,
+  MIN_HEIGHT,
+  MAX_HEIGHT,
   MIN_WIDTH,
   moveWidget,
   moveWidgetStep,
@@ -61,14 +65,15 @@ import type { WidgetComponents } from "./types";
 import type { LayoutEditor } from "./use-layout-editor";
 import { WidgetFrame } from "./WidgetFrame";
 import { WidgetGallery } from "./WidgetGallery";
+import { WidgetScopeCards } from "./WidgetScopeCards";
+import { addWidgetInScope, rowScope, type WidgetScope } from "./widget-scope";
 import { WidgetSettingsDialog } from "./WidgetSettings";
+import styles from "./widget-board.module.css";
 
 /** Gap between rows, columns and stacked cards (gap-4). */
 const GAP = 16;
 /** Height step of the keyboard height handle. */
 const HEIGHT_KEY_STEP = 40;
-/** Distance from the viewport edge (px) where a drag scrolls the page. */
-const SCROLL_EDGE = 72;
 const MOVE_EASING = cubicBezier(motionCurve.easeOut);
 const IGNORE_SPARE = () => {};
 
@@ -154,7 +159,7 @@ const WidgetBody = memo(
     const content = <Component ticker={ticker} options={resolved} />;
     return meta.stock ? <StockIdentityScope ticker={ticker}>{content}</StockIdentityScope> : content;
   },
-  (a, b) => a.type === b.type && a.ticker === b.ticker && a.components === b.components && shallowEqual(a.options, b.options),
+  (a, b) => a.type === b.type && (a.ticker === b.ticker || !widgetMeta(a.type)?.stock) && a.components === b.components && shallowEqual(a.options, b.options),
 );
 
 /** Card-shaped stand-in for a widget below the fold that hasn't mounted yet. */
@@ -270,6 +275,57 @@ function FittedChart({
   );
 }
 
+type WidgetPanelProps = {
+  type: string;
+  ticker: string;
+  options: Record<string, OptionValue> | undefined;
+  components: WidgetComponents | undefined;
+  height: number | undefined;
+  columnWidth: number;
+  slotted: boolean;
+  wide: boolean;
+  nested: boolean;
+  eager: boolean;
+  editing: boolean;
+  emptyLabel: string | undefined;
+};
+
+/** A drop indicator or another card's resize never updates this card's context. */
+const WidgetPanel = memo(function WidgetPanel({
+  type, ticker, options, components, height, columnWidth, slotted, wide, nested, eager, editing, emptyLabel,
+}: WidgetPanelProps) {
+  const meta = widgetMeta(type);
+  const fixed = height !== undefined;
+  const body = <WidgetBody type={type} ticker={ticker} options={options} components={components} />;
+  const inner = type === "general.heading" ? body : (
+    <LazyMount eager={eager} minHeight={meta?.estimatedHeight ?? 240} emptyLabel={emptyLabel}>{body}</LazyMount>
+  );
+  const content = <SectionHeadingLevel level={nested ? 3 : 2}>{inner}</SectionHeadingLevel>;
+  return (
+    <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto rounded-2xl scrollbar-thin")}>
+      <PanelProvider value={{
+        fill: fixed && !meta?.plotHeight,
+        columns: slotted ? (wide ? columnWidth / 2 : 6) : 0,
+        rows: fixed ? Math.round((height + GAP) / 32) : 0,
+        reportSpare: IGNORE_SPARE,
+      }}>
+        {meta?.plotHeight ? (
+          <FittedChart height={height ?? null} basePlot={meta.plotHeight(resolveOptions(meta, options))} inert={editing}>
+            {content}
+          </FittedChart>
+        ) : (
+          <div inert={editing} className={cn("flex min-w-0 grow flex-col [&>*:last-child]:grow", fixed ? "min-h-0" : "shrink-0")}>
+            {content}
+          </div>
+        )}
+      </PanelProvider>
+    </div>
+  );
+}, (a, b) => a.type === b.type && (a.ticker === b.ticker || !widgetMeta(a.type)?.stock) &&
+  shallowEqual(a.options, b.options) && a.components === b.components && a.height === b.height &&
+  a.columnWidth === b.columnWidth && a.slotted === b.slotted && a.wide === b.wide &&
+  a.nested === b.nested && a.eager === b.eager && a.editing === b.editing && a.emptyLabel === b.emptyLabel);
+
 // ---------------------------------------------------------------------------
 // Board
 // ---------------------------------------------------------------------------
@@ -331,15 +387,12 @@ function measure(board: HTMLElement): MeasuredBoard {
   };
 }
 
-function lockCursor(cursor: string): () => void {
-  const { style } = document.body;
-  const previous = { cursor: style.cursor, userSelect: style.userSelect };
-  style.cursor = cursor;
-  style.userSelect = "none";
-  return () => {
-    style.cursor = previous.cursor;
-    style.userSelect = previous.userSelect;
-  };
+/** Changing pointer coordinates alone never renders the board again. */
+function sameDropHit(a: DropHit | null, b: DropHit | null): boolean {
+  return a === b || (a !== null && b !== null &&
+    JSON.stringify(a.target) === JSON.stringify(b.target) &&
+    a.line.orientation === b.line.orientation && a.line.x === b.line.x &&
+    a.line.y === b.line.y && a.line.length === b.line.length);
 }
 
 /**
@@ -364,6 +417,7 @@ export function WidgetBoard({
   lazyFromRow = 3,
   stackedGap,
   galleryCategories,
+  scopeSections = false,
   components,
   className,
 }: {
@@ -381,6 +435,8 @@ export function WidgetBoard({
   stackedGap?: number;
   /** Gallery categories to list first (the page's own kind of widgets). */
   galleryCategories?: readonly WidgetCategory[];
+  /** Personal pages keep stock-specific and general cards beneath permanent headings. */
+  scopeSections?: boolean;
   className?: string;
 }) {
   const { t } = useWidgetI18n();
@@ -392,6 +448,7 @@ export function WidgetBoard({
   const pageTicker = context.ticker ?? DEFAULT_TICKER;
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const floatedRef = useRef<HTMLElement | null>(null);
   const layoutRef = useRef(layout);
   const previousPositions = useRef<Map<string, DOMRect> | null>(null);
   const moves = useRef(new Map<HTMLElement, Animation>());
@@ -403,6 +460,7 @@ export function WidgetBoard({
   const [drag, setDrag] = useState<DragView | null>(null);
   const [resize, setResize] = useState<ResizeView | null>(null);
   const [gallery, setGallery] = useState<{ open: boolean; target: DropTarget | null; width: number | null }>({ open: false, target: null, width: null });
+  const [galleryScope, setGalleryScope] = useState<WidgetScope | "all">("all");
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -422,10 +480,10 @@ export function WidgetBoard({
 
   // Leaving edit mode (or unmounting) ends any drag or resize in progress.
   useEffect(() => {
-    if (editing) return;
+    if (interactive) return;
     cleanupRef.current?.();
     cleanupRef.current = null;
-  }, [editing]);
+  }, [interactive]);
   useEffect(() => () => cleanupRef.current?.(), []);
 
   const cancelMoves = useCallback(() => {
@@ -471,6 +529,14 @@ export function WidgetBoard({
 
   useEffect(() => cancelMoves, [cancelMoves]);
 
+  // Keep the last floating position until React removes its moving state.
+  useLayoutEffect(() => {
+    if (drag || !floatedRef.current) return;
+    floatedRef.current.style.removeProperty("--drag-x");
+    floatedRef.current.style.removeProperty("--drag-y");
+    floatedRef.current = null;
+  }, [drag]);
+
   // After a keyboard move the widget re-mounts elsewhere: give its grip the focus back.
   useEffect(() => {
     const id = focusAfterRef.current;
@@ -501,245 +567,160 @@ export function WidgetBoard({
 
   const startDrag = useCallback(
     (event: ReactPointerEvent<HTMLElement>, widgetId: string, fromGrip: boolean) => {
-      if (event.button !== 0 || !boardRef.current) return;
+      if (!interactive || !event.isPrimary || event.button !== 0 || !boardRef.current) return;
       // Touch drags only from the grip, so a finger on a card still scrolls the page.
       if (event.pointerType === "touch" && !fromGrip) return;
       if (event.pointerType !== "touch") event.preventDefault();
+      if (fromGrip) event.currentTarget.focus({ preventScroll: true });
       cleanupRef.current?.();
-
       const board = boardRef.current;
-      const pointerId = event.pointerId;
-      const startX = event.clientX;
-      const startY = event.clientY;
-      let pointerX = startX;
-      let pointerY = startY;
-      let started = false;
+      const base = layoutRef.current;
+      const cell = board.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(widgetId)}"]`);
+      if (!cell) return;
+      const cellBox = cell.getBoundingClientRect();
+      const boardBox = board.getBoundingClientRect();
       let measured: MeasuredBoard | null = null;
+      let needsMeasure = true;
       let hit: DropHit | null = null;
-      let frame = 0;
-      let unlock: (() => void) | null = null;
-      let resizeObserver: ResizeObserver | null = null;
-
-      const update = () => {
-        if (!measured) return;
-        const next = hitTest(measured, pointerX + window.scrollX, pointerY + window.scrollY, GAP);
-        hit = next && !isNoopMove(layoutRef.current, widgetId, next.target) ? next : null;
-        setDrag({ widgetId, x: pointerX, y: pointerY, hit, origin: { left: measured.box.left, top: measured.box.top } });
-      };
-
-      const onScroll = () => {
-        update();
-      };
-
-      const autoScroll = () => {
-        const height = window.innerHeight;
-        const speed = pointerY < SCROLL_EDGE ? -(SCROLL_EDGE - pointerY) : pointerY > height - SCROLL_EDGE ? pointerY - (height - SCROLL_EDGE) : 0;
-        if (speed !== 0) {
-          window.scrollBy(0, Math.round(speed / 3));
-          update();
-        }
-        frame = window.requestAnimationFrame(autoScroll);
-      };
-
-      const onMove = (move: PointerEvent) => {
-        if (move.pointerId !== pointerId) return;
-        if (move.buttons === 0) {
-          finish(false);
-          return;
-        }
-        pointerX = move.clientX;
-        pointerY = move.clientY;
-        if (!started) {
-          if (Math.hypot(pointerX - startX, pointerY - startY) < 5) return;
-          started = true;
+      let observer: ResizeObserver | null = null;
+      cleanupRef.current = beginPointerGesture(event, {
+        mediaQuery: WIDE_QUERY[stackBelow],
+        cursor: "grabbing",
+        onStart: () => {
           cancelMoves();
-          measured = measure(board);
-          resizeObserver = new ResizeObserver(() => {
+          floatedRef.current = cell;
+          // Observe the boxes used for hit testing; late-loaded cards can resize
+          // inside a row without changing the board's total height.
+          observer = new ResizeObserver(() => { needsMeasure = true; });
+          observer.observe(board);
+          for (const element of board.querySelectorAll<HTMLElement>("[data-row-id], [data-col-id], [data-widget-id]")) observer.observe(element);
+        },
+        onFrame: ({ clientX, clientY, deltaX, deltaY }) => {
+          if (needsMeasure || !measured) {
+            // Transforms follow the pointer, but drop targets stay in their
+            // original slots. Measure those slots even during a late resize.
+            const previousX = cell.style.getPropertyValue("--drag-x");
+            const previousY = cell.style.getPropertyValue("--drag-y");
+            cell.style.removeProperty("--drag-x");
+            cell.style.removeProperty("--drag-y");
             measured = measure(board);
-            update();
-          });
-          resizeObserver.observe(board);
-          window.addEventListener("scroll", onScroll, { passive: true });
-          unlock = lockCursor("grabbing");
-          frame = window.requestAnimationFrame(autoScroll);
-        }
-        move.preventDefault();
-        update();
-      };
-
-      const finish = (drop: boolean) => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onCancel);
-        window.removeEventListener("keydown", onKey, true);
-        window.removeEventListener("blur", onBlur);
-        window.removeEventListener("scroll", onScroll);
-        resizeObserver?.disconnect();
-        window.cancelAnimationFrame(frame);
-        unlock?.();
-        cleanupRef.current = null;
-        setDrag(null);
-        if (drop && started && hit) {
-          const current = layoutRef.current;
-          const next = moveWidget(current, widgetId, hit.target);
-          if (next !== current) {
-            commitMove(next);
-            setAnnouncement(t("announce.moved", { name: nameOf(findWidget(current, widgetId)?.widget) }));
+            cell.style.setProperty("--drag-x", previousX);
+            cell.style.setProperty("--drag-y", previousY);
+            needsMeasure = false;
           }
-        }
-      };
-      const onUp = (up: PointerEvent) => {
-        if (up.pointerId === pointerId) finish(true);
-      };
-      const onCancel = (cancel: PointerEvent) => {
-        if (cancel.pointerId === pointerId) finish(false);
-      };
-      const onKey = (key: KeyboardEvent) => {
-        if (key.key !== "Escape") return;
-        key.preventDefault();
-        key.stopPropagation();
-        finish(false);
-      };
-      const onBlur = () => finish(false);
-
-      window.addEventListener("pointermove", onMove, { passive: false });
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onCancel);
-      window.addEventListener("keydown", onKey, true);
-      window.addEventListener("blur", onBlur);
-      cleanupRef.current = () => finish(false);
+          const next = hitTest(measured, clientX + window.scrollX, clientY + window.scrollY, GAP);
+          hit = next && !isNoopMove(base, widgetId, next.target) ? next : null;
+          cell.style.setProperty("--drag-x", `${gestureResistance(deltaX, boardBox.left - cellBox.left, boardBox.right - cellBox.right)}px`);
+          cell.style.setProperty("--drag-y", `${gestureResistance(deltaY, boardBox.top - cellBox.top, boardBox.bottom - cellBox.top)}px`);
+          const origin = { left: measured.box.left, top: measured.box.top };
+          setDrag((shown) => shown?.widgetId === widgetId && sameDropHit(shown.hit, hit) &&
+            shown.origin.left === origin.left && shown.origin.top === origin.top
+            ? shown : { widgetId, x: clientX, y: clientY, hit, origin });
+        },
+        onFinish: (apply, started) => {
+          observer?.disconnect();
+          cleanupRef.current = null;
+          setDrag(null);
+          if (apply && started && hit) {
+            const current = layoutRef.current;
+            const next = moveWidget(current, widgetId, hit.target);
+            if (next !== current) {
+              if (fromGrip) focusAfterRef.current = widgetId;
+              commitMove(next);
+              setAnnouncement(t("announce.moved", { name: nameOf(findWidget(current, widgetId)?.widget) }));
+            }
+          }
+        },
+      });
     },
-    [cancelMoves, commitMove, nameOf, t],
+    [cancelMoves, commitMove, interactive, nameOf, stackBelow, t],
   );
 
   // -------------------------------------------------------------------------
-  // Resize handles
+  // Resize handles — the same frame loop used by the page's Customize editor.
   // -------------------------------------------------------------------------
 
   const startColumnResize = useCallback(
     (event: ReactPointerEvent<HTMLElement>, column: Column) => {
-      if (event.button !== 0 || !boardRef.current) return;
+      if (!interactive || !event.isPrimary || event.button !== 0 || !boardRef.current) return;
       event.preventDefault();
       event.stopPropagation();
       cleanupRef.current?.();
       const pitch = (boardRef.current.clientWidth + GAP) / GRID_COLUMNS;
       const base = layoutRef.current;
-      const pointerId = event.pointerId;
-      const startX = event.clientX;
       let next = base;
-      const unlock = lockCursor("col-resize");
-      setResize({ kind: "width", columnId: column.id, width: column.width });
-
-      const onMove = (move: PointerEvent) => {
-        if (move.pointerId !== pointerId) return;
-        if (move.buttons === 0) {
-          finish(false);
-          return;
-        }
-        next = resizeColumn(base, column.id, column.width + Math.round((move.clientX - startX) / pitch));
-        setPreview(next === base ? null : next);
-        const width = next.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width;
-        setResize({ kind: "width", columnId: column.id, width });
-      };
-      const finish = (apply: boolean) => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onCancel);
-        window.removeEventListener("keydown", onKey, true);
-        window.removeEventListener("blur", onBlur);
-        unlock();
-        cleanupRef.current = null;
-        setPreview(null);
-        setResize(null);
-        if (apply && next !== base) commit(next);
-      };
-      const onUp = (up: PointerEvent) => {
-        if (up.pointerId === pointerId) finish(true);
-      };
-      const onCancel = (cancel: PointerEvent) => {
-        if (cancel.pointerId === pointerId) finish(false);
-      };
-      const onKey = (key: KeyboardEvent) => {
-        if (key.key !== "Escape") return;
-        key.preventDefault();
-        key.stopPropagation();
-        finish(false);
-      };
-      const onBlur = () => finish(false);
-
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onCancel);
-      window.addEventListener("keydown", onKey, true);
-      window.addEventListener("blur", onBlur);
-      cleanupRef.current = () => finish(false);
+      let previousWidth = column.width;
+      cleanupRef.current = beginPointerGesture(event, {
+        mediaQuery: WIDE_QUERY[stackBelow],
+        cursor: "col-resize",
+        autoScroll: false,
+        onStart: () => {
+          cancelMoves();
+          setResize({ kind: "width", columnId: column.id, width: column.width });
+        },
+        onFrame: ({ deltaX }) => {
+          const wanted = column.width + Math.round(deltaX / pitch);
+          // Many pointer frames stay inside the same column: don't clone or
+          // rerender the layout (and all its charts) for those frames.
+          if (wanted === previousWidth) return;
+          previousWidth = wanted;
+          const candidate = resizeColumn(base, column.id, wanted);
+          const width = candidate.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width;
+          if (width === (next.rows.flatMap((row) => row.columns).find((c) => c.id === column.id)?.width ?? column.width)) return;
+          next = candidate;
+          setPreview(next === base ? null : next);
+          setResize({ kind: "width", columnId: column.id, width });
+        },
+        onFinish: (apply) => {
+          cleanupRef.current = null;
+          setPreview(null);
+          setResize(null);
+          if (apply && next !== base) commit(next);
+        },
+      });
     },
-    [commit],
+    [cancelMoves, commit, interactive, stackBelow],
   );
 
   const startHeightResize = useCallback(
     (event: ReactPointerEvent<HTMLElement>, widgetId: string) => {
-      if (event.button !== 0 || !boardRef.current) return;
+      if (!interactive || !event.isPrimary || event.button !== 0 || !boardRef.current) return;
       const cell = boardRef.current.querySelector<HTMLElement>(`[data-widget-id="${CSS.escape(widgetId)}"]`);
       if (!cell) return;
       event.preventDefault();
       event.stopPropagation();
       cleanupRef.current?.();
       const base = layoutRef.current;
-      const pointerId = event.pointerId;
-      const startY = event.clientY;
       const startHeight = cell.getBoundingClientRect().height;
-      let next = base;
+      let previousHeight = startHeight;
+      let rawHeight = startHeight;
       let moved = false;
-      const unlock = lockCursor("row-resize");
-
-      const onMove = (move: PointerEvent) => {
-        if (move.pointerId !== pointerId) return;
-        if (move.buttons === 0) {
-          finish(false);
-          return;
-        }
-        if (!moved && Math.abs(move.clientY - startY) < 3) return;
-        moved = true;
-        const height = clampHeight(startHeight + move.clientY - startY);
-        next = setWidgetHeight(base, widgetId, height);
-        setPreview(next);
-        setResize({ kind: "height", widgetId, height });
-      };
-      const finish = (apply: boolean) => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onCancel);
-        window.removeEventListener("keydown", onKey, true);
-        window.removeEventListener("blur", onBlur);
-        unlock();
-        cleanupRef.current = null;
-        setPreview(null);
-        setResize(null);
-        if (apply && moved && next !== base) commit(next);
-      };
-      const onUp = (up: PointerEvent) => {
-        if (up.pointerId === pointerId) finish(true);
-      };
-      const onCancel = (cancel: PointerEvent) => {
-        if (cancel.pointerId === pointerId) finish(false);
-      };
-      const onKey = (key: KeyboardEvent) => {
-        if (key.key !== "Escape") return;
-        key.preventDefault();
-        key.stopPropagation();
-        finish(false);
-      };
-      const onBlur = () => finish(false);
-
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onCancel);
-      window.addEventListener("keydown", onKey, true);
-      window.addEventListener("blur", onBlur);
-      cleanupRef.current = () => finish(false);
+      let next = base;
+      cleanupRef.current = beginPointerGesture(event, {
+        mediaQuery: WIDE_QUERY[stackBelow],
+        cursor: "row-resize",
+        scrollRoom: () => ({ up: rawHeight > MIN_HEIGHT, down: rawHeight < MAX_HEIGHT }),
+        onStart: cancelMoves,
+        onFrame: ({ deltaY }) => {
+          if (!moved && Math.abs(deltaY) < 3) return;
+          moved = true;
+          rawHeight = startHeight + deltaY;
+          const height = clampHeight(rawHeight);
+          if (height === previousHeight) return;
+          previousHeight = height;
+          next = setWidgetHeight(base, widgetId, height);
+          setPreview(next === base ? null : next);
+          setResize({ kind: "height", widgetId, height });
+        },
+        onFinish: (apply) => {
+          cleanupRef.current = null;
+          setPreview(null);
+          setResize(null);
+          if (apply && next !== base) commit(next);
+        },
+      });
     },
-    [commit],
+    [cancelMoves, commit, interactive, stackBelow],
   );
 
   // -------------------------------------------------------------------------
@@ -830,7 +811,10 @@ export function WidgetBoard({
     [setHeight],
   );
 
-  const openGallery = useCallback((target: DropTarget | null = null, width: number | null = null) => setGallery({ open: true, target, width }), []);
+  const openGallery = useCallback((target: DropTarget | null = null, width: number | null = null) => {
+    setGalleryScope("all");
+    setGallery({ open: true, target, width });
+  }, []);
 
   const pick = useCallback(
     (type: string) => {
@@ -841,13 +825,15 @@ export function WidgetBoard({
         return;
       }
       const { target, width } = gallery;
-      const added = target ? insertWidget(layout, { type }, width ?? meta.defaultWidth, target) : addWidget(layout, { type }, meta.defaultWidth);
+      const added = target ? insertWidget(layout, { type }, width ?? meta.defaultWidth, target)
+        : scopeSections ? addWidgetInScope(layout, { type }, meta.defaultWidth, widgetMeta)
+        : addWidget(layout, { type }, meta.defaultWidth);
       commit(added.layout);
       setGallery({ open: false, target: null, width: null });
       setHighlight(added.id);
       setAnnouncement(t("gallery.added", { name: t(meta.name) }));
     },
-    [commit, gallery, layout, t],
+    [commit, gallery, layout, scopeSections, t],
   );
 
   const counts = useMemo(() => {
@@ -918,25 +904,16 @@ export function WidgetBoard({
     rowIndex: number,
   ) => {
     const meta = widgetMeta(widget.type);
-    const isHeading = widget.type === "general.heading";
     const ticker = (context.tickerOverrides ? widget.ticker : undefined) ?? pageTicker;
     const fixed = widget.height !== undefined;
     const name = nameOf(widget);
     const Icon = meta?.icon;
-    const body = <WidgetBody type={widget.type} ticker={ticker} options={widget.options} components={components} />;
     const eager = rowIndex < lazyFromRow && widget.options?.lazy !== true;
-    const inner = isHeading ? (
-      body
-    ) : (
-      <LazyMount eager={eager} minHeight={meta?.estimatedHeight ?? 240} emptyLabel={editing ? t("board.noData") : undefined}>
-        {body}
-      </LazyMount>
-    );
-    const content = <SectionHeadingLevel level={nested ? 3 : 2}>{inner}</SectionHeadingLevel>;
     return (
       <div
         key={widget.id}
         data-widget-id={widget.id}
+        data-dragging={drag?.widgetId === widget.id ? "" : undefined}
         style={{
           ...(fixed ? { height: widget.height } : { flexGrow: grow }),
           containerName: slotted ? "tile" : undefined,
@@ -944,6 +921,7 @@ export function WidgetBoard({
         }}
         // While editing, room for the toolbar even on a one-line heading.
         className={cn(
+          styles.card,
           "relative flex min-w-0 shrink-0 flex-col",
           editing ? "min-h-12 justify-end" : "[&:has([data-widget-body]:empty)]:hidden",
           meta?.snug && !editing && "-mb-1",
@@ -954,26 +932,20 @@ export function WidgetBoard({
             {t("board.stockFor", { ticker })}
           </span>
         ) : null}
-        <div className={cn("flex min-w-0 grow flex-col", fixed && "min-h-0 overflow-y-auto rounded-2xl scrollbar-thin")}>
-          <PanelProvider
-            value={{
-              fill: fixed && !meta?.plotHeight,
-              columns: slotted ? (wide ? column.width / 2 : 6) : 0,
-              rows: fixed ? Math.round((widget.height! + GAP) / 32) : 0,
-              reportSpare: IGNORE_SPARE,
-            }}
-          >
-            {meta?.plotHeight ? (
-              <FittedChart height={widget.height ?? null} basePlot={meta.plotHeight(resolveOptions(meta, widget.options))} inert={editing}>
-                {content}
-              </FittedChart>
-            ) : (
-              <div inert={editing} className={cn("flex min-w-0 grow flex-col [&>*:last-child]:grow", fixed ? "min-h-0" : "shrink-0")}>
-                {content}
-              </div>
-            )}
-          </PanelProvider>
-        </div>
+        <WidgetPanel
+          type={widget.type}
+          ticker={ticker}
+          options={widget.options}
+          components={components}
+          height={widget.height}
+          columnWidth={column.width}
+          slotted={slotted}
+          wide={wide}
+          nested={nested}
+          eager={eager}
+          editing={editing}
+          emptyLabel={editing ? t("board.noData") : undefined}
+        />
 
         {editing ? (
           <WidgetFrame
@@ -1005,6 +977,9 @@ export function WidgetBoard({
             aria-orientation="horizontal"
             tabIndex={0}
             aria-label={t("resize.height", { name })}
+            aria-valuenow={widget.height}
+            aria-valuemin={MIN_HEIGHT}
+            aria-valuemax={MAX_HEIGHT}
             aria-valuetext={fixed ? t("height.px", { px: widget.height ?? 0 }) : t("height.autoShort")}
             onPointerDown={(event) => startHeightResize(event, widget.id)}
             onDoubleClick={() => setHeight(widget.id, null)}
@@ -1023,131 +998,163 @@ export function WidgetBoard({
     );
   };
 
-  return (
-    <>
-      <div ref={boardRef} className={cn("relative space-y-4", editing && "pb-28", className)} data-editing={editing ? "" : undefined}>
-        {shown.rows.map((row, rowIndex) => {
-          const free = freeWidth(row);
-          const isRail = !!row.rail && row.columns.length === 2 && row.columns[0].widgets.length >= 2;
+  const renderRows = (rows: Layout["rows"]) => rows.map((row) => {
+    const rowIndex = shown.rows.indexOf(row);
+    const free = freeWidth(row);
+    const isRail = !!row.rail && row.columns.length === 2 && row.columns[0].widgets.length >= 2;
 
-          if (isRail) {
-            const [main, rail] = row.columns;
-            let underHeadingRail = false;
-            const anyGrowsRail = rail.widgets.some((widget) => (weight(widget) ?? 0) > 0);
-            let underHeadingTail = main.widgets[0].type === "general.heading";
-            return (
-              <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1 gap-4", RAIL_GRID_CLASS[stackBelow])}>
-                <div
-                  key={`${main.id}-head`}
-                  data-col-id={main.id}
-                  style={spanStyle(main.width)}
-                  className={cn("relative flex min-w-0 flex-col gap-4", RAIL_HEAD_CLASS[stackBelow])}
-                >
-                  {renderCard(main.widgets[0], 0, main, false, rowIndex)}
-                  {renderColHandle(main)}
-                </div>
+    if (isRail) {
+      const [main, rail] = row.columns;
+      let underHeadingRail = false;
+      const anyGrowsRail = rail.widgets.some((widget) => (weight(widget) ?? 0) > 0);
+      let underHeadingTail = main.widgets[0].type === "general.heading";
+      return (
+        <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1 gap-4", RAIL_GRID_CLASS[stackBelow])}>
+          <div
+            key={`${main.id}-head`}
+            data-col-id={main.id}
+            style={spanStyle(main.width)}
+            className={cn("relative flex min-w-0 flex-col gap-4", RAIL_HEAD_CLASS[stackBelow])}
+          >
+            {renderCard(main.widgets[0], 0, main, false, rowIndex)}
+            {renderColHandle(main)}
+          </div>
 
-                <div
-                  key={rail.id}
-                  data-col-id={rail.id}
-                  style={{ ...spanStyle(rail.width), "--start": main.width + 1 } as CSSProperties}
-                  className={cn("relative flex min-w-0 flex-col gap-4", RAIL_SIDE_CLASS[stackBelow])}
-                >
-                  {rail.widgets.map((widget) => {
-                    const isHeading = widget.type === "general.heading";
-                    const nested = underHeadingRail && !isHeading;
-                    if (isHeading) underHeadingRail = true;
-                    const share = weight(widget);
-                    const grow = share === null ? 0 : anyGrowsRail ? share : 1;
-                    return renderCard(widget, grow, rail, nested, rowIndex);
-                  })}
-                  {renderColHandle(rail)}
-                </div>
+          <div
+            key={rail.id}
+            data-col-id={rail.id}
+            style={{ ...spanStyle(rail.width), "--start": main.width + 1 } as CSSProperties}
+            className={cn("relative flex min-w-0 flex-col gap-4", RAIL_SIDE_CLASS[stackBelow])}
+          >
+            {rail.widgets.map((widget) => {
+              const isHeading = widget.type === "general.heading";
+              const nested = underHeadingRail && !isHeading;
+              if (isHeading) underHeadingRail = true;
+              const share = weight(widget);
+              const grow = share === null ? 0 : anyGrowsRail ? share : 1;
+              return renderCard(widget, grow, rail, nested, rowIndex);
+            })}
+            {renderColHandle(rail)}
+          </div>
 
-                <div
-                  key={`${main.id}-tail`}
-                  data-col-id={main.id}
-                  style={spanStyle(main.width)}
-                  className={cn("relative flex min-w-0 flex-col gap-4", RAIL_TAIL_CLASS[stackBelow])}
-                >
-                  {main.widgets.slice(1).map((widget) => {
-                    const isHeading = widget.type === "general.heading";
-                    const nested = underHeadingTail && !isHeading;
-                    if (isHeading) underHeadingTail = true;
-                    return renderCard(widget, 0, main, nested, rowIndex);
-                  })}
-                  {renderColHandle(main)}
-                </div>
+          <div
+            key={`${main.id}-tail`}
+            data-col-id={main.id}
+            style={spanStyle(main.width)}
+            className={cn("relative flex min-w-0 flex-col gap-4", RAIL_TAIL_CLASS[stackBelow])}
+          >
+            {main.widgets.slice(1).map((widget) => {
+              const isHeading = widget.type === "general.heading";
+              const nested = underHeadingTail && !isHeading;
+              if (isHeading) underHeadingTail = true;
+              return renderCard(widget, 0, main, nested, rowIndex);
+            })}
+            {renderColHandle(main)}
+          </div>
 
-                {interactive && free >= MIN_WIDTH ? (
-                  <button
-                    type="button"
-                    style={{ ...spanStyle(free), "--start": main.width + rail.width + 1 } as CSSProperties}
-                    onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
-                    className={cn(
-                      "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
-                      RAIL_FREE_CLASS[stackBelow],
-                    )}
-                  >
-                    <Plus aria-hidden className="size-4" />
-                    {t("slot.add")}
-                  </button>
-                ) : null}
-              </div>
-            );
-          }
+          {interactive && free >= MIN_WIDTH ? (
+            <button
+              type="button"
+              style={{ ...spanStyle(free), "--start": main.width + rail.width + 1 } as CSSProperties}
+              onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
+              className={cn(
+                "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                RAIL_FREE_CLASS[stackBelow],
+              )}
+            >
+              <Plus aria-hidden className="size-4" />
+              {t("slot.add")}
+            </button>
+          ) : null}
+        </div>
+      );
+    }
 
-          const rowGapClass =
-            stackedGap === 32
-              ? stackBelow === "xl"
-                ? "gap-x-4 gap-y-8 xl:gap-y-4"
-                : "gap-x-4 gap-y-8 lg:gap-y-4"
-              : "gap-4";
+    const rowGapClass =
+      stackedGap === 32
+        ? stackBelow === "xl"
+          ? "gap-x-4 gap-y-8 xl:gap-y-4"
+          : "gap-x-4 gap-y-8 lg:gap-y-4"
+        : "gap-4";
 
+    return (
+      <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1", rowGapClass, GRID_CLASS[stackBelow])}>
+        {row.columns.map((column) => {
+          let underHeading = false;
+          const anyGrows = column.widgets.some((widget) => (weight(widget) ?? 0) > 0);
           return (
-            <div key={row.id} data-row-id={row.id} className={cn("grid grid-cols-1", rowGapClass, GRID_CLASS[stackBelow])}>
-              {row.columns.map((column) => {
-                let underHeading = false;
-                const anyGrows = column.widgets.some((widget) => (weight(widget) ?? 0) > 0);
-                return (
-                  <div
-                    key={column.id}
-                    data-col-id={column.id}
-                    style={spanStyle(column.width)}
-                    className={cn("relative flex min-w-0 flex-col gap-4", SPAN_CLASS[stackBelow])}
-                  >
-                    {column.widgets.map((widget) => {
-                      const isHeading = widget.type === "general.heading";
-                      const nested = underHeading && !isHeading;
-                      if (isHeading) underHeading = true;
-                      const share = weight(widget);
-                      const grow = share === null ? 0 : anyGrows ? share : 1;
-                      return renderCard(widget, grow, column, nested, rowIndex);
-                    })}
-                    {renderColHandle(column)}
-                  </div>
-                );
+            <div
+              key={column.id}
+              data-col-id={column.id}
+              style={spanStyle(column.width)}
+              className={cn("relative flex min-w-0 flex-col gap-4", SPAN_CLASS[stackBelow])}
+            >
+              {column.widgets.map((widget) => {
+                const isHeading = widget.type === "general.heading";
+                const nested = underHeading && !isHeading;
+                if (isHeading) underHeading = true;
+                const share = weight(widget);
+                const grow = share === null ? 0 : anyGrows ? share : 1;
+                return renderCard(widget, grow, column, nested, rowIndex);
               })}
-
-              {interactive && free >= MIN_WIDTH ? (
-                <button
-                  type="button"
-                  style={spanStyle(free)}
-                  onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
-                  className={cn(
-                    "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
-                    SPAN_CLASS[stackBelow],
-                  )}
-                >
-                  <Plus aria-hidden className="size-4" />
-                  {t("slot.add")}
-                </button>
-              ) : null}
+              {renderColHandle(column)}
             </div>
           );
         })}
 
-        {shown.rows.length === 0 && !editing ? (
+        {interactive && free >= MIN_WIDTH ? (
+          <button
+            type="button"
+            style={spanStyle(free)}
+            onClick={() => openGallery({ kind: "column", rowId: row.id, beforeColumnId: null }, free)}
+            className={cn(
+              "flex min-h-24 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+              SPAN_CLASS[stackBelow],
+            )}
+          >
+            <Plus aria-hidden className="size-4" />
+            {t("slot.add")}
+          </button>
+        ) : null}
+      </div>
+    );
+  });
+
+  return (
+    <>
+      <div ref={boardRef} className={cn("relative space-y-4", editing && "pb-28", className)} data-editing={editing ? "" : undefined}>
+        {scopeSections ? (
+          <>
+            {shown.rows.length === 0 ? <WidgetScopeCards /> : null}
+            {(["stock", "general"] as const).map((scope) => {
+              const rows = shown.rows.filter((row) => rowScope(row, widgetMeta) === scope);
+              return (
+                <Fragment key={scope}>
+                  <h2 data-scope-heading={scope} className="border-b border-border pb-2 pt-3 text-[15px] font-semibold tracking-tight text-foreground">
+                    {t(`scope.${scope}`)}
+                  </h2>
+                  {renderRows(rows)}
+                  {editing || rows.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.setEditing(true);
+                        setGalleryScope(scope);
+                        setGallery({ open: true, target: null, width: null });
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-7 text-[13px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/[0.04] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      <Plus aria-hidden className="size-4" />
+                      {t(`scope.${scope}Add`)}
+                    </button>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </>
+        ) : renderRows(shown.rows)}
+
+        {!scopeSections && shown.rows.length === 0 && !editing ? (
           <div className="card-surface flex flex-col items-center gap-1.5 px-6 py-12 text-center">
             <Inbox aria-hidden className="size-5 text-muted-foreground" />
             <p className="text-[14px] font-medium text-foreground">{t("board.empty")}</p>
@@ -1155,7 +1162,14 @@ export function WidgetBoard({
           </div>
         ) : null}
 
-        {editing ? (
+        {!scopeSections && editing && shown.rows.length === 0 ? (
+          <WidgetScopeCards onPick={(scope) => {
+            setGalleryScope(scope);
+            setGallery({ open: true, target: null, width: null });
+          }} />
+        ) : null}
+
+        {!scopeSections && editing ? (
           <button
             type="button"
             onClick={() => openGallery()}
@@ -1173,7 +1187,7 @@ export function WidgetBoard({
         </p>
       </div>
 
-      {drag ? <DragGhost drag={drag} widget={findWidget(layout, drag.widgetId)?.widget} name={nameOf(findWidget(layout, drag.widgetId)?.widget)} /> : null}
+
 
       {editing ? <EditBar editor={editor} widgets={total} onAdd={() => openGallery()} hint={wide ? t("edit.hint") : t("edit.hintMobile")} /> : null}
 
@@ -1183,6 +1197,7 @@ export function WidgetBoard({
         onPick={pick}
         counts={counts}
         categories={galleryCategories}
+        initialScope={galleryScope}
       />
       <WidgetSettingsDialog
         widget={settingsWidget}
@@ -1211,23 +1226,6 @@ function DropIndicator({ hit, origin, label }: { hit: DropHit; origin: { left: n
           {label}
         </span>
       ) : null}
-    </div>
-  );
-}
-
-/** Follows the pointer during a drag: the widget's icon and name. */
-function DragGhost({ drag, widget, name }: { drag: DragView; widget: WidgetInstance | undefined; name: string }) {
-  const meta = widget ? widgetMeta(widget.type) : undefined;
-  const Icon = meta?.icon;
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none fixed left-0 top-0 z-[60] flex max-w-64 items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-[13px] font-medium text-popover-foreground shadow-[0_16px_40px_-12px_rgb(0_0_0/0.45)]"
-      // Beside the pointer, flipped to its left near the right edge of the window.
-      style={{ transform: `translate(${drag.x + 270 > window.innerWidth ? drag.x - 270 : drag.x + 14}px, ${drag.y + 14}px)` }}
-    >
-      {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
-      <span className="truncate">{name}</span>
     </div>
   );
 }

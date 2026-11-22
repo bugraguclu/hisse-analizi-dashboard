@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
@@ -14,6 +14,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TEMPLATES, type TemplateId } from "./defaults";
+import { widgetMeta } from "./catalog";
 import { EditLayoutButton } from "./EditBar";
 import { useWidgetI18n } from "./i18n";
 import type { WidgetKey } from "./i18n-dict";
@@ -22,6 +23,7 @@ import { MAX_PAGES, pageActions, useCustomPages, useHydrated, type CustomPage } 
 import { TickerPicker } from "./TickerPicker";
 import { useLayoutEditor } from "./use-layout-editor";
 import { WidgetBoard } from "./WidgetBoard";
+import { groupWidgetsByScope, pageStockUsage } from "./widget-scope";
 
 const PAGE_PARAM = "p";
 const EMPTY_LAYOUT: Layout = { rows: [] };
@@ -148,7 +150,7 @@ function StartOptions({ pages, onCreate, ticker }: { pages: readonly CustomPage[
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] font-semibold text-foreground">{label}</span>
-                  <span className="block text-xs text-muted-foreground">{t("pages.templateWidgets", { count: widgetCount(template.layout) })}</span>
+                  <span className="block text-xs text-muted-foreground">{t("pages.templateWidgets", { count: widgetCount(template.layout) })} · {t(pageStockUsage(template.layout, widgetMeta).stock > 0 ? "scope.stock" : "scope.general")}</span>
                 </span>
               </button>
             </li>
@@ -174,9 +176,11 @@ function Intro({ pages, onCreate }: { pages: readonly CustomPage[]; onCreate: Cr
 /** One custom page: tabs to the others, its stock, the board. */
 function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPage; pages: readonly CustomPage[]; onCreate: CreatePage; initialEditing: boolean }) {
   const { t } = useWidgetI18n();
-  const save = useCallback((layout: Layout | null) => pageActions.setLayout(page.id, layout ?? EMPTY_LAYOUT), [page.id]);
-  const editor = useLayoutEditor({ layout: page.layout, save, initialEditing });
+  const layout = useMemo(() => groupWidgetsByScope(page.layout, widgetMeta), [page.layout]);
+  const save = useCallback((next: Layout | null) => pageActions.setLayout(page.id, groupWidgetsByScope(next ?? EMPTY_LAYOUT, widgetMeta)), [page.id]);
+  const editor = useLayoutEditor({ layout, save, initialEditing });
   const [dialog, setDialog] = useState<"new" | "rename" | null>(null);
+  const stockUsage = pageStockUsage(editor.layout, widgetMeta);
 
   const remove = () => {
     const index = pages.findIndex((p) => p.id === page.id);
@@ -210,9 +214,11 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
         title={<span className="break-words">{page.name}</span>}
         actions={
           <>
-            <TickerPicker value={page.ticker} onChange={(ticker) => pageActions.setTicker(page.id, ticker)} label={t("pages.changeStock")}>
-              <span className="text-muted-foreground">{t("pages.stock")}</span>
-            </TickerPicker>
+            {stockUsage.followingPage > 0 ? (
+              <TickerPicker value={page.ticker} onChange={(ticker) => pageActions.setTicker(page.id, ticker)} label={t("pages.changeStock")}>
+                <span className="text-muted-foreground">{t("pages.stock")}</span>
+              </TickerPicker>
+            ) : null}
             <EditLayoutButton editor={editor} />
             <Menu.Root>
               <Menu.Trigger aria-label={t("pages.menu")} title={t("pages.menu")} className={cn(buttonVariants({ variant: "outline", size: "md" }), "w-8 px-0")}>
@@ -243,13 +249,10 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
       />
 
       <PageTabs pages={pages} active={page.id} onNew={() => setDialog("new")} />
+      {stockUsage.followingPage > 0 ? <p className="mt-3 text-xs text-muted-foreground">{t("pages.stockHint")}</p> : null}
 
       <div className="mt-6">
-        {widgetCount(page.layout) === 0 && !editor.editing ? (
-          <EmptyPage onStart={() => editor.setEditing(true)} />
-        ) : (
-          <WidgetBoard editor={editor} context={{ ticker: page.ticker, tickerOverrides: true }} galleryCategories={["stock", "market", "macro", "general"]} />
-        )}
+        <WidgetBoard editor={editor} context={{ ticker: page.ticker, tickerOverrides: true }} galleryCategories={["stock", "market", "macro", "general"]} scopeSections />
       </div>
       <p className="mt-10 text-xs text-muted-foreground">{t("pages.storageNote")}</p>
 
@@ -317,23 +320,6 @@ function PageTabs({ pages, active, onNew }: { pages: readonly CustomPage[]; acti
         </li>
       </ul>
     </nav>
-  );
-}
-
-function EmptyPage({ onStart }: { onStart: () => void }) {
-  const { t } = useWidgetI18n();
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border px-6 py-16 text-center">
-      <span aria-hidden className="flex size-11 items-center justify-center rounded-lg bg-muted text-foreground">
-        <SquarePlus className="size-5" />
-      </span>
-      <p className="text-[15px] font-semibold text-foreground">{t("board.empty")}</p>
-      <p className="max-w-md text-[13px] text-muted-foreground">{t("board.emptyHint")}</p>
-      <Button onClick={onStart} className="mt-2">
-        <Plus aria-hidden />
-        {t("edit.add")}
-      </Button>
-    </div>
   );
 }
 
