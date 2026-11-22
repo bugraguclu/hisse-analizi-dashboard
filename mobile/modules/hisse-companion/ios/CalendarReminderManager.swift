@@ -87,7 +87,11 @@ final class CalendarReminderManager: NSObject {
 
         let pending = await center.pendingNotificationRequests()
         var existingOwned: [String: Date] = [:]
+        var existingContent: [String: String] = [:]
         for request in pending where Self.isOwned(request.content.userInfo) {
+            if let fingerprint = request.content.userInfo["fingerprint"] as? String {
+                existingContent[request.identifier] = fingerprint
+            }
             if let trigger = request.trigger as? UNCalendarNotificationTrigger,
                let nextDate = trigger.nextTriggerDate() {
                 existingOwned[request.identifier] = nextDate
@@ -105,7 +109,11 @@ final class CalendarReminderManager: NSObject {
         }
 
         let desired = CalendarReminderPlanner.plan(events: events, preferences: preferences)
-        let diff = CalendarReminderPlanner.reconcile(existing: existingOwned, desired: desired)
+        let diff = CalendarReminderPlanner.reconcile(
+            existing: existingOwned,
+            desired: desired,
+            existingContent: existingContent
+        )
 
         if !diff.toCancel.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: diff.toCancel)
@@ -123,8 +131,9 @@ final class CalendarReminderManager: NSObject {
                 "kind": CalendarReminderPlanner.ownedKind,
                 "eventId": item.eventId,
                 "eventKind": item.eventKind.rawValue,
-                "deepLink": item.deepLink,
+                "deepLink": item.notificationDeepLink,
                 "ticker": item.ticker ?? "",
+                "fingerprint": item.contentFingerprint,
             ]
             var comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: item.fireDate)
             comps.timeZone = MarketFormat.istanbulTimeZone

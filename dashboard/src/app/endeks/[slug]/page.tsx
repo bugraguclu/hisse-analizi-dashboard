@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { IndexDetailView } from "@/components/discovery/IndexDetailView";
 import { JsonLd } from "@/components/shared/JsonLd";
+import { getAtlasConcept } from "@/lib/atlas";
 import { DISCOVERY_INDICES, indexPageHref, resolveIndexSlug } from "@/lib/discovery";
 import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
 import { breadcrumbList, collectionPage, siteOrigin } from "@/lib/schema";
@@ -55,7 +56,7 @@ export default async function EndeksDetailPage({ params }: Props) {
       locale,
       items: [
         { name: `${entry.name[locale]} — ${t("nav.screening", locale)}`, path: `/tarama?idx=${entry.code}` },
-        ...entry.relatedAtlasSlugs.map((atlasSlug) => ({ name: atlasSlug, path: `/atlas/${atlasSlug}` })),
+        ...entry.relatedAtlasSlugs.map((atlasSlug) => ({ name: getAtlasConcept(atlasSlug)?.title[locale] ?? atlasSlug, path: `/atlas/${atlasSlug}` })),
       ],
     }),
     breadcrumbList(origin, [

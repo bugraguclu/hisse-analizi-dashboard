@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { SectorDetailView } from "@/components/discovery/SectorDetailView";
 import { JsonLd } from "@/components/shared/JsonLd";
+import { getAtlasConcept } from "@/lib/atlas";
 import {
   allCanonicalSectorKeys,
   resolveSectorSlug,
@@ -64,7 +65,7 @@ export default async function SektorDetailPage({ params }: Props) {
       locale,
       items: [
         { name: `${name} — ${t("nav.screening", locale)}`, path: sectorHref(key, "fundamentals") },
-        ...sectorRelatedAtlasSlugs(key).map((atlasSlug) => ({ name: atlasSlug, path: `/atlas/${atlasSlug}` })),
+        ...sectorRelatedAtlasSlugs(key).map((atlasSlug) => ({ name: getAtlasConcept(atlasSlug)?.title[locale] ?? atlasSlug, path: `/atlas/${atlasSlug}` })),
       ],
     }),
     breadcrumbList(origin, [

@@ -18,6 +18,8 @@ export default function EventsScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const [severity, setSeverity] = useState(params.severity ?? "");
+  // A deep link that arrives while this tab is already open replaces the params in place.
+  useEffect(() => setSeverity(params.severity ?? ""), [params.severity]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [items, setItems] = useState<EventItemPayload[]>([]);
 

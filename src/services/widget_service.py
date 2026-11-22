@@ -194,7 +194,7 @@ async def _safe_quotes(symbols: tuple[str, ...]) -> tuple[dict[str, dict[str, An
     if not symbols:
         return {}, False, DEFAULT_DELAY_SECONDS, None
     try:
-        result = await market_service.get_quotes(symbols)
+        result = await asyncio.wait_for(market_service.get_quotes(symbols), timeout=6.0)
         meta = result.meta
         return (
             result.quotes,

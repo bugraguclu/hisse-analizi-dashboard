@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import timedelta
+from datetime import UTC, timedelta
 from typing import Annotated
 
 import structlog
@@ -48,6 +48,7 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 _OWNER_KEY_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 _PAIR_RATE_LIMIT = "20/minute"
 _CODE_RATE_LIMIT = "20/minute"
+_TOUCH_INTERVAL = timedelta(minutes=5)
 
 _INVALID_CODE_DETAIL = "Kod geçersiz ya da süresi dolmuş. Web uygulamasından yeni kod oluştur."
 _UNPAIRED_DETAIL = "Widget bağlantısı kaldırılmış. iPhone'da yeniden bağlan."
@@ -70,21 +71,23 @@ def require_widget_owner(
 OwnerHash = Annotated[str, Depends(require_widget_owner)]
 
 
-async def require_paired_device(
-    db: DB,
-    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
-) -> WidgetDevice:
-    """Authenticate an iOS widget/companion request by its read-only bearer token."""
-    raw = (authorization or "").strip()
-    token = raw[7:].strip() if raw.startswith("Bearer ") else ""
-    device = await WidgetRepository(db).get_device_by_token_hash(digest(token)) if token else None
-    if device is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_UNPAIRED_DETAIL,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return device
+def _bearer_token(authorization: str | None) -> str:
+    """Return the bearer credential; the auth scheme is case-insensitive (RFC 7235)."""
+    scheme, _, credentials = (authorization or "").strip().partition(" ")
+    return credentials.strip() if scheme.lower() == "bearer" else ""
+
+
+async def _paired_device(repo: WidgetRepository, authorization: str | None) -> WidgetDevice | None:
+    token = _bearer_token(authorization)
+    return await repo.get_device_by_token_hash(digest(token)) if token else None
+
+
+def _unpaired_response() -> JSONResponse:
+    return JSONResponse(
+        {"detail": _UNPAIRED_DETAIL, "code": "widget_unpaired"},
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 @widget_router.get("/devices", response_model=WidgetDevicesListOut)
@@ -225,20 +228,20 @@ async def widget_summary(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ):
     """Read-only BIST 100, paired watchlist quotes, and upcoming financial events for iOS widgets."""
-    raw = (authorization or "").strip()
-    token = raw[7:].strip() if raw.startswith("Bearer ") else ""
     repo = WidgetRepository(db)
-    device = await repo.get_device_by_token_hash(digest(token)) if token else None
+    device = await _paired_device(repo, authorization)
     if device is None:
-        return JSONResponse(
-            {"detail": _UNPAIRED_DETAIL, "code": "widget_unpaired"},
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return _unpaired_response()
 
     now = utcnow()
-    await repo.touch_device(device.id, now)
-    await db.commit()
+    # Widgets refresh often; record "last seen" at most every few minutes instead of
+    # writing to the database on every request.
+    last_seen = device.last_seen_at
+    if last_seen is not None and last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=UTC)
+    if last_seen is None or now - last_seen >= _TOUCH_INTERVAL:
+        await repo.touch_device(device.id, now)
+        await db.commit()
     return await build_widget_summary(db, device)
 
 
@@ -251,16 +254,10 @@ async def unpair_from_phone(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ):
     """Allow a paired iPhone to revoke its own read-only token."""
-    raw = (authorization or "").strip()
-    token = raw[7:].strip() if raw.startswith("Bearer ") else ""
     repo = WidgetRepository(db)
-    device = await repo.get_device_by_token_hash(digest(token)) if token else None
+    device = await _paired_device(repo, authorization)
     if device is None:
-        return JSONResponse(
-            {"detail": _UNPAIRED_DETAIL, "code": "widget_unpaired"},
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return _unpaired_response()
     await repo.delete_device_by_id(device.id)
     await db.commit()
     logger.info("widget_device_revoked", device_id=str(device.id), by="phone")

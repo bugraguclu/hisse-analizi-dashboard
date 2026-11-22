@@ -79,8 +79,18 @@ private final class CompanionService {
         busy = true
     }
 
-    func pair(server: String, code: String) async throws -> String {
+    /// Pairing is user-initiated (often straight from a QR scan, while the foreground refresh
+    /// is still running), so wait for the in-flight operation instead of failing immediately.
+    private func beginWaiting(timeout: TimeInterval = 15) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while busy && Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
         try begin()
+    }
+
+    func pair(server: String, code: String) async throws -> String {
+        try await beginWaiting()
         defer { busy = false }
         guard let url = URL(string: server), url.scheme == "https", url.host != nil,
               url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else {

@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, or_, select, update
+from sqlalchemy import CursorResult, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Company, Dividend, ExpectedDisclosure, WidgetDevice, WidgetPairing
@@ -16,6 +16,10 @@ from src.db.models import Company, Dividend, ExpectedDisclosure, WidgetDevice, W
 class WidgetRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    def _is_postgres(self) -> bool:
+        bind = self.db.get_bind()
+        return bind is not None and bind.dialect.name == "postgresql"
 
     async def replace_pairing(
         self,
@@ -30,6 +34,12 @@ class WidgetRepository:
         expires_at: datetime,
     ) -> WidgetPairing:
         """Keep at most one active pairing code per workspace owner and purge expired codes."""
+        if self._is_postgres():
+            # Serialize code creation per owner so two concurrent requests cannot both
+            # survive the delete below and leave two valid codes.
+            await self.db.execute(
+                select(func.pg_advisory_xact_lock(func.hashtext("widget_pairing:" + owner_hash)))
+            )
         await self.db.execute(
             delete(WidgetPairing).where(
                 or_(WidgetPairing.owner_hash == owner_hash, WidgetPairing.expires_at <= now)
@@ -65,8 +75,7 @@ class WidgetRepository:
             WidgetPairing.code_hash == code_hash,
             WidgetPairing.expires_at > now,
         )
-        bind = self.db.get_bind()
-        if bind is not None and bind.dialect.name == "postgresql":
+        if self._is_postgres():
             stmt = stmt.with_for_update()
 
         pairing = (await self.db.execute(stmt)).scalar_one_or_none()
@@ -140,7 +149,10 @@ class WidgetRepository:
 
     async def touch_device(self, device_id: uuid.UUID, seen_at: datetime) -> None:
         await self.db.execute(
-            update(WidgetDevice).where(WidgetDevice.id == device_id).values(last_seen_at=seen_at)
+            update(WidgetDevice)
+            .where(WidgetDevice.id == device_id)
+            # Keep updated_at meaning "settings changed", not "widget refreshed".
+            .values(last_seen_at=seen_at, updated_at=WidgetDevice.updated_at)
         )
 
     async def delete_device_by_id(self, device_id: uuid.UUID) -> bool:

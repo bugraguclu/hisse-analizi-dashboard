@@ -102,6 +102,13 @@ export function useSheetDismiss(
         if (/auto|scroll/.test(style.overflowY) && node.scrollTop > 1) return false;
         if (/auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1) return false;
       }
+      // The sheet may sit inside its own scroll container (e.g. the mobile search overlay).
+      // If that container is scrolled down, a downward drag means "scroll back up", not "dismiss".
+      const boundary = element.closest('dialog, [role="dialog"]');
+      for (let node = element.parentElement; node; node = node.parentElement) {
+        if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollTop > 1) return false;
+        if (node === boundary) break;
+      }
       return true;
     };
 

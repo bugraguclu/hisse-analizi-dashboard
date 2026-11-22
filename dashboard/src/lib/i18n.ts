@@ -377,6 +377,7 @@ const translations = {
   "workspace.restoredToast": { tr: "Çalışma alanı geri yüklendi.", en: "Workspace restored.", fr: "Espace de travail restauré." },
   "workspace.undoRestore": { tr: "Önceki duruma dön", en: "Undo restore", fr: "Annuler la restauration" },
   "workspace.undoneToast": { tr: "Önceki çalışma alanına geri dönüldü.", en: "Reverted to previous workspace.", fr: "Retour à l'espace précédent effectué." },
+  "workspace.localActionFailed": { tr: "Tarayıcı depolamasına erişilemedi; işlem yapılamadı.", en: "Browser storage is unavailable; the action could not be completed.", fr: "Le stockage du navigateur est indisponible ; l'action n'a pas pu être effectuée." },
   "workspace.restoreFailed": { tr: "Geri yükleme tamamlanamadı; önceki ayarlarınız korundu.", en: "Restore could not complete; your previous settings were preserved.", fr: "Restauration impossible ; vos paramètres précédents ont été conservés." },
   "workspace.historyTitle": { tr: "Geri Dönüş Kopyaları ve Yerel Yedekler", en: "Rollback Copies & Local Restore Points", fr: "Copies de retour et points locaux" },
   "workspace.historyEmpty": { tr: "Henüz yerel geri dönüş noktası yok. Geri yükleme yaptığınızda önceki durumunuz burada otomatik saklanır.", en: "No local restore points yet. Your previous state is automatically saved here whenever you restore.", fr: "Aucun point local. Votre état précédent est enregistré ici automatiquement lors d'une restauration." },

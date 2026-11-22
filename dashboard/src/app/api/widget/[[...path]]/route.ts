@@ -149,6 +149,11 @@ async function proxyWidget(request: NextRequest, context: RouteContext): Promise
       cache: "no-store",
       signal: controller.signal,
     });
+    if (upstream.status >= 300 && upstream.status < 400 && upstream.status !== 304) {
+      // Never forward a Location header that points at the internal API host.
+      cleanup();
+      return jsonError(502, "Backend servisi beklenmeyen bir yönlendirme döndürdü.", "upstream_redirect");
+    }
     const responseHeaders = new Headers(upstream.headers);
     for (const name of DROPPED_RESPONSE_HEADERS) responseHeaders.delete(name);
     responseHeaders.set("cache-control", "no-store");

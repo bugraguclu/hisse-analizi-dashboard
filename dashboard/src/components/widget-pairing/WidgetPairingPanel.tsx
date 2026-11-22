@@ -80,6 +80,7 @@ export function WidgetPairingPanel() {
   const [copyStatusText, setCopyStatusText] = useState("");
   const copyTimerRef = useRef<number | null>(null);
   const lastAnnouncementRef = useRef("");
+  const knownDeviceIdsRef = useRef<Set<string> | null>(null);
   const codeElementId = useId();
 
   useEffect(() => {
@@ -101,28 +102,40 @@ export function WidgetPairingPanel() {
     loadDevices(controller.signal).catch((err: unknown) => {
       if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("common.loadError"));
+      // Show an empty list instead of a "Loading" line that never ends.
+      setDevices((current) => current ?? []);
     });
     return () => controller.abort();
   }, [loadDevices, t]);
 
   // Poll every 3 seconds while a pairing code is active so we notice the iPhone connecting.
+  // The baseline of already-known devices is captured when the code is created (see
+  // handleCreateCode), so a phone that pairs before the first tick is still noticed.
   useEffect(() => {
     if (!pairing || expired) return;
-    let known: Set<string> | null = devices ? new Set(devices.map((d) => d.id)) : null;
+    const controller = new AbortController();
+    let inFlight = false;
 
     const pollId = window.setInterval(async () => {
       setNowMs(Date.now());
+      if (inFlight) return; // Slow network: never stack requests.
+      inFlight = true;
       try {
-        const next = await listWidgetDevices();
+        const next = await listWidgetDevices(controller.signal);
+        if (controller.signal.aborted) return;
+        const known = knownDeviceIdsRef.current;
         if (!known) {
-          known = new Set(next.map((d) => d.id));
-        } else if (next.some((d) => !known!.has(d.id))) {
+          knownDeviceIdsRef.current = new Set(next.map((d) => d.id));
+        } else if (next.some((d) => !known.has(d.id))) {
+          knownDeviceIdsRef.current = new Set(next.map((d) => d.id));
           setDevices(next);
           setPairing(null);
           toast.success(t("widgetPairing.pairedToast"));
         }
       } catch {
         // Retry on next tick
+      } finally {
+        inFlight = false;
       }
     }, 3000);
 
@@ -130,10 +143,11 @@ export function WidgetPairingPanel() {
     const expireTimer = window.setTimeout(() => setNowMs(Date.now()), remainingMs);
 
     return () => {
+      controller.abort();
       window.clearInterval(pollId);
       window.clearTimeout(expireTimer);
     };
-  }, [pairing, expired, devices, t]);
+  }, [pairing, expired, t]);
 
   useEffect(() => {
     return () => {
@@ -145,6 +159,10 @@ export function WidgetPairingPanel() {
     setBusy("code");
     setError("");
     try {
+      // Snapshot the devices that exist *before* the code, so the poll can tell which one is new.
+      const baseline = await listWidgetDevices().catch(() => devices);
+      if (baseline) setDevices(baseline);
+      knownDeviceIdsRef.current = baseline ? new Set(baseline.map((d) => d.id)) : null;
       const created = await createPairingCode({
         watchlist_id: selectedList.id,
         watchlist_name: selectedListName,

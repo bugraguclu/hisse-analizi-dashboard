@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: absUrl(origin, "/makro"), changeFrequency: "daily", priority: 0.8 },
     { url: absUrl(origin, "/events"), changeFrequency: "hourly", priority: 0.8 },
     { url: absUrl(origin, "/atlas"), changeFrequency: "weekly", priority: 0.85 },
+    { url: absUrl(origin, "/rehber"), changeFrequency: "monthly", priority: 0.6 },
     { url: absUrl(origin, "/endeks"), changeFrequency: "daily", priority: 0.85 },
     { url: absUrl(origin, "/sektor"), changeFrequency: "daily", priority: 0.85 },
   ];

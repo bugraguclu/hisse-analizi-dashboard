@@ -1,9 +1,9 @@
 """Transactional request deduplication. Callers commit the receipt and business write together."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,21 @@ class IdempotencyRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    async def _purge_expired(self, now: datetime) -> None:
+        expired = IdempotencyReceipt.expires_at <= now
+        bind = self.db.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            # Skip rows another in-flight request is already purging, so unrelated keys do
+            # not queue behind each other's transactions (or deadlock on the same rows).
+            victims = (
+                select(IdempotencyReceipt.scope, IdempotencyReceipt.request_id)
+                .where(expired)
+                .limit(500)
+                .with_for_update(skip_locked=True)
+            )
+            expired = tuple_(IdempotencyReceipt.scope, IdempotencyReceipt.request_id).in_(victims)
+        await self.db.execute(delete(IdempotencyReceipt).where(expired))
+
     async def claim(self, scope: str, request_id: str, payload: Any) -> dict[str, Any] | None:
         """Return a previous response, or reserve the key until this transaction commits/rolls back.
 
@@ -23,7 +38,7 @@ class IdempotencyRepository:
         one owns the write. Failed writes roll back the reservation too.
         """
         now = utcnow()
-        await self.db.execute(delete(IdempotencyReceipt).where(IdempotencyReceipt.expires_at <= now))
+        await self._purge_expired(now)
         digest = canonical_payload_hash(payload)
         stmt = insert(IdempotencyReceipt).values(
             scope=scope,

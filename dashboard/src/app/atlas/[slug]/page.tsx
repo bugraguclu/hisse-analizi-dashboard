@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { AtlasConceptView } from "@/components/atlas/AtlasConceptView";
 import { JsonLd } from "@/components/shared/JsonLd";
 import { ATLAS_CONCEPTS, atlasHref, getAtlasConcept } from "@/lib/atlas";
@@ -43,7 +43,7 @@ export default async function AtlasConceptPage({ params }: Props) {
   const { slug } = await params;
   const concept = getAtlasConcept(slug);
   if (!concept) notFound();
-  if (slug !== concept.slug) redirect(atlasHref(concept.slug));
+  if (slug !== concept.slug) permanentRedirect(atlasHref(concept.slug));
 
   const locale = await requestLocale();
   const origin = siteOrigin();

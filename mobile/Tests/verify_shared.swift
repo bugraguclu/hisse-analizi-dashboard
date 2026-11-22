@@ -68,6 +68,21 @@ enum SharedTests {
         expect(diff.toSchedule.contains(where: { $0.identifier == ev1Id }), "Shifted event must be rescheduled")
         expect(diff.toSchedule.count == 2, "Should schedule shifted ev-1 and new ev-2")
 
+        let sameTime: [String: Date] = [ev1Id: planned[0].fireDate]
+        let renamed = CalendarReminderPlanner.reconcile(
+            existing: sameTime,
+            desired: [planned[0]],
+            existingContent: [ev1Id: "old title"]
+        )
+        expect(renamed.toCancel == [ev1Id] && renamed.toSchedule.count == 1, "Changed text must replace the pending reminder")
+        let unchanged = CalendarReminderPlanner.reconcile(
+            existing: sameTime,
+            desired: [planned[0]],
+            existingContent: [ev1Id: planned[0].contentFingerprint]
+        )
+        expect(unchanged.toCancel.isEmpty && unchanged.toSchedule.isEmpty, "Unchanged reminder must be left alone")
+        expect(planned[0].notificationDeepLink.contains("source=notification"), "Reminder links must be tagged as notifications")
+
         let ppkDate = ISO8601DateFormatter().date(from: "2026-11-26T14:00:00+03:00")!
         let fire = ReminderLeadTime.dayBeforeMorning.fireDate(for: ppkDate)
         var cal = Calendar(identifier: .gregorian)

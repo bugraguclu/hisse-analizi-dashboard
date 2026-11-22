@@ -361,6 +361,8 @@ export function SectorDetailView({ sectorKey }: { sectorKey: string }) {
               <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
+        ) : universeQ.isError ? (
+          <ErrorState message={universeQ.error.message} onRetry={() => void universeQ.refetch()} />
         ) : companies.length === 0 ? (
           <div className="card-surface p-6 text-sm text-muted-foreground">{copy.noCompanies}</div>
         ) : (

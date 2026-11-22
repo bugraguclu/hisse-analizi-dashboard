@@ -52,11 +52,12 @@ let memoryOwnerKey: string | null = null;
 
 function randomOwnerKey(): string {
   const bytes = new Uint8Array(24);
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  // This key is the only credential for managing paired devices, so never fall back to
+  // Math.random: without a secure random source we would rather fail than issue a guessable key.
+  if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
+    throw new Error("Secure random source unavailable");
   }
+  crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 

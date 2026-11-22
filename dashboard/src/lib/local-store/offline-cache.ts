@@ -312,6 +312,14 @@ function notifyOfflineChange(): void {
   window.dispatchEvent(new Event(OFFLINE_SUMMARY_EVENT));
 }
 
+// IndexedDB writes are fire-and-forget. Run them one after another so a "clear" can never be
+// overtaken by a mirror write that started earlier (which would resurrect the cleared cache
+// on the next startup).
+let idbQueue: Promise<unknown> = Promise.resolve();
+function queueIdb(task: () => Promise<unknown>): void {
+  idbQueue = idbQueue.then(task, task).catch(() => undefined);
+}
+
 function writeSummary(storage: StorageAdapter, summary: OfflineMarketSummary, mirrorToIdb: boolean): void {
   try {
     storage.setItem(OFFLINE_SUMMARY_STORAGE_KEY, JSON.stringify(summary));
@@ -328,7 +336,7 @@ function writeSummary(storage: StorageAdapter, summary: OfflineMarketSummary, mi
     }
   }
   if (mirrorToIdb) {
-    void writeIdbOfflineSnapshot(IDB_SNAPSHOT_KEY, summary);
+    queueIdb(() => writeIdbOfflineSnapshot(IDB_SNAPSHOT_KEY, summary));
   }
   notifyOfflineChange();
 }
@@ -350,7 +358,7 @@ export function clearOfflineSummary(storage?: StorageAdapter | null): void {
   const s = storage === undefined ? createBrowserStorage() : storage;
   if (s) s.removeItem(OFFLINE_SUMMARY_STORAGE_KEY);
   if (storage === undefined) {
-    void clearIdbOfflineSnapshot(IDB_SNAPSHOT_KEY);
+    queueIdb(() => clearIdbOfflineSnapshot(IDB_SNAPSHOT_KEY));
   }
   notifyOfflineChange();
 }

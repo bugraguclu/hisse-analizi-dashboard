@@ -61,6 +61,20 @@ struct PlannedReminder: Equatable, Sendable {
     let fireDate: Date
     let deepLink: String
     let ticker: String?
+
+    /// Visible content of the notification; a change means the pending one must be replaced.
+    var contentFingerprint: String { [title, body, deepLink].joined(separator: "\u{1F}") }
+
+    /// Deep link tagged as coming from a reminder, so a cold start opens Markets underneath.
+    var notificationDeepLink: String {
+        guard var components = URLComponents(string: deepLink) else { return deepLink }
+        var items = components.queryItems ?? []
+        if !items.contains(where: { $0.name == "source" }) {
+            items.append(URLQueryItem(name: "source", value: "notification"))
+        }
+        components.queryItems = items
+        return components.string ?? deepLink
+    }
 }
 
 struct ReminderDiff: Equatable, Sendable {
@@ -126,10 +140,12 @@ enum CalendarReminderPlanner {
     }
 
     /// Reconciles currently scheduled owned notifications against the new plan.
-    /// Any removed event OR any event whose fire date shifted is cancelled and rescheduled cleanly.
+    /// Any removed event, any event whose fire date shifted, or whose text/link changed
+    /// (when `existingContent` is known) is cancelled and rescheduled cleanly.
     static func reconcile(
         existing: [String: Date],
-        desired: [PlannedReminder]
+        desired: [PlannedReminder],
+        existingContent: [String: String] = [:]
     ) -> ReminderDiff {
         let desiredById = Dictionary(uniqueKeysWithValues: desired.map { ($0.identifier, $0) })
         var toCancel: [String] = []
@@ -141,7 +157,8 @@ enum CalendarReminderPlanner {
                 continue
             }
             // If event date or lead time moved by >= 60 seconds, cancel and reschedule.
-            if abs(target.fireDate.timeIntervalSince(scheduledDate)) >= 60 {
+            let contentChanged = existingContent[id].map { $0 != target.contentFingerprint } ?? false
+            if abs(target.fireDate.timeIntervalSince(scheduledDate)) >= 60 || contentChanged {
                 toCancel.append(id)
                 toSchedule.append(target)
             }

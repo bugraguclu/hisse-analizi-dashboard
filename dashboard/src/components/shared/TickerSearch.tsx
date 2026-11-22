@@ -241,8 +241,13 @@ export function TickerSearch({
     if (serverCurrent) {
       for (const item of serverItems) append(item);
     }
+    const primaryCount = merged.length;
     for (const item of exploreRows) append(item);
-    return merged.slice(0, MAX_RESULTS);
+    // Reserve room for index/sector/Atlas rows: a common word like "enerji" or "banka" matches
+    // a dozen company names and would otherwise push the matching sector page out of the list.
+    const explore = merged.slice(primaryCount);
+    const primary = merged.slice(0, Math.min(primaryCount, Math.max(0, MAX_RESULTS - explore.length)));
+    return [...primary, ...explore];
   }, [hasQuery, unified, localUnified, serverCurrent, serverItems, exploreRows]);
 
   const rows: SearchRow[] = hasQuery ? results : [...popularStocks, ...quickAccess];

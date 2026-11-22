@@ -216,6 +216,9 @@ export function WorkspaceBackupDialog() {
       await createLocalRestorePoint({ appVersion: "1.1.0" });
       await refreshLocalMeta();
       toast.success(t("workspace.localPointSaved"));
+    } catch {
+      // e.g. Safari private mode or storage blocked by policy.
+      toast.error(t("workspace.localActionFailed"));
     } finally {
       setBusy(false);
     }
@@ -340,17 +343,25 @@ export function WorkspaceBackupDialog() {
   );
 
   const handleDownloadHistory = useCallback(async (id: string) => {
-    const record = await readRestorePoint(id);
-    if (!record) return;
-    downloadJsonFile(record.contents, record.name.endsWith(".json") ? record.name : `${record.name}.json`);
-  }, []);
+    try {
+      const record = await readRestorePoint(id);
+      if (!record) return;
+      downloadJsonFile(record.contents, record.name.endsWith(".json") ? record.name : `${record.name}.json`);
+    } catch {
+      toast.error(t("workspace.localActionFailed"));
+    }
+  }, [t]);
 
   const handleDeleteHistory = useCallback(
     async (id: string) => {
-      await deleteRestorePoint(id);
-      await refreshLocalMeta();
+      try {
+        await deleteRestorePoint(id);
+        await refreshLocalMeta();
+      } catch {
+        toast.error(t("workspace.localActionFailed"));
+      }
     },
-    [refreshLocalMeta],
+    [refreshLocalMeta, t],
   );
 
   const handleRefreshOnline = useCallback(() => {

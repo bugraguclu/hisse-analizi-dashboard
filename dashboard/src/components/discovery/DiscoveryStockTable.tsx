@@ -64,9 +64,15 @@ const COPY: Record<
     showing: (shown: number, total: number) => string;
     empty: string;
     showAll: (n: number) => string;
+    sortLabel: string;
+    asc: string;
+    desc: string;
   }
 > = {
   tr: {
+    sortLabel: "Sırala",
+    asc: "artan",
+    desc: "azalan",
     stockCol: "Hisse",
     medianRow: "Grup medyanı",
     loss: "Zararda",
@@ -78,6 +84,9 @@ const COPY: Record<
     showAll: (n) => `Tüm ${n} hisseyi göster`,
   },
   en: {
+    sortLabel: "Sort by",
+    asc: "ascending",
+    desc: "descending",
     stockCol: "Stock",
     medianRow: "Group median",
     loss: "Loss",
@@ -89,6 +98,9 @@ const COPY: Record<
     showAll: (n) => `Show all ${n} stocks`,
   },
   fr: {
+    sortLabel: "Trier par",
+    asc: "croissant",
+    desc: "décroissant",
     stockCol: "Action",
     medianRow: "Médiane du groupe",
     loss: "Déficitaire",
@@ -187,6 +199,30 @@ export function DiscoveryStockTable({
         </div>
       </div>
 
+      {/* On narrow screens the table becomes stacked cards and its header row (with the sort
+          buttons) is hidden, so offer the same sorting as a select. */}
+      <label className="flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+        <span>{copy.sortLabel}</span>
+        <select
+          value={`${sortKey}:${sortDir}`}
+          onChange={(event) => {
+            const [key, dir] = event.target.value.split(":") as [SortKey, SortDir];
+            setSortKey(key);
+            setSortDir(dir);
+          }}
+          className="h-8 flex-1 rounded-md border border-input bg-card px-2 text-xs text-foreground"
+        >
+          {[{ key: "symbol" as SortKey, label: copy.stockCol }, ...visibleCols.map((col) => ({ key: col.key as SortKey, label: col.label[locale] }))].flatMap(
+            (option) =>
+              (["desc", "asc"] as const).map((dir) => (
+                <option key={`${option.key}:${dir}`} value={`${option.key}:${dir}`}>
+                  {option.label} ({dir === "asc" ? copy.asc : copy.desc})
+                </option>
+              )),
+          )}
+        </select>
+      </label>
+
       <div
         tabIndex={0}
         role="region"
@@ -196,12 +232,13 @@ export function DiscoveryStockTable({
         {displayed.length === 0 ? (
           <p className="p-6 text-center text-sm text-muted-foreground">{copy.empty}</p>
         ) : (
-          <table className="discovery-table text-[13px]">
+          <table role="table" className="discovery-table text-[13px]">
             <caption className="sr-only">{caption}</caption>
-            <thead>
-              <tr className="bg-surface text-[11px] font-medium text-muted-foreground">
+            <thead role="rowgroup">
+              <tr role="row" className="bg-surface text-[11px] font-medium text-muted-foreground">
                 <th
                   scope="col"
+                      role="columnheader"
                   aria-sort={sortKey === "symbol" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                   className="sticky left-0 z-[3] border-b border-border bg-surface py-2.5 pl-4 pr-3 text-left"
                 >
@@ -221,6 +258,7 @@ export function DiscoveryStockTable({
                     <th
                       key={col.key}
                       scope="col"
+                      role="columnheader"
                       aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                       className="whitespace-nowrap border-b border-border bg-surface px-3 py-2.5 text-right"
                     >
@@ -245,11 +283,12 @@ export function DiscoveryStockTable({
                 })}
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {hasMedianRow && !query.trim() && (
-                <tr className="bg-surface/60 font-medium text-foreground">
+                <tr role="row" className="bg-surface/60 font-medium text-foreground">
                   <th
                     scope="row"
+                    role="rowheader"
                     className="border-b border-border bg-surface/95 py-2.5 pl-4 pr-3 text-left text-xs font-semibold text-foreground"
                   >
                     {copy.medianRow}
@@ -259,6 +298,7 @@ export function DiscoveryStockTable({
                     return (
                       <td
                         key={col.key}
+                        role="cell"
                         data-label={col.label[locale]}
                         className={cn(
                           "whitespace-nowrap border-b border-border px-3 py-2.5 text-right font-mono text-xs tabular-nums",
@@ -272,9 +312,10 @@ export function DiscoveryStockTable({
                 </tr>
               )}
               {displayed.map((row) => (
-                <tr key={row.symbol} className="group transition-colors hover:bg-surface/50">
+                <tr role="row" key={row.symbol} className="group transition-colors hover:bg-surface/50">
                   <th
                     scope="row"
+                    role="rowheader"
                     className="border-b border-border bg-card py-2.5 pl-4 pr-3 text-left font-normal transition-colors group-hover:bg-surface/80"
                   >
                     <Link
@@ -297,6 +338,7 @@ export function DiscoveryStockTable({
                     return (
                       <td
                         key={col.key}
+                        role="cell"
                         data-label={col.label[locale]}
                         className={cn(
                           "whitespace-nowrap border-b border-border px-3 py-2.5 text-right font-mono tabular-nums",
