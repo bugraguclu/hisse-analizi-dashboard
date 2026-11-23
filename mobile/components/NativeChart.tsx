@@ -682,9 +682,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    borderTopWidth: 1,
-    borderStyle: "dashed",
-    opacity: 0.75,
+    // iOS cannot dash a single border side (it warns and draws a solid line), so
+    // reference lines are thin solid rules, kept distinct from series by opacity.
+    borderTopWidth: StyleSheet.hairlineWidth * 2,
+    opacity: 0.6,
   },
   refLabel: {
     position: "absolute",

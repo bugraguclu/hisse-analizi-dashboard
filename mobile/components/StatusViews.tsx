@@ -231,7 +231,7 @@ export function MetricTile({
         {value || EMPTY_VALUE}
       </Text>
       {subValue ? (
-        <Text style={[styles.metricSub, { color: colors.textSecondary }]} numberOfLines={1}>
+        <Text style={[styles.metricSub, { color: colors.textSecondary }]} numberOfLines={2}>
           {subValue}
         </Text>
       ) : null}

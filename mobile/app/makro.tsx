@@ -929,14 +929,12 @@ export default function MakroScreen() {
                             subValue={
                               [
                                 formatIndicatorPeriod(ind.period, ind.frequency),
-                                ind.change !== null ? `Değ. ${formatIndicatorChange(ind)}` : null,
+                                ind.previous !== null ? `önc. ${formatIndicatorValue(ind, ind.previous)}` : null,
                               ]
                                 .filter((part) => part && part !== EMPTY_VALUE)
                                 .join(" · ") || null
                             }
-                            detail={
-                              ind.previous !== null ? `Önceki: ${formatIndicatorValue(ind, ind.previous)}` : null
-                            }
+                            detail={ind.change !== null ? `Değişim: ${formatIndicatorChange(ind)}` : null}
                           />
                         ))}
                       </View>

@@ -61,7 +61,9 @@ export function formatSignedPrice(value: number | null | undefined, decimals = 2
 
 export function formatPercent(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;
-  return `%${formatNumber(value, decimals)}`;
+  // Turkish writes the sign before the percent sign: "−%1,9", not "%−1,9".
+  const body = formatNumber(Math.abs(value), decimals);
+  return value < 0 && body !== formatNumber(0, decimals) ? `${MINUS_SIGN}%${body}` : `%${body}`;
 }
 
 export function formatSignedPercent(value: number | null | undefined, decimals = 2): string {

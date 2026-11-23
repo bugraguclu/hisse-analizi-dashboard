@@ -2,7 +2,8 @@
 
 Expo Router / React Native uygulaması Piyasa, Takip, Tarama ve Takvim sekmelerini içerir.
 Yerel başlangıç, bağlantı yönlendirmesi, kurtarma ekranı ve ortak alt panel bu sürümdedir.
-Tarama, Makro ve teknik ekranların kapsamı web sürümünden daha dardır.
+Tarama, Makro ve hisse analizi ekranları canlı API verisini kullanır; mum/hacim grafiği, çizim
+araçları ve CSV dışa aktarma yalnızca web sürümündedir.
 
 ## Geliştirme ve doğrulama
 

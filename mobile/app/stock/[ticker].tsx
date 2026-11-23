@@ -759,8 +759,11 @@ export default function StockDetailScreen() {
                 />
                 <MetricTile
                   label="F/K · PD/DD"
-                  value={`${formatNumber(overview.data?.ratios?.values.pe_ratio ?? overview.data?.fastInfo?.pe, 1)} · ${formatNumber(overview.data?.ratios?.values.pb_ratio ?? overview.data?.fastInfo?.pb, 2)}`}
-                  subValue={overview.data?.ratios?.mainPeriod?.label ?? null}
+                  // Market-data multiples first (same source as the quote and the scorecard, as on the web).
+                  value={`${formatNumber(overview.data?.fastInfo?.pe ?? overview.data?.ratios?.values.pe_ratio, 1)} · ${formatNumber(overview.data?.fastInfo?.pb ?? overview.data?.ratios?.values.pb_ratio, 2)}`}
+                  subValue={
+                    overview.data?.fastInfo?.pe != null ? "Piyasa verisi · son 12 ay" : overview.data?.ratios?.mainPeriod?.label ?? null
+                  }
                 />
               </View>
             </SectionCard>

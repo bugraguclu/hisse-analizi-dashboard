@@ -118,6 +118,9 @@ describe("formatting", () => {
       assert.equal(formatCompactMoney(value, "USD"), "—");
     }
     assert.equal(formatSignedPercent(-1.52), "−%1,52");
+    // Turkish puts the sign before "%"; a value that rounds to zero carries no sign.
+    assert.equal(formatPercent(-1.88, 1), "−%1,9");
+    assert.equal(formatPercent(-0.001, 2), "%0,00");
   });
 });
 

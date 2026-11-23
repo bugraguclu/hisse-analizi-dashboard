@@ -211,6 +211,8 @@ export default function TaramaScreen() {
   const breadth = useMemo(() => computeBreadth(filteredRows), [filteredRows]);
   const activeCount = useMemo(() => countActiveFilters(filters), [filters]);
   const displayMetrics = VIEW_METRICS[filters.view];
+  // 4 → one row of four, 5–6 → two rows of three, 7 → four + three: no lone cell on a line.
+  const metricWidth = displayMetrics.length === 5 || displayMetrics.length === 6 ? "33.333%" : "25%";
   const allRangeKeys = useMemo(() => RANGE_GROUPS.flatMap((group) => group.keys), []);
 
   const openFilterSheet = () => {
@@ -357,7 +359,7 @@ export default function TaramaScreen() {
             {displayMetrics.map((field) => {
               const sorted = filters.sort === field;
               return (
-                <View key={field} style={styles.metricCell}>
+                <View key={field} style={[styles.metricCell, { width: metricWidth }]}>
                   <Text
                     style={[styles.metricLabel, { color: sorted ? colors.accent : colors.textMuted }]}
                     numberOfLines={1}
@@ -396,7 +398,7 @@ export default function TaramaScreen() {
         </TouchableOpacity>
       );
     },
-    [colors, displayMetrics, filters.dir, filters.sort, filters.view, router, sectorLabelMap],
+    [colors, displayMetrics, metricWidth, filters.dir, filters.sort, filters.view, router, sectorLabelMap],
   );
 
   const listHeader = (
@@ -1209,8 +1211,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     rowGap: Spacing.sm,
   },
-  // Four columns per line: up to seven metrics fit in two rows on a phone.
-  metricCell: { width: "25%", paddingRight: Spacing.xs, gap: 1 },
+  // Width is set per view (three or four columns) so up to seven metrics fit in two rows.
+  metricCell: { paddingRight: Spacing.xs, gap: 1 },
   signalRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
   signalBadge: {
     paddingHorizontal: 6,
