@@ -15,6 +15,7 @@ from src.api.limiter import RATE_LIMIT_DETAIL, enforce_default_rate_limit, limit
 from src.api.middleware import INTERNAL_ERROR_DETAIL, REQUEST_ID_HEADER, RequestContextMiddleware
 from src.core.mutations import IDEMPOTENCY_KEY_HEADER, IDEMPOTENT_REPLAY_HEADER
 from src.api.routers import admin_router, router
+from src.api.routers_assistant import assistant_router
 from src.api.routers_data import router as data_router
 from src.api.routers_fundamentals import fundamentals_router
 from src.api.routers_macro import macro_router
@@ -130,6 +131,7 @@ app.include_router(market_router)
 app.include_router(news_router)
 app.include_router(data_router)
 app.include_router(sectors_router)
+app.include_router(assistant_router)
 
 
 @app.get("/", include_in_schema=False)
