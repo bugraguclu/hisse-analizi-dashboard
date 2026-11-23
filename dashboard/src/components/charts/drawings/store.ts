@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
 import { MAX_DRAWINGS, sanitizeDrawings } from "./model";
 import type { Drawing } from "./types";
 
@@ -72,11 +73,18 @@ function subscribe(onChange: () => void): () => void {
     else memory.delete(event.key);
     onChange();
   };
+  const onWorkspaceSync = () => {
+    memory.clear();
+    snapshotCache.clear();
+    onChange();
+  };
   listeners.add(onChange);
   window.addEventListener("storage", onStorage);
+  window.addEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   return () => {
     listeners.delete(onChange);
     window.removeEventListener("storage", onStorage);
+    window.removeEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   };
 }
 

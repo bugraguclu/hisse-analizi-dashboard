@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type Ref, type RefObject } from "react";
+import { SheetHandle, useSheetDismiss } from "@/components/ui/DismissibleSheet";
 import { useLocale } from "@/lib/locale-context";
 import { TickerSearch, type TickerSearchHandle } from "../TickerSearch";
 
@@ -93,18 +94,21 @@ export function SearchOverlay({
     stops[next].focus();
   }
 
+  useSheetDismiss(panelRef, () => closeRef.current());
+
   return (
     <div
       ref={overlayRef}
       id={id}
       role="dialog"
       aria-label={t("search.label")}
+      data-search-overlay=""
       onKeyDown={handleKeyDown}
       className="fixed inset-x-0 bottom-0 top-[var(--search-top,57px)] z-40 md:hidden"
     >
       <div aria-hidden="true" className="absolute inset-0 bg-black/40 dark:bg-black/60" />
       <div
-        className="relative h-full overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-8 pt-3"
+        className="relative h-full overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-2"
         onPointerDown={(event) => {
           pressedOutside.current = !panelRef.current?.contains(event.target as Node);
         }}
@@ -113,7 +117,11 @@ export function SearchOverlay({
           pressedOutside.current = false;
         }}
       >
-        <div ref={panelRef} className="mx-auto max-w-2xl">
+        <div
+          ref={panelRef}
+          className="mx-auto max-w-2xl rounded-xl border border-border/80 bg-background/95 px-2 pb-2 shadow-[0_18px_36px_-12px_rgb(0_0_0/0.25)] backdrop-blur-sm"
+        >
+          <SheetHandle onClose={() => closeRef.current()} label={t("shell.closeSearch")} className="py-1.5" />
           <TickerSearch ref={searchRef} variant="overlay" autoFocus onClose={() => closeRef.current()} />
         </div>
       </div>

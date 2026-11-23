@@ -11,6 +11,7 @@ import { STALE_TIME } from "@/lib/queryClient";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { categoryKeys, severityKeys, toCategoryKey, toSeverity, type SeverityKey } from "@/components/shared/SeverityBadge";
 import { cn } from "@/lib/utils";
+import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
 import { useNow } from "@/hooks/use-now";
 import type { EventOut } from "@/types";
 import { usePanel } from "@/components/workspace/panel";
@@ -34,6 +35,8 @@ function eventTime(event: EventOut): Date | null {
 export function LatestEventsCard({ className }: { className?: string }) {
   const { t } = useLocale();
   const now = useNow();
+  const disconnected = useIsDisconnected();
+  const offlineSummary = useOfflineSummary();
   // KAP disclosures (results, dividends) mostly arrive after the close — refresh around the clock.
   const refetchInterval = 180_000;
   const eventsQ = useQuery({
@@ -43,8 +46,12 @@ export function LatestEventsCard({ className }: { className?: string }) {
     refetchInterval,
   });
 
+  const cachedEvents = (eventsQ.isError || disconnected) ? offlineSummary?.latestEvents : undefined;
+  const usingOfflineCache = !eventsQ.data && cachedEvents !== undefined && cachedEvents.items.length > 0;
+  const rawEvents = eventsQ.data ?? (usingOfflineCache ? cachedEvents.items : []);
+
   const { fill } = usePanel();
-  const events: LatestEvent[] = fill ? (eventsQ.data ?? []) : (eventsQ.data ?? []).slice(0, MAX_ITEMS);
+  const events: LatestEvent[] = fill ? rawEvents : rawEvents.slice(0, MAX_ITEMS);
   const newest = events.reduce<Date | null>((latest, event) => {
     const time = eventTime(event);
     return time && (!latest || time > latest) ? time : latest;
@@ -52,20 +59,24 @@ export function LatestEventsCard({ className }: { className?: string }) {
   const stale = now !== null && newest !== null && isFeedStale(newest, now);
 
   let body: React.ReactNode;
-  if (eventsQ.isPending) {
+  if (eventsQ.isPending && !usingOfflineCache) {
     body = <RowSkeleton rows={4} />;
-  } else if (eventsQ.isLoadingError) {
+  } else if (eventsQ.isLoadingError && !usingOfflineCache) {
     body = <ErrorState compact message={t("events.loadError")} onRetry={() => void eventsQ.refetch()} />;
   } else if (events.length === 0) {
     body = <EmptyState compact message={t("dashboard.noEventsYet")} />;
   } else {
     body = (
       <>
-        {stale && newest && now !== null && (
+        {usingOfflineCache && cachedEvents ? (
+          <p role="status" className="border-b border-border bg-warn/10 px-4 py-1.5 text-[11px] text-warn">
+            {t("offline.cachedBadge", { time: formatMarketDate(cachedEvents.savedAt, "dayMonthTime") })}
+          </p>
+        ) : stale && newest && now !== null ? (
           <p role="status" className="border-b border-border bg-warn/10 px-4 py-2 text-[11px] text-warn">
             {t("events.staleHint", { time: formatRelativeTime(newest, now) })}
           </p>
-        )}
+        ) : null}
         <ul className="divide-y divide-border">
           {events.map((event) => {
             const time = eventTime(event);
@@ -134,7 +145,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
           </Link>
         }
       />
-      <CardBody pending={eventsQ.isPending} reveal={events.length > 0}>
+      <CardBody pending={eventsQ.isPending && !usingOfflineCache} reveal={events.length > 0}>
         {body}
       </CardBody>
     </DashboardCard>

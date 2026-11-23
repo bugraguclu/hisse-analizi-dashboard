@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.limiter import RATE_LIMIT_DETAIL, enforce_default_rate_limit, limiter
 from src.api.middleware import INTERNAL_ERROR_DETAIL, REQUEST_ID_HEADER, RequestContextMiddleware
+from src.core.mutations import IDEMPOTENCY_KEY_HEADER, IDEMPOTENT_REPLAY_HEADER
 from src.api.routers import admin_router, router
 from src.api.routers_data import router as data_router
 from src.api.routers_fundamentals import fundamentals_router
@@ -21,6 +22,7 @@ from src.api.routers_market import market_router
 from src.api.routers_news import news_router
 from src.api.routers_sectors import sectors_router
 from src.api.routers_technical import technical_router
+from src.api.routers_widget import widget_router
 from src.core.config import settings
 from src.core.logging import setup_logging
 from src.core.version import get_version
@@ -114,9 +116,9 @@ app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Admin-Key", REQUEST_ID_HEADER],
-    expose_headers=[REQUEST_ID_HEADER, "Retry-After", "X-Total-Count", "X-Data-Meta"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Admin-Key", "X-Widget-Owner", REQUEST_ID_HEADER, IDEMPOTENCY_KEY_HEADER],
+    expose_headers=[REQUEST_ID_HEADER, IDEMPOTENT_REPLAY_HEADER, "Retry-After", "X-Total-Count", "X-Data-Meta"],
 )
 
 # API routers
@@ -129,6 +131,7 @@ app.include_router(market_router)
 app.include_router(news_router)
 app.include_router(data_router)
 app.include_router(sectors_router)
+app.include_router(widget_router)
 
 
 @app.get("/", include_in_schema=False)

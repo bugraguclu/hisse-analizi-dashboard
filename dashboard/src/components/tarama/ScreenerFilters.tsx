@@ -303,7 +303,7 @@ function SearchField({ value, onCommit }: { value: string; onCommit: (q: string)
   }
 
   return (
-    <div className="relative">
+    <div className="relative" data-keyboard-field="">
       <label htmlFor={id} className="sr-only">
         {t("filters.searchLabel")}
       </label>
@@ -360,11 +360,11 @@ function ChoiceField<T extends string>({
   const { t } = useTaramaI18n();
   const id = useId();
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,11rem)] items-center gap-2">
+    <div data-keyboard-field="" className="grid grid-cols-[minmax(0,1fr)_minmax(0,11rem)] items-center gap-2">
       <label htmlFor={id} className="text-pretty text-[12px] leading-snug text-foreground">
         {label}
       </label>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value as T)} className={cn(selectClass, "h-7 text-[12px]")}>
+      <select id={id} value={value} onChange={(event) => onChange(event.target.value as T)} className={cn(selectClass, "h-9 text-base sm:h-7 sm:text-[12px]")}>
         <option value="">{t("filters.any")}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -425,7 +425,7 @@ function RangeField({ rangeKey, bounds, onCommit }: { rangeKey: RangeKey; bounds
   const error = invalid[0] || invalid[1] ? t("filters.invalidNumber") : inverted ? t("filters.invalidRange") : null;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,11rem)] items-center gap-x-2 gap-y-1">
+    <div data-keyboard-field="" className="grid grid-cols-[minmax(0,1fr)_minmax(0,11rem)] items-center gap-x-2 gap-y-1">
       <label htmlFor={`${baseId}-min`} className="text-pretty text-[12px] leading-snug text-foreground">
         {label}
       </label>
@@ -436,6 +436,7 @@ function RangeField({ rangeKey, bounds, onCommit }: { rangeKey: RangeKey; bounds
             id={`${baseId}-${index === 0 ? "min" : "max"}`}
             type="text"
             inputMode="decimal"
+            enterKeyHint="done"
             autoComplete="off"
             spellCheck={false}
             placeholder={t(index === 0 ? "filters.min" : "filters.max")}
@@ -448,7 +449,7 @@ function RangeField({ rangeKey, bounds, onCommit }: { rangeKey: RangeKey; bounds
             onKeyDown={(event) => {
               if (event.key === "Enter") flush();
             }}
-            className="h-7 px-2 text-right font-mono text-[12px] tabular-nums md:text-[12px]"
+            className="h-9 px-2 text-right font-mono text-base tabular-nums sm:h-7 sm:text-[12px]"
           />
         ))}
       </div>

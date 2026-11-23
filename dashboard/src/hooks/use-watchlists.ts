@@ -1,11 +1,17 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
+import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
+import {
+  createUndoReceipt,
+  evaluateUndo,
+  type UndoReceipt,
+} from "@/lib/reliable-mutations";
 
 /**
  * Watchlists persisted in localStorage (per browser), synced across tabs.
- * Storage format stays compatible with the original dashboard:
- *   [{ id, name, items: [{ ticker }] }]
+ * Storage format stays backward-compatible with the original dashboard:
+ *   [{ id, name, rev?, items: [{ ticker }] }]
  */
 
 export interface Watchlist {
@@ -13,9 +19,20 @@ export interface Watchlist {
   /** Empty for the built-in default list (rendered as the localized "Favorites"). */
   name: string;
   tickers: string[];
+  /** Monotonic per-list revision used by conflict-checked undo. */
+  rev: number;
 }
 
+export type WatchlistUndoSnapshot =
+  | { readonly kind: "remove_ticker"; readonly listId: string; readonly tickers: readonly string[] }
+  | { readonly kind: "delete_list"; readonly index: number; readonly list: Watchlist; readonly remainingIds: readonly string[] };
+
+export type WatchlistUndoReceipt = UndoReceipt<WatchlistUndoSnapshot>;
+
+export type WatchlistUndoOutcome = "undone" | "conflict" | "expired";
+
 export const DEFAULT_WATCHLIST_ID = "favorites";
+const LOCAL_OWNER_ID = "local";
 const STORAGE_KEY = "watchlists";
 /** Same rule as the backend's normalize_symbol: one invalid symbol makes /market/snapshot reject the whole list. */
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
@@ -24,7 +41,7 @@ const MAX_TICKERS = 40;
 const MAX_NAME_LENGTH = 40;
 
 const DEFAULT_WATCHLISTS: readonly Watchlist[] = Object.freeze([
-  { id: DEFAULT_WATCHLIST_ID, name: "", tickers: ["THYAO", "GARAN", "SISE", "ASELS", "EREGL"] },
+  { id: DEFAULT_WATCHLIST_ID, name: "", tickers: ["THYAO", "GARAN", "SISE", "ASELS", "EREGL"], rev: 1 },
 ]);
 
 export function normalizeTicker(value: unknown): string | null {
@@ -41,7 +58,7 @@ function sanitize(raw: unknown): Watchlist[] | null {
   for (const entry of raw) {
     if (lists.length >= MAX_LISTS) break;
     if (!entry || typeof entry !== "object") continue;
-    const { id, name, items, tickers } = entry as Record<string, unknown>;
+    const { id, name, items, tickers, rev } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !id || seen.has(id)) continue;
     const source = Array.isArray(items) ? items : Array.isArray(tickers) ? tickers : [];
     const clean: string[] = [];
@@ -54,8 +71,9 @@ function sanitize(raw: unknown): Watchlist[] | null {
     }
     seen.add(id);
     const label = typeof name === "string" ? name.trim().slice(0, MAX_NAME_LENGTH) : "";
+    const parsedRev = typeof rev === "number" && Number.isInteger(rev) && rev >= 1 ? rev : 1;
     // The original default list stored a hard-coded Turkish name; keep it localizable.
-    lists.push({ id, name: id === DEFAULT_WATCHLIST_ID && label === "Favoriler" ? "" : label, tickers: clean });
+    lists.push({ id, name: id === DEFAULT_WATCHLIST_ID && label === "Favoriler" ? "" : label, tickers: clean, rev: parsedRev });
   }
   return lists.length > 0 ? lists : null;
 }
@@ -97,17 +115,33 @@ function getServerSnapshot(): readonly Watchlist[] {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY || event.key === null) listener();
+    if (event.key === STORAGE_KEY || event.key === null) {
+      memoryLists = null;
+      cachedRaw = undefined;
+      listener();
+    }
+  };
+  const onWorkspaceSync = () => {
+    memoryLists = null;
+    cachedRaw = undefined;
+    listener();
   };
   window.addEventListener("storage", onStorage);
+  window.addEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   return () => {
     listeners.delete(listener);
     window.removeEventListener("storage", onStorage);
+    window.removeEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   };
 }
 
 function write(lists: readonly Watchlist[]) {
-  const payload = lists.map((list) => ({ id: list.id, name: list.name, items: list.tickers.map((ticker) => ({ ticker })) }));
+  const payload = lists.map((list) => ({
+    id: list.id,
+    name: list.name,
+    rev: list.rev,
+    items: list.tickers.map((ticker) => ({ ticker })),
+  }));
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     memoryLists = null;
@@ -119,15 +153,25 @@ function write(lists: readonly Watchlist[]) {
 }
 
 function update(mutator: (lists: readonly Watchlist[]) => readonly Watchlist[]) {
-  const next = mutator(getSnapshot());
-  if (next !== getSnapshot()) write(next);
+  const current = getSnapshot();
+  const next = mutator(current);
+  if (next !== current) write(next);
+}
+
+function collectionRevision(lists: readonly Watchlist[]): number {
+  return lists.reduce((sum, list) => sum + list.rev, lists.length * 1000);
+}
+
+function nextReceiptId(): string {
+  return `undo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export interface WatchlistActions {
   createList: (name: string) => string | null;
-  deleteList: (id: string) => void;
+  deleteList: (id: string) => WatchlistUndoReceipt | null;
   addTicker: (listId: string, ticker: string) => "added" | "duplicate" | "invalid" | "full";
-  removeTicker: (listId: string, ticker: string) => void;
+  removeTicker: (listId: string, ticker: string) => WatchlistUndoReceipt | null;
+  undoChange: (receipt: WatchlistUndoReceipt) => WatchlistUndoOutcome;
 }
 
 const actions: WatchlistActions = {
@@ -135,11 +179,26 @@ const actions: WatchlistActions = {
     const label = name.trim().slice(0, MAX_NAME_LENGTH);
     if (!label || getSnapshot().length >= MAX_LISTS) return null;
     const id = `list-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    update((lists) => [...lists, { id, name: label, tickers: [] }]);
+    update((lists) => [...lists, { id, name: label, tickers: [], rev: 1 }]);
     return id;
   },
   deleteList(id) {
-    update((lists) => (lists.length <= 1 ? lists : lists.filter((list) => list.id !== id)));
+    const before = getSnapshot();
+    if (before.length <= 1) return null;
+    const index = before.findIndex((list) => list.id === id);
+    if (index < 0) return null;
+    const target = before[index];
+    const next = before.filter((list) => list.id !== id);
+    write(next);
+    return createUndoReceipt<WatchlistUndoSnapshot>({
+      id: nextReceiptId(),
+      ownerId: LOCAL_OWNER_ID,
+      entityId: id,
+      beforeRevision: collectionRevision(before),
+      afterRevision: collectionRevision(next),
+      beforeSnapshot: { kind: "delete_list", index, list: { ...target, tickers: [...target.tickers] }, remainingIds: before.map((l) => l.id) },
+      afterSnapshot: { kind: "delete_list", index, list: { ...target, tickers: [...target.tickers] }, remainingIds: next.map((l) => l.id) },
+    });
   },
   addTicker(listId, value) {
     const ticker = normalizeTicker(value);
@@ -148,13 +207,69 @@ const actions: WatchlistActions = {
     if (!list) return "invalid";
     if (list.tickers.includes(ticker)) return "duplicate";
     if (list.tickers.length >= MAX_TICKERS) return "full";
-    update((lists) => lists.map((l) => (l.id === listId ? { ...l, tickers: [...l.tickers, ticker] } : l)));
+    update((lists) =>
+      lists.map((l) => (l.id === listId ? { ...l, tickers: [...l.tickers, ticker], rev: l.rev + 1 } : l)),
+    );
     return "added";
   },
   removeTicker(listId, ticker) {
-    update((lists) =>
-      lists.map((l) => (l.id === listId ? { ...l, tickers: l.tickers.filter((t) => t !== ticker) } : l)),
+    const beforeLists = getSnapshot();
+    const target = beforeLists.find((l) => l.id === listId);
+    if (!target || !target.tickers.includes(ticker)) return null;
+    const afterTickers = target.tickers.filter((t) => t !== ticker);
+    const afterRev = target.rev + 1;
+    write(
+      beforeLists.map((l) => (l.id === listId ? { ...l, tickers: afterTickers, rev: afterRev } : l)),
     );
+    return createUndoReceipt<WatchlistUndoSnapshot>({
+      id: nextReceiptId(),
+      ownerId: LOCAL_OWNER_ID,
+      entityId: listId,
+      beforeRevision: target.rev,
+      afterRevision: afterRev,
+      beforeSnapshot: { kind: "remove_ticker", listId, tickers: [...target.tickers] },
+      afterSnapshot: { kind: "remove_ticker", listId, tickers: afterTickers },
+    });
+  },
+  undoChange(receipt) {
+    const currentLists = getSnapshot();
+    if (receipt.beforeSnapshot.kind === "remove_ticker") {
+      const current = currentLists.find((l) => l.id === receipt.entityId) ?? null;
+      const decision = evaluateUndo<WatchlistUndoSnapshot>({
+        receipt,
+        activeOwnerId: LOCAL_OWNER_ID,
+        currentRevision: current?.rev ?? null,
+        currentSnapshot: current ? { kind: "remove_ticker", listId: current.id, tickers: current.tickers } : null,
+      });
+      if (!decision.ok) return decision.reason === "expired" ? "expired" : "conflict";
+      if (decision.restoreSnapshot.kind !== "remove_ticker") return "conflict";
+      const restoredTickers = [...decision.restoreSnapshot.tickers];
+      write(
+        currentLists.map((l) => (l.id === receipt.entityId ? { ...l, tickers: restoredTickers, rev: l.rev + 1 } : l)),
+      );
+      return "undone";
+    }
+
+    const decision = evaluateUndo<WatchlistUndoSnapshot>({
+      receipt,
+      activeOwnerId: LOCAL_OWNER_ID,
+      currentRevision: collectionRevision(currentLists),
+      currentSnapshot: {
+        kind: "delete_list",
+        index: receipt.afterSnapshot.kind === "delete_list" ? receipt.afterSnapshot.index : 0,
+        list: receipt.afterSnapshot.kind === "delete_list" ? receipt.afterSnapshot.list : currentLists[0],
+        remainingIds: currentLists.map((l) => l.id),
+      },
+    });
+    if (!decision.ok) return decision.reason === "expired" ? "expired" : "conflict";
+    if (decision.restoreSnapshot.kind !== "delete_list") return "conflict";
+    const { index, list } = decision.restoreSnapshot;
+    if (currentLists.some((entry) => entry.id === list.id) || currentLists.length >= MAX_LISTS) return "conflict";
+    const clampedIndex = Math.max(0, Math.min(index, currentLists.length));
+    const next = [...currentLists];
+    next.splice(clampedIndex, 0, { ...list, tickers: [...list.tickers], rev: list.rev + 1 });
+    write(next);
+    return "undone";
   },
 };
 

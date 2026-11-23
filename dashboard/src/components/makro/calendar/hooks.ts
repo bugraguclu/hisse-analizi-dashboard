@@ -159,6 +159,17 @@ export function useCalendarFilters() {
   }, [filters]);
 
   useEffect(() => {
+    const onWorkspaceSync = () => {
+      const nextCountries = storedCountries();
+      if (nextCountries) {
+        setFilters((current) => (sameSet(current.countries, nextCountries) ? current : { ...current, countries: nextCountries }));
+      }
+    };
+    window.addEventListener("hisse-workspace-storage-changed", onWorkspaceSync);
+    return () => window.removeEventListener("hisse-workspace-storage-changed", onWorkspaceSync);
+  }, []);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(COUNTRIES_STORAGE_KEY, JSON.stringify(filters.countries));
     } catch {

@@ -9,14 +9,19 @@
     "directory": "dashboard"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18.0"
   },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run check:content",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
+    "check:content": "node scripts/check-content.mjs",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "check:budgets": "node ../scripts/check-bundle-budgets.mjs --web",
+    "check:ios": "node ../scripts/verify-ios-readiness.mjs",
+    "test:gates": "node --test ../scripts/release-gates.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
@@ -28,6 +33,7 @@
     "lucide-react": "^0.577.0",
     "next": "16.4.6",
     "next-themes": "^0.4.6",
+    "qrcode-generator": "^2.0.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.0",
@@ -42,6 +48,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "jsqr": "^1.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

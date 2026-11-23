@@ -21,6 +21,7 @@ import { requestCurrency, seriesUnit } from "@/components/charts/units";
 import { useUnitConversion } from "@/components/charts/use-unit";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useMarketStatus } from "@/hooks/use-market-status";
+import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
 import { useNow } from "@/hooks/use-now";
 import { formatChangePercent, formatMarketDate, formatNumber, formatSigned } from "@/lib/format";
 import type { TranslationKey } from "@/lib/i18n";
@@ -107,10 +108,15 @@ export function IndexChartCard({ className }: { className?: string }) {
   const historyQ = useChartHistory("index", SYMBOL, period, { currency });
   const prefetchPeriods = usePrefetchChartPeriods("index", SYMBOL, currency);
   const quotesQ = useIndexQuotes();
+  const disconnected = useIsDisconnected();
+  const offlineSummary = useOfflineSummary();
   const now = useNow();
 
   const history = historyQ.data;
-  const quote = mergeQuote(findQuote(quotesQ.data?.quotes, SYMBOL), (history?.info ?? undefined) as Partial<IndexQuote> | undefined);
+  const cachedIndexQuote = (quotesQ.isError || disconnected) ? findQuote(offlineSummary?.indices?.quotes, SYMBOL) : null;
+  const primaryQuote = findQuote(quotesQ.data?.quotes, SYMBOL) ?? cachedIndexQuote;
+  const usingCachedIndexQuote = !quotesQ.data && primaryQuote !== null;
+  const quote = mergeQuote(primaryQuote, (history?.info ?? undefined) as Partial<IndexQuote> | undefined);
   const quoteTime = quoteTimeMs(quote);
   // The last bar follows the live level, so the chart ends where the header does (in dollars:
   // the level over the latest USD/TRY close; euros, gold and real lira convert after the merge).
@@ -121,7 +127,7 @@ export function IndexChartCard({ className }: { className?: string }) {
   const shownPeriod = series?.period ?? period;
   const intraday = shownPeriod === "1d";
   const market = useMarketStatus(quoteTime);
-  const live = intraday && market?.isOpen === true;
+  const live = intraday && market?.isOpen === true && !usingCachedIndexQuote;
   // What is on screen decides the unit: a lira stand-in stays lira while the euro rates load.
   const unit = series ? seriesUnit(series) : chosenUnit;
   const lira = unit === "TRY";
@@ -220,7 +226,9 @@ export function IndexChartCard({ className }: { className?: string }) {
             )}
             {updatedAt !== null && (
               <p className="mt-0.5 text-[11px] text-muted-foreground slot-short:hidden">
-                {t("dashboard.updatedAt", { time: formatMarketDate(updatedAt, "dayMonthTime") })}
+                {usingCachedIndexQuote && offlineSummary?.indices?.savedAt
+                  ? t("offline.cachedBadge", { time: formatMarketDate(offlineSummary.indices.savedAt, "dayMonthTime") })
+                  : t("dashboard.updatedAt", { time: formatMarketDate(updatedAt, "dayMonthTime") })}
               </p>
             )}
           </div>

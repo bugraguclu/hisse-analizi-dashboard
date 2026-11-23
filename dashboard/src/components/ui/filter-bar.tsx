@@ -592,7 +592,8 @@ function nudgeIntoView(menu: HTMLElement, panel: HTMLElement) {
   const folded = panel.querySelector<HTMLElement>("[data-fb-folded='true']");
   const cap = folded ? parseFloat(getComputedStyle(panel).maxHeight) || 0 : 0;
   const grow = folded ? Math.max(0, Math.min(folded.scrollHeight - folded.clientHeight, cap - panel.offsetHeight)) : 0;
-  const overflow = panel.getBoundingClientRect().bottom + grow - window.innerHeight + 16;
+  const visibleHeight = window.visualViewport?.height ?? window.innerHeight;
+  const overflow = panel.getBoundingClientRect().bottom + grow - visibleHeight + 16;
   if (overflow <= 0) return;
   const summary = menu.querySelector("summary");
   const header = document.querySelector("header");
@@ -745,6 +746,7 @@ export function FilterMenu({
         </summary>
         <div
           ref={panelRef}
+          data-fb-panel=""
           className={cn(
             "absolute inset-x-0 top-full z-30 border border-border bg-popover text-popover-foreground",
             // Two-layer shadow: one layer disappeared over the rows it covers.
@@ -1234,7 +1236,10 @@ function GroupsPanel({
 
   return (
     <>
-      <div className="flex shrink-0 items-center justify-between border-b border-border py-1 pl-[18px] pr-1.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+      <div
+        data-sheet-header=""
+        className="flex shrink-0 items-center justify-between border-b border-border py-1 pl-[18px] pr-1.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+      >
         <span>{title}</span>
         <button
           type="button"
@@ -1247,6 +1252,7 @@ function GroupsPanel({
       </div>
       <div
         ref={bodyRef}
+        data-fb-body=""
         data-fb-folded={foldable ? "true" : undefined}
         data-fb-cut={foldable && cut ? "true" : undefined}
         onScroll={(event) => {
@@ -1294,7 +1300,10 @@ function GroupsPanel({
           ))
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-2.5 border-t border-border px-3.5 pb-3 pt-2.5 sm:pb-3.5 sm:pt-3">
+      <div
+        data-fb-actions=""
+        className="flex shrink-0 items-center gap-2.5 border-t border-border px-3.5 pb-3 pt-2.5 sm:pb-3.5 sm:pt-3"
+      >
         {/* Clears this panel's axes only; kept (dimmed) when there is nothing to clear, so
             the button beside it does not change width on the first pick. */}
         <button

@@ -389,11 +389,17 @@ function readPause(key: string): boolean | null {
 }
 
 function subscribePause(onChange: () => void): () => void {
+  const onWorkspaceSync = () => {
+    pauseMemory.clear();
+    onChange();
+  };
   pauseListeners.add(onChange);
   window.addEventListener("storage", onChange);
+  window.addEventListener("hisse-workspace-storage-changed", onWorkspaceSync);
   return () => {
     pauseListeners.delete(onChange);
     window.removeEventListener("storage", onChange);
+    window.removeEventListener("hisse-workspace-storage-changed", onWorkspaceSync);
   };
 }
 

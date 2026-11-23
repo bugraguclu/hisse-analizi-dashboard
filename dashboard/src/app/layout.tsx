@@ -7,6 +7,8 @@ import { motionCss } from "@/lib/motion";
 import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { siteOrigin } from "@/lib/schema";
+import { startupBootstrapScript } from "@/lib/startup-recovery";
 
 // Type system (mapped to font-sans / font-mono / font-display in globals.css):
 // Plex Sans for UI text, Plex Mono for figures and tickers, Newsreader for page titles.
@@ -39,6 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const title = t("meta.title", locale);
   const description = t("meta.description", locale);
   return {
+    metadataBase: new URL(siteOrigin()),
     title: { default: title, template: "%s · Hisse Analizi" },
     description,
     applicationName: "Hisse Analizi",
@@ -56,6 +59,8 @@ export const viewport: Viewport = {
   colorScheme: "dark light",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default async function RootLayout({
@@ -68,6 +73,12 @@ export default async function RootLayout({
   const locale = await requestLocale();
   return (
     <html lang={locale} className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable} h-full antialiased`} style={motionCss as React.CSSProperties} suppressHydrationWarning>
+      <head>
+        <script
+          id="hisse-startup-recovery"
+          dangerouslySetInnerHTML={{ __html: startupBootstrapScript(locale) }}
+        />
+      </head>
       <body className="min-h-full">
         <Providers initialLocale={locale}>
           <AppShell>{children}</AppShell>

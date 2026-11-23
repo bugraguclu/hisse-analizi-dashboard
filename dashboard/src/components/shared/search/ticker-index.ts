@@ -1,5 +1,5 @@
 import type { AllCompaniesOut, ScreenerRow } from "@/types";
-import { foldTr } from "./fold";
+import { foldTr } from "./fold.ts";
 
 /** One searchable BIST company. */
 export interface TickerEntry {

@@ -15,7 +15,7 @@ import pytest  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
-    """Rate-limit counters live in process memory; isolate them per test."""
+    """Rate-limit counters live in process memory; isolate per test."""
     from src.api.limiter import limiter
 
     limiter.reset()

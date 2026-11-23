@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Archive, Menu, Search } from "lucide-react";
 import { TickerSearch, type TickerSearchHandle } from "@/components/shared/TickerSearch";
 import { SearchOverlay } from "@/components/shared/search/SearchOverlay";
 import { useSearchHotkey } from "@/components/shared/search/use-search-hotkey";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LocaleToggle } from "@/components/ui/locale-toggle";
 import { useLocale } from "@/lib/locale-context";
+import { getAtlasConcept } from "@/lib/atlas";
+import { resolveIndexSlug, resolveSectorSlug } from "@/lib/discovery";
+import { sectorLabel } from "@/lib/sectors";
 import type { TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { DEFAULT_TICKER, NAV_ITEMS, SECTION_LABELS, tickerFromPath } from "./nav";
@@ -28,13 +31,29 @@ function safeDecode(value: string): string {
 
 /** Client-rendered pages cannot export metadata; keep the tab title in sync with the route. */
 function useDocumentTitle(pathname: string) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const segments = pathname.split("/").filter(Boolean);
   const knownSection = segments.length === 0 || segments[0] in SECTION_LABELS;
   const labels = knownSection
     ? segments.map((segment, index) => {
-        const labelKey: TranslationKey | undefined = index === 0 ? SECTION_LABELS[segment] : undefined;
-        return labelKey ? t(labelKey) : safeDecode(segment).toUpperCase();
+        if (index === 0) {
+          const labelKey: TranslationKey | undefined = SECTION_LABELS[segment];
+          return labelKey ? t(labelKey) : safeDecode(segment).toUpperCase();
+        }
+        const decoded = safeDecode(segment);
+        if (segments[0] === "atlas") {
+          const concept = getAtlasConcept(decoded);
+          return concept ? concept.title[locale] : t("notFound.title");
+        }
+        if (segments[0] === "endeks") {
+          const resolved = resolveIndexSlug(decoded);
+          return resolved ? resolved.entry.name[locale] : t("notFound.title");
+        }
+        if (segments[0] === "sektor") {
+          const resolved = resolveSectorSlug(decoded);
+          return resolved ? sectorLabel(resolved.key, locale) : t("notFound.title");
+        }
+        return decoded.toUpperCase();
       })
     : [t("notFound.title")];
   const current = labels.at(-1);
@@ -96,7 +115,7 @@ const ICON_BUTTON =
 export function SiteHeader() {
   const pathname = usePathname();
   const { t } = useLocale();
-  const { openMobileNav, mobileNavOpen, mobileNavTriggerRef } = useShell();
+  const { openMobileNav, mobileNavOpen, mobileNavTriggerRef, openWorkspaceManager } = useShell();
   useDocumentTitle(pathname);
   // Small-screen search sheet, scoped to the page it was opened on (closes on navigation).
   const [searchOpenOn, setSearchOpenOn] = useState<string | null>(null);
@@ -195,7 +214,17 @@ export function SiteHeader() {
               >
                 <Search className="h-5 w-5" aria-hidden="true" />
               </button>
-              <LocaleToggle className="ml-1.5 hidden md:inline-flex" />
+              <button
+                type="button"
+                onClick={() => openWorkspaceManager("backup")}
+                aria-label={t("workspace.openManager")}
+                aria-haspopup="dialog"
+                title={t("workspace.openManager")}
+                className={cn(ICON_BUTTON, "hidden md:inline-flex")}
+              >
+                <Archive className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
+              </button>
+              <LocaleToggle className="ml-1 hidden md:inline-flex" />
               <ThemeToggle className="hidden md:inline-flex" />
             </div>
           </div>

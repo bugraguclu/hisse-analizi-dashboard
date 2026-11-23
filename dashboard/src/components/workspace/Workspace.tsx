@@ -29,6 +29,7 @@ import { motionScrollBehavior, useMotionAllowed } from "@/hooks/use-motion-allow
 import type { TranslationKey } from "@/lib/i18n";
 import { useLocale } from "@/lib/locale-context";
 import { cubicBezier, motionCurve, motionDuration } from "@/lib/motion";
+import { WORKSPACE_STORAGE_EVENT } from "@/lib/local-store/storage";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_LIMITS,
@@ -101,11 +102,17 @@ function readStorage(key: string) {
 }
 
 function subscribe(onChange: () => void) {
+  const onWorkspaceSync = () => {
+    sessionLayouts.clear();
+    onChange();
+  };
   window.addEventListener("storage", onChange);
   window.addEventListener(SAVED_EVENT, onChange);
+  window.addEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   return () => {
     window.removeEventListener("storage", onChange);
     window.removeEventListener(SAVED_EVENT, onChange);
+    window.removeEventListener(WORKSPACE_STORAGE_EVENT, onWorkspaceSync);
   };
 }
 

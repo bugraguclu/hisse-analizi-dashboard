@@ -3,17 +3,21 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Trash2, X } from "lucide-react";
+import { Archive, Plus, Smartphone, Trash2, WifiOff, X } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
-import { formatNumber } from "@/lib/format";
+import { formatMarketDate, formatNumber } from "@/lib/format";
+import { buildOfflineWatchlistSnapshot } from "@/lib/local-store/offline-cache";
 import { STALE_TIME } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { useShell } from "@/components/layout/shell-context";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
-import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist } from "@/hooks/use-watchlists";
+import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
+import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist, type WatchlistUndoReceipt } from "@/hooks/use-watchlists";
 import { useCompanies } from "./queries";
 import { CardBody, CardHeading, ChangePill, DashboardCard } from "./ui";
 
@@ -21,7 +25,10 @@ const HEADING_ID = "watchlist-heading";
 
 export function WatchlistCard({ className }: { className?: string }) {
   const { t } = useLocale();
-  const { lists, createList, deleteList, addTicker, removeTicker } = useWatchlists();
+  const { openWorkspaceManager } = useShell();
+  const { lists, createList, deleteList, addTicker, removeTicker, undoChange } = useWatchlists();
+  const disconnected = useIsDisconnected();
+  const offlineSummary = useOfflineSummary();
   const [selectedId, setSelectedId] = useState<string>(DEFAULT_WATCHLIST_ID);
   const [editing, setEditing] = useState(false);
   const [newListName, setNewListName] = useState("");
@@ -41,7 +48,17 @@ export function WatchlistCard({ className }: { className?: string }) {
     placeholderData: (previous) => previous,
   });
   const companiesQ = useCompanies();
-  const names = useMemo(() => new Map((companiesQ.data ?? []).map((c) => [c.ticker, c.display_name])), [companiesQ.data]);
+  const offlineWatchlist = useMemo(
+    () => buildOfflineWatchlistSnapshot(offlineSummary, tickers),
+    [offlineSummary, tickers],
+  );
+  const usingOfflineCache = !snapshotQ.data && (snapshotQ.isError || disconnected) && offlineWatchlist !== null;
+  const effectiveSnapshot = snapshotQ.data ?? (usingOfflineCache ? offlineWatchlist.snapshot : undefined);
+  const names = useMemo(() => {
+    const live = companiesQ.data;
+    if (live && live.length > 0) return new Map(live.map((c) => [c.ticker, c.display_name]));
+    return new Map((offlineSummary?.companies?.items ?? []).map((c) => [c.ticker, c.display_name]));
+  }, [companiesQ.data, offlineSummary]);
 
   function handleCreate() {
     const id = createList(newListName);
@@ -56,11 +73,39 @@ export function WatchlistCard({ className }: { className?: string }) {
     setNotice(result === "duplicate" ? t("watchlist.alreadyInList", { ticker }) : null);
   }
 
+  function offerUndo(message: string, receipt: WatchlistUndoReceipt | null, onRestored?: () => void) {
+    if (!receipt) return;
+    toast(message, {
+      action: {
+        label: t("watchlist.undo"),
+        onClick: () => {
+          const outcome = undoChange(receipt);
+          if (outcome === "undone") {
+            onRestored?.();
+            toast.success(t("watchlist.undone"));
+          } else if (outcome === "expired") {
+            toast.warning(t("watchlist.undoExpired"));
+          } else {
+            toast.warning(t("watchlist.undoConflict"));
+          }
+        },
+      },
+    });
+  }
+
+  function handleRemoveTicker(listId: string, ticker: string) {
+    const receipt = removeTicker(listId, ticker);
+    offerUndo(t("watchlist.tickerRemoved", { ticker }), receipt);
+  }
+
   function handleDelete() {
     if (lists.length <= 1) return;
-    if (!window.confirm(t("watchlist.deleteConfirm", { name: listLabel(activeList) }))) return;
-    deleteList(activeList.id);
-    setSelectedId(lists.find((l) => l.id !== activeList.id)?.id ?? DEFAULT_WATCHLIST_ID);
+    const deletedId = activeList.id;
+    const deletedName = listLabel(activeList);
+    const receipt = deleteList(deletedId);
+    if (!receipt) return;
+    setSelectedId(lists.find((l) => l.id !== deletedId)?.id ?? DEFAULT_WATCHLIST_ID);
+    offerUndo(t("watchlist.listDeleted", { name: deletedName }), receipt, () => setSelectedId(deletedId));
   }
 
   return (
@@ -70,17 +115,26 @@ export function WatchlistCard({ className }: { className?: string }) {
         id={HEADING_ID}
         title={t("dashboard.watchlist")}
         action={
-          <button
-            type="button"
-            onClick={() => {
-              setEditing((value) => !value);
-              setNotice(null);
-            }}
-            aria-expanded={editing}
-            className="rounded-sm text-xs text-primary underline-offset-4 motion-press hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            {editing ? t("watchlist.done") : t("watchlist.editLists")}
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/cihazlar"
+              className="inline-flex items-center gap-1 rounded-sm text-xs text-muted-foreground motion-press hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <Smartphone className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t("nav.devices")}</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing((value) => !value);
+                setNotice(null);
+              }}
+              aria-expanded={editing}
+              className="rounded-sm text-xs text-primary underline-offset-4 motion-press hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {editing ? t("watchlist.done") : t("watchlist.editLists")}
+            </button>
+          </div>
         }
       />
 
@@ -139,16 +193,29 @@ export function WatchlistCard({ className }: { className?: string }) {
               {t("watchlist.newList")}
             </button>
           </form>
-          {lists.length > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            {lists.length > 1 ? (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive motion-press hover:text-destructive/80"
+              >
+                <Trash2 className="h-3 w-3" aria-hidden="true" />
+                {t("watchlist.deleteList")}: {listLabel(activeList)}
+              </button>
+            ) : (
+              <span />
+            )}
             <button
               type="button"
-              onClick={handleDelete}
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive motion-press hover:text-destructive/80"
+              aria-haspopup="dialog"
+              onClick={() => openWorkspaceManager("backup")}
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
-              <Trash2 className="h-3 w-3" aria-hidden="true" />
-              {t("watchlist.deleteList")}: {listLabel(activeList)}
+              <Archive className="h-3 w-3" aria-hidden="true" />
+              {t("offline.backupShortcut")}
             </button>
-          )}
+          </div>
         </div>
       )}
 
@@ -157,14 +224,23 @@ export function WatchlistCard({ className }: { className?: string }) {
           <p className="px-4 py-8 text-center text-xs text-muted-foreground">{t("watchlist.emptyList")}</p>
         ) : (
           <>
-            {snapshotQ.isError && !snapshotQ.data && (
+            {usingOfflineCache && offlineWatchlist && (
+              <div role="status" className="flex items-center justify-between gap-2 border-b border-border bg-warn/10 px-4 py-1.5 text-[11px] text-warn">
+                <span className="inline-flex items-center gap-1.5">
+                  <WifiOff className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  {t("offline.cachedBadge", { time: formatMarketDate(offlineWatchlist.newestSavedAt, "dayMonthTime") })}
+                </span>
+                <span className="hidden text-[10px] text-muted-foreground sm:inline">{t("offline.delayNote")}</span>
+              </div>
+            )}
+            {snapshotQ.isError && !effectiveSnapshot && (
               <ErrorState compact message={t("watchlist.quoteError")} onRetry={() => void snapshotQ.refetch()} />
             )}
             {/* A wide card lists the stocks in two columns instead of stretching each row. */}
-            <ul className="slot-wide:grid slot-wide:grid-cols-2 slot-wide:gap-x-6 skeleton-rows" aria-busy={snapshotQ.isFetching}>
+            <ul className="slot-wide:grid slot-wide:grid-cols-2 slot-wide:gap-x-6 skeleton-rows" aria-busy={snapshotQ.isFetching && !usingOfflineCache}>
               {tickers.map((ticker) => {
-                const quote = snapshotQ.data?.snapshot[ticker];
-                const loading = !quote && (snapshotQ.isPending || snapshotQ.isPlaceholderData);
+                const quote = effectiveSnapshot?.snapshot[ticker];
+                const loading = !quote && !usingOfflineCache && (snapshotQ.isPending || snapshotQ.isPlaceholderData);
                 return (
                   <li
                     key={ticker}
@@ -201,7 +277,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                     {editing && (
                       <button
                         type="button"
-                        onClick={() => removeTicker(activeList.id, ticker)}
+                        onClick={() => handleRemoveTicker(activeList.id, ticker)}
                         aria-label={t("watchlist.remove", { ticker })}
                         className="rounded-sm p-1 text-muted-foreground motion-press hover:bg-destructive/10 hover:text-destructive"
                       >
