@@ -930,3 +930,60 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     details_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = _created_at()
+
+
+# ---------------------------------------------------------------------------
+# iOS Widget pairing & read-only device access (migration 024)
+# ---------------------------------------------------------------------------
+
+
+class WidgetPairing(Base):
+    """Short-lived, single-use pairing code generated from the web UI for an iOS widget.
+
+    Stores only ``sha256(code)`` and ``sha256(owner_key)``. Once consumed by ``POST /widget/pair``,
+    the row is deleted atomically inside the same transaction that creates ``WidgetDevice``.
+    """
+
+    __tablename__ = "widget_pairings"
+    __table_args__ = (
+        Index("ix_widget_pairings_owner_hash", "owner_hash"),
+        Index("ix_widget_pairings_expires_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    owner_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    watchlist_id: Mapped[str] = mapped_column(String(80), default="favorites", server_default="favorites", nullable=False)
+    watchlist_name: Mapped[str] = mapped_column(String(80), default="", server_default="", nullable=False)
+    tickers: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    dashboard_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class WidgetDevice(Base):
+    """Paired iOS device with a read-only bearer token (``scope='widget:read'``).
+
+    Separate from future full-account sessions: holds only the SHA-256 hash of its bearer
+    token and the personal watchlist selection bound to the widget. Revoking a device deletes
+    the row so subsequent widget fetches fail immediately with 401.
+    """
+
+    __tablename__ = "widget_devices"
+    __table_args__ = (
+        CheckConstraint("scope IN ('widget:read')", name="ck_widget_devices_scope"),
+        Index("ix_widget_devices_owner_created", "owner_hash", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    owner_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(60), default="iPhone", server_default="iPhone", nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    scope: Mapped[str] = mapped_column(String(40), default="widget:read", server_default="widget:read", nullable=False)
+    watchlist_id: Mapped[str] = mapped_column(String(80), default="favorites", server_default="favorites", nullable=False)
+    watchlist_name: Mapped[str] = mapped_column(String(80), default="", server_default="", nullable=False)
+    tickers: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    dashboard_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()

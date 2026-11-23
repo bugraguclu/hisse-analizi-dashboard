@@ -6,7 +6,8 @@
 Borsa İstanbul için piyasa takibi ve hisse analizi uygulaması: piyasa özeti, etkileşimli grafikler, teknik ve temel analiz, KAP bildirimleri, makroekonomik veriler ve hisse taraması. Next.js ile yazılmış arayüzün arkasında FastAPI, PostgreSQL ve verileri kaynaklardan düzenli olarak toplayan ayrı bir worker süreci çalışır.
 
 Web uygulaması `dashboard/`, iOS uygulaması [mobile/](./mobile/README.md) altındadır. iOS için
-Expo Router kullanılır. Mobil ekranların kapsamı henüz web ile eşit değildir. Güncel entegrasyon ve doğrulama
+Expo Router kullanılır; WidgetKit ve Siri kaynakları aynı uygulamaya yerel Expo modülü üzerinden
+bağlanır. Mobil ekranların kapsamı henüz web ile eşit değildir. Güncel entegrasyon ve doğrulama
 durumu [havuz kalite incelemesinde](./docs/havuz-kalite-incelemesi.md) açıklanır.
 
 **Canlı:** [hisse-analizi.duckdns.org](https://hisse-analizi.duckdns.org) · [Ekran görüntüleri](#ekran-görüntüleri) · [Kurulum](#kurulum) · [Sunucuya kurulum](#sunucuya-kurulum) · [Mimari](#mimari) · [API](#api) · [Değişiklik günlüğü](./CHANGELOG.md)

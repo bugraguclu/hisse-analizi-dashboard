@@ -44,6 +44,10 @@ export function SiteFooter() {
             >
               {t("workspace.openManager")}
             </button>
+            <span aria-hidden="true">·</span>
+            <Link href="/cihazlar" className="underline-offset-4 hover:text-foreground hover:underline">
+              {t("widgetPairing.footerLink")}
+            </Link>
           </p>
         </div>
         <div className="space-y-1 md:text-right">

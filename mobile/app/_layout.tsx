@@ -3,9 +3,11 @@ import { Stack, router as globalRouter, usePathname, useRouter } from "expo-rout
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
+import * as Notifications from "expo-notifications";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Appearance,
   Linking,
   Platform,
@@ -19,7 +21,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import StartupIssueScreen from "../components/StartupIssueScreen";
 import { AppProvider, useAppContext } from "../contexts/AppContext";
 import { describeLinkRejection } from "../lib/externalLinking";
-import { attachIncomingUrlHandler, incomingUrlNavigation, startIncomingUrls } from "../lib/incomingUrl";
+import { attachIncomingUrlHandler, incomingUrlNavigation, receiveIncomingUrl, startIncomingUrls } from "../lib/incomingUrl";
+import { companion } from "../lib/companion";
 import {
   BorderRadius,
   DarkColors,
@@ -37,6 +40,20 @@ SplashScreen.setOptions({ duration: 250, fade: true });
 // Subscribe once at module load so launch/incoming URLs wait in the queue until startup succeeds.
 if (Platform.OS !== "web") {
   startIncomingUrls(Linking);
+  Notifications.setNotificationHandler({ handleNotification: async () => ({
+    shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false,
+  }) });
+  const notificationLinks = new Set<string>();
+  const acceptNotification = (response: Notifications.NotificationResponse) => {
+    const id = response.notification.request.identifier;
+    const url = response.notification.request.content.data?.deepLink;
+    if (typeof url !== "string" || notificationLinks.has(id)) return;
+    notificationLinks.add(id);
+    receiveIncomingUrl(url);
+    void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+  };
+  Notifications.addNotificationResponseReceivedListener(acceptNotification);
+  void Notifications.getLastNotificationResponseAsync().then((response) => { if (response) acceptNotification(response); }).catch(() => undefined);
 }
 
 const SPLASH_GRACE_MS = 1500;
@@ -243,6 +260,19 @@ function AppStack() {
   const startupSucceeded = !isLoading && !startupIssue;
 
   useEffect(() => {
+    if (!startupSucceeded || !companion.available) return;
+    const consume = () => { void companion.consumeShortcut().then((url) => { if (url) receiveIncomingUrl(url); }).catch(() => undefined); };
+    const active = () => {
+      consume();
+      void companion.refresh().catch(() => undefined);
+    };
+    const subscription = companion.subscribeShortcut(consume);
+    const appState = AppState.addEventListener("change", (next) => { if (next === "active") active(); });
+    active();
+    return () => { subscription?.remove(); appState.remove(); };
+  }, [startupSucceeded]);
+
+  useEffect(() => {
     if (Platform.OS === "web" || !startupSucceeded) return undefined;
     return attachIncomingUrlHandler((url) => {
       const nav = incomingUrlNavigation(url, pathname);
@@ -279,6 +309,7 @@ function AppStack() {
         }}
       >
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="companion" options={{ presentation: "card" }} />
         <Stack.Screen
           name="stock/[ticker]"
           options={{

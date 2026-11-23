@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Archive, Plus, Trash2, WifiOff, X } from "lucide-react";
+import { Archive, Plus, Smartphone, Trash2, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
@@ -116,6 +116,13 @@ export function WatchlistCard({ className }: { className?: string }) {
         title={t("dashboard.watchlist")}
         action={
           <div className="flex items-center gap-3">
+            <Link
+              href="/cihazlar"
+              className="inline-flex items-center gap-1 rounded-sm text-xs text-muted-foreground motion-press hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <Smartphone className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t("nav.devices")}</span>
+            </Link>
             <button
               type="button"
               onClick={() => {
