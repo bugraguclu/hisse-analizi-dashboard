@@ -1,3 +1,7 @@
+> 23 Kasım yayın seçimi. Bu belge havuz dalının tarihsel kaydıdır.
+> PDF’deki 1–10 yayın kapsamındadır. QR, widget, hatırlatıcı ve Siri (11) next-step dalındadır.
+> Yayın dalında makbuz migration’ı 023 doğrudan 021 sonrasına bağlanır.
+
 # Havuz kod kalitesi incelemesi — 20–21 Kasım 2026
 
 İncelenen başlangıç: `havuz` @ `99cc6ad`; karşılaştırma tabanı `master` @ `e51cacf`.

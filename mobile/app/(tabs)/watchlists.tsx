@@ -32,9 +32,6 @@ export default function WatchlistsScreen() {
           { paddingTop: insets.top + Spacing.lg, paddingBottom: Spacing.xxl },
         ]}
       >
-        <TouchableOpacity accessibilityRole="button" onPress={() => router.push("/companion" as never)} style={{ paddingVertical: Spacing.md }}>
-          <Text style={{ color: colors.accent }}>iPhone widget ve hatırlatıcılar</Text>
-        </TouchableOpacity>
         <View style={styles.headerRow}>
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
             {activeList?.name ?? "Takip Listesi"}

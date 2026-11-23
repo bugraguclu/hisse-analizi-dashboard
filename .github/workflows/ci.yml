@@ -141,7 +141,7 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
 
   ios:
-    name: iOS · Expo and widget simulator builds
+    name: iOS · Expo simulator build
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -157,21 +157,14 @@ jobs:
         working-directory: mobile
         run: |
           npx expo prebuild --platform ios --no-install
-          node scripts/check-companion.cjs
       - name: Install iOS pods
         run: pod install --project-directory=mobile/ios
       - name: Compile primary Expo app
         run: xcodebuild -workspace mobile/ios/HisseAnalizi.xcworkspace -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/hisse-expo-build" CODE_SIGNING_ALLOWED=NO build
-      - name: Shared Swift behavior
-        run: |
-          shared=mobile/modules/hisse-companion/ios/Shared
-          swiftc "$shared/WidgetModels.swift" "$shared/CalendarReminderModel.swift" "$shared/DeepLinkRouter.swift" mobile/Tests/verify_shared.swift -o "$RUNNER_TEMP/hisse-ios-tests"
-          "$RUNNER_TEMP/hisse-ios-tests"
       - name: Check shipped privacy manifests
         run: |
           app="$RUNNER_TEMP/hisse-expo-build/Build/Products/Debug-iphonesimulator/HisseAnalizi.app"
           test -f "$app/PrivacyInfo.xcprivacy"
-          test -f "$app/PlugIns/HisseWidgets.appex/PrivacyInfo.xcprivacy"
 
   docker:
     name: Docker build

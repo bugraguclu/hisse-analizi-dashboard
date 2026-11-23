@@ -1,3 +1,7 @@
+> 23 Kasım yayın seçimi. Bu belge havuz dalının tarihsel kaydıdır.
+> PDF’deki 1–10 yayın kapsamındadır. QR, widget, hatırlatıcı ve Siri (11) next-step dalındadır.
+> Yayın dalında makbuz migration’ı 023 doğrudan 021 sonrasına bağlanır.
+
 # `havuz` Dalı — AI Devir ve Teknik Bütünleştirme Notu
 
 > **Sonraki kalite incelemesi:** [havuz-kalite-incelemesi.md](./havuz-kalite-incelemesi.md).

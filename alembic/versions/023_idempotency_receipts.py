@@ -1,7 +1,7 @@
 """Persist request receipts in the same transaction as notification rule creation.
 
 Revision ID: 023
-Revises: 022
+Revises: 021
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "023"
-down_revision = "022"
+down_revision = "021"
 branch_labels = None
 depends_on = None
 

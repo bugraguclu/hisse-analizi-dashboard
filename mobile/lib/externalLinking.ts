@@ -11,7 +11,6 @@ export type StockSection = "hisse" | "teknik" | "temel" | "analiz";
 
 export type AppDeepLinkAction =
   | { kind: "markets" }
-  | { kind: "companion"; server?: string; code?: string; eventId?: string }
   | { kind: "watchlists"; listId?: string }
   | { kind: "stock"; ticker: string; section: StockSection; fromNotification?: boolean }
   | { kind: "tarama"; preset?: string; sector?: string; index?: string; q?: string }
@@ -124,22 +123,8 @@ export function readExternalAppUrl(rawUrl: string): ExternalLinkReading | null {
 
   const head = segments[0].toLowerCase();
 
-  if (head === "pair" || head === "companion") {
-    const rawServer = url.searchParams.get("server");
-    const code = url.searchParams.get("code")?.replace(/-/g, "").toUpperCase();
-    if (code && !/^[A-Z0-9]{8}$/.test(code)) return { rejected: { reason: "invalidUrl" } };
-    if (rawServer) {
-      try {
-        const server = new URL(rawServer);
-        if (server.protocol !== "https:" || server.username || server.password || server.search || server.hash) throw new Error();
-      } catch { return { rejected: { reason: "invalidUrl" } }; }
-    }
-    return { action: { kind: "companion", server: rawServer ?? undefined, code }, source };
-  }
-
   if (head === "watchlist" || head === "watchlists" || head === "takip") {
     const listId = cleanValue(segments[1] ?? url.searchParams.get("id"), 64) || undefined;
-    if (listId && listId !== "default") return { action: { kind: "companion" }, source };
     return { action: { kind: "watchlists", listId }, source };
   }
 
@@ -166,7 +151,6 @@ export function readExternalAppUrl(rawUrl: string): ExternalLinkReading | null {
     };
   }
 
-  if (head === "event" || head === "olay") return { action: { kind: "companion", eventId: cleanValue(segments[1], 160) }, source };
 
   if (head === "events" || head === "kap" || head === "takvim") {
     const rawTicker = url.searchParams.get("ticker") ?? url.searchParams.get("hisse");
@@ -187,7 +171,6 @@ export function readExternalAppUrl(rawUrl: string): ExternalLinkReading | null {
   }
 
   if (head === "makro" || head === "macro") {
-    if (url.searchParams.get("event")) return { action: { kind: "companion", eventId: cleanValue(url.searchParams.get("event"), 160) }, source };
     return {
       action: {
         kind: "makro",
@@ -222,8 +205,6 @@ export interface ResolvedRoute {
 /** Maps a validated `AppDeepLinkAction` into an Expo Router href + stack behavior. */
 export function routeForAction(action: AppDeepLinkAction): ResolvedRoute {
   switch (action.kind) {
-    case "companion":
-      return { pathname: "/companion", params: { ...(action.server ? { server: action.server } : {}), ...(action.code ? { code: action.code } : {}), ...(action.eventId ? { eventId: action.eventId } : {}) }, isTabRoot: false, ensureHomeUnderneath: false };
     case "markets":
       return { pathname: "/(tabs)/markets", params: {}, isTabRoot: true, ensureHomeUnderneath: false };
     case "watchlists":

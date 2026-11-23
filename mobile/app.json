@@ -4,14 +4,20 @@
     "slug": "hisse-analizi",
     "version": "0.1.0",
     "scheme": "hisseanalizi",
-    "platforms": ["ios"],
+    "platforms": [
+      "ios"
+    ],
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "buildNumber": "1",
       "bundleIdentifier": "com.hisseanalizi.app",
-      "associatedDomains": ["applinks:hisse-analizi.duckdns.org", "applinks:hisseanalizi.com", "applinks:www.hisseanalizi.com"],
+      "associatedDomains": [
+        "applinks:hisse-analizi.duckdns.org",
+        "applinks:hisseanalizi.com",
+        "applinks:www.hisseanalizi.com"
+      ],
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -25,10 +31,14 @@
         }
       },
       "privacyManifests": {
-        "NSPrivacyAccessedAPITypes": [{
-          "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
-          "NSPrivacyAccessedAPITypeReasons": ["1C8F.1"]
-        }],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "1C8F.1"
+            ]
+          }
+        ],
         "NSPrivacyTracking": false,
         "NSPrivacyCollectedDataTypes": [],
         "NSPrivacyTrackingDomains": []
@@ -45,8 +55,7 @@
           }
         }
       ],
-      "expo-notifications",
-      "./plugins/with-companion.cjs"
+      "expo-notifications"
     ]
   }
 }
