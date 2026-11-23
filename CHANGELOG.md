@@ -2,6 +2,22 @@
 
 ## Yayımlanmamış
 
+### KAP bildirimlerinin PDF ekleri okunuyor
+
+Birçok bildirim yalnızca "açıklama ekte yer almaktadır" der ve asıl içerik PDF ekindedir (MKK pay sahipliği tabloları, genel kurul tutanakları, fon kullanım raporları, Eurobond duyuruları). Bildirim panelinde bu eklerin yalnızca dosya adı görünüyordu; artık metni de görünüyor.
+
+- Panelin "Ekler" bölümünde her PDF'in metni sayfa sayısıyla birlikte açılır kutuda yer alır. İlk okunabilir ek açık gelir. Metin, tablo sütunlarını hizalı tutan eş aralıklı yazıyla gösterilir ve geniş tablolar kutunun içinde yatay kayar.
+- Okunamayan ekler adıyla listelenir ve nedeni yazar: taranmış belge (metin katmanı yok), dosya çok büyük, dosya okunamadı ya da KAP şu an yanıt vermedi. Son durumda içerik saklanmaz; sonraki açılışta yeniden denenir.
+- Bildirim başına en fazla 3 PDF okunur. Her PDF için sınır 8 MB, 20 sayfa ve 30.000 karakterdir; daha uzun eklerde "yalnızca ilk bölüm gösteriliyor" notu çıkar. Excel ve diğer dosyalar adıyla listelenir.
+- Ek metinleri bildirimin `body_text` alanına da eklenir; arama ve sonraki AI özetleri ekteki içeriği de görür.
+- `GET /events/{id}/content` yanıtındaki `attachments` öğeleri artık `type`, `status`, `text`, `pages` ve `truncated` alanlarını taşır. Önbellek biçimi v2 oldu; eski önbellekteki bildirimler ilk açılışta yeniden çekilir.
+
+Teknik notlar:
+- KAP dosyaları `GET /tr/api/file/download/{objId}` ile iner ve dosyayı Java serileştirmesiyle paketlenmiş bir `byte[]` olarak döndürür. `unwrap_kap_file` bu paketi açar.
+- Metni yeni `pypdf` bağımlılığı çıkarır (`src/parsers/pdf_text.py`) ve yerleşim kipini kullanır. İki yana yaslı paragraflardaki fazla boşluklar teke indirilir, tablo satırlarının sütun boşlukları korunur.
+- İndirmeler bildirim istekleriyle aynı aralık ve bekleme kurallarına uyar. Bekleme yalnızca engel ya da kesinti gibi görünen hatalarda başlar (ağ hatası, 403/429, 5xx); eksik ya da çok büyük bir dosya beklemeyi tetiklemez.
+- Taranmış PDF'leri okumak OCR ya da görsel model gerektirir ve bu sürümün kapsamında değildir.
+
 ### Kişiselleştirilebilir sayfalar ve "Sayfalarım"
 
 Piyasa Özeti, Makro ve hisse sayfaları widget düzenleyicisini kullanır. Önceki düzenleyicide kaydedilmiş kartlar ilk açılışta yeni satır ve sütun düzenine aktarılır. Kartların sırası ve boyutları yeni ızgaraya uyarlanır.

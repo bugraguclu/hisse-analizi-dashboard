@@ -182,6 +182,31 @@ const dict = {
   "drawer.table": { tr: "Tablo {index}", en: "Table {index}", fr: "Tableau {index}" },
   "drawer.attachments": { tr: "Ekler", en: "Attachments", fr: "Pièces jointes" },
   "drawer.attachmentsNote": { tr: "Ek dosyalar KAP'ta açılır.", en: "Attachments open on KAP.", fr: "Les pièces jointes s'ouvrent sur KAP." },
+  "drawer.attachment.pages.one": { tr: "{count} sayfa", en: "{count} page", fr: "{count} page" },
+  "drawer.attachment.pages.other": { tr: "{count} sayfa", en: "{count} pages", fr: "{count} pages" },
+  "drawer.attachment.textLabel": { tr: "{name} metni", en: "Text of {name}", fr: "Texte de {name}" },
+  "drawer.attachment.extracted": {
+    tr: "PDF'ten çıkarılan metin. Yerleşim asıl belgeden farklı olabilir.",
+    en: "Text extracted from the PDF. The layout may differ from the original.",
+    fr: "Texte extrait du PDF. La mise en page peut différer de l'original.",
+  },
+  "drawer.attachment.truncated": {
+    tr: "Yalnızca ilk bölüm gösteriliyor — tamamı KAP'ta.",
+    en: "Only the first part is shown — the full file is on KAP.",
+    fr: "Seul le début est affiché — le fichier complet est sur KAP.",
+  },
+  "drawer.attachment.noText": {
+    tr: "Taranmış belge; metni okunamadı.",
+    en: "Scanned document; its text could not be read.",
+    fr: "Document numérisé ; son texte n'a pas pu être lu.",
+  },
+  "drawer.attachment.tooLarge": { tr: "Dosya çok büyük.", en: "The file is too large.", fr: "Le fichier est trop volumineux." },
+  "drawer.attachment.unreadable": { tr: "Dosya okunamadı.", en: "The file could not be read.", fr: "Le fichier n'a pas pu être lu." },
+  "drawer.attachment.failed": {
+    tr: "Ek şu an KAP'tan alınamadı; birazdan tekrar deneyin.",
+    en: "The attachment could not be retrieved from KAP right now; try again shortly.",
+    fr: "La pièce jointe n'a pas pu être récupérée sur KAP ; réessayez dans un instant.",
+  },
   "drawer.notFound": { tr: "Bildirim bulunamadı", en: "Disclosure not found", fr: "Publication introuvable" },
   "drawer.notFoundHint": {
     tr: "Bağlantı eski olabilir ya da bildirim kaldırılmış olabilir.",

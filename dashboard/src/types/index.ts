@@ -74,14 +74,32 @@ export type EventContentBlock =
   /** First row is the header row. */
   | { type: "table"; rows: string[][] };
 
+/**
+ * text: `text` holds the PDF's extracted text · no_text: scanned PDF · too_large /
+ * unreadable: not readable here · failed: KAP did not answer, a later view retries ·
+ * skipped / unsupported (or null in older caches): listed by name only.
+ */
+export type EventAttachmentStatus = "text" | "no_text" | "too_large" | "unreadable" | "failed" | "skipped" | "unsupported";
+
+export interface EventContentAttachment {
+  name: string;
+  type?: "pdf" | "other" | null;
+  status?: EventAttachmentStatus | null;
+  /** Monospace plain text (layout kept: table columns are aligned with spaces). */
+  text?: string | null;
+  pages?: number | null;
+  /** Only the first pages / characters were read. */
+  truncated?: boolean;
+}
+
 /** GET /events/{id}/content — full disclosure text fetched from KAP on first view, then cached. */
 export interface EventContentOut {
   event_id: string;
   /** KAP page of the disclosure. */
   source_url: string | null;
   blocks: EventContentBlock[];
-  /** File names only; downloads happen on KAP. */
-  attachments: { name: string }[];
+  /** Attachments; PDFs carry their extracted text (downloads happen on KAP). */
+  attachments: EventContentAttachment[];
   /** Very large disclosures (financial reports) are cut. */
   truncated: boolean;
   fetched_at: string;

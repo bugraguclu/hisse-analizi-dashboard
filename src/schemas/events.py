@@ -135,7 +135,16 @@ EventContentBlock = Annotated[
 
 
 class EventContentAttachment(BaseModel):
+    """One attachment; PDF attachments carry their extracted text (``status == "text"``)."""
+
     name: str
+    type: Literal["pdf", "other"] | None = None
+    # text | no_text (scanned) | too_large | unreadable | failed (retry later) | skipped | unsupported.
+    # None: content cached before attachment texts existed.
+    status: str | None = None
+    text: str | None = None
+    pages: int | None = None
+    truncated: bool = False
 
 
 class EventContentOut(BaseModel):

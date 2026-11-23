@@ -316,8 +316,9 @@ def _content_out(event_id: uuid.UUID, source_url: str | None, content: dict[str,
     )
 
 
-def _blocks_to_text(blocks: list[dict[str, Any]]) -> str:
-    """Plain-text rendition of content blocks (``body_text``, shown by simpler clients)."""
+def _blocks_to_text(blocks: list[dict[str, Any]], attachments: list[dict[str, Any]] | None = None) -> str:
+    """Plain-text rendition of content blocks and attachment texts (``body_text``, shown
+    by simpler clients)."""
     parts: list[str] = []
     for block in blocks:
         if block["type"] in ("heading", "text"):
@@ -326,6 +327,9 @@ def _blocks_to_text(blocks: list[dict[str, Any]]) -> str:
             parts.append(f"{block['label']}: {block['value']}")
         elif block["type"] == "table":
             parts.append("\n".join(" | ".join(cell for cell in row) for row in block["rows"]))
+    for attachment in attachments or []:
+        if attachment.get("text"):
+            parts.append(f"[{attachment.get('name') or 'Ek'}]\n{attachment['text']}")
     return "\n\n".join(parts)[:_MAX_BODY_TEXT]
 
 
@@ -360,10 +364,14 @@ async def get_event_content(request: Request, event_id: uuid.UUID, db: DB):
         )
     payload = content.to_json()
     fetched_at = utcnow()
+    if not content.attachments_settled:
+        # An attachment failed for a passing reason: serve what we have, store nothing,
+        # so the next view retries instead of keeping the gap forever.
+        return _content_out(event_id, event.event_url, payload, fetched_at)
     await repo.save_content(
         event.event_url or "",
         payload,
-        _blocks_to_text(payload["blocks"]) or None,
+        _blocks_to_text(payload["blocks"], payload["attachments"]) or None,
         fetched_at,
         summary=content.summary,
     )

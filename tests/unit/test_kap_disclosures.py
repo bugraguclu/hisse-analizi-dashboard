@@ -302,7 +302,8 @@ def test_legacy_form_keeps_order_tables_and_drops_empty_sections():
     # "Özet Bilgi" becomes the summary instead of a field; "Hayır" flags are dropped.
     assert content.summary == "22.09.2026 Tarihli Pay Geri Alım İşlemleri"
     assert content.publisher == "PC İLETİŞİM A.Ş."
-    assert content.attachments == [{"name": "rapor.pdf"}]
+    # "x" is no KAP file id: the attachment is listed but cannot be downloaded.
+    assert content.attachments == [{"name": "rapor.pdf", "type": "pdf"}]
     assert content.blocks == [
         {"type": "field", "label": "Yönetim Kurulu Karar Tarihi", "value": "14.09.2026"},
         {"type": "heading", "text": "Geri Alım İşlemlerinin Detayları"},
@@ -368,3 +369,130 @@ async def test_fetch_disclosure_content_requests_the_detail_endpoint(monkeypatch
     assert content.index == "1666845" and content.summary == "S" and content.blocks
     with pytest.raises(ValueError):
         await kap.fetch_disclosure_content("../etc")
+
+
+# ---------------------------------------------------------------------------
+# PDF attachments
+# ---------------------------------------------------------------------------
+
+from tests.unit.test_pdf_text import make_pdf  # noqa: E402
+
+
+def java_byte_array(data: bytes) -> bytes:
+    """``data`` the way KAP's file endpoint sends it: a Java-serialized ``byte[]``."""
+    return (
+        b"\xac\xed\x00\x05\x75\x72\x00\x02[B"
+        + b"\xac\xf3\x17\xf8\x06\x08T\xe0"  # serialVersionUID of byte[]
+        + b"\x02\x00\x00\x78\x70"
+        + len(data).to_bytes(4, "big")
+        + data
+    )
+
+
+class FakeFileClient(FakeClient):
+    """FakeClient that also serves file downloads: ``files`` maps objId → bytes / status / exception."""
+
+    def __init__(self, detail, files):
+        super().__init__(detail)
+        self.files = files
+        self.downloads: list[str] = []
+
+    def stream(self, method, url, headers=None):
+        obj_id = url.rsplit("/", 1)[-1]
+        self.downloads.append(obj_id)
+        served = self.files[obj_id]
+
+        class _Ctx:
+            async def __aenter__(self_inner):
+                if isinstance(served, Exception):
+                    raise served
+                if isinstance(served, int):
+                    return httpx.Response(served, content=b"", request=httpx.Request(method, url))
+                return httpx.Response(200, content=served, request=httpx.Request(method, url))
+
+            async def __aexit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+
+def _detail_with(*attachments):
+    return [{
+        "disclosure": {"disclosureBasic": {"title": "Özel Durum Açıklaması (Genel)", "summary": "Ekte"}},
+        "disclosureBody": [XBRL_ODA],
+        "attachments": [
+            {"objId": obj_id, "fileName": name, "fileExtension": name.rsplit(".", 1)[-1]} for obj_id, name in attachments
+        ],
+    }]
+
+
+def test_kap_file_wrapper_is_unwrapped_and_plain_pdfs_pass_through():
+    pdf = make_pdf(["Pay alimi"])
+
+    assert kap.unwrap_kap_file(java_byte_array(pdf)) == pdf
+    assert kap.unwrap_kap_file(pdf) == pdf
+    for bad in (b"<html>", java_byte_array(pdf)[:30], b"\xac\xed\x00\x05\x75\x72\x00\x02[I" + b"\x00" * 20):
+        with pytest.raises(kap.AttachmentError) as info:
+            kap.unwrap_kap_file(bad)
+        assert info.value.status == "unreadable"
+
+
+async def test_pdf_attachments_carry_their_text_and_other_files_are_listed(monkeypatch):
+    client = FakeFileClient(
+        _detail_with(("aaaaaaaa01", "bildirim.pdf"), ("aaaaaaaa02", "tablo.xlsx"), ("aaaaaaaa03", "taranmis.pdf")),
+        {"aaaaaaaa01": java_byte_array(make_pdf(["Pay alimi yapilmistir."])), "aaaaaaaa03": java_byte_array(make_pdf([]))},
+    )
+    monkeypatch.setattr(kap, "_get_client", lambda: client)
+
+    content = await kap.fetch_disclosure_content("1700907")
+
+    first, sheet, scanned = content.attachments
+    assert first["status"] == "text" and "Pay alimi yapilmistir." in first["text"] and first["pages"] == 1
+    assert sheet == {"name": "tablo.xlsx", "id": "aaaaaaaa02", "type": "other", "status": "unsupported"}
+    assert scanned["status"] == "no_text" and "text" not in scanned
+    assert client.downloads == ["aaaaaaaa01", "aaaaaaaa03"]
+    assert content.attachments_settled
+    assert content.to_json()["attachments"][0]["text"] == first["text"]
+
+
+async def test_attachment_reads_are_capped_per_disclosure(monkeypatch):
+    names = [(f"bbbbbbbb{n:02d}", f"ek{n}.pdf") for n in range(5)]
+    pdf = java_byte_array(make_pdf(["x"]))
+    client = FakeFileClient(_detail_with(*names), {obj_id: pdf for obj_id, _ in names})
+    monkeypatch.setattr(kap, "_get_client", lambda: client)
+
+    content = await kap.fetch_disclosure_content("1700907")
+
+    assert [a["status"] for a in content.attachments] == ["text"] * kap.MAX_PDF_ATTACHMENTS + ["skipped"] * 2
+    assert len(client.downloads) == kap.MAX_PDF_ATTACHMENTS
+
+
+async def test_missing_or_oversized_files_are_settled_without_a_cooldown(monkeypatch):
+    monkeypatch.setattr(kap, "_MAX_PDF_BYTES", 1000)
+    client = FakeFileClient(
+        _detail_with(("cccccccc01", "yok.pdf"), ("cccccccc02", "buyuk.pdf")),
+        {"cccccccc01": 404, "cccccccc02": java_byte_array(make_pdf(["y" * 2000]))},
+    )
+    monkeypatch.setattr(kap, "_get_client", lambda: client)
+
+    content = await kap.fetch_disclosure_content("1700907")
+
+    assert [a["status"] for a in content.attachments] == ["unreadable", "too_large"]
+    assert content.attachments_settled
+    assert kap._failed_until == 0.0
+
+
+async def test_a_kap_outage_during_a_download_is_retried_on_a_later_view(monkeypatch):
+    client = FakeFileClient(
+        _detail_with(("dddddddd01", "ek.pdf")),
+        {"dddddddd01": httpx.ConnectError("Server disconnected")},
+    )
+    monkeypatch.setattr(kap, "_get_client", lambda: client)
+
+    content = await kap.fetch_disclosure_content("1700907")
+
+    assert content.attachments[0]["status"] == "failed"
+    assert not content.attachments_settled
+    assert kap._failed_until > 0  # same back-off as the disclosure requests
+    # The disclosure detail cached for other viewers is not modified.
+    assert "status" not in (await kap._fetch_disclosure_content("1700907")).attachments[0]

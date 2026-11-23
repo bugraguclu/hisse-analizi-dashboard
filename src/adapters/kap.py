@@ -20,7 +20,9 @@ olduğundan an UTC olarak saklanır.
 """
 
 import asyncio
+import dataclasses
 import re
+import struct
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -38,6 +40,7 @@ from src.core.config import settings
 from src.core.time import utcnow
 from src.db.models import PollingState
 from src.parsers.helpers import clean_whitespace, compute_content_hash, parse_date
+from src.parsers.pdf_text import PdfText, PdfTextError, extract_pdf_text
 
 logger = structlog.get_logger(__name__)
 
@@ -45,6 +48,7 @@ KAP_BASE_URL = "https://www.kap.org.tr"
 KAP_DISCLOSURE_URL = KAP_BASE_URL + "/tr/Bildirim/{index}"
 KAP_LIST_URL = KAP_BASE_URL + "/tr/api/disclosure/members/byCriteria"
 KAP_DETAIL_URL = KAP_BASE_URL + "/tr/api/notification/attachment-detail/{index}"
+KAP_FILE_URL = KAP_BASE_URL + "/tr/api/file/download/{obj_id}"
 _LIST_REFERER = KAP_BASE_URL + "/tr/bildirim-sorgu"
 
 # The list endpoint returns at most this many rows and, when it truncates, silently keeps
@@ -69,6 +73,17 @@ _client: httpx.AsyncClient | None = None
 
 class KapUnavailableError(RuntimeError):
     """KAP did not answer usably; the poll counts as failed (and backs off)."""
+
+
+class AttachmentError(RuntimeError):
+    """An attachment that will not become readable by retrying (too large, gone, not a PDF).
+
+    ``status`` is the attachment status shown to clients (see :func:`fetch_disclosure_content`).
+    """
+
+    def __init__(self, status: str, message: str) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +137,47 @@ async def _request(method: Literal["GET", "POST"], url: str, *, referer: str, js
             resp = await _get_client().request(method, url, json=json_body, headers={"Referer": referer})
             resp.raise_for_status()
             return resp.json()
+        except Exception as e:
+            _failed_until = time.time() + _FAILURE_COOLDOWN_SECONDS
+            raise KapUnavailableError(f"{type(e).__name__}: {e}"[:300]) from e
+        finally:
+            _last_request_at = time.monotonic()
+
+
+async def _request_file(url: str, *, referer: str, max_bytes: int) -> bytes:
+    """Download one KAP file under the same spacing/cooldown as :func:`_request`.
+
+    Only failures that look like a block or an outage (network errors, 403/429, 5xx) start
+    the cooldown; a missing or oversized file raises :class:`AttachmentError` instead.
+    """
+    global _failed_until, _last_request_at
+    if time.time() < _failed_until:
+        raise KapUnavailableError("KAP recently failed; retrying after cooldown")
+    async with _lock():
+        if time.time() < _failed_until:
+            raise KapUnavailableError("KAP recently failed; retrying after cooldown")
+        wait = _last_request_at + _MIN_REQUEST_INTERVAL_SECONDS - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            async with _get_client().stream("GET", url, headers={"Referer": referer, "Accept": "*/*"}) as resp:
+                if resp.status_code in (403, 429) or resp.status_code >= 500:
+                    resp.raise_for_status()
+                if resp.status_code >= 400:
+                    raise AttachmentError("unreadable", f"KAP file answered {resp.status_code}")
+                declared = resp.headers.get("content-length", "")
+                if declared.isdigit() and int(declared) > max_bytes:
+                    raise AttachmentError("too_large", f"{declared} bytes")
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in resp.aiter_bytes():
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise AttachmentError("too_large", f"over {max_bytes} bytes")
+                    chunks.append(chunk)
+                return b"".join(chunks)
+        except AttachmentError:
+            raise
         except Exception as e:
             _failed_until = time.time() + _FAILURE_COOLDOWN_SECONDS
             raise KapUnavailableError(f"{type(e).__name__}: {e}"[:300]) from e
@@ -362,6 +418,11 @@ _MAX_TABLE_ROWS = 120
 _MAX_TABLE_COLS = 14
 # Financial reports carry several MB of statement tables; parse at most this much HTML.
 _MAX_HTML_CHARS = 700_000
+# PDF attachments: read at most this many per disclosure, each this large / this long.
+MAX_PDF_ATTACHMENTS = 3
+_MAX_PDF_BYTES = 8 * 1024 * 1024
+_MAX_PDF_PAGES = 20
+_MAX_PDF_TEXT_CHARS = 30_000
 _HIDDEN_STYLE_RE = re.compile(r"display\s*:\s*none", re.IGNORECASE)
 # Unfilled template slots such as "[CONSOLIDATION_METHOD]" (not stock lists like "[METRO]").
 _PLACEHOLDER_RE = re.compile(r"^\[[A-Z]+(?:_[A-Z]+)+\]$")
@@ -378,14 +439,15 @@ _SUMMARY_LABELS = {"özet bilgi"}
 
 
 # Bump when the block format/parsing changes: cached content of an older version is refetched.
-CONTENT_FORMAT_VERSION = 1
+# v2: PDF attachments carry their extracted text.
+CONTENT_FORMAT_VERSION = 2
 
 
 @dataclass
 class DisclosureContent:
     index: str
     blocks: list[ContentBlock] = field(default_factory=list)
-    attachments: list[dict[str, str]] = field(default_factory=list)
+    attachments: list[dict[str, Any]] = field(default_factory=list)
     truncated: bool = False
     summary: str | None = None
     publisher: str | None = None
@@ -399,6 +461,11 @@ class DisclosureContent:
             "summary": self.summary,
             "publisher": self.publisher,
         }
+
+    @property
+    def attachments_settled(self) -> bool:
+        """False while an attachment failed for a passing reason (worth refetching later)."""
+        return all(a.get("status") != "failed" for a in self.attachments)
 
 
 def _is_hidden(tag: Tag) -> bool:
@@ -644,6 +711,21 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+_OBJ_ID_RE = re.compile(r"^[0-9A-Za-z]{8,64}$")
+
+
+def _attachment_entry(raw: dict[str, Any]) -> dict[str, Any]:
+    """Name, KAP file id and kind of one attachment (text is added by the fetch)."""
+    name = clean_whitespace(str(raw.get("fileName") or ""))
+    entry: dict[str, Any] = {"name": name}
+    obj_id = str(raw.get("objId") or "")
+    if _OBJ_ID_RE.match(obj_id):
+        entry["id"] = obj_id
+    ext = str(raw.get("fileExtension") or "").lower().lstrip(".") or name.rsplit(".", 1)[-1].lower()
+    entry["type"] = "pdf" if ext == "pdf" else "other"
+    return entry
+
+
 def parse_disclosure_detail(index: str, payload: Any) -> DisclosureContent:
     """Parse the ``attachment-detail`` response (a one-element list) into content blocks."""
     element = payload[0] if isinstance(payload, list) and payload else payload
@@ -659,11 +741,7 @@ def parse_disclosure_detail(index: str, payload: Any) -> DisclosureContent:
     form_name = clean_whitespace(str(basic.get("title") or "")).casefold()
     if form_name:  # the form's own title repeats the headline area
         blocks = [b for b in blocks if not (b["type"] == "heading" and b["text"].casefold() == form_name)]
-    attachments = [
-        {"name": clean_whitespace(str(a.get("fileName") or ""))}
-        for a in element.get("attachments") or []
-        if isinstance(a, dict) and a.get("fileName")
-    ]
+    attachments = [_attachment_entry(a) for a in element.get("attachments") or [] if isinstance(a, dict) and a.get("fileName")]
     return DisclosureContent(
         index=index,
         blocks=blocks,
@@ -675,10 +753,112 @@ def parse_disclosure_detail(index: str, payload: Any) -> DisclosureContent:
 
 
 async def fetch_disclosure_content(index: str) -> DisclosureContent:
-    """Full text of one disclosure from KAP (raises :class:`KapUnavailableError`)."""
+    """Full text of one disclosure from KAP, PDF attachments included as plain text.
+
+    Raises :class:`KapUnavailableError` when the disclosure itself cannot be fetched. An
+    attachment that cannot be read never fails the disclosure; its ``status`` says why:
+
+    - ``text``: ``text`` holds the extracted text (``pages``, ``truncated`` alongside)
+    - ``no_text``: a PDF without a text layer (scanned image)
+    - ``too_large`` / ``unreadable``: over the size cap / missing, corrupt or not a PDF
+    - ``failed``: KAP did not answer now; :attr:`DisclosureContent.attachments_settled` is
+      False so the caller does not store the result and a later view retries
+    - ``skipped``: past the per-disclosure attachment cap; ``unsupported``: not a PDF
+    """
     if not str(index).isdigit():
         raise ValueError(f"invalid KAP disclosure index: {index!r}")
-    return await _fetch_disclosure_content(str(index))
+    content = await _fetch_disclosure_content(str(index))
+    if not content.attachments:
+        return content
+    attachments: list[dict[str, Any]] = []
+    pdfs = 0
+    for attachment in content.attachments:
+        entry = {key: value for key, value in attachment.items() if key in ("name", "id", "type")}
+        if entry.get("type") != "pdf" or "id" not in entry:
+            entry["status"] = "unsupported"
+        elif pdfs >= MAX_PDF_ATTACHMENTS:
+            entry["status"] = "skipped"
+        else:
+            pdfs += 1
+            entry.update(await _attachment_text_entry(str(index), entry["id"]))
+        attachments.append(entry)
+    # The cached detail object is shared between callers: never mutate it.
+    return dataclasses.replace(content, attachments=attachments)
+
+
+async def _attachment_text_entry(index: str, obj_id: str) -> dict[str, Any]:
+    try:
+        pdf = await _fetch_attachment_text(index, obj_id)
+    except AttachmentError as e:
+        logger.info("kap_attachment_unreadable", index=index, status=e.status, error=str(e)[:200])
+        return {"status": e.status}
+    except KapUnavailableError as e:
+        logger.warning("kap_attachment_unavailable", index=index, error=str(e)[:200])
+        return {"status": "failed"}
+    if pdf.pages_with_text == 0:
+        return {"status": "no_text", "pages": pdf.pages}
+    return {"status": "text", "text": pdf.text, "pages": pdf.pages, "truncated": pdf.truncated}
+
+
+def unwrap_kap_file(raw: bytes) -> bytes:
+    """File bytes from a KAP download.
+
+    KAP's file endpoint answers with the file inside a Java serialization stream of a
+    ``byte[]`` (``AC ED 00 05 75 72 … "[B" …``) rather than the bare file; plain files are
+    returned unchanged. Raises :class:`AttachmentError` for anything else.
+    """
+    if raw.startswith(b"%PDF-"):
+        return raw
+    try:
+        if not raw.startswith(b"\xac\xed\x00\x05\x75\x72"):  # stream magic, TC_ARRAY, TC_CLASSDESC
+            raise ValueError("not a Java byte[] stream")
+        pos = 6
+        (name_len,) = struct.unpack_from(">H", raw, pos)
+        pos += 2
+        if raw[pos : pos + name_len] != b"[B":
+            raise ValueError("array is not byte[]")
+        pos += name_len + 8 + 1  # class name, serialVersionUID, flags
+        (field_count,) = struct.unpack_from(">H", raw, pos)
+        pos += 2
+        if field_count != 0 or raw[pos : pos + 2] != b"\x78\x70":  # TC_ENDBLOCKDATA, TC_NULL (no superclass)
+            raise ValueError("unexpected class descriptor")
+        pos += 2
+        (length,) = struct.unpack_from(">i", raw, pos)
+        pos += 4
+        if length < 0 or pos + length > len(raw):
+            raise ValueError("array length beyond the stream")
+        return raw[pos : pos + length]
+    except (ValueError, struct.error) as e:
+        raise AttachmentError("unreadable", f"unknown KAP file format: {e}") from e
+
+
+def _read_pdf(raw: bytes) -> PdfText:
+    try:
+        return extract_pdf_text(unwrap_kap_file(raw), max_pages=_MAX_PDF_PAGES, max_chars=_MAX_PDF_TEXT_CHARS)
+    except PdfTextError as e:
+        raise AttachmentError("unreadable", str(e)) from e
+
+
+# One download + extraction per file for every simultaneous view (and for 10 minutes).
+@cached(ttl_seconds=600, key_prefix="kap-attachment")
+async def _fetch_attachment_text(index: str, obj_id: str) -> PdfText:
+    raw = await _request_file(
+        KAP_FILE_URL.format(obj_id=obj_id),
+        referer=KAP_DISCLOSURE_URL.format(index=index),
+        max_bytes=_MAX_PDF_BYTES,
+    )
+    started = time.perf_counter()
+    pdf = await asyncio.to_thread(_read_pdf, raw)
+    logger.info(
+        "kap_attachment_parsed",
+        index=index,
+        bytes=len(raw),
+        pages=pdf.pages,
+        pages_with_text=pdf.pages_with_text,
+        chars=len(pdf.text),
+        parse_ms=round((time.perf_counter() - started) * 1000),
+    )
+    return pdf
 
 
 # Single-flight: simultaneous first views of one disclosure share a single KAP request.

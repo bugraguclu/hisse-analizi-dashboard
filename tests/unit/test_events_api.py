@@ -206,12 +206,53 @@ def test_content_is_fetched_parsed_and_cached_for_the_disclosure(client, monkeyp
     assert response.status_code == 200
     assert requested == ["1666380"]
     body = response.json()
-    assert body["attachments"] == [{"name": "rapor.pdf"}] and not body["truncated"]
+    assert body["attachments"] == [{"name": "rapor.pdf", "type": None, "status": None, "text": None, "pages": None, "truncated": False}]
+    assert not body["truncated"]
     assert [b["type"] for b in body["blocks"]] == ["field", "text"]
     [saved] = FakeRepo.saved
     assert saved["url"] == KAP_URL and saved["summary"] == "Özet başlık"
     assert saved["body_text"] == "Karar Tarihi: 02.09.2026\n\nAçıklama"
     assert saved["content"]["v"] == kap.CONTENT_FORMAT_VERSION
+
+
+def test_attachment_text_is_returned_and_searchable_in_body_text(client, monkeypatch):
+    async def fake_fetch(index):
+        return kap.DisclosureContent(
+            index=index,
+            blocks=[{"type": "text", "text": "Açıklama ekte yer almaktadır."}],
+            attachments=[
+                {"name": "ek.pdf", "id": "x1", "type": "pdf", "status": "text", "text": "Pay alımı: 808.147 adet", "pages": 1, "truncated": False},
+                {"name": "taranmis.pdf", "id": "x2", "type": "pdf", "status": "no_text", "pages": 3},
+            ],
+        )
+
+    monkeypatch.setattr(routers, "fetch_disclosure_content", fake_fetch)
+
+    body = client.get(f"/events/{EVENT_ID}/content").json()
+
+    assert body["attachments"] == [
+        {"name": "ek.pdf", "type": "pdf", "status": "text", "text": "Pay alımı: 808.147 adet", "pages": 1, "truncated": False},
+        {"name": "taranmis.pdf", "type": "pdf", "status": "no_text", "text": None, "pages": 3, "truncated": False},
+    ]
+    [saved] = FakeRepo.saved
+    assert saved["body_text"] == "Açıklama ekte yer almaktadır.\n\n[ek.pdf]\nPay alımı: 808.147 adet"
+
+
+def test_content_with_a_failed_attachment_is_served_but_not_stored(client, monkeypatch):
+    async def fake_fetch(index):
+        return kap.DisclosureContent(
+            index=index,
+            blocks=[{"type": "text", "text": "Ekte"}],
+            attachments=[{"name": "ek.pdf", "type": "pdf", "status": "failed"}],
+        )
+
+    monkeypatch.setattr(routers, "fetch_disclosure_content", fake_fetch)
+
+    response = client.get(f"/events/{EVENT_ID}/content")
+
+    assert response.status_code == 200
+    assert response.json()["attachments"][0]["status"] == "failed"
+    assert FakeRepo.saved == []
 
 
 def test_kap_outage_is_a_503_with_a_machine_readable_code(client, monkeypatch):

@@ -1,10 +1,10 @@
 "use client";
 
 import { Fragment, useMemo, type ReactNode } from "react";
-import { Paperclip } from "lucide-react";
+import { ChevronDown, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { EventContentBlock, EventContentOut } from "@/types";
-import { useEventsI18n } from "./i18n";
+import type { EventAttachmentStatus, EventContentBlock, EventContentOut } from "@/types";
+import { useEventsI18n, type EventsKey } from "./i18n";
 
 type FieldBlock = Extract<EventContentBlock, { type: "field" }>;
 
@@ -71,6 +71,66 @@ function groupBlocks(blocks: unknown): Group[] {
   return groups;
 }
 
+interface Attachment {
+  name: string;
+  status: EventAttachmentStatus | null;
+  text: string;
+  pages: number | null;
+  truncated: boolean;
+}
+
+const STATUSES: readonly EventAttachmentStatus[] = ["text", "no_text", "too_large", "unreadable", "failed", "skipped", "unsupported"];
+
+const STATUS_NOTE: Partial<Record<EventAttachmentStatus, EventsKey>> = {
+  no_text: "drawer.attachment.noText",
+  too_large: "drawer.attachment.tooLarge",
+  unreadable: "drawer.attachment.unreadable",
+  failed: "drawer.attachment.failed",
+};
+
+/** Validate untrusted attachment entries (older caches carry the name only). */
+function readAttachments(raw: unknown): Attachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): Attachment[] => {
+    if (!item || typeof item !== "object") return [];
+    const entry = item as Record<string, unknown>;
+    const name = str(entry.name).trim();
+    if (!name) return [];
+    const status = STATUSES.find((value) => value === entry.status) ?? null;
+    const text = status === "text" ? str(entry.text).replace(/\r\n?/g, "\n") : "";
+    const pages = typeof entry.pages === "number" && Number.isFinite(entry.pages) && entry.pages > 0 ? entry.pages : null;
+    return [{ name, status: text.trim() ? status : status === "text" ? null : status, text, pages, truncated: entry.truncated === true }];
+  });
+}
+
+function AttachmentText({ attachment, open, kapLink }: { attachment: Attachment; open: boolean; kapLink: (children: ReactNode) => ReactNode }) {
+  const { t, tp } = useEventsI18n();
+  return (
+    <details open={open} className="group rounded-md border border-border">
+      <summary className="flex cursor-pointer list-none items-start gap-2 px-3 py-2 text-[13px] text-foreground [&::-webkit-details-marker]:hidden">
+        <Paperclip aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 break-all font-medium">{attachment.name}</span>
+        {attachment.pages ? (
+          <span className="shrink-0 text-xs text-muted-foreground">{tp("drawer.attachment.pages", attachment.pages)}</span>
+        ) : null}
+        <ChevronDown aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-2 border-t border-border px-3 py-2">
+        <p className="text-xs text-muted-foreground">{t("drawer.attachment.extracted")}</p>
+        <pre
+          role="region"
+          aria-label={t("drawer.attachment.textLabel", { name: attachment.name })}
+          tabIndex={0}
+          className="max-h-[28rem] overflow-auto whitespace-pre rounded bg-surface p-2 font-mono text-[11px] leading-snug text-foreground scrollbar-thin focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {attachment.text}
+        </pre>
+        {attachment.truncated ? <p className="text-xs text-muted-foreground">{kapLink(t("drawer.attachment.truncated"))}</p> : null}
+      </div>
+    </details>
+  );
+}
+
 /** "1.234.567,89", "(12,5)", "%15", "-3,2 TL" → right-aligned tabular cells. */
 function isNumeric(cell: string): boolean {
   const compact = cell.replace(/\s|%|TL|TRY|₺/gi, "");
@@ -131,9 +191,9 @@ function ContentTable({ header, rows, index }: { header: string[]; rows: string[
 export function EventContentBody({ content, kapUrl }: { content: EventContentOut; kapUrl: string | null }) {
   const { t } = useEventsI18n();
   const groups = useMemo(() => groupBlocks(content.blocks), [content.blocks]);
-  const attachments = Array.isArray(content.attachments)
-    ? content.attachments.map((item) => str(item?.name).trim()).filter(Boolean)
-    : [];
+  const attachments = useMemo(() => readAttachments(content.attachments), [content.attachments]);
+  // The first readable attachment starts open: it is often the whole disclosure ("ekte yer almaktadır").
+  const firstText = attachments.findIndex((item) => item.status === "text");
 
   if (groups.length === 0 && attachments.length === 0) {
     return <p className="text-[13px] text-muted-foreground">{t("drawer.contentEmpty")}</p>;
@@ -194,13 +254,26 @@ export function EventContentBody({ content, kapUrl }: { content: EventContentOut
       {attachments.length > 0 ? (
         <section className="space-y-2 border-t border-border pt-4">
           <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("drawer.attachments")}</h4>
-          <ul className="space-y-1">
-            {attachments.map((name, index) => (
-              <li key={`${name}-${index}`} className="flex items-start gap-2 text-[13px] text-foreground">
-                <Paperclip aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="break-all">{name}</span>
-              </li>
-            ))}
+          <ul className="space-y-2">
+            {attachments.map((attachment, index) => {
+              if (attachment.status === "text") {
+                return (
+                  <li key={`${attachment.name}-${index}`}>
+                    <AttachmentText attachment={attachment} open={index === firstText} kapLink={kapLink} />
+                  </li>
+                );
+              }
+              const note = attachment.status ? STATUS_NOTE[attachment.status] : undefined;
+              return (
+                <li key={`${attachment.name}-${index}`} className="flex items-start gap-2 text-[13px] text-foreground">
+                  <Paperclip aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="break-all">{attachment.name}</span>
+                    {note ? <span className="block text-xs text-muted-foreground">{t(note)}</span> : null}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           <p className="text-xs text-muted-foreground">{kapLink(t("drawer.attachmentsNote"))}</p>
         </section>

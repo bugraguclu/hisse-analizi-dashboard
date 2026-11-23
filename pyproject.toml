@@ -30,6 +30,9 @@ dependencies = [
     "httpx>=0.27.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=5.1.0",
+    # KAP disclosure attachments (src/parsers/pdf_text.py). Pure Python; >=6.1 for the
+    # recent fixes against crafted PDFs (they are untrusted input).
+    "pypdf>=6.1,<8",
     "borsapy>=0.10.2,<0.11",
     "yfinance>=0.2.35,<2.0",
     # Imported directly (src/adapters/{price,technical,index_adapter}.py) — was
