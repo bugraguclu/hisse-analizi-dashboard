@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { EMPTY_VALUE, formatFreshnessStamp, formatIstanbulDateTime } from "../lib/format";
 import type { ResourceStatus } from "../lib/requestState";
 import { BorderRadius, FontSize, Spacing, useThemeColors } from "../lib/theme";
+import { Icon, type IconName, PillButton } from "./ui";
 
 export function LoadingBlock({ message = "Veriler yükleniyor…" }: { message?: string }) {
   const colors = useThemeColors();
@@ -30,20 +31,15 @@ export function ErrorCard({
   const colors = useThemeColors();
   return (
     <View
-      style={[styles.stateBox, { backgroundColor: colors.bgCard, borderColor: colors.down }]}
+      style={[styles.stateBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
       accessibilityRole="alert"
     >
-      <Text style={[styles.stateTitle, { color: colors.down }]}>{title}</Text>
-      <Text style={[styles.stateBody, { color: colors.textSecondary }]}>{message}</Text>
-      {onRetry ? (
-        <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: colors.accent }]}
-          onPress={onRetry}
-          accessibilityRole="button"
-        >
-          <Text style={styles.retryButtonText}>Tekrar dene</Text>
-        </TouchableOpacity>
-      ) : null}
+      <View style={[styles.stateIcon, { backgroundColor: colors.downSoft }]}>
+        <Icon name="wifi.exclamationmark" size={20} color={colors.down} weight="semibold" />
+      </View>
+      <Text style={[styles.stateTitle, { color: colors.textPrimary }]}>{title}</Text>
+      <Text style={[styles.stateBody, { color: colors.textMuted }]}>{message}</Text>
+      {onRetry ? <PillButton label="Tekrar dene" icon="arrow.clockwise" variant="filled" onPress={onRetry} /> : null}
     </View>
   );
 }
@@ -53,28 +49,23 @@ export function EmptyCard({
   message,
   actionLabel,
   onAction,
+  icon = "tray",
 }: {
   title?: string;
   message: string;
   actionLabel?: string;
   onAction?: () => void;
+  icon?: IconName;
 }) {
   const colors = useThemeColors();
   return (
     <View style={[styles.stateBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      <View style={[styles.stateIcon, { backgroundColor: colors.fill }]}>
+        <Icon name={icon} size={20} color={colors.textMuted} weight="semibold" />
+      </View>
       <Text style={[styles.stateTitle, { color: colors.textPrimary }]}>{title}</Text>
       <Text style={[styles.stateBody, { color: colors.textMuted }]}>{message}</Text>
-      {actionLabel && onAction ? (
-        <TouchableOpacity
-          style={[styles.secondaryButton, { borderColor: colors.accent, backgroundColor: colors.accentLight }]}
-          onPress={onAction}
-          accessibilityRole="button"
-        >
-          <Text style={{ color: colors.accent, fontSize: FontSize.sm, fontWeight: "600" }}>
-            {actionLabel}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
+      {actionLabel && onAction ? <PillButton label={actionLabel} onPress={onAction} /> : null}
     </View>
   );
 }
@@ -100,7 +91,9 @@ export function FreshnessBanner({
 }) {
   const colors = useThemeColors();
 
-  if (status === "stale") {
+  // A cached snapshot that is being refreshed right now is normal on launch; only
+  // warn once the refresh has failed or stopped.
+  if (status === "stale" && !(refreshing && !error)) {
     const savedText = fetchedAt ? formatIstanbulDateTime(fetchedAt) : EMPTY_VALUE;
     return (
       <View
@@ -248,9 +241,18 @@ const styles = StyleSheet.create({
   stateBox: {
     borderRadius: BorderRadius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
     alignItems: "center",
     gap: Spacing.sm,
+  },
+  stateIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
   },
   stateTitle: {
     fontSize: FontSize.md,
@@ -261,24 +263,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     textAlign: "center",
     lineHeight: 19,
-  },
-  retryButton: {
-    marginTop: Spacing.xs,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontSize: FontSize.sm,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    marginTop: Spacing.xs,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   staleBanner: {
     flexDirection: "row",

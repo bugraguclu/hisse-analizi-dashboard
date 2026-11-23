@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   FlatList,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BottomSheetModal from "../../components/BottomSheetModal";
 import { EmptyCard, ErrorCard, FreshnessBanner, LoadingBlock } from "../../components/StatusViews";
+import { ChangePill, Chip, Icon, IconButton, ScreenHeader, Touchable, trTitleCase, usePullToRefresh } from "../../components/ui";
 import { SheetNoDrag, SheetScrollView } from "../../components/SwipeDismissSheet";
 import { mobileApi } from "../../lib/api";
 import {
@@ -60,6 +62,7 @@ import {
 } from "../../lib/screener";
 import { BorderRadius, FontSize, Spacing, useThemeColors } from "../../lib/theme";
 import { useResource } from "../../lib/useResource";
+import { useStockActions } from "../../lib/useStockActions";
 
 type FilterSheetTab = "presets" | "universe" | "advanced";
 
@@ -121,24 +124,10 @@ function formatScreenerField(row: ScreenerStockRow, field: NumericField): string
   }
 }
 
-function RemovablePill({ text, onRemove }: { text: string; onRemove: () => void }) {
-  const colors = useThemeColors();
-  return (
-    <TouchableOpacity
-      style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-      onPress={onRemove}
-      accessibilityRole="button"
-      accessibilityLabel={`${text} filtresini kaldır`}
-      hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
-    >
-      <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>{text} ×</Text>
-    </TouchableOpacity>
-  );
-}
-
 export default function TaramaScreen() {
   const params = useLocalSearchParams<{ preset?: string; sector?: string; index?: string; q?: string }>();
   const router = useRouter();
+  const stockActions = useStockActions();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
 
@@ -185,9 +174,11 @@ export default function TaramaScreen() {
     isEmpty: (data) => !data.rows || data.rows.length === 0,
   });
 
+  const pull = usePullToRefresh(universe.reload, universe.refreshing);
+
   const sectorLabelMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const s of universe.data?.kap_sectors ?? []) map.set(s.key, s.name);
+    for (const s of universe.data?.kap_sectors ?? []) map.set(s.key, trTitleCase(s.name));
     for (const s of universe.data?.sectors ?? []) {
       if (!map.has(s.key)) map.set(s.key, s.name_tr);
     }
@@ -196,7 +187,7 @@ export default function TaramaScreen() {
 
   const sectorOptions = useMemo(() => {
     if (universe.data?.kap_sectors && universe.data.kap_sectors.length > 0) {
-      return universe.data.kap_sectors.map((s) => ({ key: s.key, label: s.name, count: s.count }));
+      return universe.data.kap_sectors.map((s) => ({ key: s.key, label: trTitleCase(s.name), count: s.count }));
     }
     return (universe.data?.sectors ?? []).map((s) => ({ key: s.key, label: s.name_tr, count: s.count }));
   }, [universe.data?.kap_sectors, universe.data?.sectors]);
@@ -261,14 +252,6 @@ export default function TaramaScreen() {
   const renderStockRow = useCallback(
     ({ item }: { item: ScreenerStockRow }) => {
       const change = item.change_pct;
-      const changeColor =
-        change === undefined
-          ? colors.textMuted
-          : change > 0.005
-            ? colors.up
-            : change < -0.005
-              ? colors.down
-              : colors.textSecondary;
       const sectorName =
         (item.kap_sector ? sectorLabelMap.get(item.kap_sector) : undefined) ??
         (item.sector ? sectorLabelMap.get(item.sector) : undefined) ??
@@ -293,9 +276,12 @@ export default function TaramaScreen() {
         .join(", ");
 
       return (
-        <TouchableOpacity
+        <Touchable
+          scaleTo={0.985}
           style={[styles.stockCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
           onPress={() => router.push(`/stock/${item.symbol}` as never)}
+          onLongPress={() => stockActions(item.symbol, { name: item.name, price: item.close, changePct: item.change_pct })}
+          delayLongPress={320}
           accessibilityRole="button"
           accessibilityLabel={a11yLabel}
           accessibilityHint="Hisse analizini açar"
@@ -349,9 +335,7 @@ export default function TaramaScreen() {
               <Text style={[styles.priceText, { color: colors.textPrimary }]}>
                 {formatPrice(item.close)}
               </Text>
-              <Text style={[styles.changeText, { color: changeColor }]}>
-                {formatSignedPercent(change)}
-              </Text>
+              <ChangePill value={change} size="sm" />
             </View>
           </View>
 
@@ -386,7 +370,7 @@ export default function TaramaScreen() {
               {signals.map((signal) => (
                 <View
                   key={signal}
-                  style={[styles.signalBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+                  style={[styles.signalBadge, { backgroundColor: colors.fill }]}
                 >
                   <Text style={{ color: colors.textSecondary, fontSize: 10, fontWeight: "600" }}>
                     {ROW_SIGNAL_LABELS[signal]}
@@ -395,40 +379,37 @@ export default function TaramaScreen() {
               ))}
             </View>
           ) : null}
-        </TouchableOpacity>
+        </Touchable>
       );
     },
-    [colors, displayMetrics, metricWidth, filters.dir, filters.sort, filters.view, router, sectorLabelMap],
+    [colors, displayMetrics, metricWidth, filters.dir, filters.sort, filters.view, router, sectorLabelMap, stockActions],
   );
 
   const listHeader = (
     <View style={styles.listHeader}>
       {/* Search bar */}
-      <View
-        style={[
-          styles.searchRow,
-          { backgroundColor: colors.bgCard, borderColor: colors.border },
-        ]}
-      >
+      <View style={[styles.searchRow, { backgroundColor: colors.fill }]}>
+        <Icon name="magnifyingglass" size={15} color={colors.textMuted} weight="semibold" />
         <TextInput
           value={filters.q}
           onChangeText={(q) => setFilters((prev) => ({ ...prev, q }))}
-          placeholder="Hisse kodu veya şirket ara (örn. THYAO)"
+          placeholder="Kod veya şirket ara"
           placeholderTextColor={colors.textMuted}
           autoCapitalize="characters"
           autoCorrect={false}
           returnKeyType="search"
+          clearButtonMode="never"
           style={[styles.searchInput, { color: colors.textPrimary }]}
         />
         {filters.q ? (
-          <TouchableOpacity
+          <Pressable
             onPress={() => setFilters((prev) => ({ ...prev, q: "" }))}
             accessibilityRole="button"
+            accessibilityLabel="Aramayı temizle"
+            hitSlop={8}
           >
-            <Text style={{ color: colors.textMuted, fontSize: FontSize.xs, fontWeight: "600" }}>
-              Temizle
-            </Text>
-          </TouchableOpacity>
+            <Icon name="xmark.circle.fill" size={16} color={colors.textMuted} />
+          </Pressable>
         ) : null}
       </View>
 
@@ -438,34 +419,15 @@ export default function TaramaScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.presetChipsRow}
       >
-        {FEATURED_PRESETS.map((preset) => {
-          const active = filters.presets.includes(preset.id);
-          return (
-            <TouchableOpacity
-              key={preset.id}
-              style={[
-                styles.presetChip,
-                {
-                  backgroundColor: active ? colors.accentLight : colors.bgCard,
-                  borderColor: active ? colors.accent : colors.border,
-                },
-              ]}
-              onPress={() => setFilters((prev) => toggleScreenerPreset(prev, preset.id))}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text
-                style={{
-                  color: active ? colors.accent : colors.textSecondary,
-                  fontSize: FontSize.xs,
-                  fontWeight: active ? "700" : "500",
-                }}
-              >
-                {preset.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {FEATURED_PRESETS.map((preset) => (
+          <Chip
+            key={preset.id}
+            label={preset.label}
+            active={filters.presets.includes(preset.id)}
+            icon={filters.presets.includes(preset.id) ? "checkmark" : undefined}
+            onPress={() => setFilters((prev) => toggleScreenerPreset(prev, preset.id))}
+          />
+        ))}
       </ScrollView>
 
       {/* Column set (web table views) */}
@@ -510,33 +472,45 @@ export default function TaramaScreen() {
           contentContainerStyle={styles.activeChipsRow}
         >
           {filters.index ? (
-            <RemovablePill
-              text={`Endeks: ${filters.index}`}
-              onRemove={() => setFilters((p) => ({ ...p, index: "" }))}
+            <Chip
+              active
+              removable
+              label={`Endeks: ${filters.index}`}
+              onPress={() => setFilters((p) => ({ ...p, index: "" }))}
             />
           ) : null}
           {filters.sector ? (
-            <RemovablePill
-              text={`Sektör: ${sectorLabelMap.get(filters.sector) ?? filters.sector}`}
-              onRemove={() => setFilters((p) => ({ ...p, sector: "" }))}
+            <Chip
+              active
+              removable
+              label={`Sektör: ${sectorLabelMap.get(filters.sector) ?? filters.sector}`}
+              onPress={() => setFilters((p) => ({ ...p, sector: "" }))}
             />
           ) : null}
           {filters.presets
             .filter((id) => !FEATURED_PRESETS.some((f) => f.id === id))
             .map((id) => (
-              <RemovablePill
-                key={id}
-                text={PRESET_BY_ID.get(id)?.label ?? id}
-                onRemove={() => setFilters((p) => toggleScreenerPreset(p, id))}
+              <Chip key={id}
+                active
+                removable
+                label={PRESET_BY_ID.get(id)?.label ?? id}
+                onPress={() => setFilters((p) => toggleScreenerPreset(p, id))}
               />
             ))}
           {filters.rec ? (
-            <RemovablePill text={`Öneri: ${filters.rec}`} onRemove={() => setFilters((p) => ({ ...p, rec: "" }))} />
+            <Chip
+              active
+              removable
+              label={`Öneri: ${filters.rec}`}
+              onPress={() => setFilters((p) => ({ ...p, rec: "" }))}
+            />
           ) : null}
           {filters.cross ? (
-            <RemovablePill
-              text={filters.cross === "golden" ? "Golden cross" : "Death cross"}
-              onRemove={() => setFilters((p) => ({ ...p, cross: "" }))}
+            <Chip
+              active
+              removable
+              label={filters.cross === "golden" ? "Golden cross" : "Death cross"}
+              onPress={() => setFilters((p) => ({ ...p, cross: "" }))}
             />
           ) : null}
           {(Object.keys(filters.ranges) as RangeKey[]).map((key) => {
@@ -551,10 +525,11 @@ export default function TaramaScreen() {
                   ? `${def.shortLabel} ≥ ${fmt(b.min)}`
                   : `${def.shortLabel} ≤ ${fmt(b.max as number)}`;
             return (
-              <RemovablePill
-                key={key}
-                text={text}
-                onRemove={() => {
+              <Chip key={key}
+                active
+                removable
+                label={text}
+                onPress={() => {
                   setFilters((p) => {
                     const nextRanges = { ...p.ranges };
                     delete nextRanges[key];
@@ -565,19 +540,14 @@ export default function TaramaScreen() {
               />
             );
           })}
-          <TouchableOpacity
-            style={[styles.activePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+          <Chip
+            label="Tümünü temizle"
+            icon="arrow.counterclockwise"
             onPress={() => {
               setFilters((p) => clearScreenerFilters(p));
               setRangeDrafts({});
             }}
-            accessibilityRole="button"
-            accessibilityLabel="Tüm filtreleri temizle"
-          >
-            <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "600" }}>
-              Tümünü temizle
-            </Text>
-          </TouchableOpacity>
+          />
         </ScrollView>
       ) : null}
 
@@ -586,7 +556,7 @@ export default function TaramaScreen() {
         fetchedAt={universe.fetchedAt}
         dataAsOf={universe.data?.as_of ?? null}
         delayMinutes={universe.data?.delay_minutes ?? null}
-        source={universe.data?.source ?? "BIST Tarama Evreni"}
+        source="Borsa İstanbul"
         refreshing={universe.refreshing}
         error={universe.error}
         onRetry={universe.reload}
@@ -599,25 +569,20 @@ export default function TaramaScreen() {
             style={[styles.countText, { color: colors.textSecondary }]}
             accessibilityLabel={`${universe.data.rows.length} hisseden ${filteredRows.length} eşleşme, ${breadth.up} yükselen, ${breadth.down} düşen`}
           >
-            <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{filteredRows.length}</Text>
-            {" / "}
-            {universe.data.rows.length} hisse
-            {"  ·  "}
-            <Text style={{ color: colors.up }}>↑ {breadth.up}</Text>
-            {" "}
-            <Text style={{ color: colors.down }}>↓ {breadth.down}</Text>
+            <Text style={{ color: colors.up, fontWeight: "600" }}>▲ {breadth.up}</Text>
+            {"   "}
+            <Text style={{ color: colors.down, fontWeight: "600" }}>▼ {breadth.down}</Text>
           </Text>
-          <TouchableOpacity
-            style={[styles.sortPill, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+          <Touchable
+            style={[styles.sortPill, { backgroundColor: colors.fill }]}
             onPress={() => setSortOpen(true)}
             accessibilityRole="button"
             accessibilityLabel={`Sıralama: ${sortLabel(filters.sort)}, ${filters.dir === "asc" ? "artan" : "azalan"}`}
             accessibilityHint="Sıralama seçeneklerini açar"
           >
-            <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
-              {activeSortLabel}
-            </Text>
-          </TouchableOpacity>
+            <Icon name="arrow.up.arrow.down" size={11} color={colors.accent} weight="semibold" />
+            <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>{activeSortLabel}</Text>
+          </Touchable>
         </View>
       ) : null}
     </View>
@@ -631,22 +596,19 @@ export default function TaramaScreen() {
       ]}
     >
       <View style={styles.headerRow}>
-        <Text style={[styles.heading, { color: colors.textPrimary }]}>Tarama</Text>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            {
-              backgroundColor: activeCount > 0 ? colors.accentLight : colors.bgCard,
-              borderColor: activeCount > 0 ? colors.accent : colors.border,
-            },
-          ]}
-          onPress={openFilterSheet}
-          accessibilityRole="button"
-        >
-          <Text style={{ color: colors.accent, fontWeight: "600", fontSize: FontSize.sm }}>
-            Filtreler{activeCount > 0 ? ` · ${activeCount}` : ""}
-          </Text>
-        </TouchableOpacity>
+        <ScreenHeader
+          title="Tarama"
+          subtitle={universe.data ? `${filteredRows.length} / ${universe.data.rows.length} hisse` : null}
+          right={
+            <IconButton
+              icon="slider.horizontal.3"
+              label={activeCount > 0 ? `Filtreler, ${activeCount} etkin` : "Filtreler"}
+              variant={activeCount > 0 ? "accent" : "filled"}
+              badge={activeCount > 0 ? activeCount : undefined}
+              onPress={openFilterSheet}
+            />
+          }
+        />
       </View>
 
       {universe.status === "loading" && !universe.data ? (
@@ -686,11 +648,7 @@ export default function TaramaScreen() {
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + Spacing.xxl }]}
           ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
           refreshControl={
-            <RefreshControl
-              refreshing={universe.refreshing}
-              onRefresh={universe.reload}
-              tintColor={colors.accent}
-            />
+            <RefreshControl {...pull} tintColor={colors.accent} />
           }
           initialNumToRender={16}
           maxToRenderPerBatch={20}
@@ -1120,49 +1078,31 @@ export default function TaramaScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: Spacing.lg },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: Spacing.md,
-  },
-  heading: { fontSize: 26, fontWeight: "700" },
-  filterButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  headerRow: { marginBottom: Spacing.md },
   stateWrap: { gap: Spacing.md },
   listContent: { paddingBottom: Spacing.xxl },
   listHeader: { gap: Spacing.sm, marginBottom: Spacing.md },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
+    height: 38,
     borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: FontSize.sm,
+    paddingVertical: 0,
+    fontSize: FontSize.md,
   },
-  presetChipsRow: { gap: Spacing.xs, paddingVertical: 2 },
+  presetChipsRow: { gap: Spacing.sm, paddingVertical: 2 },
   presetChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 7,
     borderRadius: BorderRadius.full,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  activeChipsRow: { gap: Spacing.xs, paddingVertical: 2 },
-  activePill: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 5,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  activeChipsRow: { gap: Spacing.sm, paddingVertical: 2 },
   summaryBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -1174,10 +1114,12 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   sortPill: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: Spacing.md,
+    height: 30,
+    borderRadius: BorderRadius.full,
   },
   stockCard: {
     borderRadius: BorderRadius.lg,
@@ -1203,7 +1145,6 @@ const styles = StyleSheet.create({
   companyName: { fontSize: FontSize.xs },
   priceCol: { alignItems: "flex-end", gap: 2 },
   priceText: { fontSize: FontSize.md, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  changeText: { fontSize: FontSize.xs, fontWeight: "600", fontVariant: ["tabular-nums"] },
   metricsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1218,7 +1159,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   viewRow: { flexDirection: "row", gap: Spacing.xs },
   viewChip: {

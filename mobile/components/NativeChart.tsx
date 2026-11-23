@@ -220,14 +220,14 @@ export function MultiLineChart({
                 <View
                   key={`${refLine.value}-${idx}`}
                   pointerEvents="none"
-                  style={[
-                    styles.refLine,
-                    {
-                      top: y,
-                      borderTopColor: refLine.color ?? colors.textMuted,
-                    },
-                  ]}
+                  style={[styles.refLine, { top: y }]}
                 >
+                  {/* iOS cannot dash a single border edge, so draw the dashes. */}
+                  <View style={styles.refDashes}>
+                    {Array.from({ length: Math.ceil(plotWidth / 7) }).map((_, i) => (
+                      <View key={i} style={[styles.refDash, { backgroundColor: refLine.color ?? colors.textMuted }]} />
+                    ))}
+                  </View>
                   {refLine.label ? (
                     <Text
                       style={[
@@ -682,11 +682,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    // iOS cannot dash a single border side (it warns and draws a solid line), so
-    // reference lines are thin solid rules, kept distinct from series by opacity.
-    borderTopWidth: StyleSheet.hairlineWidth * 2,
-    opacity: 0.6,
+    height: 1,
+    opacity: 0.75,
   },
+  refDashes: { flexDirection: "row", gap: 3, height: 1, overflow: "hidden" },
+  refDash: { width: 4, height: 1 },
   refLabel: {
     position: "absolute",
     right: 4,

@@ -116,6 +116,10 @@ export interface EventItemPayload {
   category?: string;
   severity?: string;
   published_at?: string;
+  /** KAP form name, e.g. "Özel Durum Açıklaması (Genel)". */
+  form_title?: string;
+  company_name?: string;
+  event_url?: string;
 }
 
 export interface StockAnalysisOverview {
@@ -250,6 +254,35 @@ const STATEMENT_ENDPOINT: Record<StatementKind, string> = {
   cashflow: "cashflow",
 };
 
+const UNIVERSE_REUSE_MS = 45_000;
+let universeMemo: { at: number; promise: Promise<ScreenerUniverseOut> } | null = null;
+
+/** Lets one caller stop waiting on a shared request without cancelling it for the others. */
+function abortError(): Error {
+  const error = new Error("Aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 export const mobileApi = {
   async marketOverview(signal?: AbortSignal): Promise<MarketOverviewPayload> {
     const data = await fetchJson<IndicesOut>("/market/indices", signal);
@@ -296,14 +329,32 @@ export const mobileApi = {
         ...item,
         ticker: item.ticker ?? undefined,
         title: item.summary ?? item.title ?? undefined,
+        form_title: item.title ?? undefined,
         category: item.category ?? undefined,
         published_at: item.published_at ?? undefined,
+        company_name: item.company_name ?? undefined,
+        event_url: item.event_url ?? undefined,
       })),
     };
   },
 
+  /**
+   * ~400 KB payload shared by Piyasa, Takip and Tarama. Concurrent callers reuse
+   * one request, and a fresh result is reused for a short window so switching
+   * tabs does not download it again.
+   */
   async screenerUniverse(signal?: AbortSignal): Promise<ScreenerUniverseOut> {
-    return fetchJson<ScreenerUniverseOut>("/market/screener/universe", signal);
+    const now = Date.now();
+    if (universeMemo && now - universeMemo.at < UNIVERSE_REUSE_MS) {
+      return abortable(universeMemo.promise, signal);
+    }
+    const promise = fetchJson<ScreenerUniverseOut>("/market/screener/universe");
+    const entry = { at: now, promise };
+    universeMemo = entry;
+    promise.catch(() => {
+      if (universeMemo === entry) universeMemo = null;
+    });
+    return abortable(promise, signal);
   },
 
   async searchSymbols(query: string, signal?: AbortSignal): Promise<SymbolSearchOut> {

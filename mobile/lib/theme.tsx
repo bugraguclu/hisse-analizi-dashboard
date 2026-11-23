@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from "react";
-import { Easing, useColorScheme } from "react-native";
+import { Easing, type TextStyle, useColorScheme } from "react-native";
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -16,36 +16,65 @@ export interface ThemeColors {
   up: string;
   down: string;
   warn: string;
+  /** Inset list dividers; lighter than card borders. */
+  separator: string;
+  /** Neutral fill for segmented tracks, chips and icon wells. */
+  fill: string;
+  /** Pressed/selected overlay on cards and rows. */
+  pressed: string;
+  upSoft: string;
+  downSoft: string;
+  warnSoft: string;
+  /** Text and icons placed on top of `accent`. */
+  onAccent: string;
+  /** Raised surface inside a card (segment thumb, popovers). */
+  elevated: string;
 }
 
 export const LightColors: ThemeColors = {
-  bgPrimary: "#f7f6f3",
-  bgSecondary: "#efede8",
-  bgCard: "#fdfcfa",
-  textPrimary: "#1d1c1a",
+  bgPrimary: "#f4f3ef",
+  bgSecondary: "#ecebe6",
+  bgCard: "#ffffff",
+  textPrimary: "#1b1a18",
   textSecondary: "#45423d",
   textMuted: "#6f6b63",
-  border: "#e3e0d8",
+  border: "#e2dfd7",
   accent: "#2557a7",
-  accentLight: "rgba(37, 87, 167, 0.12)",
-  up: "#16804a",
-  down: "#c8322b",
+  accentLight: "rgba(37, 87, 167, 0.10)",
+  up: "#147a45",
+  down: "#c4302a",
   warn: "#9a6312",
+  separator: "#ebe8e1",
+  fill: "rgba(118, 112, 100, 0.12)",
+  pressed: "rgba(27, 26, 24, 0.05)",
+  upSoft: "rgba(20, 122, 69, 0.10)",
+  downSoft: "rgba(196, 48, 42, 0.09)",
+  warnSoft: "rgba(154, 99, 18, 0.10)",
+  onAccent: "#ffffff",
+  elevated: "#ffffff",
 };
 
 export const DarkColors: ThemeColors = {
-  bgPrimary: "#0e0e0e",
-  bgSecondary: "#1a1a1a",
-  bgCard: "#161616",
-  textPrimary: "#eceae4",
+  bgPrimary: "#0b0b0b",
+  bgSecondary: "#1c1c1d",
+  bgCard: "#161617",
+  textPrimary: "#eeece6",
   textSecondary: "#c7c3ba",
-  textMuted: "#969188",
-  border: "#2b2b2b",
+  textMuted: "#9a958c",
+  border: "#2a2a2c",
   accent: "#6ea3f7",
-  accentLight: "rgba(110, 163, 247, 0.16)",
+  accentLight: "rgba(110, 163, 247, 0.15)",
   up: "#42c77d",
-  down: "#eb5f57",
+  down: "#f0645c",
   warn: "#e2a93b",
+  separator: "#242426",
+  fill: "rgba(150, 146, 138, 0.16)",
+  pressed: "rgba(255, 255, 255, 0.06)",
+  upSoft: "rgba(66, 199, 125, 0.14)",
+  downSoft: "rgba(240, 100, 92, 0.14)",
+  warnSoft: "rgba(226, 169, 59, 0.14)",
+  onAccent: "#0b1830",
+  elevated: "#3a3a3e",
 };
 
 export const Spacing = {
@@ -66,11 +95,29 @@ export const FontSize = {
 } as const;
 
 export const BorderRadius = {
-  md: 8,
-  lg: 12,
-  xl: 18,
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 20,
   full: 999,
 } as const;
+
+/**
+ * iOS-aligned type ramp. Numbers use tabular figures wherever values line up in
+ * columns so prices do not jitter while they refresh.
+ */
+export const Type = {
+  largeTitle: { fontSize: 32, fontWeight: "700", letterSpacing: 0.2 },
+  title: { fontSize: 22, fontWeight: "700", letterSpacing: 0.1 },
+  headline: { fontSize: FontSize.lg, fontWeight: "600" },
+  body: { fontSize: FontSize.md, fontWeight: "400" },
+  callout: { fontSize: FontSize.sm, fontWeight: "500" },
+  footnote: { fontSize: FontSize.xs, fontWeight: "400" },
+  caption: { fontSize: 11, fontWeight: "500" },
+  /** Callers upper-case the text with `trUpper` (Turkish dotted İ). */
+  overline: { fontSize: 11, fontWeight: "600", letterSpacing: 0.8 },
+  number: { fontVariant: ["tabular-nums"] },
+} as const satisfies Record<string, TextStyle>;
 
 export const MotionEasing = {
   out: Easing.bezier(0.22, 1, 0.36, 1),

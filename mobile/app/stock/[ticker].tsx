@@ -27,6 +27,16 @@ import {
   SectionCard,
 } from "../../components/StatusViews";
 import { SheetScrollView } from "../../components/SwipeDismissSheet";
+import {
+  Chip,
+  haptic,
+  IconButton,
+  SegmentedControl,
+  Skeleton,
+  StatusBarScrim,
+  trTitleCase,
+  usePullToRefresh,
+} from "../../components/ui";
 import { useAppContext } from "../../contexts/AppContext";
 import { mobileApi, type StatementKind } from "../../lib/api";
 import { normalizeTicker, type StockSection } from "../../lib/externalLinking";
@@ -178,6 +188,7 @@ export default function StockDetailScreen() {
 
   const isRefreshing =
     overview.refreshing || chart.refreshing || technical.refreshing || extras.refreshing;
+  const pull = usePullToRefresh(handleRefreshAll, isRefreshing);
 
   // Chart series & active indicator overlays (computed with warmup bars!)
   const chartView = useMemo(() => {
@@ -272,69 +283,20 @@ export default function StockDetailScreen() {
         }
       >
         {/* Period pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodRow}>
-          {PERIODS.map((p) => {
-            const active = period === p.id;
-            return (
-              <TouchableOpacity
-                key={p.id}
-                style={[
-                  styles.periodChip,
-                  {
-                    backgroundColor: active ? colors.accentLight : colors.bgSecondary,
-                    borderColor: active ? colors.accent : colors.border,
-                  },
-                ]}
-                onPress={() => setPeriod(p.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={{
-                    color: active ? colors.accent : colors.textSecondary,
-                    fontSize: FontSize.xs,
-                    fontWeight: active ? "700" : "500",
-                  }}
-                >
-                  {p.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} size="sm" />
 
         {/* Quick indicator toggles directly above technical chart */}
         {withOverlays ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodRow}>
-            {MOBILE_INDICATORS.map((ind) => {
-              const on = activeIndicators.includes(ind);
-              return (
-                <TouchableOpacity
-                  key={ind}
-                  style={[
-                    styles.indChip,
-                    {
-                      backgroundColor: on ? colors.accentLight : colors.bgSecondary,
-                      borderColor: on ? colors.accent : colors.border,
-                    },
-                  ]}
-                  onPress={() => toggleIndicator(ind)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Text
-                    style={{
-                      color: on ? colors.accent : colors.textMuted,
-                      fontSize: 11,
-                      fontWeight: on ? "700" : "500",
-                    }}
-                  >
-                    {on ? "✓ " : ""}
-                    {ind}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            {MOBILE_INDICATORS.map((ind) => (
+              <Chip
+                key={ind}
+                label={ind}
+                active={activeIndicators.includes(ind)}
+                icon={activeIndicators.includes(ind) ? "checkmark" : undefined}
+                onPress={() => toggleIndicator(ind)}
+              />
+            ))}
           </ScrollView>
         ) : null}
 
@@ -478,76 +440,80 @@ export default function StockDetailScreen() {
           { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.xxl },
         ]}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefreshAll}
-            tintColor={colors.accent}
-          />
+          <RefreshControl {...pull} tintColor={colors.accent} />
         }
       >
         {/* Top bar */}
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-            <Text style={{ color: colors.accent, fontSize: FontSize.md }}>← Geri</Text>
-          </TouchableOpacity>
+          <IconButton icon="chevron.left" label="Geri" onPress={() => router.back()} />
           <View style={styles.topActions}>
-            <TouchableOpacity
-              style={[styles.topActionBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-              onPress={() =>
-                isWatched
-                  ? removeTickerFromWatchlist(ticker, activeWatchlist?.id)
-                  : addTickerToWatchlist(ticker, activeWatchlist?.id)
-              }
-              accessibilityRole="button"
-            >
-              <Text style={{ color: isWatched ? colors.warn : colors.textSecondary, fontSize: FontSize.xs, fontWeight: "600" }}>
-                {isWatched ? "★ Takipte" : "☆ Takip et"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.topActionBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            <IconButton
+              icon="magnifyingglass"
+              label="Başka hisse ara"
               onPress={() => router.push("/search" as never)}
-              accessibilityRole="button"
-            >
-              <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
-                Hisse seç
-              </Text>
-            </TouchableOpacity>
+            />
+            <IconButton
+              icon={isWatched ? "star.fill" : "star"}
+              label={isWatched ? `${ticker} takipten çıkar` : `${ticker} takip listesine ekle`}
+              variant={isWatched ? "accent" : "filled"}
+              tint={isWatched ? colors.warn : colors.accent}
+              onPress={() => {
+                if (isWatched) {
+                  haptic.light();
+                  removeTickerFromWatchlist(ticker, activeWatchlist?.id);
+                } else {
+                  haptic.success();
+                  addTickerToWatchlist(ticker, activeWatchlist?.id);
+                }
+              }}
+            />
           </View>
         </View>
 
         {/* Identity & Live Quote Header */}
-        <View style={[styles.heroCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          <View style={styles.heroTop}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[styles.ticker, { color: colors.textPrimary }]}>{ticker}</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: FontSize.sm }} numberOfLines={2}>
+        <View style={styles.hero}>
+          <View style={styles.heroIdentity}>
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={[styles.ticker, { color: colors.textPrimary }]} accessibilityRole="header">
+                {ticker}
+              </Text>
+              <Text style={{ color: colors.textSecondary, fontSize: FontSize.sm }} numberOfLines={1}>
                 {overview.data?.name ?? (overview.status === "loading" ? "Şirket bilgisi yükleniyor…" : EMPTY_VALUE)}
               </Text>
-              {overview.data?.profile?.sector || overview.data?.profile?.market ? (
-                <Text style={{ color: colors.textMuted, fontSize: 11 }}>
-                  {[overview.data.profile.sector, overview.data.profile.market].filter(Boolean).join(" · ")}
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={styles.heroPriceCol}>
-              {overview.status === "loading" && !overview.data ? (
-                <Text style={{ color: colors.textMuted, fontSize: FontSize.sm }}>Yükleniyor…</Text>
-              ) : (
-                <>
-                  <Text style={[styles.heroPrice, { color: colors.textPrimary }]}>
-                    {formatPrice(quote?.last)}
-                  </Text>
-                  <Text style={[styles.heroChange, { color: priceTone }]}>
-                    {changeAmount !== null || changePct !== null
-                      ? `${formatSignedPrice(changeAmount)} (${formatSignedPercent(changePct)})`
-                      : EMPTY_VALUE}
-                  </Text>
-                </>
-              )}
             </View>
           </View>
+          {overview.data?.profile?.sector || overview.data?.profile?.market ? (
+            <View style={styles.heroTags}>
+              {[overview.data.profile.sector, overview.data.profile.market]
+                .filter((t): t is string => Boolean(t))
+                .map((tag) => (
+                  <View key={tag} style={[styles.heroTag, { backgroundColor: colors.fill }]}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "500" }} numberOfLines={1}>
+                      {trTitleCase(tag)}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+          ) : null}
+
+          {overview.status === "loading" && !overview.data ? (
+            <View style={{ gap: 8, marginTop: 4 }}>
+              <Skeleton width={170} height={34} radius={8} />
+              <Skeleton width={120} height={12} />
+            </View>
+          ) : (
+            <View style={styles.heroPriceRow}>
+              <Text style={[styles.heroPrice, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>
+                {formatPrice(quote?.last)}
+              </Text>
+              <Text style={[styles.heroChange, { color: priceTone }]}>
+                {changeAmount !== null || changePct !== null
+                  ? `${formatSignedPrice(changeAmount)}  ${formatSignedPercent(changePct)}`
+                  : EMPTY_VALUE}
+                <Text style={{ color: colors.textMuted, fontWeight: "400" }}>  bugün</Text>
+              </Text>
+            </View>
+          )}
 
           <FreshnessBanner
             status={overview.status}
@@ -570,36 +536,7 @@ export default function StockDetailScreen() {
         ) : null}
 
         {/* Section Tabs: Genel · Teknik · Temel · Analiz */}
-        <View style={styles.tabs}>
-          {SECTIONS.map((item) => {
-            const active = section === item.id;
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.tab,
-                  {
-                    backgroundColor: active ? colors.accentLight : colors.bgCard,
-                    borderColor: active ? colors.accent : colors.border,
-                  },
-                ]}
-                onPress={() => setSection(item.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={{
-                    color: active ? colors.accent : colors.textSecondary,
-                    fontSize: FontSize.xs,
-                    fontWeight: active ? "700" : "500",
-                  }}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <SegmentedControl options={SECTIONS} value={section} onChange={setSection} />
 
         {/* GENEL */}
         {section === "hisse" ? (
@@ -793,6 +730,7 @@ export default function StockDetailScreen() {
           </>
         ) : null}
       </ScrollView>
+      <StatusBarScrim />
 
       {/* Indicator Settings Bottom Sheet */}
       <BottomSheetModal
@@ -857,50 +795,16 @@ export default function StockDetailScreen() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  topActions: { flexDirection: "row", gap: Spacing.xs },
-  topActionBtn: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  heroCard: {
-    borderRadius: BorderRadius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  heroTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: Spacing.md,
-  },
-  ticker: { fontSize: 26, fontWeight: "700" },
-  heroPriceCol: { alignItems: "flex-end", gap: 3 },
-  heroPrice: { fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  heroChange: { fontSize: FontSize.xs, fontWeight: "600", fontVariant: ["tabular-nums"] },
-  tabs: { flexDirection: "row", gap: Spacing.xs },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  periodRow: { gap: Spacing.xs, paddingVertical: 2 },
-  periodChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  indChip: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 5,
-    borderRadius: BorderRadius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  topActions: { flexDirection: "row", gap: Spacing.sm },
+  hero: { gap: Spacing.sm, paddingTop: Spacing.xs },
+  heroIdentity: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
+  heroTags: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  heroTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.sm, maxWidth: 260 },
+  ticker: { fontSize: 24, fontWeight: "700", letterSpacing: 0.2 },
+  heroPriceRow: { gap: 2, marginTop: 4 },
+  heroPrice: { fontSize: 36, fontWeight: "700", letterSpacing: -0.5, fontVariant: ["tabular-nums"] },
+  heroChange: { fontSize: FontSize.md, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  periodRow: { gap: Spacing.sm, paddingVertical: 2 },
   combinedTiles: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   sheetList: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
   optionRow: {

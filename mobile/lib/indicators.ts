@@ -270,7 +270,8 @@ export function computeYDomain(
     hi += delta;
   } else {
     const pad = (hi - lo) * padRatio;
-    lo -= pad;
+    // Padding must not invent negative prices for an all-positive series.
+    lo = lo >= 0 ? Math.max(0, lo - pad) : lo - pad;
     hi += pad;
   }
   return {

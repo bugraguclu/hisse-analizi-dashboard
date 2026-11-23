@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DEFAULT_HOME_SECTIONS, type HomeSectionPref, sanitizeHomeSections } from "./reorder";
 import type { ThemeMode } from "./theme";
 
 export const LOCAL_SCHEMA_VERSION = 1;
@@ -13,6 +14,8 @@ export interface LocalWatchlist {
 export interface LocalSettings {
   themeMode: ThemeMode;
   locale: "tr" | "en" | "fr";
+  /** Order and visibility of the Piyasa (home) sections. */
+  homeSections: HomeSectionPref[];
 }
 
 export interface LocalAppState {
@@ -27,6 +30,7 @@ export const DEFAULT_LOCAL_STATE: LocalAppState = {
   settings: {
     themeMode: "system",
     locale: "tr",
+    homeSections: [...DEFAULT_HOME_SECTIONS],
   },
   watchlists: [
     {
@@ -63,6 +67,7 @@ export function sanitizeLocalState(raw: unknown): LocalAppState {
     locale: isValidLocale(rawSettings.locale)
       ? rawSettings.locale
       : DEFAULT_LOCAL_STATE.settings.locale,
+    homeSections: sanitizeHomeSections(rawSettings.homeSections),
   };
 
   const watchlists: LocalWatchlist[] = Array.isArray(data.watchlists)

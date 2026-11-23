@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { moveItem } from "../lib/reorder";
 import { observeStartupRun, StartupCoordinator, type StartupState } from "../lib/startupCoordinator";
 import {
   DEFAULT_LOCAL_STATE,
@@ -26,8 +27,11 @@ interface AppContextValue {
   settings: LocalSettings;
   watchlists: LocalWatchlist[];
   updateSettings: (patch: Partial<LocalSettings>) => void;
-  addTickerToWatchlist: (ticker: string, listId?: string) => void;
+  /** `atIndex` restores a removed ticker to its old slot (undo). */
+  addTickerToWatchlist: (ticker: string, listId?: string, atIndex?: number) => void;
   removeTickerFromWatchlist: (ticker: string, listId?: string) => void;
+  /** Drag-to-reorder: moves the ticker at `from` to `to`. */
+  moveTickerInWatchlist: (from: number, to: number, listId?: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -100,16 +104,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addTickerToWatchlist = useCallback(
-    (rawTicker: string, listId = "default") => {
+    (rawTicker: string, listId = "default", atIndex?: number) => {
       const ticker = rawTicker.trim().toUpperCase();
       if (!/^[A-Z0-9]{2,10}$/.test(ticker)) return;
       persist((prev) => ({
         ...prev,
-        watchlists: prev.watchlists.map((list) =>
-          list.id === listId && !list.tickers.includes(ticker)
-            ? { ...list, tickers: [...list.tickers, ticker].slice(0, 40) }
-            : list,
-        ),
+        watchlists: prev.watchlists.map((list) => {
+          if (list.id !== listId || list.tickers.includes(ticker)) return list;
+          const next = [...list.tickers];
+          const slot = atIndex === undefined ? next.length : Math.max(0, Math.min(atIndex, next.length));
+          next.splice(slot, 0, ticker);
+          return { ...list, tickers: next.slice(0, 40) };
+        }),
       }));
     },
     [persist],
@@ -130,6 +136,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [persist],
   );
 
+  const moveTickerInWatchlist = useCallback(
+    (from: number, to: number, listId = "default") => {
+      persist((prev) => ({
+        ...prev,
+        watchlists: prev.watchlists.map((list) =>
+          list.id === listId ? { ...list, tickers: moveItem(list.tickers, from, to) } : list,
+        ),
+      }));
+    },
+    [persist],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       isLoading,
@@ -141,6 +159,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSettings,
       addTickerToWatchlist,
       removeTickerFromWatchlist,
+      moveTickerInWatchlist,
     }),
     [
       isLoading,
@@ -151,6 +170,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSettings,
       addTickerToWatchlist,
       removeTickerFromWatchlist,
+      moveTickerInWatchlist,
     ],
   );
 

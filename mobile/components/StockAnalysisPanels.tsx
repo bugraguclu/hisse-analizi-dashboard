@@ -203,6 +203,8 @@ export function DividendsPanel({
   );
 }
 
+const SEVERITY_LABELS: Record<string, string> = { HIGH: "Yüksek önem", WATCH: "Takip", INFO: "Bilgi" };
+
 export function KapAndNewsPanel({
   kap,
   news,
@@ -241,10 +243,11 @@ export function KapAndNewsPanel({
                       style={{
                         fontSize: 10,
                         fontWeight: "700",
-                        color: item.severity === "HIGH" ? colors.down : colors.accent,
+                        color:
+                          item.severity === "HIGH" ? colors.down : item.severity === "WATCH" ? colors.warn : colors.accent,
                       }}
                     >
-                      {item.severity}
+                      {SEVERITY_LABELS[item.severity] ?? item.severity}
                     </Text>
                   ) : null}
                 </View>

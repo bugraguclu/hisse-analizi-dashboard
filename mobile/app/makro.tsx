@@ -42,6 +42,7 @@ import {
 } from "../lib/macroParsers";
 import { BorderRadius, FontSize, Spacing, useThemeColors } from "../lib/theme";
 import { useResource } from "../lib/useResource";
+import { Chip, IconButton, ScreenHeader, SegmentedControl, StatusBarScrim, usePullToRefresh } from "../components/ui";
 
 type MacroTab = "summary" | "policy" | "markets" | "indicators" | "calendar";
 
@@ -149,6 +150,7 @@ export default function MakroScreen() {
     if (tab === "markets" || tab === "summary") marketHistory.reload();
     if (tab === "calendar") calendar.reload();
   };
+  const pull = usePullToRefresh(handleRefresh, overview.refreshing || marketHistory.refreshing || calendar.refreshing);
 
   const rangeMonths = MACRO_RANGES.find((r) => r.id === historyRange)?.months ?? 36;
 
@@ -190,37 +192,7 @@ export default function MakroScreen() {
   const data = overview.data;
 
   const renderRangePicker = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-      {MACRO_RANGES.map((r) => {
-        const active = historyRange === r.id;
-        return (
-          <TouchableOpacity
-            key={r.id}
-            style={[
-              styles.periodChip,
-              {
-                backgroundColor: active ? colors.accentLight : colors.bgSecondary,
-                borderColor: active ? colors.accent : colors.border,
-              },
-            ]}
-            onPress={() => setHistoryRange(r.id)}
-            accessibilityRole="button"
-            accessibilityLabel={`Dönem ${r.label}`}
-            accessibilityState={{ selected: active }}
-          >
-            <Text
-              style={{
-                color: active ? colors.accent : colors.textSecondary,
-                fontSize: FontSize.xs,
-                fontWeight: active ? "700" : "500",
-              }}
-            >
-              {r.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+    <SegmentedControl options={MACRO_RANGES} value={historyRange} onChange={setHistoryRange} size="sm" />
   );
 
   const renderMarketHistoryCard = () => {
@@ -246,37 +218,7 @@ export default function MakroScreen() {
               : null
         }
       >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {MACRO_MARKET_PERIODS.map((p) => {
-            const active = marketPeriod === p.id;
-            return (
-              <TouchableOpacity
-                key={p.id}
-                style={[
-                  styles.periodChip,
-                  {
-                    backgroundColor: active ? colors.accentLight : colors.bgSecondary,
-                    borderColor: active ? colors.accent : colors.border,
-                  },
-                ]}
-                onPress={() => setMarketPeriod(p.id)}
-                accessibilityRole="button"
-                accessibilityLabel={`Dönem ${p.label}`}
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={{
-                    color: active ? colors.accent : colors.textSecondary,
-                    fontSize: FontSize.xs,
-                    fontWeight: active ? "700" : "500",
-                  }}
-                >
-                  {p.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <SegmentedControl options={MACRO_MARKET_PERIODS} value={marketPeriod} onChange={setMarketPeriod} size="sm" />
 
         {marketHistory.status === "loading" && !history ? (
           <LoadingBlock message="Piyasa geçmişi yükleniyor…" />
@@ -465,67 +407,31 @@ export default function MakroScreen() {
           { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.xxl },
         ]}
         refreshControl={
-          <RefreshControl
-            refreshing={overview.refreshing || marketHistory.refreshing || calendar.refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.accent}
-          />
+          <RefreshControl {...pull} tintColor={colors.accent} />
         }
       >
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-            <Text style={{ color: colors.accent, fontSize: FontSize.md }}>← Geri</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleRefresh} accessibilityRole="button">
-            <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
-              Yenile
-            </Text>
-          </TouchableOpacity>
+          <IconButton icon="chevron.left" label="Geri" onPress={() => router.back()} />
         </View>
 
-        <View style={{ gap: 4 }}>
-          <Text style={[styles.heading, { color: colors.textPrimary }]}>Makroekonomi</Text>
+        <View style={{ gap: 6 }}>
+          <ScreenHeader title="Makroekonomi" subtitle="TCMB · TÜİK · Piyasalar" />
           <FreshnessBanner
             status={overview.status}
             fetchedAt={overview.fetchedAt}
             dataAsOf={data?.asOf ?? null}
-            source="TCMB · TÜİK · Piyasalar"
-            refreshing={overview.refreshing}
+            source={null}
+            refreshing={marketHistory.refreshing}
             error={overview.error}
             onRetry={overview.reload}
           />
         </View>
 
         {/* Sub-section Tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {MACRO_TABS.map((item) => {
-            const active = tab === item.id;
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.tabChip,
-                  {
-                    backgroundColor: active ? colors.accentLight : colors.bgCard,
-                    borderColor: active ? colors.accent : colors.border,
-                  },
-                ]}
-                onPress={() => setTab(item.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={{
-                    color: active ? colors.accent : colors.textSecondary,
-                    fontSize: FontSize.xs,
-                    fontWeight: active ? "700" : "500",
-                  }}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow} style={styles.bleed}>
+          {MACRO_TABS.map((item) => (
+            <Chip key={item.id} label={item.label} active={tab === item.id} onPress={() => setTab(item.id)} />
+          ))}
         </ScrollView>
 
         {overview.status === "loading" && !data ? (
@@ -1068,6 +974,7 @@ export default function MakroScreen() {
           </>
         ) : null}
       </ScrollView>
+      <StatusBarScrim />
     </View>
   );
 }
@@ -1075,14 +982,9 @@ export default function MakroScreen() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  heading: { fontSize: 26, fontWeight: "700" },
   chipRow: { gap: Spacing.xs, paddingVertical: 2 },
-  tabChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  tabRow: { gap: Spacing.sm, paddingVertical: 2, paddingHorizontal: Spacing.lg },
+  bleed: { marginHorizontal: -Spacing.lg },
   periodChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 6,
