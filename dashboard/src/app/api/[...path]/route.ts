@@ -10,7 +10,8 @@ import { clientIpFromForwardedFor, trustedProxyHops } from "@/lib/client-ip";
  *   with TRUSTED_PROXY_HOPS (see lib/client-ip.ts) — so the backend limiter
  *   only has to trust this server.
  * - Responses are buffered under an upstream timeout and failures become
- *   JSON 502/504 errors with a Turkish `detail`.
+ *   JSON 502/504 errors with a Turkish `detail`. `text/event-stream` responses
+ *   (POST /assistant/ask) are streamed through unbuffered instead.
  */
 
 export const dynamic = "force-dynamic";
@@ -195,6 +196,16 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
   for (const name of DROPPED_RESPONSE_HEADERS) responseHeaders.delete(name);
   const location = upstream.headers.get("location");
   if (location) responseHeaders.set("location", rewriteLocation(location, apiBase));
+
+  // Server-Sent Events (the assistant's answer) are passed through as they arrive: the
+  // upstream timeout covers the wait for the response headers only — the backend bounds
+  // the stream itself — and a client disconnect still cancels the upstream request.
+  if (upstream.body && (upstream.headers.get("content-type") ?? "").startsWith("text/event-stream")) {
+    clearTimeout(timer);
+    responseHeaders.set("cache-control", "no-cache, no-transform");
+    responseHeaders.set("x-accel-buffering", "no");
+    return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders });
+  }
 
   const hasNoBody = request.method === "HEAD" || [101, 204, 205, 304].includes(upstream.status);
   let payload: ArrayBuffer | null = null;

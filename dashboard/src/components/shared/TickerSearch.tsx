@@ -13,6 +13,8 @@ import type { TranslationKey } from "@/lib/i18n";
 import { STALE_TIME } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { DEFAULT_TICKER, tickerFromPath, tickerHref } from "@/components/layout/nav";
+import { useOptionalShell } from "@/components/layout/shell-context";
+import { useAssistantStatus } from "@/components/assistant/client";
 import {
   getQuickAccessItems,
   searchUnified,
@@ -33,7 +35,9 @@ const MAX_STOCK_ONLY_RESULTS = 8;
 const MAX_DISCOVERY_RESULTS = 4;
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
 
-type SearchKind = SearchResultKind | "index" | "sector";
+type SearchKind = SearchResultKind | "index" | "sector" | "assistant";
+/** Typed text this long (and not a bare ticker) also offers "Ask the assistant". */
+const ASSISTANT_MIN_LENGTH = 4;
 
 interface SearchRow {
   readonly id: string;
@@ -52,6 +56,7 @@ const KIND_LABEL: Record<SearchKind, TranslationKey> = {
   concept: "search.kind.concept",
   index: "search.kind.index",
   sector: "search.kind.sector",
+  assistant: "search.kind.assistant",
 };
 
 export interface TickerSearchHandle {
@@ -251,7 +256,21 @@ export function TickerSearch({
     return [...primary, ...explore];
   }, [hasQuery, unified, localUnified, serverCurrent, serverItems, exploreRows]);
 
-  const rows: SearchRow[] = hasQuery ? results : [...popularStocks, ...quickAccess];
+  // Free text in the site search can go to the AI assistant (last row, once results settled).
+  const shell = useOptionalShell();
+  const assistantEnabled = useAssistantStatus().data?.enabled === true;
+  const assistantRow: SearchRow | null =
+    unified && shell && assistantEnabled && settled && trimmed.length >= ASSISTANT_MIN_LENGTH && !TICKER_RE.test(trimmed.toUpperCase())
+      ? {
+          id: "assistant:ask",
+          kind: "assistant",
+          code: "AI",
+          title: t("assistant.searchAsk", { q: trimmed.length > 60 ? `${trimmed.slice(0, 59)}…` : trimmed }),
+          subtitle: t("assistant.searchAskHint"),
+          href: "",
+        }
+      : null;
+  const rows: SearchRow[] = hasQuery ? (assistantRow ? [...results, assistantRow] : results) : [...popularStocks, ...quickAccess];
   const hasMixedKinds = unified && rows.some((row) => row.kind !== "stock");
   const showRows = panelOpen && rows.length > 0;
   const showStatus = panelOpen && hasQuery && rows.length === 0;
@@ -295,6 +314,10 @@ export function TickerSearch({
     if (overlay) onClose?.();
     else inputRef.current?.blur();
 
+    if (item.kind === "assistant") {
+      shell?.openAssistant(trimmed);
+      return;
+    }
     if (item.kind === "stock") {
       // Tickers are ASCII: a Turkish-locale uppercase would turn "sise" into "SİSE".
       const symbol = (item.ticker ?? item.code).trim().toUpperCase();

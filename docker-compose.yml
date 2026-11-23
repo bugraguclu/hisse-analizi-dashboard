@@ -47,6 +47,10 @@ services:
     env_file: .env
     environment:
       <<: *backend-db-urls
+      # AI assistant (optional; an empty key disables it — see .env.example).
+      LLM_API_KEY: ${LLM_API_KEY:-${NVIDIA_API_KEY:-}}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-nvidia/nemotron-3-ultra-550b-a55b}
     depends_on:
       migrate:
         condition: service_completed_successfully

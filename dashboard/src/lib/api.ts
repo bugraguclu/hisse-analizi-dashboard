@@ -438,4 +438,8 @@ export const api = {
 
   // Polling
   pollingState: (signal?: AbortSignal) => get<PollingStateOut[]>("/polling-state", "no-store", signal),
+
+  /** Whether the AI assistant is configured (POST /assistant/ask streams; see components/assistant). */
+  assistantStatus: (signal?: AbortSignal) =>
+    get<{ enabled: boolean; model: string | null; max_question_chars: number }>("/assistant/status", "no-store", signal),
 };

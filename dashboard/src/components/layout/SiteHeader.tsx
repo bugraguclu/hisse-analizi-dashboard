@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Menu, Search } from "lucide-react";
+import { Archive, Menu, Search, Sparkles } from "lucide-react";
+import { useAssistantStatus } from "@/components/assistant/client";
 import { TickerSearch, type TickerSearchHandle } from "@/components/shared/TickerSearch";
 import { SearchOverlay } from "@/components/shared/search/SearchOverlay";
 import { useSearchHotkey } from "@/components/shared/search/use-search-hotkey";
@@ -116,7 +117,9 @@ const ICON_BUTTON =
 export function SiteHeader() {
   const pathname = usePathname();
   const { t } = useLocale();
-  const { openMobileNav, mobileNavOpen, mobileNavTriggerRef, openWorkspaceManager } = useShell();
+  const { openMobileNav, mobileNavOpen, mobileNavTriggerRef, openWorkspaceManager, openAssistant, assistantOpen } = useShell();
+  // Hidden until the server says the assistant is configured (no key → no button).
+  const assistantEnabled = useAssistantStatus().data?.enabled === true;
   useDocumentTitle(pathname);
   // Small-screen search sheet, scoped to the page it was opened on (closes on navigation).
   const [searchOpenOn, setSearchOpenOn] = useState<string | null>(null);
@@ -215,6 +218,19 @@ export function SiteHeader() {
               >
                 <Search className="h-5 w-5" aria-hidden="true" />
               </button>
+              {assistantEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => openAssistant()}
+                  aria-label={t("assistant.open")}
+                  aria-haspopup="dialog"
+                  aria-expanded={assistantOpen}
+                  title={t("assistant.open")}
+                  className={cn(ICON_BUTTON, "relative text-foreground after:absolute after:-inset-1.5 after:content-[''] md:after:content-none")}
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => openWorkspaceManager("backup")}

@@ -209,6 +209,21 @@ class Settings(BaseSettings):
     quality_price_crosscheck_fail_pct: float = 5.0
     quality_price_crosscheck_timeout_seconds: float = 20.0
 
+    # AI explanation assistant (src/services/assistant): an OpenAI-compatible chat
+    # completions endpoint (default NVIDIA's) answering only from the app's own data.
+    # Without a key the assistant is disabled: /assistant/status says so and
+    # /assistant/ask returns 503 (code: assistant_not_configured).
+    llm_api_key: str = ""
+    nvidia_api_key: str = ""  # accepted as a fallback for LLM_API_KEY
+    llm_base_url: str = "https://integrate.api.nvidia.com/v1"
+    llm_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    llm_timeout_seconds: float = 45.0  # one completion request (streamed: time to the next chunk)
+    llm_max_output_tokens: int = 1200
+    assistant_rate_limit: str = "6/minute;60/day"  # per client IP, on top of RATE_LIMIT_DEFAULT
+    assistant_total_timeout_seconds: float = 90.0  # one question, all rounds included
+    assistant_tool_timeout_seconds: float = 15.0  # one data lookup
+    assistant_max_tool_rounds: int = 4
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("app_env", mode="before")
@@ -230,7 +245,7 @@ class Settings(BaseSettings):
                 raise ValueError(f"TRUSTED_PROXIES entry {item!r} is not an IP address or CIDR network") from exc
         return value
 
-    @field_validator("rate_limit_default", "rate_limit_admin")
+    @field_validator("rate_limit_default", "rate_limit_admin", "assistant_rate_limit")
     @classmethod
     def _validate_rate_limit(cls, value: str) -> str:
         try:
@@ -242,6 +257,11 @@ class Settings(BaseSettings):
     @property
     def cors_allowed_origins(self) -> list[str]:
         return split_csv(self.cors_origins)
+
+    @property
+    def llm_effective_api_key(self) -> str:
+        """LLM_API_KEY, else NVIDIA_API_KEY (empty = assistant disabled)."""
+        return (self.llm_api_key or self.nvidia_api_key).strip()
 
     @property
     def is_production(self) -> bool:

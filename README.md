@@ -61,6 +61,7 @@ Demoya hisse eklemek için `dashboard/scripts/capture-demo-data.mjs` içindeki `
 | **Hisse tarama** | ~630 BIST payı; değerleme, kârlılık, ölçek, teknik, performans ve analist kriterleri; 31 hazır tarama; endeks ve sektör filtreleri; beş sütun görünümü; sıralama ve CSV dışa aktarma |
 | **KAP haberleri** | Günlere göre gruplanan bildirim akışı; tarih, önem, kategori, hisse ve takip listesi filtreleri; arama ve dört sıralama; bildirimin tablolarıyla tam metni, `j`/`k` ile önceki ve sonraki bildirim |
 | **Sayfalarım ve düzenleme** | Her sayfa kişiselleştirilebilir: kartları sürükleyip taşıma, sütun genişliğini ve kart yüksekliğini kenarından ayarlama, kart gizleme ve 36 widget arasından ekleme, geri al ve varsayılana dön. "Sayfalarım"da boş sayfadan ya da şablondan kendi sayfalarınız; her kart ayrı bir hisseyi izleyebilir |
+| **Veri asistanı** | "Bu oran nasıl hesaplandı?", "THYAO'nun son bilançosu ne söylüyor?", "Takip listemde bugün hangi KAP'lar var?" gibi soruları yalnızca uygulamanın verileriyle yanıtlar; her bilgiye numaralı kaynak (hisse sayfası, KAP bildirimi, yöntem sayfası) bağlar, veri yoksa bunu söyler, al/sat önerisi vermez. Başlıktaki ✦ düğmesi ya da `⌘K` aramasındaki "Asistana sor" satırı; dil modeli anahtarı tanımlı değilse gizlenir |
 | **Her sayfada** | Piyasa şeridi (BIST 100/30/Banka/Sınai, USD ve EUR, gram ve ons altın, Brent, 2 ve 10 yıllık tahvil faizi, seans durumu); `⌘K` ile hisse arama; Türkçe, İngilizce ve Fransızca; açık ve koyu tema; telefon uyumu; tarama, KAP ve takvim filtreleri URL'de saklanır ve bağlantıyla paylaşılabilir |
 
 Eksik veri hiçbir ekranda `0` olarak gösterilmez: değer yoksa `—` yazılır; yükleniyor, boş veri ve kaynak hatası durumları ayrı gösterilir.
@@ -308,6 +309,7 @@ Tüm ayarlar açıklamalarıyla [`.env.example`](./.env.example) dosyasındadır
 | `CORS_ORIGINS` | İzin verilen origin'ler |
 | `TRUSTED_PROXIES` | `X-Forwarded-For` başlığına güvenilen proxy adresleri (istemci bazlı oran sınırı) |
 | `RATE_LIMIT_DEFAULT`, `RATE_LIMIT_ADMIN` | İstemci başına genel ve yönetim uç noktası sınırları |
+| `LLM_API_KEY` (ya da `NVIDIA_API_KEY`), `LLM_BASE_URL`, `LLM_MODEL` | Veri asistanının OpenAI uyumlu sohbet uç noktası (varsayılan NVIDIA, `nvidia/nemotron-3-ultra-550b-a55b`); anahtar boşsa asistan kapalıdır. `ASSISTANT_RATE_LIMIT` (IP başına, varsayılan `6/minute;60/day`) ve `ASSISTANT_*` süre/tur sınırları |
 | `SMTP_*`, `ENABLE_REAL_EMAIL` | İsteğe bağlı gerçek e-posta gönderimi (varsayılan: kuru çalıştırma) |
 | `MARKET_*`, `FUNDAMENTALS_*`, `REFERENCE_*`, `MACRO_*`, `QUALITY_*` | Veri platformu: worker zamanlamaları, depo tazelik pencereleri, KAP/İş Yatırım istek aralıkları, kalite eşikleri (`MACRO_EVDS_API_KEY` ile EVDS3 açılır) |
 | `API_URL`, `TRUSTED_PROXY_HOPS` | Next.js → FastAPI adresi ve Next.js önündeki proxy sayısı ([`dashboard/.env.example`](./dashboard/.env.example)) |
@@ -358,8 +360,9 @@ npm audit --omit=dev --audit-level=high
 
 OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/redoc`, JSON `/openapi.json` (yerelde; canlı sitede dışarı açık değildir).
 
-- Uç nokta grupları: sistem ve arşiv (`/health`, `/stats`, `/companies`, `/events`, `/prices`, `/financials`), `/technical`, `/fundamentals`, `/market`, `/macro`, `/news`, `/data` ve `X-Admin-Key` ile korunan `/admin`, `/admin/data`, `/notifications`, `/outbox`.
+- Uç nokta grupları: sistem ve arşiv (`/health`, `/stats`, `/companies`, `/events`, `/prices`, `/financials`), `/technical`, `/fundamentals`, `/market`, `/macro`, `/news`, `/data`, `/assistant` ve `X-Admin-Key` ile korunan `/admin`, `/admin/data`, `/notifications`, `/outbox`.
 - Hata yanıtları `{"detail": "<Türkçe mesaj>"}` biçimindedir; istek doğrulama hataları (422) FastAPI'nin varsayılan biçimini kullanır. Her yanıt `X-Request-ID` taşır.
+- `POST /assistant/ask` yanıtı Server-Sent Events olarak akar (`meta`, `status`, `delta`, `discard`, `done` | `error`); `done` olayı kaynak listesini (`id`, `title`, `url`, `kind`, `cited`) ve yasal uyarıyı taşır. `GET /assistant/status` asistanın açık olup olmadığını söyler; anahtar yoksa `ask` 503 `assistant_not_configured` döner.
 - Geçersiz sembol 400, bilinmeyen sembol 404, veri sağlayıcı hatası 502/503 döner. `/events` toplam kayıt sayısını `X-Total-Count` başlığında verir.
 - Depo öncelikli uçlar `meta` bloğu taşır (bkz. [Veri kaynakları](#veri-kaynakları)). `/prices` ve `/prices/latest` bunun özetini `X-Data-*` başlıklarında, `/financials` uçları tamamını `X-Data-Meta` başlığında da verir.
 - `GET /companies` varsayılan olarak çekirdek katmanı (BIST 100) döner (`?tier=universe|all`, `?include_inactive=true`).
@@ -394,6 +397,7 @@ OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/r
 - Piyasa verileri ücretsiz kaynaklardan gelir ve 15 dakika gecikmelidir; arayüz gecikmeyi belirtir.
 - Haberler (Google News) yalnızca BIST 100 şirketleri için toplanır.
 - Kullanıcı hesabı yoktur: site herkese açık, salt okunur bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur; takip listeleri, sayfa düzenleri ve "Sayfalarım" tarayıcıda saklanır (cihazlar arasında taşınmaz).
+- Veri asistanı bir dil modeli kullanır: yanıtlar kaynak gösterir ama hata içerebilir; soru metni ve sayfa bağlamı yapılandırılan sağlayıcıya (varsayılan NVIDIA) gönderilir, sunucu günlüklerine yazılmaz.
 - Worker tek replika çalışacak şekilde tasarlanmıştır (bkz. [Mimari](#mimari)).
 
 Değişiklik geçmişi [CHANGELOG.md](./CHANGELOG.md), yönetici özeti [PROJE_OZETI.md](./PROJE_OZETI.md), veri platformu ayrıntıları [docs/data-platform.md](./docs/data-platform.md) dosyasındadır.

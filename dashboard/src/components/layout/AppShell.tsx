@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale } from "@/lib/locale-context";
+import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { StartupRecovery } from "@/components/shared/StartupRecovery";
 import { WorkspaceBackupDialog } from "@/components/workspace/WorkspaceBackupDialog";
 import { DemoBanner } from "./DemoBanner";
@@ -14,7 +15,7 @@ import { ShellProvider } from "./shell-context";
 
 /**
  * Scroll-linked top navigation + market strip above the page, site footer below; drawer menu on
- * small screens; the legal notice on a visitor's first page view.
+ * small screens; the legal notice on a visitor's first page view; the AI assistant sheet.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useLocale();
@@ -40,6 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <MobileNav />
       <LegalNotice />
       <WorkspaceBackupDialog />
+      <AssistantPanel />
     </ShellProvider>
   );
 }
