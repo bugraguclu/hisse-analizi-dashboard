@@ -13,6 +13,7 @@
 
 import type { Locale } from "../i18n.ts";
 import { DEVICE_KEY_STORAGE_KEY, isValidDeviceKey } from "../device/device-key.ts";
+import { NOTES_STORAGE_KEY, sanitizeNotes, writeNotes, type NotesMap } from "../notes/notes-cache.ts";
 import {
   createIndexedDbArchiveStore,
   type BackupArchiveStore,
@@ -81,7 +82,8 @@ export type BackupValidationErrorCode =
   | "invalid-drawings"
   | "invalid-costs"
   | "invalid-preferences"
-  | "invalid-device-key";
+  | "invalid-device-key"
+  | "invalid-notes";
 
 export interface BackupCounts {
   watchlists: number;
@@ -94,6 +96,7 @@ export interface BackupCounts {
   preferences: number;
   /** 1 when the backup carries the device key (alerts and notes on the server). */
   deviceKey: number;
+  notes: number;
 }
 
 export interface BackupPreview {
@@ -168,6 +171,7 @@ export function summarizeWorkspaceData(data: WorkspaceData, exportedAt: string |
     costs: Object.keys(data.costs).length,
     preferences: prefCount,
     deviceKey: data.deviceKey ? 1 : 0,
+    notes: Object.keys(data.notes ?? {}).length,
   };
 
   const hasChanges =
@@ -177,7 +181,8 @@ export function summarizeWorkspaceData(data: WorkspaceData, exportedAt: string |
     counts.drawings > 0 ||
     counts.costs > 0 ||
     counts.preferences > 0 ||
-    counts.deviceKey > 0;
+    counts.deviceKey > 0 ||
+    counts.notes > 0;
 
   return {
     exportedAt,
@@ -349,12 +354,31 @@ export function validateWorkspaceBackup(rawContents: string): BackupValidationRe
     deviceKey = rawData.deviceKey;
   }
 
+  // 8. Stock notes
+  let notes: WorkspaceData["notes"];
+  if (rawData.notes !== undefined) {
+    const clean = sanitizeNotes(rawData.notes);
+    if (!clean) return { valid: false, reason: "invalid-notes" };
+    if (clean.dropped > 0) warnings.push(`notes:${clean.dropped}`);
+    notes = {};
+    for (const [ticker, note] of Object.entries(clean.items)) notes[ticker] = { text: note.text, updatedAt: note.updatedAt };
+  }
+
   const exportedAt =
     typeof parsed.exportedAt === "string" && !Number.isNaN(Date.parse(parsed.exportedAt))
       ? parsed.exportedAt
       : null;
 
-  const data: WorkspaceData = { watchlists, layouts, chartPrefs, drawings, costs, preferences, ...(deviceKey ? { deviceKey } : {}) };
+  const data: WorkspaceData = {
+    watchlists,
+    layouts,
+    chartPrefs,
+    drawings,
+    costs,
+    preferences,
+    ...(deviceKey ? { deviceKey } : {}),
+    ...(notes && Object.keys(notes).length ? { notes } : {}),
+  };
   const snapshot: WorkspaceSnapshot = {
     format: WORKSPACE_BACKUP_FORMAT,
     version: WORKSPACE_SCHEMA_VERSION,
@@ -382,7 +406,8 @@ function isPersonalStorageKey(key: string): boolean {
     key === MARKET_STRIP_PAUSED_STORAGE_KEY ||
     key === LOCALE_STORAGE_KEY ||
     key === THEME_STORAGE_KEY ||
-    key === DEVICE_KEY_STORAGE_KEY
+    key === DEVICE_KEY_STORAGE_KEY ||
+    key === NOTES_STORAGE_KEY
   );
 }
 
@@ -426,6 +451,8 @@ function writeWorkspaceData(
       if (key === THEME_STORAGE_KEY && data.preferences.theme === undefined) continue;
       // An older backup without a device key must not orphan this browser's alerts.
       if (key === DEVICE_KEY_STORAGE_KEY && data.deviceKey === undefined) continue;
+      // Notes live on the server too; a backup without them leaves the local copy alone.
+      if (key === NOTES_STORAGE_KEY && data.notes === undefined) continue;
       storage.removeItem(key);
     }
   }
@@ -480,6 +507,14 @@ function writeWorkspaceData(
   // 7. Device key (restoring it brings back that device's alerts and notes)
   if (data.deviceKey) {
     storage.setItem(DEVICE_KEY_STORAGE_KEY, data.deviceKey);
+  }
+
+  // 8. Stock notes: unconfirmed (version null) until the server list is reconciled,
+  // which adopts the server copy where one exists and re-creates the rest.
+  if (data.notes) {
+    const restored: NotesMap = {};
+    for (const [ticker, note] of Object.entries(data.notes)) restored[ticker] = { text: note.text, updatedAt: note.updatedAt, version: null };
+    writeNotes(storage, restored);
   }
 
   // Stamp schema metadata

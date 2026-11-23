@@ -4,6 +4,8 @@ import { useLocale } from "@/lib/locale-context";
 import { StartupRecovery } from "@/components/shared/StartupRecovery";
 import { WorkspaceBackupDialog } from "@/components/workspace/WorkspaceBackupDialog";
 import { ServiceWorkerManager } from "@/components/pwa/ServiceWorkerManager";
+import { OutboxManager } from "@/components/offline/OutboxManager";
+import { OutboxStatus } from "@/components/offline/OutboxStatus";
 import { LegalNotice } from "./LegalNotice";
 import { MarketStrip } from "./MarketStrip";
 import { MobileNav } from "./MobileNav";
@@ -30,6 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SiteHeader />
         <MarketStrip />
         <OfflineBanner />
+        <OutboxStatus />
         <StartupRecovery />
         <main id="main-content" tabIndex={-1} className="flex-1 px-4 pb-12 pt-6 outline-none md:px-6 md:pt-8">
           {children}
@@ -40,6 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <LegalNotice />
       <WorkspaceBackupDialog />
       <ServiceWorkerManager />
+      <OutboxManager />
     </ShellProvider>
   );
 }

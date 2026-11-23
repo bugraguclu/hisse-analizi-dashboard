@@ -24,6 +24,15 @@
 - Ortam: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`python scripts/generate_vapid_keys.py`). Anahtarlar yoksa özellik kapalıdır: alarmlar kaydedilir, bildirim gönderilmez, arayüz bunu söyler. `deploy/setup-oracle.sh` anahtarları ilk çalıştırmada üretir, sonrakilerde korur.
 - iOS: bildirimler yalnızca ana ekrana eklenmiş sitede çalışır (iOS 16.4+); Alarmlar sayfası adımları anlatır.
 
+### Çevrimdışı değişiklik kuyruğu ve hisse notları
+
+- Hisse sayfalarında kişisel **not** (ekle, düzenle, sil): cihazda hemen kaydedilir, sunucuda cihaz anahtarıyla saklanır (`GET /me/notes`, `PUT /me/notes/{kod}` `base_version` ile, `DELETE /me/notes/{kod}?base_version=`). Migration `026_stock_notes` (`025`'in ardından). Notlar çalışma alanı yedeğine dahildir; geri yüklenen not sunucuda yoksa yeniden oluşturulur, varsa sunucudaki kopya geçerlidir.
+- Alarm ve not değişiklikleri artık kalıcı bir kuyruktan (IndexedDB `hisse-analizi-local` v2, `outbox`) gider: bağlantı yokken ya da istek yanıtsız kaldığında saklanır, sayfa yenilense de kalır, bağlantı gelince sırayla gönderilir. Tetikleyiciler: `online`, sekmenin görünür olması, geri çekilmeli yeniden deneme ve destekleyen tarayıcılarda Background Sync (service worker, hiçbir sekme açık değilken de). Sayfa ve service worker aynı Web Lock'u kullanır; worker sayfayla aynı gönderim kodunu (`src/lib/offline-outbox/core.ts`) gömülü çalıştırır.
+- Her kayıt kendi `Idempotency-Key`'ini taşır: yanıtı kaybolan istek tekrarlandığında sunucu ilk yanıtı döner, değişiklik iki kez uygulanmaz. Aynı öğenin art arda çevrimdışı düzenlemeleri bir önceki yanıtın sürümüne zincirlenir; hiç gönderilmemiş düzenlemeler birleşir, gönderilmemiş oluştur+sil birbirini götürür.
+- Çakışma (`409 version_conflict`) ve reddedilen değişiklik sessizce atılmaz: üst şerit "Çakışma: THYAO notu siz çevrimdışıyken başka yerde değişti" ile **Benimkini kullan / Sunucudakini kullan** (reddedilende **Değişikliği bırak**) sunar; o öğenin sonraki değişiklikleri karar verilene kadar bekler. Bekleyenler için "2 değişiklik gönderilmeyi bekliyor".
+- Alarmlar sayfası son sunucu listesini cihazda tutar, kuyruktaki değişiklikleri üstüne "gönderilmeyi bekliyor" işaretiyle uygular; sayfa çevrimdışı da açılır.
+- Havuz incelemesinde kullanılmadığı için kaldırılan kuyruk iskeletinin yerine gelen bu katmanın iki gerçek çağıranı (notlar, alarmlar) ve sunucu uçları vardır.
+
 ## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 import { sanitizeSwVersion, serviceWorkerScript } from "./service-worker.ts";
 import { basic, fetchLog, FakeCacheStorage, loadWorker, networkDown, ORIGIN, setNetwork } from "./sw-test-harness.ts";
+import { LOCAL_DB_VERSION, OUTBOX_STORE } from "../local-store/idb.ts";
+import { createMemoryOutboxStore } from "../offline-outbox/store.ts";
 
 const OFFLINE_HTML =
   '<html><head><link rel="stylesheet" href="/_next/static/css/app-1.css"><script src="/_next/static/chunks/main-a.js" async></script></head>' +
@@ -220,5 +222,37 @@ describe("service worker push notifications", () => {
     });
     assert.ok(closed);
     assert.deepEqual(worker.state.opened, [`${ORIGIN}/events?ticker=THYAO&event=e1`]);
+  });
+});
+
+describe("service worker background sync", () => {
+  const entry = (id: string, ticker: string, text: string) => ({
+    id, seq: Number(id.slice(1)), entity: `note:${ticker}`, kind: "note.put", target: ticker, payload: { text }, base: null,
+    baseFrom: "fixed", deviceKey: "k".repeat(43), status: "pending", attempts: 0, createdAt: 1, label: ticker,
+  });
+
+  test("uses the same IndexedDB version and stores as the pages", () => {
+    assert.match(serviceWorkerScript("v"), new RegExp(`var LOCAL_DB_VERSION = ${LOCAL_DB_VERSION};`));
+    assert.match(serviceWorkerScript("v"), new RegExp(`var OUTBOX_STORE = "${OUTBOX_STORE}";`));
+  });
+
+  test("replays the queue with the embedded outbox code and asks for a retry while offline", async () => {
+    const memory = createMemoryOutboxStore([entry("e1", "THYAO", "not") as never, entry("e2", "GARAN", "not 2") as never]);
+    const requests: string[] = [];
+    let online = false;
+    setNetwork((url, init) => {
+      if (!online) throw new TypeError("Failed to fetch");
+      requests.push(`${init?.method} ${url.pathname} ${(init?.headers as Record<string, string>)["Idempotency-Key"]}`);
+      return basic(JSON.stringify({ ticker: "X", text: "t", version: 1 }), { contentType: "application/json" });
+    });
+    const worker = loadWorker("v1", undefined, { BroadcastChannel: undefined });
+    (worker.context.self as Record<string, unknown>).__outboxStoreOverride = memory;
+    await assert.rejects(worker.dispatch("sync", { tag: "hisse-outbox" }), /connection still unavailable/);
+    assert.equal((await memory.list()).length, 2);
+
+    online = true;
+    await worker.dispatch("sync", { tag: "hisse-outbox" });
+    assert.deepEqual(requests, ["PUT /api/me/notes/THYAO e1", "PUT /api/me/notes/GARAN e2"]);
+    assert.equal((await memory.list()).length, 0);
   });
 });

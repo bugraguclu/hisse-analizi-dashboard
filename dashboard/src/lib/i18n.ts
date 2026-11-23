@@ -500,6 +500,38 @@ const translations = {
   "alerts.keyNote": { tr: "Alarmlar ve notlar bu tarayıcının cihaz anahtarına bağlıdır. Anahtar, Yedekle penceresindeki yedek dosyasına dahildir: dosyayı geri yükleyen tarayıcı aynı alarmlara erişir, bu yüzden paylaşmayın.", en: "Alerts and notes belong to this browser's device key. The key is part of the backup file (Backup dialog): whoever restores it gets the same alerts, so do not share it.", fr: "Les alertes et notes sont liées à la clé de cet appareil. La clé fait partie du fichier de sauvegarde : qui le restaure accède aux mêmes alertes, ne le partagez pas." },
   "workspace.deviceKeyIncluded": { tr: "Cihaz anahtarı (alarmlar ve notlar) dahil — dosyayı paylaşmayın.", en: "Includes the device key (alerts and notes) — do not share the file.", fr: "Contient la clé de l'appareil (alertes et notes) — ne partagez pas le fichier." },
 
+  // Offline outbox
+  "outbox.pendingOne": { tr: "1 değişiklik gönderilmeyi bekliyor", en: "1 change waiting to be sent", fr: "1 modification en attente d'envoi" },
+  "outbox.pendingMany": { tr: "{count} değişiklik gönderilmeyi bekliyor", en: "{count} changes waiting to be sent", fr: "{count} modifications en attente d'envoi" },
+  "outbox.whenOnline": { tr: "bağlantı gelince gönderilecek", en: "sent when you are back online", fr: "envoyées au retour de la connexion" },
+  "outbox.sendNow": { tr: "Şimdi gönder", en: "Send now", fr: "Envoyer maintenant" },
+  "outbox.problemsLabel": { tr: "Gönderilemeyen değişiklikler", en: "Changes that could not be sent", fr: "Modifications non envoyées" },
+  "outbox.what.note": { tr: "{label} notu", en: "{label} note", fr: "note {label}" },
+  "outbox.what.alert": { tr: "{label} alarmı", en: "{label} alert", fr: "alerte {label}" },
+  "outbox.conflict": { tr: "Çakışma: {what} siz çevrimdışıyken başka yerde değişti.", en: "Conflict: the {what} changed elsewhere while you were offline.", fr: "Conflit : {what} a été modifiée ailleurs pendant que vous étiez hors ligne." },
+  "outbox.rejected": { tr: "{what} kaydedilemedi: {reason}", en: "The {what} could not be saved: {reason}", fr: "{what} n'a pas pu être enregistrée : {reason}" },
+  "outbox.keepMine": { tr: "Benimkini kullan", en: "Keep mine", fr: "Garder la mienne" },
+  "outbox.useServer": { tr: "Sunucudakini kullan", en: "Use the server's", fr: "Garder celle du serveur" },
+  "outbox.discard": { tr: "Değişikliği bırak", en: "Discard change", fr: "Abandonner" },
+  "outbox.state.pending": { tr: "gönderilmeyi bekliyor", en: "waiting to be sent", fr: "en attente d'envoi" },
+  "outbox.state.conflict": { tr: "çakışma", en: "conflict", fr: "conflit" },
+  "outbox.state.rejected": { tr: "kaydedilemedi", en: "not saved", fr: "non enregistrée" },
+
+  // Stock notes
+  "notes.add": { tr: "Not ekle", en: "Add note", fr: "Ajouter une note" },
+  "notes.label": { tr: "{ticker} notum", en: "My {ticker} note", fr: "Ma note {ticker}" },
+  "notes.editLabel": { tr: "{ticker} notunu düzenle", en: "Edit {ticker} note", fr: "Modifier la note {ticker}" },
+  "notes.hint": { tr: "Yalnızca bu cihaz anahtarıyla görülür; çevrimdışı da kaydedilir.", en: "Visible only with this device key; saved offline too.", fr: "Visible uniquement avec la clé de cet appareil ; enregistrée aussi hors ligne." },
+  "notes.save": { tr: "Notu kaydet", en: "Save note", fr: "Enregistrer la note" },
+  "notes.delete": { tr: "Notu sil", en: "Delete note", fr: "Supprimer la note" },
+  "notes.deleteConfirm": { tr: "{ticker} notu silinsin mi?", en: "Delete the {ticker} note?", fr: "Supprimer la note {ticker} ?" },
+  "notes.saveFailed": { tr: "Not bu tarayıcıda kaydedilemedi.", en: "The note could not be stored in this browser.", fr: "La note n'a pas pu être enregistrée dans ce navigateur." },
+  "notes.syncPending": { tr: "Gönderilmeyi bekliyor", en: "Waiting to be sent", fr: "En attente d'envoi" },
+  "notes.syncConflict": { tr: "Çakışma — sayfanın üstünden seçin", en: "Conflict — choose at the top of the page", fr: "Conflit — choisissez en haut de la page" },
+  "notes.syncRejected": { tr: "Kaydedilemedi — sayfanın üstüne bakın", en: "Not saved — see the top of the page", fr: "Non enregistrée — voir en haut de la page" },
+  "notes.syncSaved": { tr: "Kaydedildi · {time}", en: "Saved · {time}", fr: "Enregistrée · {time}" },
+  "workspace.statNotes": { tr: "{count} hisse notu", en: "{count} stock notes", fr: "{count} notes d'actions" },
+
   // Installable app / service worker
   "pwa.updateReady": { tr: "Yeni sürüm hazır", en: "New version ready", fr: "Nouvelle version prête" },
   "pwa.updateDescription": { tr: "Yenilediğinizde güncel sürüm açılır.", en: "Reload to open the latest version.", fr: "Rechargez pour ouvrir la dernière version." },

@@ -1024,6 +1024,25 @@ class AlertDelivery(Base):
     updated_at: Mapped[datetime] = _updated_at()
 
 
+class StockNote(Base):
+    """A device's private note on one stock (migration 026). ``version`` guards offline edits."""
+
+    __tablename__ = "stock_notes"
+    __table_args__ = (UniqueConstraint("device_id", "company_id", name="uq_stock_notes_device_company"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
 # ---------------------------------------------------------------------------
 # News, AI usage, audit — unchanged
 # ---------------------------------------------------------------------------

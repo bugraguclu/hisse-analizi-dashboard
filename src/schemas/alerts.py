@@ -130,3 +130,27 @@ class AlertDeliveryOut(BaseModel):
 class TestPushOut(BaseModel):
     delivery_id: uuid.UUID
     subscriptions: int
+
+
+MAX_NOTE_LENGTH = 5000
+
+
+class StockNoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_NOTE_LENGTH)
+    # The version this edit was based on; null = the note must not exist yet.
+    base_version: int | None = Field(default=None, ge=1)
+
+    @field_validator("text")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Not boş olamaz.")
+        return value
+
+
+class StockNoteOut(BaseModel):
+    ticker: str
+    text: str
+    version: int
+    created_at: datetime
+    updated_at: datetime

@@ -9,6 +9,7 @@ import { DeviceApiError } from "@/lib/device/device-api";
 import { formatMarketDate, formatNumber, formatPrice } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import { emptyAlertForm, formFromRule, type AlertRule, type AlertRuleInput } from "@/lib/alerts/model";
+import type { DisplayedRule } from "@/lib/alerts/overlay";
 import { cn } from "@/lib/utils";
 import { AlertRuleForm } from "./AlertRuleForm";
 import { PushPermissionCard } from "./PushPermissionCard";
@@ -38,7 +39,7 @@ export function AlertsView() {
   const deliveries = useAlertDeliveries();
   const { create, update, remove } = useAlertMutations();
   const describe = useDescribeRule();
-  const [editing, setEditing] = useState<AlertRule | null>(null);
+  const [editing, setEditing] = useState<DisplayedRule | null>(null);
   const [formKey, setFormKey] = useState(0);
 
   const save = async (input: AlertRuleInput) => {
@@ -53,7 +54,7 @@ export function AlertsView() {
     }
   };
 
-  const del = async (rule: AlertRule) => {
+  const del = async (rule: DisplayedRule) => {
     if (!window.confirm(t("alerts.deleteConfirm", { ticker: rule.ticker }))) return;
     try {
       await remove(rule);
@@ -64,7 +65,7 @@ export function AlertsView() {
     }
   };
 
-  const list = rules.data ?? [];
+  const list = rules.rules;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -77,14 +78,14 @@ export function AlertsView() {
         <h2 id="alerts-list-title" className="text-sm font-semibold text-foreground">
           {t("alerts.listTitle")}
         </h2>
-        {rules.isError ? (
+        {rules.isError && list.length === 0 ? (
           <p role="alert" className="text-[13px] text-destructive">
             {t("alerts.loadError")}{" "}
             <button type="button" className="underline underline-offset-4" onClick={() => void rules.refetch()}>
               {t("common.retry")}
             </button>
           </p>
-        ) : rules.isLoading ? (
+        ) : rules.isLoading && list.length === 0 ? (
           <p className="text-[13px] text-muted-foreground">{t("common.loading")}</p>
         ) : list.length === 0 ? (
           <p className="text-[13px] text-muted-foreground">{t("alerts.empty")}</p>
@@ -105,6 +106,9 @@ export function AlertsView() {
                       {t(`alerts.state.${rule.state}`)}
                     </span>
                     {rule.last_triggered_at ? ` · ${t("alerts.lastFired", { time: formatMarketDate(rule.last_triggered_at, "dayMonthTime") })}` : null}
+                    {rule.sync !== "synced" ? (
+                      <span className={cn("ml-1", rule.sync === "pending" ? "text-muted-foreground" : "text-warn")}>· {t(`outbox.state.${rule.sync}`)}</span>
+                    ) : null}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">

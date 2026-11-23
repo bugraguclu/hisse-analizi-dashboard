@@ -425,3 +425,37 @@ async def test_test_push_endpoint_requires_a_subscription(pg, monkeypatch):
     assert response.status_code == 202 and response.json()["subscriptions"] == 1
     deliveries = (await pg.client.get("/me/alerts/deliveries", headers=headers())).json()
     assert deliveries[0]["kind"] == "test" and deliveries[0]["status"] == "sent" and sent == ["done"]
+
+
+# --- Stock notes -----------------------------------------------------------------------
+
+async def test_notes_create_edit_conflict_and_delete(pg):
+    created = await pg.client.put("/me/notes/thyao", json={"text": "Bilanço 12 Mart", "base_version": None}, headers=headers(idem="note-0001"))
+    assert created.status_code == 200 and created.json()["version"] == 1 and created.json()["ticker"] == "THYAO"
+    # Lost response → the outbox replays the same request: same answer, no second write.
+    replay = await pg.client.put("/me/notes/THYAO", json={"text": "Bilanço 12 Mart", "base_version": None}, headers=headers(idem="note-0001"))
+    assert replay.json() == created.json() and replay.headers[IDEMPOTENT_REPLAY_HEADER] == "true"
+
+    # Another browser (same key, other edit) creating from scratch conflicts with the existing note.
+    other = await pg.client.put("/me/notes/THYAO", json={"text": "Başka", "base_version": None}, headers=headers(idem="note-0002"))
+    assert other.status_code == 409 and other.json()["current"]["text"] == "Bilanço 12 Mart"
+
+    edited = await pg.client.put("/me/notes/THYAO", json={"text": "Bilanço 14 Mart", "base_version": 1}, headers=headers())
+    assert edited.json()["version"] == 2
+    stale = await pg.client.put("/me/notes/THYAO", json={"text": "eski", "base_version": 1}, headers=headers())
+    assert stale.status_code == 409 and stale.json()["code"] == "version_conflict" and stale.json()["current"]["version"] == 2
+
+    assert (await pg.client.get("/me/notes", headers=headers())).json()[0]["text"] == "Bilanço 14 Mart"
+    assert (await pg.client.get("/me/notes", headers=headers(OTHER_KEY))).json() == []
+    assert (await pg.client.delete("/me/notes/THYAO?base_version=1", headers=headers())).status_code == 409
+    assert (await pg.client.delete("/me/notes/THYAO?base_version=2", headers=headers())).status_code == 204
+    assert (await pg.client.delete("/me/notes/THYAO?base_version=2", headers=headers())).status_code == 204
+    gone = await pg.client.put("/me/notes/THYAO", json={"text": "x", "base_version": 2}, headers=headers())
+    assert gone.status_code == 409 and gone.json()["current"] is None
+
+
+async def test_note_validation(pg):
+    assert (await pg.client.put("/me/notes/NOPE", json={"text": "x"}, headers=headers())).status_code == 404
+    assert (await pg.client.put("/me/notes/THYAO", json={"text": "   "}, headers=headers())).status_code == 422
+    assert (await pg.client.put("/me/notes/THYAO", json={"text": "x" * 5001}, headers=headers())).status_code == 422
+    assert (await pg.client.put("/me/notes/THYAO", json={"text": "x"})).status_code == 401

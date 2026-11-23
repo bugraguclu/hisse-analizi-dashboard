@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useStockIdentity, type IdentityState } from "./hooks";
 import { useStockI18n, type StockKey } from "./i18n";
 import { StockHeader } from "./StockHeader";
+import { StockNote } from "./StockNote";
 
 export type StockView = "overview" | "technical" | "fundamental" | "combined";
 
@@ -131,6 +132,7 @@ export function StockShell({
   return (
     <div className="mx-auto max-w-7xl">
       <StockHeader ticker={ticker} identity={identity} />
+      <StockNote ticker={ticker} />
       <div className="relative mt-5">
         <StockTabs ticker={ticker} active={view} />
         {actions ? <div className="absolute inset-y-0 right-0 flex items-center pb-1">{actions}</div> : null}

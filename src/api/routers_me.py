@@ -1,4 +1,4 @@
-"""Anonymous-device API: Web Push subscriptions and alert rules (``/push``, ``/me/...``).
+"""Anonymous-device API: Web Push subscriptions, alert rules and stock notes (``/push``, ``/me/...``).
 
 Authentication is the device key in ``X-Device-Key`` (see src/core/device.py); the
 server stores only its hash. Reads with an unknown key return empty results and
@@ -27,7 +27,7 @@ from src.api.limiter import limiter
 from src.core.config import settings
 from src.core.device import DEVICE_KEY_HEADER, InvalidDeviceKeyError, device_key_hash, is_allowed_push_endpoint
 from src.core.mutations import IDEMPOTENCY_KEY_HEADER, IDEMPOTENT_REPLAY_HEADER, MutationError, validate_idempotency_key
-from src.db.models import AlertDelivery, AlertRule, Company, Device, PushSubscription
+from src.db.models import AlertDelivery, AlertRule, Company, Device, PushSubscription, StockNote
 from src.db.repositories.idempotency import IdempotencyRepository
 from src.db.session import get_db
 from src.schemas.alerts import (
@@ -40,6 +40,8 @@ from src.schemas.alerts import (
     PushSubscriptionDelete,
     PushSubscriptionIn,
     PushSubscriptionOut,
+    StockNoteIn,
+    StockNoteOut,
     TestPushOut,
 )
 from src.services.alert_service import enqueue_delivery, text
@@ -445,6 +447,96 @@ async def list_deliveries(
         )
         for d in rows
     ]
+
+
+# --- Stock notes ---------------------------------------------------------------------
+
+def note_out(note: StockNote, ticker: str) -> dict[str, Any]:
+    return StockNoteOut(
+        ticker=ticker, text=note.text, version=note.version, created_at=note.created_at, updated_at=note.updated_at
+    ).model_dump(mode="json")
+
+
+async def _note(db: AsyncSession, device_id: uuid.UUID, company_id: uuid.UUID) -> StockNote | None:
+    return (
+        await db.execute(select(StockNote).where(StockNote.device_id == device_id, StockNote.company_id == company_id))
+    ).scalar_one_or_none()
+
+
+@me_router.get("/me/notes", response_model=list[StockNoteOut])
+async def list_notes(db: DB, key_hash: DeviceHash) -> list[dict[str, Any]]:
+    device = await _find_device(db, key_hash)
+    if device is None:
+        return []
+    rows = (
+        await db.execute(
+            select(StockNote, Company.ticker)
+            .join(Company, Company.id == StockNote.company_id)
+            .where(StockNote.device_id == device.id)
+            .order_by(Company.ticker)
+        )
+    ).all()
+    return [note_out(note, ticker) for note, ticker in rows]
+
+
+@me_router.put("/me/notes/{ticker}", response_model=StockNoteOut)
+@limiter.limit(lambda: settings.rate_limit_device_write)
+async def put_note(
+    request: Request, ticker: str, body: StockNoteIn, db: DB, key_hash: DeviceHash, idempotency_key: IdempotencyKey = None
+) -> Response:
+    """Create (``base_version`` null) or replace a note; a stale base is ``409 version_conflict``."""
+
+    async def operation() -> tuple[int, Any]:
+        company = await _company(db, ticker)
+        device = await _ensure_device(db, key_hash)
+        note = await _note(db, device.id, company.id)
+        if note is None:
+            if body.base_version is not None:
+                return _conflict(None)  # deleted elsewhere since this edit started
+            count = (
+                await db.execute(select(func.count()).select_from(StockNote).where(StockNote.device_id == device.id))
+            ).scalar_one()
+            if count >= settings.notes_max_per_device:
+                return status.HTTP_409_CONFLICT, {"detail": "Not sayısı sınırına ulaşıldı.", "code": "limit_reached"}
+            note = StockNote(device_id=device.id, company_id=company.id, text=body.text, version=1)
+            db.add(note)
+        elif body.base_version != note.version:
+            return _conflict(note_out(note, company.ticker))
+        else:
+            note.text = body.text
+            note.version = note.version + 1
+        await db.flush()
+        await db.refresh(note)
+        return status.HTTP_200_OK, note_out(note, company.ticker)
+
+    payload = {"ticker": ticker.upper(), **body.model_dump(mode="json")}
+    return await run_idempotent(db, key_hash, "notes:put", idempotency_key, payload, operation)
+
+
+@me_router.delete("/me/notes/{ticker}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(lambda: settings.rate_limit_device_write)
+async def delete_note(
+    request: Request,
+    ticker: str,
+    db: DB,
+    key_hash: DeviceHash,
+    base_version: Annotated[int | None, Query(ge=1)] = None,
+    idempotency_key: IdempotencyKey = None,
+) -> Response:
+    async def operation() -> tuple[int, Any]:
+        company = await _company(db, ticker)
+        device = await _find_device(db, key_hash)
+        note = await _note(db, device.id, company.id) if device else None
+        if note is None:
+            return status.HTTP_204_NO_CONTENT, None
+        if base_version is not None and note.version != base_version:
+            return _conflict(note_out(note, company.ticker))
+        await db.delete(note)
+        await db.flush()
+        return status.HTTP_204_NO_CONTENT, None
+
+    payload = {"ticker": ticker.upper(), "base_version": base_version}
+    return await run_idempotent(db, key_hash, "notes:delete", idempotency_key, payload, operation)
 
 
 @me_router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

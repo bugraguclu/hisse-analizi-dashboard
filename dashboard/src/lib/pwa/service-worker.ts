@@ -19,6 +19,8 @@
  * `node:vm` by the unit tests. Keep it ES2017 and free of backticks and `${`.
  */
 
+import { replayOutbox } from "../offline-outbox/core.ts";
+
 export const SW_VERSION_PLACEHOLDER = "__HISSE_SW_VERSION__";
 
 /** Characters allowed in the version; it ends up in cache names. */
@@ -28,7 +30,10 @@ export function sanitizeSwVersion(raw: string | null | undefined): string {
 }
 
 export function serviceWorkerScript(version: string): string {
-  return SW_SOURCE.split(SW_VERSION_PLACEHOLDER).join(sanitizeSwVersion(version));
+  // The outbox replay is shared with the pages: its compiled source is embedded as is.
+  // Appended (not prepended) so the "use strict" directive stays first.
+  const shared = "\nvar replayOutbox = " + replayOutbox.toString() + ";\n";
+  return SW_SOURCE.split(SW_VERSION_PLACEHOLDER).join(sanitizeSwVersion(version)) + shared;
 }
 
 const SW_SOURCE = String.raw`/* Hisse Analizi service worker. Generated per build; do not cache this file. */
@@ -327,6 +332,84 @@ self.addEventListener("notificationclick", function (event) {
   event.waitUntil(openAppPath(safeAppPath(data.url)));
 });
 
+// --- Offline outbox: Background Sync replay ----------------------------------------------
+// Same database, version and stores as lib/local-store/idb.ts (keep them in step).
+var LOCAL_DB = "hisse-analizi-local";
+var LOCAL_DB_VERSION = 2;
+var OUTBOX_STORE = "outbox";
+var OUTBOX_TAG = "hisse-outbox";
+
+function openLocalDb() {
+  return new Promise(function (resolve, reject) {
+    var request = indexedDB.open(LOCAL_DB, LOCAL_DB_VERSION);
+    request.onupgradeneeded = function () {
+      var db = request.result;
+      if (!db.objectStoreNames.contains("backups")) db.createObjectStore("backups", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("offlineSnapshots")) db.createObjectStore("offlineSnapshots", { keyPath: "key" });
+      if (!db.objectStoreNames.contains(OUTBOX_STORE)) db.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
+    };
+    request.onsuccess = function () {
+      var db = request.result;
+      db.onversionchange = function () { db.close(); };
+      resolve(db);
+    };
+    request.onerror = function () { reject(request.error); };
+    request.onblocked = function () { reject(new Error("indexeddb blocked")); };
+  });
+}
+
+function outboxTransaction(mode, work) {
+  return openLocalDb().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(OUTBOX_STORE, mode);
+      var request = work(tx.objectStore(OUTBOX_STORE));
+      tx.oncomplete = function () { db.close(); resolve(request ? request.result : undefined); };
+      tx.onerror = function () { db.close(); reject(tx.error); };
+      tx.onabort = function () { db.close(); reject(tx.error || new Error("aborted")); };
+    });
+  });
+}
+
+function outboxStore() {
+  if (self.__outboxStoreOverride) return self.__outboxStoreOverride;
+  return {
+    list: function () { return outboxTransaction("readonly", function (store) { return store.getAll(); }); },
+    put: function (entry) { return outboxTransaction("readwrite", function (store) { return store.put(entry); }); },
+    remove: function (id) { return outboxTransaction("readwrite", function (store) { return store.delete(id); }); },
+  };
+}
+
+function withOutboxLock(task) {
+  var locks = self.navigator && self.navigator.locks;
+  return locks && locks.request ? locks.request(OUTBOX_TAG, task) : task();
+}
+
+function broadcastOutbox(message) {
+  try {
+    var channel = new BroadcastChannel(OUTBOX_TAG);
+    channel.postMessage(message);
+    channel.close();
+  } catch (error) {
+    // No BroadcastChannel: pages re-read the queue when they regain focus.
+  }
+}
+
+function syncOutbox() {
+  return withOutboxLock(function () {
+    return replayOutbox(outboxStore(), fetch.bind(self), {});
+  }).then(function (summary) {
+    if (summary.applied.length) broadcastOutbox({ type: "applied", applied: summary.applied });
+    broadcastOutbox({ type: "changed" });
+    // Rejecting makes the browser schedule another sync attempt later.
+    if (summary.transient) throw new Error("outbox: connection still unavailable");
+    return summary;
+  });
+}
+
+self.addEventListener("sync", function (event) {
+  if (event.tag === OUTBOX_TAG) event.waitUntil(syncOutbox());
+});
+
 self.__hisseSw = {
   VERSION: VERSION,
   STATIC_CACHE: STATIC_CACHE,
@@ -337,5 +420,6 @@ self.__hisseSw = {
   isCacheablePage: isCacheablePage,
   safeAppPath: safeAppPath,
   parsePush: parsePush,
+  syncOutbox: syncOutbox,
 };
 `;

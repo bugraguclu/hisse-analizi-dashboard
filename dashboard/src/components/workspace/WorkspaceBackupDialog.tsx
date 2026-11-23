@@ -491,6 +491,9 @@ export function WorkspaceBackupDialog() {
                   </div>
                 </dl>
               )}
+              {currentSummary && currentSummary.counts.notes > 0 ? (
+                <p className="mt-2 text-[11px] text-muted-foreground">{t("workspace.statNotes", { count: currentSummary.counts.notes })}</p>
+              ) : null}
               {currentSummary && currentSummary.counts.deviceKey > 0 ? (
                 <p className="mt-2 text-[11px] text-warn">{t("workspace.deviceKeyIncluded")}</p>
               ) : null}
@@ -579,6 +582,7 @@ export function WorkspaceBackupDialog() {
                     </li>
                     <li>{t("workspace.statCosts", { count: pendingImport.preview.counts.costs })}</li>
                     <li>{t("workspace.statPrefs", { count: pendingImport.preview.counts.preferences })}</li>
+                    {pendingImport.preview.counts.notes > 0 ? <li>{t("workspace.statNotes", { count: pendingImport.preview.counts.notes })}</li> : null}
                     {pendingImport.preview.counts.deviceKey > 0 ? <li>{t("workspace.deviceKeyIncluded")}</li> : null}
                   </ul>
 
