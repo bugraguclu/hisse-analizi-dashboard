@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { SectorDetailView } from "@/components/discovery/SectorDetailView";
 import { JsonLd } from "@/components/shared/JsonLd";
@@ -11,16 +10,12 @@ import {
   sectorPageHref,
   sectorRelatedAtlasSlugs,
 } from "@/lib/discovery";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { breadcrumbList, collectionPage, siteOrigin } from "@/lib/schema";
 import { sectorHref, sectorLabel } from "@/lib/sectors";
 
 type Props = { params: Promise<{ slug: string }> };
-
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
 
 export function generateStaticParams() {
   return allCanonicalSectorKeys().map((slug) => ({ slug }));

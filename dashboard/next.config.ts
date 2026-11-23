@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -54,6 +56,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  // Defined (empty) so the static-demo branches (src/lib/demo.ts) compile to dead code
+  // and are dropped; an undefined NEXT_PUBLIC_ variable would be looked up at runtime instead.
+  env: { NEXT_PUBLIC_DEMO: "" },
   async headers() {
     return [
       {
@@ -64,4 +69,34 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Static demo (`npm run build:demo`, see src/lib/demo.ts): a static export for
+ * GitHub Pages under NEXT_PUBLIC_BASE_PATH whose API calls are answered from the
+ * responses recorded in demo/data. Static hosting sends no custom headers and
+ * runs no route handlers, so the headers and the /api proxy and sitemap (the
+ * only *.ts route files) are left out.
+ */
+function staticDemoConfig(): NextConfig {
+  const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").replace(/\/$/, "");
+  if (basePath && !basePath.startsWith("/")) throw new Error(`NEXT_PUBLIC_BASE_PATH must start with "/": ${basePath}`);
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), "demo/data/manifest.json"), "utf8")) as {
+    capturedAt: string;
+    tickers: string[];
+  };
+  return {
+    output: "export",
+    basePath: basePath || undefined,
+    trailingSlash: true,
+    pageExtensions: ["tsx"],
+    poweredByHeader: false,
+    reactStrictMode: true,
+    env: {
+      NEXT_PUBLIC_DEMO: "1",
+      NEXT_PUBLIC_BASE_PATH: basePath,
+      NEXT_PUBLIC_DEMO_CAPTURED_AT: manifest.capturedAt,
+      NEXT_PUBLIC_DEMO_TICKERS: manifest.tickers.join(","),
+    },
+  };
+}
+
+export default process.env.NEXT_PUBLIC_DEMO === "1" ? staticDemoConfig() : nextConfig;

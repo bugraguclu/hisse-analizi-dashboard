@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { IndexHubView } from "@/components/discovery/IndexHubView";
 import { JsonLd } from "@/components/shared/JsonLd";
 import { DISCOVERY_INDICES, indexPageHref } from "@/lib/discovery";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { breadcrumbList, collectionPage, siteOrigin } from "@/lib/schema";
 
 const TITLES: Record<Locale, string> = {
@@ -17,11 +17,6 @@ const DESCRIPTIONS: Record<Locale, string> = {
   en: "Canonical discovery pages, live charts and median ratios for BIST 100, BIST 30, BIST Banks, BIST Industrials and thematic indices.",
   fr: "Pages canoniques, graphiques en direct et médianes pour le BIST 100, le BIST 30, BIST Banques et les indices thématiques.",
 };
-
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await requestLocale();

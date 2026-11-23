@@ -8,7 +8,9 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 import { CUSTOM_LAYOUTS_COOKIE, parseCustomLayoutsCookie } from "@/components/widgets/custom-layouts-cookie";
 import type { BuiltInPage } from "@/components/widgets/defaults";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { IS_DEMO } from "@/lib/demo";
+import { requestLocale } from "@/lib/request-locale";
 import { siteOrigin } from "@/lib/schema";
 import { startupBootstrapScript } from "@/lib/startup-recovery";
 
@@ -33,12 +35,12 @@ const newsreader = Newsreader({
 
 const OPEN_GRAPH_LOCALES: Record<Locale, string> = { tr: "tr_TR", en: "en_US", fr: "fr_FR" };
 
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
-
+/**
+ * Pages the visitor customised (cookie), so they render skeletons instead of
+ * flashing the default layout. The static demo has no request: none.
+ */
 async function requestCustomLayouts(): Promise<BuiltInPage[]> {
+  if (IS_DEMO) return [];
   const store = await cookies();
   return parseCustomLayoutsCookie(store.get(CUSTOM_LAYOUTS_COOKIE)?.value);
 }
@@ -55,6 +57,8 @@ export async function generateMetadata(): Promise<Metadata> {
     // app/favicon.ico is picked up by the file convention.
     formatDetection: { telephone: false },
     openGraph: { type: "website", siteName: "Hisse Analizi", title, description, locale: OPEN_GRAPH_LOCALES[locale] },
+    // The static demo (lib/demo.ts) is a copy of the live site: keep it out of search results.
+    ...(IS_DEMO ? { robots: { index: false, follow: false } } : {}),
   };
 }
 

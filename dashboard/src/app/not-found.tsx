@@ -5,8 +5,16 @@ import { ArrowLeft } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { buttonVariants } from "@/components/ui/button";
 import { TickerSearch } from "@/components/shared/TickerSearch";
+import { DemoTickerUnavailable } from "@/components/layout/DemoTickerUnavailable";
+import { IS_DEMO } from "@/lib/demo";
 
 export default function NotFound() {
+  // The static demo serves this page for every unknown URL, stock pages it lacks included.
+  if (IS_DEMO) return <DemoTickerUnavailable fallback={<PageNotFound />} />;
+  return <PageNotFound />;
+}
+
+function PageNotFound() {
   const { t } = useLocale();
   return (
     <section className="mx-auto max-w-7xl py-10 md:py-16" aria-labelledby="not-found-title">

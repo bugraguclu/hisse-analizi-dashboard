@@ -1,0 +1,1452 @@
+{
+ "version": 1,
+ "capturedAt": "2026-11-23T14:40:53.036Z",
+ "origin": "https://hisse-analizi.duckdns.org",
+ "tickers": [
+  "THYAO",
+  "GARAN",
+  "ASELS",
+  "BIMAS",
+  "KCHOL",
+  "SISE",
+  "EREGL"
+ ],
+ "responses": {
+  "GET /companies": {
+   "file": "companies.json",
+   "status": 200
+  },
+  "GET /companies/ASELS": {
+   "file": "companies_ASELS.json",
+   "status": 200
+  },
+  "GET /companies/BIMAS": {
+   "file": "companies_BIMAS.json",
+   "status": 200
+  },
+  "GET /companies/EREGL": {
+   "file": "companies_EREGL.json",
+   "status": 200
+  },
+  "GET /companies/GARAN": {
+   "file": "companies_GARAN.json",
+   "status": 200
+  },
+  "GET /companies/KCHOL": {
+   "file": "companies_KCHOL.json",
+   "status": 200
+  },
+  "GET /companies/SISE": {
+   "file": "companies_SISE.json",
+   "status": 200
+  },
+  "GET /companies/THYAO": {
+   "file": "companies_THYAO.json",
+   "status": 200
+  },
+  "GET /events/latest": {
+   "file": "events_latest.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=ASELS": {
+   "file": "financials_ratios__ticker_ASELS.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=BIMAS": {
+   "file": "financials_ratios__ticker_BIMAS.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=EREGL": {
+   "file": "financials_ratios__ticker_EREGL.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=GARAN": {
+   "file": "financials_ratios__ticker_GARAN.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=KCHOL": {
+   "file": "financials_ratios__ticker_KCHOL.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=SISE": {
+   "file": "financials_ratios__ticker_SISE.json",
+   "status": 200
+  },
+  "GET /financials/ratios?ticker=THYAO": {
+   "file": "financials_ratios__ticker_THYAO.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/balance-sheet?quarterly=false": {
+   "file": "fundamentals_ASELS_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/balance-sheet?quarterly=true": {
+   "file": "fundamentals_ASELS_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/cashflow?quarterly=false": {
+   "file": "fundamentals_ASELS_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/cashflow?quarterly=true": {
+   "file": "fundamentals_ASELS_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/dividends": {
+   "file": "fundamentals_ASELS_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/earnings-dates": {
+   "file": "fundamentals_ASELS_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/fast-info": {
+   "file": "fundamentals_ASELS_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/holders": {
+   "file": "fundamentals_ASELS_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/income-statement?quarterly=false": {
+   "file": "fundamentals_ASELS_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/income-statement?quarterly=true": {
+   "file": "fundamentals_ASELS_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/info": {
+   "file": "fundamentals_ASELS_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/live-news": {
+   "file": "fundamentals_ASELS_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/live-ratios": {
+   "file": "fundamentals_ASELS_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/price-targets": {
+   "file": "fundamentals_ASELS_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/recommendations": {
+   "file": "fundamentals_ASELS_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/ASELS/sector": {
+   "file": "fundamentals_ASELS_sector.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/balance-sheet?quarterly=false": {
+   "file": "fundamentals_BIMAS_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/balance-sheet?quarterly=true": {
+   "file": "fundamentals_BIMAS_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/cashflow?quarterly=false": {
+   "file": "fundamentals_BIMAS_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/cashflow?quarterly=true": {
+   "file": "fundamentals_BIMAS_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/dividends": {
+   "file": "fundamentals_BIMAS_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/earnings-dates": {
+   "file": "fundamentals_BIMAS_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/fast-info": {
+   "file": "fundamentals_BIMAS_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/holders": {
+   "file": "fundamentals_BIMAS_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/income-statement?quarterly=false": {
+   "file": "fundamentals_BIMAS_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/income-statement?quarterly=true": {
+   "file": "fundamentals_BIMAS_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/info": {
+   "file": "fundamentals_BIMAS_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/live-news": {
+   "file": "fundamentals_BIMAS_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/live-ratios": {
+   "file": "fundamentals_BIMAS_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/price-targets": {
+   "file": "fundamentals_BIMAS_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/recommendations": {
+   "file": "fundamentals_BIMAS_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/BIMAS/sector": {
+   "file": "fundamentals_BIMAS_sector.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/balance-sheet?quarterly=false": {
+   "file": "fundamentals_EREGL_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/balance-sheet?quarterly=true": {
+   "file": "fundamentals_EREGL_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/cashflow?quarterly=false": {
+   "file": "fundamentals_EREGL_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/cashflow?quarterly=true": {
+   "file": "fundamentals_EREGL_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/dividends": {
+   "file": "fundamentals_EREGL_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/earnings-dates": {
+   "file": "fundamentals_EREGL_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/fast-info": {
+   "file": "fundamentals_EREGL_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/holders": {
+   "file": "fundamentals_EREGL_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/income-statement?quarterly=false": {
+   "file": "fundamentals_EREGL_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/income-statement?quarterly=true": {
+   "file": "fundamentals_EREGL_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/info": {
+   "file": "fundamentals_EREGL_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/live-news": {
+   "file": "fundamentals_EREGL_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/live-ratios": {
+   "file": "fundamentals_EREGL_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/price-targets": {
+   "file": "fundamentals_EREGL_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/recommendations": {
+   "file": "fundamentals_EREGL_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/EREGL/sector": {
+   "file": "fundamentals_EREGL_sector.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/balance-sheet?quarterly=false": {
+   "file": "fundamentals_GARAN_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/balance-sheet?quarterly=true": {
+   "file": "fundamentals_GARAN_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/cashflow?quarterly=false": {
+   "file": "fundamentals_GARAN_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/cashflow?quarterly=true": {
+   "file": "fundamentals_GARAN_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/dividends": {
+   "file": "fundamentals_GARAN_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/earnings-dates": {
+   "file": "fundamentals_GARAN_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/fast-info": {
+   "file": "fundamentals_GARAN_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/holders": {
+   "file": "fundamentals_GARAN_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/income-statement?quarterly=false": {
+   "file": "fundamentals_GARAN_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/income-statement?quarterly=true": {
+   "file": "fundamentals_GARAN_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/info": {
+   "file": "fundamentals_GARAN_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/live-news": {
+   "file": "fundamentals_GARAN_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/live-ratios": {
+   "file": "fundamentals_GARAN_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/price-targets": {
+   "file": "fundamentals_GARAN_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/recommendations": {
+   "file": "fundamentals_GARAN_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/GARAN/sector": {
+   "file": "fundamentals_GARAN_sector.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/balance-sheet?quarterly=false": {
+   "file": "fundamentals_KCHOL_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/balance-sheet?quarterly=true": {
+   "file": "fundamentals_KCHOL_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/cashflow?quarterly=false": {
+   "file": "fundamentals_KCHOL_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/cashflow?quarterly=true": {
+   "file": "fundamentals_KCHOL_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/dividends": {
+   "file": "fundamentals_KCHOL_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/earnings-dates": {
+   "file": "fundamentals_KCHOL_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/fast-info": {
+   "file": "fundamentals_KCHOL_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/holders": {
+   "file": "fundamentals_KCHOL_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/income-statement?quarterly=false": {
+   "file": "fundamentals_KCHOL_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/income-statement?quarterly=true": {
+   "file": "fundamentals_KCHOL_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/info": {
+   "file": "fundamentals_KCHOL_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/live-news": {
+   "file": "fundamentals_KCHOL_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/live-ratios": {
+   "file": "fundamentals_KCHOL_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/price-targets": {
+   "file": "fundamentals_KCHOL_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/recommendations": {
+   "file": "fundamentals_KCHOL_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/KCHOL/sector": {
+   "file": "fundamentals_KCHOL_sector.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/balance-sheet?quarterly=false": {
+   "file": "fundamentals_SISE_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/balance-sheet?quarterly=true": {
+   "file": "fundamentals_SISE_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/cashflow?quarterly=false": {
+   "file": "fundamentals_SISE_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/cashflow?quarterly=true": {
+   "file": "fundamentals_SISE_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/dividends": {
+   "file": "fundamentals_SISE_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/earnings-dates": {
+   "file": "fundamentals_SISE_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/fast-info": {
+   "file": "fundamentals_SISE_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/holders": {
+   "file": "fundamentals_SISE_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/income-statement?quarterly=false": {
+   "file": "fundamentals_SISE_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/income-statement?quarterly=true": {
+   "file": "fundamentals_SISE_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/info": {
+   "file": "fundamentals_SISE_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/live-news": {
+   "file": "fundamentals_SISE_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/live-ratios": {
+   "file": "fundamentals_SISE_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/price-targets": {
+   "file": "fundamentals_SISE_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/recommendations": {
+   "file": "fundamentals_SISE_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/SISE/sector": {
+   "file": "fundamentals_SISE_sector.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/balance-sheet?quarterly=false": {
+   "file": "fundamentals_THYAO_balance-sheet__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/balance-sheet?quarterly=true": {
+   "file": "fundamentals_THYAO_balance-sheet__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/cashflow?quarterly=false": {
+   "file": "fundamentals_THYAO_cashflow__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/cashflow?quarterly=true": {
+   "file": "fundamentals_THYAO_cashflow__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/dividends": {
+   "file": "fundamentals_THYAO_dividends.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/earnings-dates": {
+   "file": "fundamentals_THYAO_earnings-dates.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/fast-info": {
+   "file": "fundamentals_THYAO_fast-info.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/holders": {
+   "file": "fundamentals_THYAO_holders.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/income-statement?quarterly=false": {
+   "file": "fundamentals_THYAO_income-statement__quarterly_false.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/income-statement?quarterly=true": {
+   "file": "fundamentals_THYAO_income-statement__quarterly_true.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/info": {
+   "file": "fundamentals_THYAO_info.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/live-news": {
+   "file": "fundamentals_THYAO_live-news.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/live-ratios": {
+   "file": "fundamentals_THYAO_live-ratios.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/price-targets": {
+   "file": "fundamentals_THYAO_price-targets.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/recommendations": {
+   "file": "fundamentals_THYAO_recommendations.json",
+   "status": 200
+  },
+  "GET /fundamentals/THYAO/sector": {
+   "file": "fundamentals_THYAO_sector.json",
+   "status": 200
+  },
+  "GET /health": {
+   "file": "health.json",
+   "status": 200
+  },
+  "GET /macro/calendar?countries=TR%2CUS": {
+   "file": "macro_calendar__countries_TR_2CUS.json",
+   "status": 200
+  },
+  "GET /macro/fx-bulletin": {
+   "file": "macro_fx-bulletin.json",
+   "status": 200
+  },
+  "GET /macro/indicators": {
+   "file": "macro_indicators.json",
+   "status": 200
+  },
+  "GET /macro/inflation": {
+   "file": "macro_inflation.json",
+   "status": 200
+  },
+  "GET /macro/markets": {
+   "file": "macro_markets.json",
+   "status": 200
+  },
+  "GET /macro/markets/basket/history?period=1y": {
+   "file": "macro_markets_basket_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/brent/history?period=1y": {
+   "file": "macro_markets_brent_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/dxy/history?period=1y": {
+   "file": "macro_markets_dxy_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/eurtry/history?period=1y": {
+   "file": "macro_markets_eurtry_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/eurtry/history?period=5y": {
+   "file": "macro_markets_eurtry_history__period_5y.json",
+   "status": 200
+  },
+  "GET /macro/markets/eurusd/history?period=1y": {
+   "file": "macro_markets_eurusd_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/gbptry/history?period=1y": {
+   "file": "macro_markets_gbptry_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/gram_gold/history?period=1y": {
+   "file": "macro_markets_gram_gold_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/gram_gold/history?period=5y": {
+   "file": "macro_markets_gram_gold_history__period_5y.json",
+   "status": 200
+  },
+  "GET /macro/markets/tr01y/history?period=1y": {
+   "file": "macro_markets_tr01y_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/tr02y/history?period=1y": {
+   "file": "macro_markets_tr02y_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/tr03y/history?period=1y": {
+   "file": "macro_markets_tr03y_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/tr05y/history?period=1y": {
+   "file": "macro_markets_tr05y_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/tr10y/history?period=1y": {
+   "file": "macro_markets_tr10y_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/us10y/history?period=1y": {
+   "file": "macro_markets_us10y_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=1ay": {
+   "file": "macro_markets_usdtry_history__period_1ay.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=1y": {
+   "file": "macro_markets_usdtry_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=2y": {
+   "file": "macro_markets_usdtry_history__period_2y.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=3ay": {
+   "file": "macro_markets_usdtry_history__period_3ay.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=5y": {
+   "file": "macro_markets_usdtry_history__period_5y.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=6ay": {
+   "file": "macro_markets_usdtry_history__period_6ay.json",
+   "status": 200
+  },
+  "GET /macro/markets/usdtry/history?period=ytd": {
+   "file": "macro_markets_usdtry_history__period_ytd.json",
+   "status": 200
+  },
+  "GET /macro/markets/xagusd/history?period=1y": {
+   "file": "macro_markets_xagusd_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/markets/xauusd/history?period=1y": {
+   "file": "macro_markets_xauusd_history__period_1y.json",
+   "status": 200
+  },
+  "GET /macro/policy-rate": {
+   "file": "macro_policy-rate.json",
+   "status": 200
+  },
+  "GET /macro/tcmb": {
+   "file": "macro_tcmb.json",
+   "status": 200
+  },
+  "GET /macro/tcmb-calendar": {
+   "file": "macro_tcmb-calendar.json",
+   "status": 200
+  },
+  "GET /market/companies/all": {
+   "file": "market_companies_all.json",
+   "status": 200
+  },
+  "GET /market/index/XBANK?period=3mo&warmup=250": {
+   "file": "market_index_XBANK__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XGMYO?period=3mo&warmup=250": {
+   "file": "market_index_XGMYO__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XHARZ?period=3mo&warmup=250": {
+   "file": "market_index_XHARZ__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XHOLD?period=3mo&warmup=250": {
+   "file": "market_index_XHOLD__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XK030?period=3mo&warmup=250": {
+   "file": "market_index_XK030__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XKTUM?period=3mo&warmup=250": {
+   "file": "market_index_XKTUM__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XTMTU?period=3mo&warmup=250": {
+   "file": "market_index_XTMTU__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU030?period=3mo&warmup=250": {
+   "file": "market_index_XU030__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU050?period=3mo&warmup=250": {
+   "file": "market_index_XU050__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?currency=USD&period=1d&warmup=250": {
+   "file": "market_index_XU100__currency_USD_period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=1d&warmup=250": {
+   "file": "market_index_XU100__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=1mo&warmup=250": {
+   "file": "market_index_XU100__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=1y&warmup=250": {
+   "file": "market_index_XU100__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=3mo&warmup=250": {
+   "file": "market_index_XU100__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=5d&warmup=250": {
+   "file": "market_index_XU100__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=5y&warmup=250": {
+   "file": "market_index_XU100__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=6mo&warmup=250": {
+   "file": "market_index_XU100__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=max&warmup=250": {
+   "file": "market_index_XU100__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XU100?period=ytd&warmup=250": {
+   "file": "market_index_XU100__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XUHIZ?period=3mo&warmup=250": {
+   "file": "market_index_XUHIZ__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XUMAL?period=3mo&warmup=250": {
+   "file": "market_index_XUMAL__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XUSIN?period=3mo&warmup=250": {
+   "file": "market_index_XUSIN__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/index/XUTEK?period=3mo&warmup=250": {
+   "file": "market_index_XUTEK__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/indices": {
+   "file": "market_indices.json",
+   "status": 200
+  },
+  "GET /market/screener": {
+   "file": "market_screener.json",
+   "status": 200
+  },
+  "GET /market/screener/universe": {
+   "file": "market_screener_universe.json",
+   "status": 200
+  },
+  "GET /market/snapshot?symbols=THYAO%2CGARAN%2CASELS%2CBIMAS%2CKCHOL%2CSISE%2CEREGL": {
+   "file": "market_snapshot__symbols_THYAO_2CGARAN_2CASELS_2CBIMAS_2CKCHOL_2CSISE_2CEREGL.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_ASELS_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_ASELS_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=1d&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=1mo": {
+   "file": "market_ticker_ASELS_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=1mo&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=1y&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=3mo&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=5d&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=5y&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=6mo&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=max&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/ASELS/history?period=ytd&warmup=250": {
+   "file": "market_ticker_ASELS_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_BIMAS_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_BIMAS_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=1d&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=1mo": {
+   "file": "market_ticker_BIMAS_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=1mo&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=1y&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=3mo&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=5d&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=5y&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=6mo&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=max&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/BIMAS/history?period=ytd&warmup=250": {
+   "file": "market_ticker_BIMAS_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_EREGL_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_EREGL_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=1d&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=1mo": {
+   "file": "market_ticker_EREGL_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=1mo&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=1y&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=3mo&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=5d&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=5y&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=6mo&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=max&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/EREGL/history?period=ytd&warmup=250": {
+   "file": "market_ticker_EREGL_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_GARAN_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_GARAN_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=1d&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=1mo": {
+   "file": "market_ticker_GARAN_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=1mo&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=1y&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=3mo&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=5d&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=5y&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=6mo&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=max&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/GARAN/history?period=ytd&warmup=250": {
+   "file": "market_ticker_GARAN_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_KCHOL_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_KCHOL_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=1d&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=1mo": {
+   "file": "market_ticker_KCHOL_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=1mo&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=1y&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=3mo&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=5d&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=5y&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=6mo&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=max&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/KCHOL/history?period=ytd&warmup=250": {
+   "file": "market_ticker_KCHOL_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_SISE_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_SISE_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=1d&warmup=250": {
+   "file": "market_ticker_SISE_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=1mo": {
+   "file": "market_ticker_SISE_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=1mo&warmup=250": {
+   "file": "market_ticker_SISE_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=1y&warmup=250": {
+   "file": "market_ticker_SISE_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=3mo&warmup=250": {
+   "file": "market_ticker_SISE_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=5d&warmup=250": {
+   "file": "market_ticker_SISE_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=5y&warmup=250": {
+   "file": "market_ticker_SISE_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=6mo&warmup=250": {
+   "file": "market_ticker_SISE_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=max&warmup=250": {
+   "file": "market_ticker_SISE_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/SISE/history?period=ytd&warmup=250": {
+   "file": "market_ticker_SISE_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?currency=USD&period=3mo&warmup=250": {
+   "file": "market_ticker_THYAO_history__currency_USD_period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?currency=USD&period=6mo&warmup=250": {
+   "file": "market_ticker_THYAO_history__currency_USD_period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=1d&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_1d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=1mo": {
+   "file": "market_ticker_THYAO_history__period_1mo.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=1mo&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_1mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=1y&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_1y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=3mo&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_3mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=5d&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_5d_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=5y&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_5y_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=6mo&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_6mo_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=max&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_max_warmup_250.json",
+   "status": 200
+  },
+  "GET /market/ticker/THYAO/history?period=ytd&warmup=250": {
+   "file": "market_ticker_THYAO_history__period_ytd_warmup_250.json",
+   "status": 200
+  },
+  "GET /news/ASELS?hours=168": {
+   "file": "news_ASELS__hours_168.json",
+   "status": 200
+  },
+  "GET /news/ASELS?hours=48": {
+   "file": "news_ASELS__hours_48.json",
+   "status": 200
+  },
+  "GET /news/ASELS?hours=720": {
+   "file": "news_ASELS__hours_720.json",
+   "status": 200
+  },
+  "GET /news/BIMAS?hours=168": {
+   "file": "news_BIMAS__hours_168.json",
+   "status": 200
+  },
+  "GET /news/BIMAS?hours=48": {
+   "file": "news_BIMAS__hours_48.json",
+   "status": 200
+  },
+  "GET /news/BIMAS?hours=720": {
+   "file": "news_BIMAS__hours_720.json",
+   "status": 200
+  },
+  "GET /news/EREGL?hours=168": {
+   "file": "news_EREGL__hours_168.json",
+   "status": 200
+  },
+  "GET /news/EREGL?hours=48": {
+   "file": "news_EREGL__hours_48.json",
+   "status": 200
+  },
+  "GET /news/EREGL?hours=720": {
+   "file": "news_EREGL__hours_720.json",
+   "status": 200
+  },
+  "GET /news/GARAN?hours=168": {
+   "file": "news_GARAN__hours_168.json",
+   "status": 200
+  },
+  "GET /news/GARAN?hours=48": {
+   "file": "news_GARAN__hours_48.json",
+   "status": 200
+  },
+  "GET /news/GARAN?hours=720": {
+   "file": "news_GARAN__hours_720.json",
+   "status": 200
+  },
+  "GET /news/KCHOL?hours=168": {
+   "file": "news_KCHOL__hours_168.json",
+   "status": 200
+  },
+  "GET /news/KCHOL?hours=48": {
+   "file": "news_KCHOL__hours_48.json",
+   "status": 200
+  },
+  "GET /news/KCHOL?hours=720": {
+   "file": "news_KCHOL__hours_720.json",
+   "status": 200
+  },
+  "GET /news/SISE?hours=168": {
+   "file": "news_SISE__hours_168.json",
+   "status": 200
+  },
+  "GET /news/SISE?hours=48": {
+   "file": "news_SISE__hours_48.json",
+   "status": 200
+  },
+  "GET /news/SISE?hours=720": {
+   "file": "news_SISE__hours_720.json",
+   "status": 200
+  },
+  "GET /news/THYAO?hours=168": {
+   "file": "news_THYAO__hours_168.json",
+   "status": 200
+  },
+  "GET /news/THYAO?hours=48": {
+   "file": "news_THYAO__hours_48.json",
+   "status": 200
+  },
+  "GET /news/THYAO?hours=720": {
+   "file": "news_THYAO__hours_720.json",
+   "status": 200
+  },
+  "GET /polling-state": {
+   "file": "polling-state.json",
+   "status": 200
+  },
+  "GET /sources": {
+   "file": "sources.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/bollinger": {
+   "file": "technical_ASELS_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/macd": {
+   "file": "technical_ASELS_macd.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/moving-averages": {
+   "file": "technical_ASELS_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/pivots": {
+   "file": "technical_ASELS_pivots.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/rsi": {
+   "file": "technical_ASELS_rsi.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/signals": {
+   "file": "technical_ASELS_signals.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/signals/all-timeframes": {
+   "file": "technical_ASELS_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/stochastic": {
+   "file": "technical_ASELS_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/ASELS/supertrend": {
+   "file": "technical_ASELS_supertrend.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/bollinger": {
+   "file": "technical_BIMAS_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/macd": {
+   "file": "technical_BIMAS_macd.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/moving-averages": {
+   "file": "technical_BIMAS_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/pivots": {
+   "file": "technical_BIMAS_pivots.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/rsi": {
+   "file": "technical_BIMAS_rsi.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/signals": {
+   "file": "technical_BIMAS_signals.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/signals/all-timeframes": {
+   "file": "technical_BIMAS_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/stochastic": {
+   "file": "technical_BIMAS_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/BIMAS/supertrend": {
+   "file": "technical_BIMAS_supertrend.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/bollinger": {
+   "file": "technical_EREGL_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/macd": {
+   "file": "technical_EREGL_macd.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/moving-averages": {
+   "file": "technical_EREGL_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/pivots": {
+   "file": "technical_EREGL_pivots.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/rsi": {
+   "file": "technical_EREGL_rsi.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/signals": {
+   "file": "technical_EREGL_signals.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/signals/all-timeframes": {
+   "file": "technical_EREGL_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/stochastic": {
+   "file": "technical_EREGL_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/EREGL/supertrend": {
+   "file": "technical_EREGL_supertrend.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/bollinger": {
+   "file": "technical_GARAN_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/macd": {
+   "file": "technical_GARAN_macd.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/moving-averages": {
+   "file": "technical_GARAN_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/pivots": {
+   "file": "technical_GARAN_pivots.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/rsi": {
+   "file": "technical_GARAN_rsi.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/signals": {
+   "file": "technical_GARAN_signals.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/signals/all-timeframes": {
+   "file": "technical_GARAN_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/stochastic": {
+   "file": "technical_GARAN_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/GARAN/supertrend": {
+   "file": "technical_GARAN_supertrend.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/bollinger": {
+   "file": "technical_KCHOL_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/macd": {
+   "file": "technical_KCHOL_macd.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/moving-averages": {
+   "file": "technical_KCHOL_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/pivots": {
+   "file": "technical_KCHOL_pivots.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/rsi": {
+   "file": "technical_KCHOL_rsi.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/signals": {
+   "file": "technical_KCHOL_signals.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/signals/all-timeframes": {
+   "file": "technical_KCHOL_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/stochastic": {
+   "file": "technical_KCHOL_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/KCHOL/supertrend": {
+   "file": "technical_KCHOL_supertrend.json",
+   "status": 200
+  },
+  "GET /technical/SISE/bollinger": {
+   "file": "technical_SISE_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/SISE/macd": {
+   "file": "technical_SISE_macd.json",
+   "status": 200
+  },
+  "GET /technical/SISE/moving-averages": {
+   "file": "technical_SISE_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/SISE/pivots": {
+   "file": "technical_SISE_pivots.json",
+   "status": 200
+  },
+  "GET /technical/SISE/rsi": {
+   "file": "technical_SISE_rsi.json",
+   "status": 200
+  },
+  "GET /technical/SISE/signals": {
+   "file": "technical_SISE_signals.json",
+   "status": 200
+  },
+  "GET /technical/SISE/signals/all-timeframes": {
+   "file": "technical_SISE_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/SISE/stochastic": {
+   "file": "technical_SISE_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/SISE/supertrend": {
+   "file": "technical_SISE_supertrend.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/bollinger": {
+   "file": "technical_THYAO_bollinger.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/macd": {
+   "file": "technical_THYAO_macd.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/moving-averages": {
+   "file": "technical_THYAO_moving-averages.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/pivots": {
+   "file": "technical_THYAO_pivots.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/rsi": {
+   "file": "technical_THYAO_rsi.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/signals": {
+   "file": "technical_THYAO_signals.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/signals/all-timeframes": {
+   "file": "technical_THYAO_signals_all-timeframes.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/stochastic": {
+   "file": "technical_THYAO_stochastic.json",
+   "status": 200
+  },
+  "GET /technical/THYAO/supertrend": {
+   "file": "technical_THYAO_supertrend.json",
+   "status": 200
+  }
+ }
+}

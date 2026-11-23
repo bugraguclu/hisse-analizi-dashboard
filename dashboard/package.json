@@ -21,7 +21,10 @@
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
     "check:budgets": "node ../scripts/check-bundle-budgets.mjs --web",
     "check:ios": "node ../scripts/verify-ios-readiness.mjs",
-    "test:gates": "node --test ../scripts/release-gates.test.mjs"
+    "test:gates": "node --test ../scripts/release-gates.test.mjs",
+    "build:demo": "node scripts/build-demo.mjs",
+    "demo:capture": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-demo-data.mjs",
+    "demo:serve": "node scripts/serve-demo.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

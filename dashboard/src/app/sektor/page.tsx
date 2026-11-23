@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { SectorHubView } from "@/components/discovery/SectorHubView";
 import { JsonLd } from "@/components/shared/JsonLd";
 import { allCanonicalSectorKeys, sectorPageHref } from "@/lib/discovery";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { breadcrumbList, collectionPage, siteOrigin } from "@/lib/schema";
 import { sectorLabel } from "@/lib/sectors";
 
@@ -18,11 +18,6 @@ const DESCRIPTIONS: Record<Locale, string> = {
   en: "Canonical discovery pages, sector median multiples and listed peer tables across all 48 KAP sectors on Borsa Istanbul.",
   fr: "Pages de découverte canoniques, médianes sectorielles et listes de sociétés pour les 48 secteurs KAP de Borsa Istanbul.",
 };
-
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await requestLocale();

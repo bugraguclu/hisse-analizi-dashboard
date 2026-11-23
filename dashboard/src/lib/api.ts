@@ -28,6 +28,7 @@ import type {
   CompanyPeersOut,
 } from "@/types";
 import { recordApiMeta } from "./api-meta";
+import { DEMO_BASE_PATH } from "./demo";
 
 /**
  * Single source of truth for browser requests.
@@ -39,6 +40,20 @@ import { recordApiMeta } from "./api-meta";
  */
 const configuredApiBase = process.env.NEXT_PUBLIC_API_URL?.trim();
 export const API_BASE = (configuredApiBase || "/api").replace(/\/$/, "");
+
+/**
+ * The one place requests leave the browser. The static demo (lib/demo.ts)
+ * answers them from its recorded responses instead. The flag is read inline
+ * (not via IS_DEMO) so the bundler sees a build-time constant and drops the
+ * demo branch, and its chunk, from the normal build.
+ */
+async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+  if (process.env.NEXT_PUBLIC_DEMO === "1") {
+    const { demoFetch } = await import("./demo-fetch");
+    return demoFetch(DEMO_BASE_PATH, path, init);
+  }
+  return fetch(`${API_BASE}${path}`, init);
+}
 
 /**
  * Machine-readable failure reason: the backend's `code` field when it sends
@@ -146,7 +161,7 @@ async function request<T>(path: string, { cache = "default", signal, method = "G
   try {
     let res: Response;
     try {
-      res = await fetch(`${API_BASE}${path}`, {
+      res = await apiFetch(path, {
         method,
         cache: method === "GET" ? cache : "no-store",
         signal: controller.signal,
@@ -247,7 +262,7 @@ export const api = {
     const path = `/events${qs ? `?${qs}` : ""}`;
     let res: Response;
     try {
-      res = await fetch(`${API_BASE}${path}`, { cache: "no-store", signal, headers: { Accept: "application/json" } });
+      res = await apiFetch(path, { cache: "no-store", signal, headers: { Accept: "application/json" } });
     } catch (err) {
       if (signal?.aborted) throw err;
       throw new ApiError(`API'ye ulaşılamıyor: ${path}`, path, null, "network");

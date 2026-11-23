@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
-import { LOCALE_COOKIE, parseLocale } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { eventsText } from "@/components/events/i18n-dict";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const store = await cookies();
-  const locale = parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
+  const locale = await requestLocale();
   return { title: eventsText("page.title", locale), description: eventsText("page.metaDescription", locale) };
 }
 

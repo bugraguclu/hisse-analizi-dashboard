@@ -1,18 +1,13 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { AtlasConceptView } from "@/components/atlas/AtlasConceptView";
 import { JsonLd } from "@/components/shared/JsonLd";
 import { ATLAS_CONCEPTS, atlasHref, getAtlasConcept } from "@/lib/atlas";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { breadcrumbList, definedTermSchema, faqPage, siteOrigin } from "@/lib/schema";
 
 type Props = { params: Promise<{ slug: string }> };
-
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
 
 export function generateStaticParams() {
   return ATLAS_CONCEPTS.map((concept) => ({ slug: concept.slug }));

@@ -9,7 +9,7 @@ Web uygulaması `dashboard/`, iOS uygulaması [mobile/](./mobile/README.md) alt�
 Expo Router kullanılır. Mobil ekranların kapsamı henüz web ile eşit değildir. Güncel entegrasyon ve doğrulama
 durumu [havuz kalite incelemesinde](./docs/havuz-kalite-incelemesi.md) açıklanır.
 
-**Canlı:** [hisse-analizi.duckdns.org](https://hisse-analizi.duckdns.org) · [Ekran görüntüleri](#ekran-görüntüleri) · [Kurulum](#kurulum) · [Sunucuya kurulum](#sunucuya-kurulum) · [Mimari](#mimari) · [API](#api) · [Değişiklik günlüğü](./CHANGELOG.md)
+**Canlı:** [hisse-analizi.duckdns.org](https://hisse-analizi.duckdns.org) · [Statik demo](#statik-demo-github-pages) · [Ekran görüntüleri](#ekran-görüntüleri) · [Kurulum](#kurulum) · [Sunucuya kurulum](#sunucuya-kurulum) · [Mimari](#mimari) · [API](#api) · [Değişiklik günlüğü](./CHANGELOG.md)
 
 <a href="https://hisse-analizi.duckdns.org">
   <picture>
@@ -28,6 +28,23 @@ durumu [havuz kalite incelemesinde](./docs/havuz-kalite-incelemesi.md) açıklan
 - Sunucu Oracle Cloud Always Free üzerindedir (Ampere A1, 4 çekirdek, 24 GB bellek). Alan adı DuckDNS'in ücretsiz alt alan adıdır; HTTPS sertifikasını Caddy, Let's Encrypt'ten alır ve yeniler.
 - Veritabanı her gece yedeklenir, yedekler 14 gün saklanır.
 - Aynı kurulum, [Sunucuya kurulum](#sunucuya-kurulum) bölümündeki betikle başka bir sunucuda tekrarlanabilir.
+
+### Statik demo (GitHub Pages)
+
+[bugraguclu.github.io/hisse-analizi-dashboard](https://bugraguclu.github.io/hisse-analizi-dashboard/) sunucusuz bir kopyadır: aynı arayüz, canlı siteden önceden kaydedilmiş yanıtlarla çalışır. Veriler kayıt anında donmuştur; yalnızca THYAO, GARAN, ASELS, BIMAS, KCHOL, SISE ve EREGL'in sayfaları vardır, sunucu gerektiren işlemler (sembol araması, canlı yenileme, kayıt) kapalıdır. Sayfanın üstündeki şerit kayıt tarihini ve canlı siteyi gösterir.
+
+- `NEXT_PUBLIC_DEMO=1` ile derlenen arayüz statik dışa aktarılır ve API istekleri `dashboard/src/lib/api.ts` içinde kayıtlı yanıtlardan karşılanır (`dashboard/src/lib/demo.ts`, `demo-fetch.ts`). Bayrak kapalıyken üretim derlemesi değişmez.
+- `.github/workflows/pages.yml` master'a her gönderimde demoyu derleyip yayımlar. Bir kez açılması gerekir: depo **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+- Kayıtlı yanıtları yenilemek (canlı sitenin herkese açık GET uçlarına, istekler arasında bekleyerek gider) ve yerelde denemek:
+
+```bash
+cd dashboard
+npm run demo:capture                                        # demo/data/ yeniden yazılır (~8 MB)
+npm run build:demo -- --base-path /hisse-analizi-dashboard  # out/
+npm run demo:serve                                          # http://localhost:4300/hisse-analizi-dashboard/
+```
+
+Demoya hisse eklemek için `dashboard/scripts/capture-demo-data.mjs` içindeki `TICKERS` listesi güncellenir; değişen `demo/data/` klasörü commit'lenir.
 
 ## Özellikler
 
