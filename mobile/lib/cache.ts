@@ -41,8 +41,42 @@ async function resolveDefaultStore(): Promise<KeyValueStore> {
   return defaultStorePromise;
 }
 
-export function createSnapshotCache(store?: KeyValueStore) {
+const INDEX_KEY = `${CACHE_PREFIX}__index`;
+/** Snapshots kept on the device; per-ticker/period entries would otherwise grow without bound. */
+export const MAX_CACHE_ENTRIES = 48;
+
+export function createSnapshotCache(store?: KeyValueStore, maxEntries = MAX_CACHE_ENTRIES) {
   const getStore = async () => store ?? resolveDefaultStore();
+  // Index updates are serialised so concurrent writes never lose each other's keys.
+  let indexQueue: Promise<void> = Promise.resolve();
+
+  const touchIndex = (key: string) => {
+    indexQueue = indexQueue
+      .then(async () => {
+        const kv = await getStore();
+        let index: Record<string, number> = {};
+        try {
+          const parsed = JSON.parse((await kv.getItem(INDEX_KEY)) ?? "{}") as unknown;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            index = parsed as Record<string, number>;
+          }
+        } catch {
+          index = {};
+        }
+        index[key] = Date.now();
+        const keys = Object.keys(index).sort((a, b) => (index[a] ?? 0) - (index[b] ?? 0));
+        const evicted = keys.slice(0, Math.max(0, keys.length - maxEntries));
+        for (const old of evicted) {
+          delete index[old];
+          await kv.removeItem(`${CACHE_PREFIX}${old}`);
+        }
+        await kv.setItem(INDEX_KEY, JSON.stringify(index));
+      })
+      .catch(() => {
+        // Eviction is best effort; a failed index update never blocks rendering.
+      });
+    return indexQueue;
+  };
 
   return {
     async read<T>(key: string): Promise<CacheEntry<T> | null> {
@@ -65,6 +99,7 @@ export function createSnapshotCache(store?: KeyValueStore) {
       try {
         const kv = await getStore();
         await kv.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(entry));
+        await touchIndex(key);
       } catch {
         // Storage quota / availability failures never block live UI rendering.
       }

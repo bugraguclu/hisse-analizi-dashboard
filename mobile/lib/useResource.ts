@@ -56,6 +56,7 @@ export function useResource<T>(options: UseResourceOptions<T>): UseResourceResul
   const fetcherRef = useRef(fetcher);
   const isEmptyRef = useRef(isEmpty);
   const lastFetchedMsRef = useRef<number>(0);
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   fetcherRef.current = fetcher;
   isEmptyRef.current = isEmpty;
@@ -80,6 +81,7 @@ export function useResource<T>(options: UseResourceOptions<T>): UseResourceResul
           if (!guardRef.current.isCurrent(token, targetKey)) return;
           const nowIso = new Date().toISOString();
           lastFetchedMsRef.current = Date.now();
+          lastFetchedKeyRef.current = targetKey;
           setState((prev) => applyFetchSuccess(prev, targetKey, data, nowIso, isEmptyRef.current));
           if (targetCacheKey) {
             void snapshotCache.write(targetCacheKey, data, nowIso);
@@ -94,16 +96,32 @@ export function useResource<T>(options: UseResourceOptions<T>): UseResourceResul
     [],
   );
 
+  // Lazily enabled resources (tabs) flip `enabled` on every tab switch: data fetched
+  // for the same key within `foregroundStaleMs` is reused instead of refetched, so
+  // moving between tabs does not fan out a dozen API calls each time.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   useEffect(() => {
     if (!enabled) {
       guardRef.current.cancel();
+      // A cancelled first load would otherwise stay "loading" with no request behind it.
+      setState((prev) => (prev.refreshing ? { ...prev, refreshing: false } : prev));
       return;
     }
+    const current = stateRef.current;
+    const fresh =
+      current.key === key &&
+      (current.status === "ready" || current.status === "empty") &&
+      lastFetchedKeyRef.current === key &&
+      Date.now() - lastFetchedMsRef.current < foregroundStaleMs;
+    if (fresh) return;
     runFetch(key, cacheKey, true);
     const guard = guardRef.current;
     return () => {
       guard.cancel();
     };
+    // foregroundStaleMs is a tuning constant; changing it must not trigger a refetch.
   }, [cacheKey, enabled, key, runFetch]);
 
   useEffect(() => {
@@ -125,5 +143,10 @@ export function useResource<T>(options: UseResourceOptions<T>): UseResourceResul
     runFetch(key, cacheKey, false);
   }, [cacheKey, enabled, key, runFetch]);
 
+  // Between a key change and the effect that starts its request, never hand the
+  // previous key's data (another ticker, period or filter) to the screen.
+  if (state.key !== key) {
+    return { ...initialResourceState<T>(key), reload };
+  }
   return { ...state, reload };
 }

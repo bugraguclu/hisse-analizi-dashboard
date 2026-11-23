@@ -14,6 +14,7 @@ import {
   ProfileAndHoldersPanel,
   QuoteStatsPanel,
   RatiosPanel,
+  ScorecardPanel,
   SectorComparisonPanel,
   TechnicalSummaryPanel,
 } from "../../components/StockAnalysisPanels";
@@ -725,7 +726,7 @@ export default function StockDetailScreen() {
                   value={signalLabelTr(technical.data?.signals?.summary?.level ?? null)}
                   subValue={
                     technical.data?.signals?.summary
-                      ? `Al ${technical.data.signals.summary.buy ?? 0} · Sat ${technical.data.signals.summary.sell ?? 0}`
+                      ? `Al ${technical.data.signals.summary.buy ?? EMPTY_VALUE} · Sat ${technical.data.signals.summary.sell ?? EMPTY_VALUE}`
                       : null
                   }
                   tone={
@@ -764,6 +765,12 @@ export default function StockDetailScreen() {
               </View>
             </SectionCard>
 
+            <ScorecardPanel
+              ratios={overview.data?.ratios ?? null}
+              fastInfo={overview.data?.fastInfo ?? null}
+              technicalLevel={technical.data?.signals?.summary?.level ?? null}
+              loading={overview.status === "loading" || technical.status === "loading"}
+            />
             {renderPriceChartCard(true)}
             <RatiosPanel ratios={overview.data?.ratios ?? null} compact />
             <SectorComparisonPanel

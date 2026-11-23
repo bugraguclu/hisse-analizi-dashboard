@@ -41,6 +41,7 @@ import {
   type TimeframeSignal,
 } from "../lib/stockParsers";
 import type { StatementKind } from "../lib/api";
+import { buildScorecard, LOSS_MAKING_PE, type ScoredMetric } from "../lib/scorecard";
 import { BorderRadius, FontSize, Spacing, useThemeColors, type ThemeColors } from "../lib/theme";
 import { EmptyCard, ErrorCard, LoadingBlock, MetricTile, SectionCard } from "./StatusViews";
 
@@ -1014,7 +1015,146 @@ export function SectorComparisonPanel({
   );
 }
 
+function formatScoreValue(metric: ScoredMetric): string {
+  if (metric.value === null) return EMPTY_VALUE;
+  if (metric.id === "pe" && metric.value === LOSS_MAKING_PE) return "Zarar";
+  if (metric.kind === "pct") return formatPercent(metric.value, 1);
+  if (metric.kind === "multiple") return formatRatio(metric.value, 2);
+  return formatNumber(metric.value, 2);
+}
+
+function ScoreBar({ score, colors }: { score: number | null; colors: ThemeColors }) {
+  const tone = score === null ? colors.textMuted : score >= 3.5 ? colors.up : score >= 2.5 ? colors.warn : colors.down;
+  return (
+    <View style={styles.scoreBarRow}>
+      <View style={[styles.scoreTrack, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+        {score !== null ? (
+          <View style={[styles.scoreFill, { width: `${(score / 5) * 100}%`, backgroundColor: tone }]} />
+        ) : null}
+      </View>
+      <Text style={[styles.scoreText, { color: score === null ? colors.textMuted : colors.textPrimary }]}>
+        {score === null ? EMPTY_VALUE : formatNumber(score, 1)}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * "Şirket analiz karnesi": web FinancialHealthScorecard on the phone — four
+ * fundamental categories plus the daily technical summary, each 1–5 points.
+ */
+export function ScorecardPanel({
+  ratios,
+  fastInfo,
+  technicalLevel,
+  loading,
+}: {
+  ratios: RatioSet | null;
+  fastInfo: StockFastInfo | null;
+  technicalLevel: SignalLevel | null;
+  loading?: boolean;
+}) {
+  const colors = useThemeColors();
+  const [expanded, setExpanded] = React.useState(false);
+  const card = buildScorecard({
+    ratios: ratios?.values,
+    marketPe: fastInfo?.pe ?? null,
+    marketPb: fastInfo?.pb ?? null,
+    technicalLevel,
+  });
+
+  return (
+    <SectionCard
+      title="Şirket analiz karnesi"
+      subtitle={
+        card.overall !== null
+          ? `Genel puan: 5 üzerinden ${formatNumber(card.overall, 1)}`
+          : "Kârlılık, büyüme, finansal sağlık, değerleme ve teknik trend"
+      }
+    >
+      {loading && card.overall === null ? (
+        <LoadingBlock message="Karne hesaplanıyor…" />
+      ) : card.overall === null ? (
+        <Text style={{ color: colors.textMuted, fontSize: FontSize.sm }}>Karne için yeterli veri yok.</Text>
+      ) : (
+        <View style={{ gap: Spacing.sm }}>
+          {card.categories.map((category) => (
+            <View
+              key={category.id}
+              style={{ gap: 4 }}
+              accessible
+              accessibilityLabel={`${category.title}: ${
+                category.score === null ? "veri yok" : `5 üzerinden ${formatNumber(category.score, 1)}`
+              }. ${category.metrics
+                .map((m) => `${m.label} ${formatScoreValue(m) === EMPTY_VALUE ? "veri yok" : formatScoreValue(m)}`)
+                .join(", ")}`}
+            >
+              <Text style={[styles.subGroupTitle, { color: colors.textMuted }]}>
+                {category.title.toLocaleUpperCase("tr")}
+              </Text>
+              <ScoreBar score={category.score} colors={colors} />
+              {expanded
+                ? category.metrics.map((metric) => (
+                    <View key={metric.id} style={styles.scoreMetricRow}>
+                      <Text style={{ flex: 1, color: colors.textSecondary, fontSize: FontSize.xs }}>{metric.label}</Text>
+                      <Text style={[styles.scoreMetricValue, { color: colors.textPrimary }]}>
+                        {formatScoreValue(metric)}
+                      </Text>
+                      <Text style={[styles.scoreMetricValue, { color: colors.textMuted, width: 44 }]}>
+                        {metric.score === null ? EMPTY_VALUE : `${metric.score}/5`}
+                      </Text>
+                    </View>
+                  ))
+                : null}
+            </View>
+          ))}
+          <View
+            style={{ gap: 4 }}
+            accessible
+            accessibilityLabel={`Teknik trend: ${
+              card.technicalScore === null ? "veri yok" : `5 üzerinden ${card.technicalScore}`
+            }, günlük teknik özet ${signalLabelTr(card.technicalLevel)}`}
+          >
+            <Text style={[styles.subGroupTitle, { color: colors.textMuted }]}>TEKNİK TREND</Text>
+            <ScoreBar score={card.technicalScore} colors={colors} />
+            {expanded ? (
+              <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                Günlük teknik özet: {signalLabelTr(card.technicalLevel)} · Güçlü al 5 · Al 4 · Nötr 3 · Sat 2 · Güçlü sat 1
+              </Text>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            onPress={() => setExpanded((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+          >
+            <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
+              {expanded ? "Ayrıntıları gizle" : "Göstergeler ve puanlar"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={{ color: colors.textMuted, fontSize: 11, lineHeight: 15 }}>
+            Her gösterge eşiklere göre 1–5 puan alır; kategori puanı göstergelerin, genel puan kategorilerin
+            ortalamasıdır. Eşikler nominal TL verisi için basit kurallardır, yatırım tavsiyesi değildir.
+          </Text>
+        </View>
+      )}
+    </SectionCard>
+  );
+}
+
 const styles = StyleSheet.create({
+  scoreBarRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+  scoreTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+  },
+  scoreFill: { height: "100%", borderRadius: 4 },
+  scoreText: { width: 32, textAlign: "right", fontSize: FontSize.xs, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  scoreMetricRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingLeft: Spacing.xs },
+  scoreMetricValue: { fontSize: FontSize.xs, fontVariant: ["tabular-nums"], textAlign: "right", minWidth: 64 },
   tileGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
