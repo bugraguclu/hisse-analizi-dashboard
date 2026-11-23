@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
-import { LOCALE_COOKIE, parseLocale, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 
 const TITLES: Record<Locale, string> = {
   tr: "Makro Ekonomi",
@@ -15,8 +15,7 @@ const DESCRIPTIONS: Record<Locale, string> = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const store = await cookies();
-  const locale = parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
+  const locale = await requestLocale();
   return { title: TITLES[locale], description: DESCRIPTIONS[locale] };
 }
 

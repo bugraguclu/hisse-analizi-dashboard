@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { IndexDetailView } from "@/components/discovery/IndexDetailView";
 import { JsonLd } from "@/components/shared/JsonLd";
 import { getAtlasConcept } from "@/lib/atlas";
 import { DISCOVERY_INDICES, indexPageHref, resolveIndexSlug } from "@/lib/discovery";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { breadcrumbList, collectionPage, siteOrigin } from "@/lib/schema";
 
 type Props = { params: Promise<{ slug: string }> };
-
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
 
 export function generateStaticParams() {
   return DISCOVERY_INDICES.map((item) => ({ slug: item.slug }));

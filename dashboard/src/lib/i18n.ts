@@ -415,6 +415,15 @@ const translations = {
   "offline.backupShortcut": { tr: "Listeleri ve düzeni yedekle", en: "Back up lists & layout", fr: "Sauvegarder listes et disposition" },
   "status.offline": { tr: "Çevrimdışı (yerel kopya)", en: "Offline (local copy)", fr: "Hors ligne (copie locale)" },
 
+  // Static GitHub Pages demo (lib/demo.ts)
+  "demo.label": { tr: "Demo", en: "Demo", fr: "Démo" },
+  "demo.notice": { tr: "Demo — veriler {date} tarihinde kaydedildi; canlı site:", en: "Demo — data recorded on {date}; live site:", fr: "Démo — données enregistrées le {date} ; site en direct :" },
+  "demo.noticeDetail": { tr: "Fiyatlar güncellenmez; arama, yenileme ve kayıt gerektiren işlemler kapalı.", en: "Prices do not update; search, refresh and anything that saves to the server are off.", fr: "Les cours ne sont pas mis à jour ; la recherche, l'actualisation et tout enregistrement sur le serveur sont désactivés." },
+  "demo.unavailableTitle": { tr: "{ticker} bu demoda yok", en: "{ticker} is not in this demo", fr: "{ticker} n'est pas dans cette démo" },
+  "demo.unavailableBody": { tr: "Bu demo yalnızca şu hisseleri içerir:", en: "This demo only includes these stocks:", fr: "Cette démo ne contient que ces actions :" },
+  "demo.openLive": { tr: "{ticker} sayfasını canlı sitede aç", en: "Open {ticker} on the live site", fr: "Ouvrir {ticker} sur le site en direct" },
+  "demo.searchLimited": { tr: "Demoda yalnızca kayıtlı hisseler aranır.", en: "The demo only searches its recorded stocks.", fr: "La démo ne recherche que ses actions enregistrées." },
+
 } as const;
 
 export type TranslationKey = keyof typeof translations;

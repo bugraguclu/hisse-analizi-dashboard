@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { isFeatureEnabled } from "@/lib/demo";
 import { getMarketStatus, isLiveDataWindow, type MarketStatus } from "@/lib/market-hours";
 import { LIVE_REFETCH_MS } from "@/lib/queryClient";
 import { useNow } from "./use-now";
@@ -19,9 +20,10 @@ export function useMarketStatus(lastQuoteAt?: Date | number | null): MarketStatu
 /**
  * refetchInterval for live queries: polls from the open until the closing-auction
  * prints have come through the delayed feed (isLiveDataWindow, 10:00–18:30) and
- * resumes automatically at the open (useNow re-renders every 30 s).
+ * resumes automatically at the open (useNow re-renders every 30 s). Off where
+ * live refresh is (the static demo, lib/demo.ts).
  */
 export function useLiveRefetchInterval(intervalMs: number = LIVE_REFETCH_MS): number | false {
   const now = useNow();
-  return now !== null && isLiveDataWindow(now) ? intervalMs : false;
+  return now !== null && isLiveDataWindow(now) && isFeatureEnabled("liveRefresh") ? intervalMs : false;
 }

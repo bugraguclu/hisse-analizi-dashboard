@@ -11,3 +11,4 @@ coverage
 *.tsbuildinfo
 *.log
 .DS_Store
+demo

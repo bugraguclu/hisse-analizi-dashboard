@@ -93,8 +93,10 @@ export function LocaleProvider({
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    // Migrate localStorage-only preferences so the next SSR uses them too.
-    if (readCookieLocale() !== locale) persistLocale(locale);
+    // Migrate localStorage-only preferences so the next SSR uses them too. Not while the
+    // hydration pass still shows the server's locale: a page rendered without the cookie
+    // (the static demo, lib/demo.ts) would otherwise overwrite the saved choice.
+    if (readCookieLocale() !== locale && readClientLocale() === locale) persistLocale(locale);
   }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {

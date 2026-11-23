@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Hourglass, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { atlasHref, searchAtlasConcepts } from "@/lib/atlas";
+import { isFeatureEnabled } from "@/lib/demo";
 import { searchDiscovery } from "@/lib/discovery";
 import { useLocale } from "@/lib/locale-context";
 import type { TranslationKey } from "@/lib/i18n";
@@ -374,6 +375,8 @@ export function TickerSearch({
     if (pending) status = t("common.searching");
     else if (!unified && indexFailed && (!needServer || serverQ.isError)) status = t("search.unavailable");
     else status = t("search.noResultsFor", { q: trimmed });
+    // The static demo has no upstream symbol search (lib/demo.ts).
+    if (!pending && !isFeatureEnabled("serverSearch")) status = `${status} · ${t("demo.searchLimited")}`;
   }
 
   // Announce only settled result counts / empty outcomes, debounced so rapid typing

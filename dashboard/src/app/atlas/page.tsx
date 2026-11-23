@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { AtlasHubView } from "@/components/atlas/AtlasHubView";
 import { JsonLd } from "@/components/shared/JsonLd";
 import { ATLAS_CONCEPTS, ATLAS_FAQS, atlasHref } from "@/lib/atlas";
-import { LOCALE_COOKIE, parseLocale, t, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { requestLocale } from "@/lib/request-locale";
 import { breadcrumbList, collectionPage, faqPage, siteOrigin } from "@/lib/schema";
 
 const META_TITLES: Record<Locale, string> = {
@@ -17,11 +17,6 @@ const META_DESCRIPTIONS: Record<Locale, string> = {
   en: "Reference guide to P/E, TTM, real returns, RSI, P/B, EV/EBITDA and sector medians with direct links to live BIST charts and screens.",
   fr: "Guide des concepts PER, TTM, rendement réel, RSI, C/VC, VE/EBITDA et médianes sectorielles avec liens directs vers les graphiques et filtres.",
 };
-
-async function requestLocale(): Promise<Locale> {
-  const store = await cookies();
-  return parseLocale(store.get(LOCALE_COOKIE)?.value) ?? "tr";
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await requestLocale();
