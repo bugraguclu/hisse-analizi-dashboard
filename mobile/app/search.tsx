@@ -1,8 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { SymbolSearchResult } from "../../dashboard/src/types/index.ts";
+import { EmptyCard, ErrorCard, LoadingBlock } from "../components/StatusViews";
+import { mobileApi } from "../lib/api";
 import { normalizeTicker } from "../lib/externalLinking";
+import { describeApiFailure, isAbortError, RequestGuard } from "../lib/requestState";
 import { BorderRadius, FontSize, Spacing, useThemeColors } from "../lib/theme";
 
 const POPULAR = ["THYAO", "GARAN", "AKBNK", "ASELS", "EREGL", "TUPRS", "KCHOL", "SISE"] as const;
@@ -13,9 +17,50 @@ export default function SearchModalScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState(params.q ?? "");
+  const [remoteResults, setRemoteResults] = useState<SymbolSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const guardRef = useRef(new RequestGuard());
 
-  const filtered = POPULAR.filter((ticker) =>
-    ticker.includes(query.trim().toUpperCase()),
+  const trimmed = query.trim();
+
+  useEffect(() => {
+    const guard = guardRef.current;
+    if (trimmed.length < 2) {
+      guard.cancel();
+      setRemoteResults([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const { token, signal } = guard.begin(trimmed);
+      setLoading(true);
+      setError(null);
+      void mobileApi
+        .searchSymbols(trimmed, signal)
+        .then((res) => {
+          if (!guard.isCurrent(token, trimmed)) return;
+          setRemoteResults(res.results ?? []);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (isAbortError(err) || !guard.isCurrent(token, trimmed)) return;
+          setError(describeApiFailure(err).message);
+          setRemoteResults([]);
+          setLoading(false);
+        });
+    }, 200);
+
+    return () => {
+      clearTimeout(timer);
+      guard.cancel();
+    };
+  }, [trimmed]);
+
+  const filteredPopular = POPULAR.filter((ticker) =>
+    ticker.includes(trimmed.toUpperCase()),
   );
 
   const openTicker = (raw: string) => {
@@ -50,7 +95,7 @@ export default function SearchModalScreen() {
         autoCorrect={false}
         returnKeyType="search"
         onSubmitEditing={() => openTicker(query)}
-        placeholder="Hisse kodu (örn. THYAO)"
+        placeholder="Hisse kodu veya şirket adı (örn. THYAO)"
         placeholderTextColor={colors.textMuted}
         style={[
           styles.input,
@@ -62,20 +107,55 @@ export default function SearchModalScreen() {
         ]}
       />
 
-      <View style={styles.list}>
-        {filtered.map((ticker) => (
-          <TouchableOpacity
-            key={ticker}
-            style={[styles.row, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-            onPress={() => openTicker(ticker)}
-            accessibilityRole="button"
-          >
-            <Text style={{ color: colors.textPrimary, fontSize: FontSize.md, fontWeight: "600" }}>
-              {ticker}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        {trimmed.length >= 2 ? (
+          loading ? (
+            <LoadingBlock message="Hisseler aranıyor…" />
+          ) : error ? (
+            <ErrorCard title="Arama yapılamadı" message={error} />
+          ) : remoteResults.length === 0 ? (
+            <EmptyCard
+              title="Eşleşen hisse bulunamadı"
+              message={`"${trimmed}" için BIST şirketi bulunamadı.`}
+            />
+          ) : (
+            remoteResults.slice(0, 20).map((item) => {
+              const code = normalizeTicker(item.symbol ?? item.ticker ?? "");
+              if (!code) return null;
+              return (
+                <TouchableOpacity
+                  key={code}
+                  style={[styles.row, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                  onPress={() => openTicker(code)}
+                  accessibilityRole="button"
+                >
+                  <Text style={{ color: colors.textPrimary, fontSize: FontSize.md, fontWeight: "700" }}>
+                    {code}
+                  </Text>
+                  {item.name || item.description ? (
+                    <Text style={{ color: colors.textMuted, fontSize: FontSize.xs }} numberOfLines={1}>
+                      {item.name ?? item.description}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })
+          )
+        ) : (
+          filteredPopular.map((ticker) => (
+            <TouchableOpacity
+              key={ticker}
+              style={[styles.row, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              onPress={() => openTicker(ticker)}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: colors.textPrimary, fontSize: FontSize.md, fontWeight: "600" }}>
+                {ticker}
+              </Text>
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -91,11 +171,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     fontSize: FontSize.md,
   },
-  list: { gap: Spacing.sm },
+  list: { gap: Spacing.sm, paddingBottom: Spacing.lg },
   row: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: StyleSheet.hairlineWidth,
+    gap: 2,
   },
 });

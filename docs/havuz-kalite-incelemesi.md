@@ -96,8 +96,12 @@ Keychain ve AppIntents kaynakları Expo'ya taşındı. İki ayrı iOS uygulamas�
 
 ## Yayından önce açık kalan işler
 
-- **Mobil ürün kapsamı:** Expo'daki tarama/makro/teknik ekranları hâlâ temel iskelettir; web ile
-  işlev eşitliği yoktur. Derlenebilir olmak, bu ekranların tamamlanmış olduğu anlamına gelmez.
+- **Mobil ürün kapsamı:** Tarama (31 hazır tarama, 22 aralık filtresi, web görünümleri ve
+  sıralaması; web model.ts ile eşdeğerlik testi), Makro (faiz koridoru, enflasyon, getiri eğrisi,
+  piyasalar, göstergeler, ekonomik takvim) ve hisse analizi (fiyat/gösterge grafikleri, teknik
+  sinyaller, finansal tablolar, karne) canlı API verisiyle simülatörde doğrulandı. Web'e göre hâlâ
+  eksik: mum/hacim grafiği, çizim araçları, CSV dışa aktarma, tarama tablosunda sektör ortalaması
+  satırı. Gerçek cihaz ve VoiceOver kabulü yapılmadı.
 - **Universal Links ve imzalama:** Sunucudaki AASA dosyası, Team ID, provisioning, gerçek cihazda
   Keychain/App Group ve soğuk başlangıç eşleştirme/bildirim testleri yayın öncesi ayrıca gerekir.
 - **İçerik sözleşmesi:** Rehberin örtüşen metinleri tekilleştirildi. İçerik manifesti ayrıca yayın

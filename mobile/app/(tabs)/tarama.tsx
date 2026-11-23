@@ -1,103 +1,1117 @@
-import React, { useState } from "react";
-import { useLocalSearchParams } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BottomSheetModal from "../../components/BottomSheetModal";
-import { SheetScrollView } from "../../components/SwipeDismissSheet";
+import { EmptyCard, ErrorCard, FreshnessBanner, LoadingBlock } from "../../components/StatusViews";
+import { SheetNoDrag, SheetScrollView } from "../../components/SwipeDismissSheet";
+import { mobileApi } from "../../lib/api";
+import {
+  EMPTY_VALUE,
+  formatCompactTry,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+  formatRatio,
+  formatSignedPercent,
+} from "../../lib/format";
+import {
+  clearScreenerFilters,
+  computeBreadth,
+  countActiveFilters,
+  DEFAULT_SCREENER_STATE,
+  defaultSortDir,
+  FEATURED_PRESETS,
+  FIELD_LABELS,
+  FILTER_GROUPS,
+  filterScreenerRows,
+  parseDecimalInput,
+  PRESET_BY_ID,
+  RANGE_BY_KEY,
+  RANGE_GROUPS,
+  resolvePresetId,
+  ROW_SIGNAL_LABELS,
+  rowSignals,
+  SCREENER_PRESETS,
+  sortLabel,
+  sortOptionsForView,
+  sortScreenerRows,
+  TECH_RATING_LABELS,
+  techRating,
+  toggleScreenerPreset,
+  VIEW_METRICS,
+  VIEWS,
+  type CrossFilter,
+  type NumericField,
+  type RangeKey,
+  type RecFilter,
+  type ScreenerFilterState,
+  type ScreenerStockRow,
+  type SortKey,
+} from "../../lib/screener";
 import { BorderRadius, FontSize, Spacing, useThemeColors } from "../../lib/theme";
+import { useResource } from "../../lib/useResource";
 
-const QUICK_PRESETS = [
-  { id: "low_pe", label: "Düşük F/K" },
-  { id: "low_pb", label: "Düşük PD/DD" },
-  { id: "high_dividend", label: "Yüksek temettü" },
-  { id: "high_roe", label: "Yüksek ROE" },
-  { id: "rsi_oversold", label: "RSI aşırı satım" },
-  { id: "uptrend", label: "Yükseliş trendi" },
-] as const;
+type FilterSheetTab = "presets" | "universe" | "advanced";
+
+/** Compact card labels; the sort sheet and VoiceOver use the longer FIELD_LABELS. */
+const CARD_LABELS: Partial<Record<NumericField, string>> = {
+  market_cap: "Piy. değeri",
+  turnover: "Hacim",
+  avg_turnover: "Ort. hacim",
+  dividend_yield: "Temettü",
+  sma50_dist: "SMA 50",
+  sma200_dist: "SMA 200",
+  high_52w_dist: "52H zirve",
+  low_52w_dist: "52H dip",
+  rel_volume: "Gör. hacim",
+  tech_rating: "Teknik",
+  perf_1w: "1H",
+  perf_1m: "1A",
+  perf_3m: "3A",
+  perf_ytd: "YBB",
+  perf_1y: "1Y",
+  target_price: "Hedef",
+  upside: "Potansiyel",
+  foreign_ratio: "Yabancı",
+  rsi: "RSI",
+};
+
+/** A screener value as shown on the result card; missing values are "—", never 0. */
+function formatScreenerField(row: ScreenerStockRow, field: NumericField): string {
+  const value = row[field];
+  switch (field) {
+    case "pe":
+      return value !== undefined ? formatRatio(value) : row.loss ? "Zarar" : EMPTY_VALUE;
+    case "pb":
+    case "ev_ebitda":
+      return formatRatio(value);
+    case "rel_volume":
+      return formatRatio(value, 2);
+    case "dividend_yield":
+      return formatPercent(value);
+    case "roe":
+    case "net_margin":
+    case "foreign_ratio":
+      return formatPercent(value, 1);
+    case "rsi":
+      return formatNumber(value, 1);
+    case "close":
+    case "target_price":
+      return formatPrice(value);
+    case "market_cap":
+    case "turnover":
+    case "avg_turnover":
+      return formatCompactTry(value);
+    case "tech_rating": {
+      const rating = techRating(value);
+      return rating ? TECH_RATING_LABELS[rating] : EMPTY_VALUE;
+    }
+    default:
+      return formatSignedPercent(value, field === "change_pct" ? 2 : 1);
+  }
+}
+
+function RemovablePill({ text, onRemove }: { text: string; onRemove: () => void }) {
+  const colors = useThemeColors();
+  return (
+    <TouchableOpacity
+      style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
+      onPress={onRemove}
+      accessibilityRole="button"
+      accessibilityLabel={`${text} filtresini kaldır`}
+      hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+    >
+      <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>{text} ×</Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function TaramaScreen() {
   const params = useLocalSearchParams<{ preset?: string; sector?: string; index?: string; q?: string }>();
+  const router = useRouter();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
-  const [selectedPreset, setSelectedPreset] = useState<string>(params.preset ?? "");
+
+  const [filters, setFilters] = useState<ScreenerFilterState>(() => {
+    const base: ScreenerFilterState = {
+      ...DEFAULT_SCREENER_STATE,
+      q: params.q?.trim() ?? "",
+      sector: params.sector?.trim() ?? "",
+      index: params.index?.trim().toUpperCase() ?? "",
+    };
+    const presetId = resolvePresetId(params.preset);
+    return presetId ? toggleScreenerPreset(base, presetId) : base;
+  });
+
+  // Sync deep-link param changes in place while tab is already mounted.
+  useEffect(() => {
+    if (params.preset === undefined && params.sector === undefined && params.index === undefined && params.q === undefined) {
+      return;
+    }
+    setFilters((prev) => {
+      let next: ScreenerFilterState = {
+        ...prev,
+        q: params.q !== undefined ? params.q.trim() : prev.q,
+        sector: params.sector !== undefined ? params.sector.trim() : prev.sector,
+        index: params.index !== undefined ? params.index.trim().toUpperCase() : prev.index,
+      };
+      const presetId = resolvePresetId(params.preset);
+      if (presetId && !next.presets.includes(presetId)) {
+        next = toggleScreenerPreset({ ...next, presets: [] }, presetId);
+      }
+      return next;
+    });
+  }, [params.index, params.preset, params.q, params.sector]);
+
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterTab, setFilterTab] = useState<FilterSheetTab>("presets");
+  const [sortOpen, setSortOpen] = useState(false);
+  const [rangeDrafts, setRangeDrafts] = useState<Record<string, { min: string; max: string }>>({});
+
+  const universe = useResource({
+    key: "screener:universe",
+    cacheKey: "screener_universe",
+    fetcher: (signal) => mobileApi.screenerUniverse(signal),
+    isEmpty: (data) => !data.rows || data.rows.length === 0,
+  });
+
+  const sectorLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of universe.data?.kap_sectors ?? []) map.set(s.key, s.name);
+    for (const s of universe.data?.sectors ?? []) {
+      if (!map.has(s.key)) map.set(s.key, s.name_tr);
+    }
+    return map;
+  }, [universe.data?.kap_sectors, universe.data?.sectors]);
+
+  const sectorOptions = useMemo(() => {
+    if (universe.data?.kap_sectors && universe.data.kap_sectors.length > 0) {
+      return universe.data.kap_sectors.map((s) => ({ key: s.key, label: s.name, count: s.count }));
+    }
+    return (universe.data?.sectors ?? []).map((s) => ({ key: s.key, label: s.name_tr, count: s.count }));
+  }, [universe.data?.kap_sectors, universe.data?.sectors]);
+
+  const indexOptions = useMemo(() => universe.data?.indices ?? [], [universe.data?.indices]);
+
+  const filteredRows = useMemo(() => {
+    const rows = universe.data?.rows ?? [];
+    return sortScreenerRows(filterScreenerRows(rows, filters), filters.sort, filters.dir);
+  }, [filters, universe.data?.rows]);
+
+  const breadth = useMemo(() => computeBreadth(filteredRows), [filteredRows]);
+  const activeCount = useMemo(() => countActiveFilters(filters), [filters]);
+  const displayMetrics = VIEW_METRICS[filters.view];
+  // 4 → one row of four, 5–6 → two rows of three, 7 → four + three: no lone cell on a line.
+  const metricWidth = displayMetrics.length === 5 || displayMetrics.length === 6 ? "33.333%" : "25%";
+  const allRangeKeys = useMemo(() => RANGE_GROUPS.flatMap((group) => group.keys), []);
+
+  const openFilterSheet = () => {
+    const drafts: Record<string, { min: string; max: string }> = {};
+    for (const key of allRangeKeys) {
+      const b = filters.ranges[key];
+      drafts[key] = {
+        min: b?.min !== undefined ? String(b.min) : "",
+        max: b?.max !== undefined ? String(b.max) : "",
+      };
+    }
+    setRangeDrafts(drafts);
+    setFilterOpen(true);
+  };
+
+  // Typed text stays in the draft (so "1," can be completed); only parsed bounds reach the filter.
+  const applyRangeDraft = (key: RangeKey, side: "min" | "max", text: string) => {
+    const current = rangeDrafts[key] ?? { min: "", max: "" };
+    const updated = { ...current, [side]: text };
+    setRangeDrafts((prev) => ({ ...prev, [key]: updated }));
+    const minVal = parseDecimalInput(updated.min);
+    const maxVal = parseDecimalInput(updated.max);
+    setFilters((f) => {
+      const nextRanges = { ...f.ranges };
+      if (minVal === undefined && maxVal === undefined) {
+        delete nextRanges[key];
+      } else {
+        nextRanges[key] = { min: minVal, max: maxVal };
+      }
+      return { ...f, ranges: nextRanges };
+    });
+  };
+
+  const handleSortPick = (key: SortKey) => {
+    setFilters((prev) => ({
+      ...prev,
+      sort: key,
+      dir: prev.sort === key ? (prev.dir === "asc" ? "desc" : "asc") : defaultSortDir(key),
+    }));
+    setSortOpen(false);
+  };
+
+  const activeSortLabel = `${sortLabel(filters.sort)} ${filters.dir === "asc" ? "↑" : "↓"}`;
+  const sortGroups = useMemo(() => sortOptionsForView(filters.view), [filters.view]);
+
+  const renderStockRow = useCallback(
+    ({ item }: { item: ScreenerStockRow }) => {
+      const change = item.change_pct;
+      const changeColor =
+        change === undefined
+          ? colors.textMuted
+          : change > 0.005
+            ? colors.up
+            : change < -0.005
+              ? colors.down
+              : colors.textSecondary;
+      const sectorName =
+        (item.kap_sector ? sectorLabelMap.get(item.kap_sector) : undefined) ??
+        (item.sector ? sectorLabelMap.get(item.sector) : undefined) ??
+        null;
+      const signals = filters.view === "technical" ? rowSignals(item) : [];
+      const metricText = displayMetrics
+        .map((field) => `${FIELD_LABELS[field]} ${formatScreenerField(item, field)}`)
+        .join(", ")
+        .split(EMPTY_VALUE)
+        .join("veri yok");
+      const a11yLabel = [
+        item.symbol,
+        item.name,
+        sectorName,
+        `fiyat ${formatScreenerField(item, "close")}`,
+        `günlük ${formatScreenerField(item, "change_pct")}`,
+        item.recommendation ? `analist önerisi ${item.recommendation}` : null,
+        metricText,
+        signals.length > 0 ? signals.map((s) => ROW_SIGNAL_LABELS[s]).join(", ") : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      return (
+        <TouchableOpacity
+          style={[styles.stockCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+          onPress={() => router.push(`/stock/${item.symbol}` as never)}
+          accessibilityRole="button"
+          accessibilityLabel={a11yLabel}
+          accessibilityHint="Hisse analizini açar"
+        >
+          <View style={styles.stockTopRow}>
+            <View style={styles.stockIdentity}>
+              <View style={styles.tickerLine}>
+                <Text style={[styles.tickerText, { color: colors.textPrimary }]}>{item.symbol}</Text>
+                {item.recommendation ? (
+                  <View
+                    style={[
+                      styles.recBadge,
+                      {
+                        backgroundColor:
+                          item.recommendation === "AL"
+                            ? colors.accentLight
+                            : colors.bgSecondary,
+                        borderColor:
+                          item.recommendation === "AL"
+                            ? colors.up
+                            : item.recommendation === "SAT"
+                              ? colors.down
+                              : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: "700",
+                        color:
+                          item.recommendation === "AL"
+                            ? colors.up
+                            : item.recommendation === "SAT"
+                              ? colors.down
+                              : colors.textSecondary,
+                      }}
+                    >
+                      {item.recommendation}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={[styles.companyName, { color: colors.textMuted }]} numberOfLines={1}>
+                {item.name ?? EMPTY_VALUE}
+                {sectorName ? ` · ${sectorName}` : ""}
+              </Text>
+            </View>
+
+            <View style={styles.priceCol}>
+              <Text style={[styles.priceText, { color: colors.textPrimary }]}>
+                {formatPrice(item.close)}
+              </Text>
+              <Text style={[styles.changeText, { color: changeColor }]}>
+                {formatSignedPercent(change)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.metricsRow, { borderTopColor: colors.border }]}>
+            {displayMetrics.map((field) => {
+              const sorted = filters.sort === field;
+              return (
+                <View key={field} style={[styles.metricCell, { width: metricWidth }]}>
+                  <Text
+                    style={[styles.metricLabel, { color: sorted ? colors.accent : colors.textMuted }]}
+                    numberOfLines={1}
+                  >
+                    {CARD_LABELS[field] ?? FIELD_LABELS[field]}
+                    {sorted ? (filters.dir === "asc" ? " ↑" : " ↓") : ""}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.metricValue,
+                      { color: sorted ? colors.textPrimary : colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {formatScreenerField(item, field)}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {signals.length > 0 ? (
+            <View style={styles.signalRow}>
+              {signals.map((signal) => (
+                <View
+                  key={signal}
+                  style={[styles.signalBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+                >
+                  <Text style={{ color: colors.textSecondary, fontSize: 10, fontWeight: "600" }}>
+                    {ROW_SIGNAL_LABELS[signal]}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      );
+    },
+    [colors, displayMetrics, metricWidth, filters.dir, filters.sort, filters.view, router, sectorLabelMap],
+  );
+
+  const listHeader = (
+    <View style={styles.listHeader}>
+      {/* Search bar */}
+      <View
+        style={[
+          styles.searchRow,
+          { backgroundColor: colors.bgCard, borderColor: colors.border },
+        ]}
+      >
+        <TextInput
+          value={filters.q}
+          onChangeText={(q) => setFilters((prev) => ({ ...prev, q }))}
+          placeholder="Hisse kodu veya şirket ara (örn. THYAO)"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          returnKeyType="search"
+          style={[styles.searchInput, { color: colors.textPrimary }]}
+        />
+        {filters.q ? (
+          <TouchableOpacity
+            onPress={() => setFilters((prev) => ({ ...prev, q: "" }))}
+            accessibilityRole="button"
+          >
+            <Text style={{ color: colors.textMuted, fontSize: FontSize.xs, fontWeight: "600" }}>
+              Temizle
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {/* Featured quick presets */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.presetChipsRow}
+      >
+        {FEATURED_PRESETS.map((preset) => {
+          const active = filters.presets.includes(preset.id);
+          return (
+            <TouchableOpacity
+              key={preset.id}
+              style={[
+                styles.presetChip,
+                {
+                  backgroundColor: active ? colors.accentLight : colors.bgCard,
+                  borderColor: active ? colors.accent : colors.border,
+                },
+              ]}
+              onPress={() => setFilters((prev) => toggleScreenerPreset(prev, preset.id))}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text
+                style={{
+                  color: active ? colors.accent : colors.textSecondary,
+                  fontSize: FontSize.xs,
+                  fontWeight: active ? "700" : "500",
+                }}
+              >
+                {preset.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Column set (web table views) */}
+      <View style={styles.viewRow} accessibilityRole="tablist">
+        {VIEWS.map((view) => {
+          const active = filters.view === view.id;
+          return (
+            <TouchableOpacity
+              key={view.id}
+              style={[
+                styles.viewChip,
+                {
+                  backgroundColor: active ? colors.accent : colors.bgCard,
+                  borderColor: active ? colors.accent : colors.border,
+                },
+              ]}
+              onPress={() => setFilters((prev) => ({ ...prev, view: view.id }))}
+              accessibilityRole="tab"
+              accessibilityLabel={`${view.label} görünümü`}
+              accessibilityState={{ selected: active }}
+            >
+              <Text
+                style={{
+                  color: active ? "#ffffff" : colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: active ? "700" : "500",
+                }}
+                numberOfLines={1}
+              >
+                {view.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Active filter summary pills */}
+      {activeCount > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.activeChipsRow}
+        >
+          {filters.index ? (
+            <RemovablePill
+              text={`Endeks: ${filters.index}`}
+              onRemove={() => setFilters((p) => ({ ...p, index: "" }))}
+            />
+          ) : null}
+          {filters.sector ? (
+            <RemovablePill
+              text={`Sektör: ${sectorLabelMap.get(filters.sector) ?? filters.sector}`}
+              onRemove={() => setFilters((p) => ({ ...p, sector: "" }))}
+            />
+          ) : null}
+          {filters.presets
+            .filter((id) => !FEATURED_PRESETS.some((f) => f.id === id))
+            .map((id) => (
+              <RemovablePill
+                key={id}
+                text={PRESET_BY_ID.get(id)?.label ?? id}
+                onRemove={() => setFilters((p) => toggleScreenerPreset(p, id))}
+              />
+            ))}
+          {filters.rec ? (
+            <RemovablePill text={`Öneri: ${filters.rec}`} onRemove={() => setFilters((p) => ({ ...p, rec: "" }))} />
+          ) : null}
+          {filters.cross ? (
+            <RemovablePill
+              text={filters.cross === "golden" ? "Golden cross" : "Death cross"}
+              onRemove={() => setFilters((p) => ({ ...p, cross: "" }))}
+            />
+          ) : null}
+          {(Object.keys(filters.ranges) as RangeKey[]).map((key) => {
+            const def = RANGE_BY_KEY.get(key);
+            const b = filters.ranges[key];
+            if (!def || !b) return null;
+            const fmt = (v: number) => formatNumber(v, Number.isInteger(v) ? 0 : 2);
+            const text =
+              b.min !== undefined && b.max !== undefined
+                ? `${def.shortLabel}: ${fmt(b.min)}–${fmt(b.max)}`
+                : b.min !== undefined
+                  ? `${def.shortLabel} ≥ ${fmt(b.min)}`
+                  : `${def.shortLabel} ≤ ${fmt(b.max as number)}`;
+            return (
+              <RemovablePill
+                key={key}
+                text={text}
+                onRemove={() => {
+                  setFilters((p) => {
+                    const nextRanges = { ...p.ranges };
+                    delete nextRanges[key];
+                    return { ...p, ranges: nextRanges };
+                  });
+                  setRangeDrafts((prev) => ({ ...prev, [key]: { min: "", max: "" } }));
+                }}
+              />
+            );
+          })}
+          <TouchableOpacity
+            style={[styles.activePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+            onPress={() => {
+              setFilters((p) => clearScreenerFilters(p));
+              setRangeDrafts({});
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Tüm filtreleri temizle"
+          >
+            <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "600" }}>
+              Tümünü temizle
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      ) : null}
+
+      <FreshnessBanner
+        status={universe.status}
+        fetchedAt={universe.fetchedAt}
+        dataAsOf={universe.data?.as_of ?? null}
+        delayMinutes={universe.data?.delay_minutes ?? null}
+        source={universe.data?.source ?? "BIST Tarama Evreni"}
+        refreshing={universe.refreshing}
+        error={universe.error}
+        onRetry={universe.reload}
+      />
+
+      {/* Result count + Sort bar */}
+      {universe.data ? (
+        <View style={styles.summaryBar}>
+          <Text
+            style={[styles.countText, { color: colors.textSecondary }]}
+            accessibilityLabel={`${universe.data.rows.length} hisseden ${filteredRows.length} eşleşme, ${breadth.up} yükselen, ${breadth.down} düşen`}
+          >
+            <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{filteredRows.length}</Text>
+            {" / "}
+            {universe.data.rows.length} hisse
+            {"  ·  "}
+            <Text style={{ color: colors.up }}>↑ {breadth.up}</Text>
+            {" "}
+            <Text style={{ color: colors.down }}>↓ {breadth.down}</Text>
+          </Text>
+          <TouchableOpacity
+            style={[styles.sortPill, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            onPress={() => setSortOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Sıralama: ${sortLabel(filters.sort)}, ${filters.dir === "asc" ? "artan" : "azalan"}`}
+            accessibilityHint="Sıralama seçeneklerini açar"
+          >
+            <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
+              {activeSortLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <View
       style={[
         styles.container,
-        { backgroundColor: colors.bgPrimary, paddingTop: insets.top + Spacing.lg },
+        { backgroundColor: colors.bgPrimary, paddingTop: insets.top + Spacing.md },
       ]}
     >
       <View style={styles.headerRow}>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Tarama</Text>
         <TouchableOpacity
-          style={[styles.filterButton, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-          onPress={() => setFilterOpen(true)}
+          style={[
+            styles.filterButton,
+            {
+              backgroundColor: activeCount > 0 ? colors.accentLight : colors.bgCard,
+              borderColor: activeCount > 0 ? colors.accent : colors.border,
+            },
+          ]}
+          onPress={openFilterSheet}
           accessibilityRole="button"
         >
           <Text style={{ color: colors.accent, fontWeight: "600", fontSize: FontSize.sm }}>
-            Filtreler{selectedPreset ? " · 1" : ""}
+            Filtreler{activeCount > 0 ? ` · ${activeCount}` : ""}
           </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-        <Text style={{ color: colors.textSecondary, fontSize: FontSize.md }}>
-          {selectedPreset
-            ? `Etkin tarama: ${QUICK_PRESETS.find((p) => p.id === selectedPreset)?.label ?? selectedPreset}`
-            : "Hazır tarama veya sektör filtresi seçmek için Filtreler panelini açın."}
-        </Text>
-        {params.sector ? (
-          <Text style={{ color: colors.textMuted, fontSize: FontSize.xs }}>Sektör: {params.sector}</Text>
-        ) : null}
-        {params.index ? (
-          <Text style={{ color: colors.textMuted, fontSize: FontSize.xs }}>Endeks: {params.index}</Text>
-        ) : null}
-      </View>
+      {universe.status === "loading" && !universe.data ? (
+        <View style={styles.stateWrap}>
+          {listHeader}
+          <LoadingBlock message="BIST hisse tarama evreni yükleniyor…" />
+        </View>
+      ) : universe.status === "error" && !universe.data ? (
+        <View style={styles.stateWrap}>
+          {listHeader}
+          <ErrorCard
+            title="Tarama verisi alınamadı"
+            message={universe.error ?? "Sunucuya bağlanılamadı."}
+            onRetry={universe.reload}
+          />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredRows}
+          keyExtractor={(item) => item.symbol}
+          renderItem={renderStockRow}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            <EmptyCard
+              title="Koşullara uyan hisse bulunamadı"
+              message={
+                activeCount > 0
+                  ? "Seçili tarama veya filtre kriterlerine uyan şirket yok. Filtreleri gevşeterek tekrar deneyin."
+                  : "Tarama evreni şu an boş döndü."
+              }
+              actionLabel={activeCount > 0 ? "Filtreleri temizle" : "Yenile"}
+              onAction={() =>
+                activeCount > 0 ? setFilters((p) => clearScreenerFilters(p)) : universe.reload()
+              }
+            />
+          }
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + Spacing.xxl }]}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={universe.refreshing}
+              onRefresh={universe.reload}
+              tintColor={colors.accent}
+            />
+          }
+          initialNumToRender={16}
+          maxToRenderPerBatch={20}
+          windowSize={9}
+        />
+      )}
 
+      {/* Filter Bottom Sheet: 31 presets + Sector/Index + Advanced ranges */}
       <BottomSheetModal
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
         title="Tarama filtreleri"
-        subtitle="Hazır tarama seçin"
+        subtitle={`${filteredRows.length} hisse eşleşiyor`}
       >
-        <SheetScrollView
-          contentContainerStyle={[
-            styles.sheetList,
-            { paddingBottom: Math.max(insets.bottom, Spacing.lg) },
-          ]}
-        >
-          {QUICK_PRESETS.map((preset) => {
-            const active = selectedPreset === preset.id;
+        <View style={styles.sheetTabs}>
+          {(
+            [
+              { id: "presets", label: `Hazır (${SCREENER_PRESETS.length})` },
+              { id: "universe", label: "Endeks & Sektör" },
+              { id: "advanced", label: "Kriterler" },
+            ] as const
+          ).map((tab) => {
+            const active = filterTab === tab.id;
             return (
               <TouchableOpacity
-                key={preset.id}
+                key={tab.id}
                 style={[
-                  styles.optionRow,
+                  styles.sheetTab,
                   {
                     backgroundColor: active ? colors.accentLight : colors.bgSecondary,
                     borderColor: active ? colors.accent : colors.border,
                   },
                 ]}
-                onPress={() => {
-                  setSelectedPreset(active ? "" : preset.id);
-                  setFilterOpen(false);
-                }}
+                onPress={() => setFilterTab(tab.id)}
                 accessibilityRole="button"
               >
                 <Text
                   style={{
-                    color: active ? colors.accent : colors.textPrimary,
-                    fontWeight: active ? "600" : "400",
-                    fontSize: FontSize.md,
+                    color: active ? colors.accent : colors.textSecondary,
+                    fontSize: FontSize.xs,
+                    fontWeight: active ? "700" : "500",
                   }}
                 >
-                  {preset.label}
+                  {tab.label}
                 </Text>
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        <SheetScrollView
+          contentContainerStyle={[
+            styles.sheetBody,
+            { paddingBottom: Math.max(insets.bottom, Spacing.lg) },
+          ]}
+        >
+          {filterTab === "presets" ? (
+            FILTER_GROUPS.map((group) => {
+              const items = SCREENER_PRESETS.filter((p) => p.group === group.id);
+              return (
+                <View key={group.id} style={styles.groupBlock}>
+                  <Text style={[styles.groupTitle, { color: colors.textMuted }]}>
+                    {group.label.toUpperCase()}
+                  </Text>
+                  {items.map((preset) => {
+                    const active = filters.presets.includes(preset.id);
+                    return (
+                      <TouchableOpacity
+                        key={preset.id}
+                        style={[
+                          styles.optionRow,
+                          {
+                            backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                            borderColor: active ? colors.accent : colors.border,
+                          },
+                        ]}
+                        onPress={() => setFilters((prev) => toggleScreenerPreset(prev, preset.id))}
+                        accessibilityState={{ selected: active }}
+                        accessibilityHint={preset.ruleSummary}
+                        accessibilityRole="button"
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: active ? colors.accent : colors.textPrimary,
+                              fontWeight: active ? "700" : "500",
+                              fontSize: FontSize.sm,
+                            }}
+                          >
+                            {active ? "✓ " : ""}
+                            {preset.label}
+                          </Text>
+                          <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                            {preset.ruleSummary}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            })
+          ) : filterTab === "universe" ? (
+            <>
+              <View style={styles.groupBlock}>
+                <Text style={[styles.groupTitle, { color: colors.textMuted }]}>ENDEKS</Text>
+                <View style={styles.chipGrid}>
+                  <TouchableOpacity
+                    style={[
+                      styles.gridChip,
+                      {
+                        backgroundColor: !filters.index ? colors.accentLight : colors.bgSecondary,
+                        borderColor: !filters.index ? colors.accent : colors.border,
+                      },
+                    ]}
+                    onPress={() => setFilters((p) => ({ ...p, index: "" }))}
+                  >
+                    <Text
+                      style={{
+                        color: !filters.index ? colors.accent : colors.textPrimary,
+                        fontSize: FontSize.xs,
+                        fontWeight: !filters.index ? "700" : "500",
+                      }}
+                    >
+                      Tüm hisseler
+                    </Text>
+                  </TouchableOpacity>
+                  {indexOptions.map((idx) => {
+                    const active = filters.index === idx.code;
+                    return (
+                      <TouchableOpacity
+                        key={idx.code}
+                        style={[
+                          styles.gridChip,
+                          {
+                            backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                            borderColor: active ? colors.accent : colors.border,
+                          },
+                        ]}
+                        onPress={() => setFilters((p) => ({ ...p, index: active ? "" : idx.code }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text
+                          style={{
+                            color: active ? colors.accent : colors.textPrimary,
+                            fontSize: FontSize.xs,
+                            fontWeight: active ? "700" : "500",
+                          }}
+                        >
+                          {idx.code} ({idx.count})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.groupBlock}>
+                <Text style={[styles.groupTitle, { color: colors.textMuted }]}>SEKTÖR</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.optionRow,
+                    {
+                      backgroundColor: !filters.sector ? colors.accentLight : colors.bgSecondary,
+                      borderColor: !filters.sector ? colors.accent : colors.border,
+                    },
+                  ]}
+                  onPress={() => setFilters((p) => ({ ...p, sector: "" }))}
+                >
+                  <Text
+                    style={{
+                      color: !filters.sector ? colors.accent : colors.textPrimary,
+                      fontWeight: !filters.sector ? "700" : "500",
+                      fontSize: FontSize.sm,
+                    }}
+                  >
+                    Tüm sektörler
+                  </Text>
+                </TouchableOpacity>
+                {sectorOptions.map((sec) => {
+                  const active = filters.sector === sec.key;
+                  return (
+                    <TouchableOpacity
+                      key={sec.key}
+                      style={[
+                        styles.optionRow,
+                        {
+                          backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                          borderColor: active ? colors.accent : colors.border,
+                        },
+                      ]}
+                      onPress={() => setFilters((p) => ({ ...p, sector: active ? "" : sec.key }))}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text
+                        style={{
+                          color: active ? colors.accent : colors.textPrimary,
+                          fontWeight: active ? "700" : "400",
+                          fontSize: FontSize.sm,
+                        }}
+                      >
+                        {sec.label} ({sec.count})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <SheetNoDrag>
+              <View style={styles.groupBlock}>
+                <Text style={[styles.groupTitle, { color: colors.textMuted }]}>ANALİST ÖNERİSİ</Text>
+                <View style={styles.chipGrid}>
+                  {(["", "AL", "TUT", "SAT"] as readonly RecFilter[]).map((rec) => {
+                    const active = filters.rec === rec;
+                    return (
+                      <TouchableOpacity
+                        key={rec || "all"}
+                        style={[
+                          styles.gridChip,
+                          {
+                            backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                            borderColor: active ? colors.accent : colors.border,
+                          },
+                        ]}
+                        onPress={() => setFilters((p) => ({ ...p, rec }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text style={{ color: active ? colors.accent : colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
+                          {rec || "Hepsi"}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.groupBlock}>
+                <Text style={[styles.groupTitle, { color: colors.textMuted }]}>SMA 50 / 200 KESİŞİMİ</Text>
+                <View style={styles.chipGrid}>
+                  {(
+                    [
+                      { id: "", label: "Hepsi" },
+                      { id: "golden", label: "Golden cross" },
+                      { id: "death", label: "Death cross" },
+                    ] as readonly { id: CrossFilter; label: string }[]
+                  ).map((opt) => {
+                    const active = filters.cross === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id || "all"}
+                        style={[
+                          styles.gridChip,
+                          {
+                            backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                            borderColor: active ? colors.accent : colors.border,
+                          },
+                        ]}
+                        onPress={() => setFilters((p) => ({ ...p, cross: opt.id }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text style={{ color: active ? colors.accent : colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {RANGE_GROUPS.map((group) => (
+                <View key={group.id} style={styles.groupBlock}>
+                  <Text style={[styles.groupTitle, { color: colors.textMuted }]} accessibilityRole="header">
+                    {(FILTER_GROUPS.find((g) => g.id === group.id)?.label ?? group.id).toLocaleUpperCase("tr")}
+                  </Text>
+                  {group.keys.map((key) => {
+                    const def = RANGE_BY_KEY.get(key);
+                    if (!def) return null;
+                    const draft = rangeDrafts[key] ?? { min: "", max: "" };
+                    const invalid = (text: string) => text.trim() !== "" && parseDecimalInput(text) === undefined;
+                    return (
+                      <View key={key} style={styles.rangeRow}>
+                        <Text style={{ color: colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
+                          {def.label}
+                        </Text>
+                        <View style={styles.rangeInputs}>
+                          <TextInput
+                            value={draft.min}
+                            onChangeText={(txt) => applyRangeDraft(key, "min", txt)}
+                            placeholder="Min"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="numbers-and-punctuation"
+                            accessibilityLabel={`${def.label} en az`}
+                            style={[
+                              styles.rangeInput,
+                              {
+                                color: colors.textPrimary,
+                                backgroundColor: colors.bgSecondary,
+                                borderColor: invalid(draft.min) ? colors.down : colors.border,
+                              },
+                            ]}
+                          />
+                          <Text style={{ color: colors.textMuted }}>–</Text>
+                          <TextInput
+                            value={draft.max}
+                            onChangeText={(txt) => applyRangeDraft(key, "max", txt)}
+                            placeholder="Maks"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="numbers-and-punctuation"
+                            accessibilityLabel={`${def.label} en çok`}
+                            style={[
+                              styles.rangeInput,
+                              {
+                                color: colors.textPrimary,
+                                backgroundColor: colors.bgSecondary,
+                                borderColor: invalid(draft.max) ? colors.down : colors.border,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </SheetNoDrag>
+          )}
+
+          <View style={styles.sheetFooter}>
+            {activeCount > 0 ? (
+              <TouchableOpacity
+                style={[styles.clearBtn, { borderColor: colors.border, backgroundColor: colors.bgSecondary }]}
+                onPress={() => {
+                  setFilters((p) => clearScreenerFilters(p));
+                  setRangeDrafts({});
+                }}
+              >
+                <Text style={{ color: colors.textSecondary, fontWeight: "600", fontSize: FontSize.sm }}>
+                  Temizle
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.applyBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setFilterOpen(false)}
+            >
+              <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: FontSize.sm }}>
+                {filteredRows.length} hisseyi göster
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SheetScrollView>
+      </BottomSheetModal>
+
+      {/* Sort Bottom Sheet */}
+      <BottomSheetModal
+        visible={sortOpen}
+        onClose={() => setSortOpen(false)}
+        title="Sıralama"
+        subtitle="Aynı alana tekrar dokunarak yönü değiştirin"
+      >
+        <SheetScrollView
+          contentContainerStyle={[
+            styles.sheetBody,
+            { paddingBottom: Math.max(insets.bottom, Spacing.lg) },
+          ]}
+        >
+          {(
+            [
+              { title: `${VIEWS.find((v) => v.id === filters.view)?.label ?? ""} görünümü`, keys: sortGroups.primary },
+              { title: "Diğer alanlar", keys: sortGroups.other },
+            ] as const
+          ).map((group) => (
+            <View key={group.title} style={styles.groupBlock}>
+              <Text style={[styles.groupTitle, { color: colors.textMuted }]} accessibilityRole="header">
+                {group.title.toLocaleUpperCase("tr")}
+              </Text>
+              {group.keys.map((key) => {
+                const active = filters.sort === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.optionRow,
+                      {
+                        backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                        borderColor: active ? colors.accent : colors.border,
+                      },
+                    ]}
+                    onPress={() => handleSortPick(key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={
+                      active
+                        ? `${sortLabel(key)}, ${filters.dir === "asc" ? "artan" : "azalan"}; yönü değiştirmek için dokunun`
+                        : sortLabel(key)
+                    }
+                  >
+                    <Text
+                      style={{
+                        color: active ? colors.accent : colors.textPrimary,
+                        fontWeight: active ? "700" : "500",
+                        fontSize: FontSize.md,
+                      }}
+                    >
+                      {sortLabel(key)}
+                    </Text>
+                    {active ? (
+                      <Text style={{ color: colors.accent, fontWeight: "700", fontSize: FontSize.sm }}>
+                        {filters.dir === "asc" ? "Artan ↑" : "Azalan ↓"}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
         </SheetScrollView>
       </BottomSheetModal>
     </View>
@@ -105,8 +1119,13 @@ export default function TaramaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: Spacing.lg, gap: Spacing.lg },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  container: { flex: 1, paddingHorizontal: Spacing.lg },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.md,
+  },
   heading: { fontSize: 26, fontWeight: "700" },
   filterButton: {
     paddingHorizontal: Spacing.md,
@@ -114,17 +1133,161 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  card: {
-    borderRadius: BorderRadius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.lg,
-    gap: Spacing.xs,
-  },
-  sheetList: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
-  optionRow: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+  stateWrap: { gap: Spacing.md },
+  listContent: { paddingBottom: Spacing.xxl },
+  listHeader: { gap: Spacing.sm, marginBottom: Spacing.md },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: BorderRadius.md,
     borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: FontSize.sm,
+  },
+  presetChipsRow: { gap: Spacing.xs, paddingVertical: 2 },
+  presetChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 7,
+    borderRadius: BorderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  activeChipsRow: { gap: Spacing.xs, paddingVertical: 2 },
+  activePill: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  summaryBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
+  },
+  countText: {
+    fontSize: FontSize.xs,
+    fontVariant: ["tabular-nums"],
+  },
+  sortPill: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  stockCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  stockTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: Spacing.md,
+  },
+  stockIdentity: { flex: 1, gap: 2 },
+  tickerLine: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
+  tickerText: { fontSize: FontSize.md, fontWeight: "700" },
+  recBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  companyName: { fontSize: FontSize.xs },
+  priceCol: { alignItems: "flex-end", gap: 2 },
+  priceText: { fontSize: FontSize.md, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  changeText: { fontSize: FontSize.xs, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  metricsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    rowGap: Spacing.sm,
+  },
+  // Width is set per view (three or four columns) so up to seven metrics fit in two rows.
+  metricCell: { paddingRight: Spacing.xs, gap: 1 },
+  signalRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
+  signalBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  viewRow: { flexDirection: "row", gap: Spacing.xs },
+  viewChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  metricLabel: { fontSize: 10 },
+  metricValue: { fontSize: FontSize.xs, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  sheetTabs: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
+  },
+  sheetTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  sheetBody: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
+  groupBlock: { gap: Spacing.xs },
+  groupTitle: { fontSize: 11, fontWeight: "700", letterSpacing: 0.8 },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
+  gridChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  rangeRow: { gap: 4, paddingVertical: 4 },
+  rangeInputs: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+  rangeInput: {
+    flex: 1,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    fontSize: FontSize.sm,
+  },
+  sheetFooter: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  clearBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 13,
+    borderRadius: BorderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+  },
+  applyBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: BorderRadius.lg,
+    alignItems: "center",
   },
 });
