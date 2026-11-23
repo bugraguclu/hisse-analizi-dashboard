@@ -19,6 +19,7 @@ import { PriceChartCard } from "./PriceChartCard";
 import { QuoteStats } from "./QuoteStats";
 import { RatiosCard } from "./RatiosCard";
 import { SectorComparisonCard } from "./SectorComparisonCard";
+import { SimilarCompaniesCard } from "./SimilarCompaniesCard";
 import { StockShell, type StockView } from "./StockShell";
 import { TechnicalSummary } from "./TechnicalSummary";
 import { SectionHeadingLevel } from "./ui";
@@ -52,6 +53,7 @@ const CARDS = {
   news: { title: "news.title", minH: 6 },
   dividends: { title: "div.title", minH: 6 },
   sector: { title: "peers.title", minW: 3, minH: 7 },
+  similar: { title: "similar.title", minW: 3, minH: 7 },
   statements: { title: "fin.title", minW: 3, minH: 8 },
 } as const satisfies Record<string, Omit<WorkspaceCard, "label"> & { title: StockKey }>;
 
@@ -112,7 +114,7 @@ const STACK = "flex min-w-0 flex-col gap-4 [&>*]:shrink-0 [&>*]:grow";
 /**
  * /hisse/[ticker] — overview: key figures and the chart, the verdicts
  * (scorecard, analysts), what is new (KAP, news), ratios and signals, the
- * stock against its sector, dividends and the report calendar, then the
+ * stock against its sector and its closest peers, dividends and the report calendar, then the
  * statements. Below-the-fold cards mount when scrolled near.
  */
 export function StockOverviewView({ ticker }: { ticker: string }) {
@@ -121,7 +123,7 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
       ticker={ticker}
       view="overview"
       className={PAGE}
-      cards={["quote", "chart", "scorecard", "analysts", "kap", "news", "ratios", "signals", "sector", "dividends", "earnings", "statements"]}
+      cards={["quote", "chart", "scorecard", "analysts", "kap", "news", "ratios", "signals", "sector", "similar", "dividends", "earnings", "statements"]}
     >
       <Tile id="quote">
         <QuoteStats ticker={ticker} />
@@ -156,6 +158,9 @@ export function StockOverviewView({ ticker }: { ticker: string }) {
       <Tile id="sector" lazy placeholderHeight={420}>
         <SectorComparisonCard ticker={ticker} />
       </Tile>
+      <Tile id="similar" lazy placeholderHeight={420}>
+        <SimilarCompaniesCard ticker={ticker} />
+      </Tile>
       <TileGroup className={PAIR}>
         <Tile id="dividends" lazy placeholderHeight={300}>
           <DividendHistory ticker={ticker} />
@@ -184,7 +189,7 @@ export function StockFundamentalView({ ticker }: { ticker: string }) {
       ticker={ticker}
       view="fundamental"
       className={PAGE}
-      cards={["scorecard", "ratios", "analysts", "profile", "sector", "dividends", "holders", "earnings", "statements"]}
+      cards={["scorecard", "ratios", "analysts", "profile", "sector", "similar", "dividends", "holders", "earnings", "statements"]}
     >
       <TileGroup className={PAIR}>
         <TileGroup className={STACK}>
@@ -206,6 +211,9 @@ export function StockFundamentalView({ ticker }: { ticker: string }) {
       </TileGroup>
       <Tile id="sector" lazy placeholderHeight={420}>
         <SectorComparisonCard ticker={ticker} />
+      </Tile>
+      <Tile id="similar" lazy placeholderHeight={420}>
+        <SimilarCompaniesCard ticker={ticker} />
       </Tile>
       <TileGroup className={PAIR}>
         <Tile id="dividends" lazy placeholderHeight={440}>
@@ -285,7 +293,7 @@ export function StockCombinedView({ ticker }: { ticker: string }) {
       ticker={ticker}
       view="combined"
       className="grid grid-cols-1 gap-x-4 gap-y-8 xl:grid-cols-2"
-      cards={["scorecard", "analysts", "ratios", "sector", "profile", "holders", "summary", "signals", "indicators", "pivots"]}
+      cards={["scorecard", "analysts", "ratios", "sector", "similar", "profile", "holders", "summary", "signals", "indicators", "pivots"]}
     >
       <CombinedColumn id="combined-fundamental" title={t("tabs.fundamental")}>
         <Tile id="scorecard">
@@ -299,6 +307,9 @@ export function StockCombinedView({ ticker }: { ticker: string }) {
         </Tile>
         <Tile id="sector">
           <SectorComparisonCard ticker={ticker} compact />
+        </Tile>
+        <Tile id="similar" lazy placeholderHeight={420}>
+          <SimilarCompaniesCard ticker={ticker} compact />
         </Tile>
         <Tile id="profile">
           <CompanyProfileCard ticker={ticker} />

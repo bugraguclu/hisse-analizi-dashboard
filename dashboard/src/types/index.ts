@@ -440,6 +440,64 @@ export type CompanySectorOut = {
   peers: SectorPeerOut[];
 };
 
+/** Components of the similarity score (GET /fundamentals/{ticker}/peers `weights`). */
+export type PeerComponentKey =
+  | "industry" | "market_cap" | "revenue" | "ebitda_margin" | "debt_to_equity" | "revenue_growth_yoy" | "net_margin" | "roe";
+
+/** Figures listed next to each similar company. */
+export type PeerValueKey =
+  | "market_cap" | "revenue" | "pe" | "pb" | "ebitda_margin" | "net_margin" | "roe" | "debt_to_equity" | "revenue_growth_yoy";
+
+/** TradingView industry (sub-sector): English key, Turkish label. */
+export type PeerIndustryOut = { key: string; name: string; count?: number };
+
+/** Why a company was picked; every metric reason carries both companies' values. */
+export type PeerReasonOut =
+  | { type: "same_industry"; industry: PeerIndustryOut }
+  | { type: "same_sector"; sector: string; fallback: boolean }
+  | { type: "similar_size"; metric: "market_cap" | "revenue"; value: number; peer_value: number; similarity: number; ratio: number }
+  | { type: "close_metric"; metric: PeerComponentKey; value: number; peer_value: number; similarity: number; difference: number };
+
+export type PeerOut = {
+  symbol: string;
+  name?: string | null;
+  /** 0–100. */
+  score: number;
+  /** Share (0–1) of the stock's score weight this company could be compared on. */
+  coverage: number;
+  sector?: string | null;
+  industry?: PeerIndustryOut | null;
+  reasons: PeerReasonOut[];
+  components: Partial<Record<PeerComponentKey, number>>;
+  /** Components the stock has and this company lacks. */
+  missing: PeerComponentKey[];
+  values: Partial<Record<PeerValueKey, number>>;
+  loss?: true;
+};
+
+/**
+ * GET /fundamentals/{ticker}/peers — the most similar companies, best first.
+ * `scope`: "industry" (same KAP sector and sub-sector), "sector" (sub-sector too
+ * small, widened to the KAP sector), "industry_wide" (the sector is small too:
+ * the sub-sector's companies in other sectors join), null (no candidate).
+ */
+export type CompanyPeersOut = {
+  ticker: string;
+  available: boolean;
+  min_peers: number;
+  weights: Partial<Record<PeerComponentKey, number>>;
+  reason_min_similarity: number;
+  scope: "industry" | "sector" | "industry_wide" | null;
+  fallback: boolean;
+  sector: { key: string; name: string; count: number } | null;
+  industry: PeerIndustryOut | null;
+  company: { symbol: string; name?: string | null; values: Partial<Record<PeerValueKey, number>>; loss?: true } | null;
+  /** Components the stock itself has no value for (compared for nobody). */
+  unavailable: PeerComponentKey[];
+  candidates: number;
+  peers: PeerOut[];
+};
+
 /** Result of GET /market/search */
 export type SymbolSearchResult = {
   symbol: string;

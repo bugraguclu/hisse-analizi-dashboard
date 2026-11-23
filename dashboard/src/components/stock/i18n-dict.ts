@@ -509,6 +509,83 @@ const dict = {
     en: "Sector = KAP sector; average = median, with at least 3 companies. P/E, P/B and EV/EBITDA count positive values only, dividend yield counts payers only. Market cap, P/E, P/B and dividend yield come from the screener data; EV/EBITDA, margin and ROE from the latest financial statements.",
     fr: "Secteur = secteur KAP ; moyenne = médiane, avec au moins 3 sociétés. PER, C/VC et VE/EBITDA ne comptent que les valeurs positives, le rendement que les sociétés qui versent. Capitalisation, PER, C/VC et rendement viennent des données du filtre ; VE/EBITDA, marge et ROE des derniers états financiers.",
   },
+
+  // Similar companies (GET /fundamentals/{t}/peers)
+  "similar.title": { tr: "Benzer şirketler", en: "Similar companies", fr: "Sociétés comparables" },
+  "similar.caption": {
+    tr: "{ticker} ile ona en çok benzeyen şirketler, benzerlik puanı ve seçilme nedenleri",
+    en: "{ticker} and the companies most similar to it, with their similarity score and why each was picked",
+    fr: "{ticker} et les sociétés qui lui ressemblent le plus, avec leur score de similarité et la raison de chaque choix",
+  },
+  "similar.scope.industry": {
+    tr: "{industry} alt sektöründeki şirketler, büyüklük ve finansal profile göre sıralı.",
+    en: "Companies in the {industry} sub-sector, ranked by size and financial profile.",
+    fr: "Sociétés du sous-secteur {industry}, classées par taille et profil financier.",
+  },
+  "similar.scope.sector": {
+    tr: "{industry} alt sektöründe yeterli şirket yok ({count} şirket); karşılaştırma {sector} sektörüne genişletildi.",
+    en: "The {industry} sub-sector has too few companies ({count}); the comparison was widened to {sector}.",
+    fr: "Le sous-secteur {industry} compte trop peu de sociétés ({count}) ; la comparaison a été élargie au secteur {sector}.",
+  },
+  "similar.scope.sectorNoIndustry": {
+    tr: "Alt sektör bilinmiyor; karşılaştırma {sector} sektöründe yapıldı.",
+    en: "The sub-sector is unknown; companies are compared within {sector}.",
+    fr: "Le sous-secteur est inconnu ; la comparaison porte sur le secteur {sector}.",
+  },
+  "similar.scope.industryWide": {
+    tr: "{sector} sektöründe yeterli şirket yok; başka sektörlerdeki {industry} şirketleri de karşılaştırıldı.",
+    en: "{sector} has too few companies; {industry} companies from other sectors are compared too.",
+    fr: "Le secteur {sector} compte trop peu de sociétés ; les sociétés {industry} d'autres secteurs sont aussi comparées.",
+  },
+  "similar.empty": {
+    tr: "Karşılaştırılacak benzer şirket bulunamadı.",
+    en: "No similar company to compare with.",
+    fr: "Aucune société comparable trouvée.",
+  },
+  "similar.score": { tr: "Benzerlik", en: "Similarity", fr: "Similarité" },
+  "similar.scoreTitle": {
+    tr: "Benzerlik puanı (0–100): 100, alt sektörü, büyüklüğü ve finansal profili aynı şirket demektir.",
+    en: "Similarity score (0–100): 100 means the same sub-sector, size and financial profile.",
+    fr: "Score de similarité (0–100) : 100 signifie même sous-secteur, même taille et même profil financier.",
+  },
+  "similar.why": { tr: "Neden:", en: "Why:", fr: "Pourquoi :" },
+  "similar.noReason": {
+    tr: "yakın bir gösterge yok, puanı düşük",
+    en: "no close figure, low score",
+    fr: "aucun indicateur proche, score faible",
+  },
+  "similar.reason.sameIndustry": { tr: "aynı alt sektör ({industry})", en: "same sub-sector ({industry})", fr: "même sous-secteur ({industry})" },
+  "similar.reason.sameSector": { tr: "aynı sektör ({sector})", en: "same sector ({sector})", fr: "même secteur ({sector})" },
+  "similar.reason.marketCap": { tr: "piyasa değeri benzer ({ratio})", en: "similar market cap ({ratio})", fr: "capitalisation comparable ({ratio})" },
+  "similar.reason.revenue": { tr: "satışları benzer ({ratio})", en: "similar revenue ({ratio})", fr: "chiffre d'affaires comparable ({ratio})" },
+  "similar.reason.close": { tr: "{metric} yakın ({peer} / {self})", en: "{metric} close ({peer} vs {self})", fr: "{metric} proche ({peer} / {self})" },
+  "similar.reasonTitle": {
+    tr: "Oran ve değerler: önce bu şirket, sonra {ticker}",
+    en: "Ratios and values: this company first, then {ticker}",
+    fr: "Rapports et valeurs : cette société d'abord, puis {ticker}",
+  },
+  "similar.metric.industry": { tr: "alt sektör", en: "sub-sector", fr: "sous-secteur" },
+  "similar.metric.market_cap": { tr: "piyasa değeri", en: "market cap", fr: "capitalisation" },
+  "similar.metric.revenue": { tr: "satışlar", en: "revenue", fr: "chiffre d'affaires" },
+  "similar.metric.ebitda_margin": { tr: "FAVÖK marjı", en: "EBITDA margin", fr: "marge d'EBITDA" },
+  "similar.metric.net_margin": { tr: "net marj", en: "net margin", fr: "marge nette" },
+  "similar.metric.roe": { tr: "ROE", en: "ROE", fr: "ROE" },
+  "similar.metric.debt_to_equity": { tr: "borç/özkaynak", en: "debt/equity", fr: "dette/fonds propres" },
+  "similar.metric.revenue_growth_yoy": { tr: "satış büyümesi", en: "revenue growth", fr: "croissance du CA" },
+  "similar.col.revenue": { tr: "Satışlar", en: "Revenue", fr: "CA" },
+  "similar.col.ebitdaMargin": { tr: "FAVÖK marjı", en: "EBITDA margin", fr: "Marge EBITDA" },
+  "similar.col.debtToEquity": { tr: "Borç/Özk.", en: "Debt/Eq.", fr: "Dette/FP" },
+  "similar.col.growth": { tr: "Satış büyümesi", en: "Rev. growth", fr: "Croiss. CA" },
+  "similar.unavailable": {
+    tr: "Bu hissenin değeri olmadığı için karşılaştırılmadı: {metrics}.",
+    en: "Not compared, as this stock has no value for: {metrics}.",
+    fr: "Non comparé, faute de valeur pour cette action : {metrics}.",
+  },
+  "similar.footer": {
+    tr: "Puan ağırlıkları: {weights}. Bir şirketin eksik verisi puan getirmez ama sıfır da sayılmaz; neden yalnızca iki şirketin de değeri varsa gösterilir. Alt sektör TradingView'dan, sektör KAP'tan; piyasa değeri, F/K ve PD/DD Hisse Tarama verisinden, satışlar ve oranlar son finansal tablolardan.",
+    en: "Score weights: {weights}. A company's missing figure earns no points but never counts as zero; a reason is shown only when both companies have the value. Sub-sector from TradingView, sector from KAP; market cap, P/E and P/B from the screener data, revenue and ratios from the latest financial statements.",
+    fr: "Pondérations du score : {weights}. Une donnée manquante ne rapporte aucun point mais n'est jamais comptée comme zéro ; une raison n'est affichée que si les deux sociétés ont la valeur. Sous-secteur de TradingView, secteur de KAP ; capitalisation, PER et C/VC des données du filtre, CA et ratios des derniers états financiers.",
+  },
 } satisfies Record<string, Entry>;
 
 export type StockKey = keyof typeof dict;

@@ -1,5 +1,18 @@
 # Değişiklik Günlüğü
 
+## Yayımlanmadı
+
+### Benzer şirketler: gerekçeli emsal seçimi
+
+Hisse sayfalarında (Genel Bakış, Temel Analiz, Kombine) sektör karşılaştırmasının altında yeni **Benzer şirketler** kartı. Kart, hisseye en çok benzeyen şirketleri benzerlik puanıyla (0–100) sıralar, değerlerini yan yana gösterir ve her seçimin nedenini yazar: "Neden: aynı alt sektör (Havayolları) · piyasa değeri benzer (1,2x) · FAVÖK marjı yakın (%22,0 / %20,0)".
+
+- **Aday havuzu:** aynı KAP sektörü ve aynı alt sektör (TradingView `industry`). Alt sektörde en az 3 başka şirket yoksa sektöre genişler, sektör de küçükse başka sektörlerdeki aynı alt sektör şirketleri eklenir. Kart genişlemeyi açıkça söyler.
+- **Puan:** alt sektör 30, piyasa değeri 20, net satışlar 15, FAVÖK marjı 10, borç/özkaynak 8, satış büyümesi 7, net marj 5, ROE 5. Büyüklükte oranın logaritması, marj ve büyümede puan farkı kullanılır. Eksik veri sıfır sayılmaz: hissenin değeri yoksa gösterge kimse için hesaba girmez (kartta yazılır); adayın değeri yoksa o göstergeden puan almaz. Neden yalnızca iki şirketin de değeri varsa gösterilir.
+- API: `GET /fundamentals/{ticker}/peers?limit=8` (1–20). Yanıt makineyle okunur nedenler (`same_industry`, `same_sector`, `similar_size`, `close_metric`) ile iki şirketin değerlerini, `weights`, `scope`/`fallback` ve `unavailable` alanlarını taşır. Metinler arayüzde Türkçe, İngilizce ve Fransızca kurulur.
+- Sektör anlık görüntüsü artık her şirketin TradingView alt sektörünü ve `financial_ratios.inputs_json` içindeki net satışları da okur (banka ve sigortada satış yok). Migration yok.
+
+Kod: `src/services/peer_service.py`, `dashboard/src/components/stock/SimilarCompaniesCard.tsx`, `peers.ts`; testler `tests/unit/test_peer_service.py`, `peers.test.ts`.
+
 ## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi

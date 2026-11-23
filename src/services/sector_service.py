@@ -10,8 +10,11 @@ Değerler, sitede aynı göstergenin gösterildiği kaynaktan gelir:
   F/K, PD/DD, temettü verimi, günlük değişim, 1H…1Y getiri, yabancı payı. Hisse sayfasındaki F/K
   ve PD/DD ile Hisse Tarama tablosu aynı değerleri gösterir.
 * Finansal oranlar — ``financial_ratios`` (KAP + İş Yatırım tablolarından son 12 ay; bankalarda
-  son yıllık): marjlar, ROE/ROA, cari oran, borçluluk, büyüme, F/S, FD/FAVÖK. Finansal oranlar
-  kartı aynı hesabı gösterir.
+  son yıllık): marjlar, ROE/ROA, cari oran, borçluluk, büyüme, F/S, FD/FAVÖK ve dönemin net
+  satışları (``inputs_json.flows.revenue``; banka ve sigortada yok). Finansal oranlar kartı aynı
+  hesabı gösterir.
+* Alt sektör — TradingView'ın ``industry`` alanı ("Airlines" / "Havayolları"); benzer şirket
+  seçimi (``peer_service``) bunu kullanır.
 
 "Ortalama" medyandır: F/K 400 ya da −%900 marj gibi uç değerler aritmetik ortalamayı anlamsız
 kılar. En az :data:`MIN_COMPANIES` şirketin değeri yoksa medyan verilmez. Çarpanlarda (F/K, PD/DD,
@@ -105,6 +108,8 @@ METRICS: dict[str, MetricRule] = {
     "net_income_growth_yoy": MetricRule("ratios"),
     "ps_ratio": MetricRule("ratios", positive=True),
     "ev_ebitda": MetricRule("ratios", positive=True),
+    # Net sales of the ratio row's period (TL; ``inputs_json.flows.revenue``, not for banks/insurers).
+    "revenue": MetricRule("ratios", positive=True),
 }
 MARKET_METRICS: tuple[str, ...] = tuple(name for name, rule in METRICS.items() if rule.source == "market")
 RATIO_METRICS: tuple[str, ...] = tuple(name for name, rule in METRICS.items() if rule.source == "ratios")
@@ -216,6 +221,10 @@ class SectorSnapshot:
     ratio_periods: dict[str, str]
     #: Market data time (ISO) or ``None`` when the scan failed.
     market_as_of: str | None
+    #: ticker → TradingView industry (English key, "Airlines"): the sub-sector peers are matched by.
+    industries: dict[str, str] = field(default_factory=dict)
+    #: TradingView industry key → Turkish label ("Airlines" → "Havayolları").
+    industry_labels: dict[str, str] = field(default_factory=dict)
     built_at: datetime = field(default_factory=utcnow)
 
 
@@ -225,6 +234,7 @@ def build_snapshot(
     ratio_periods: Mapping[str, str],
     market_rows: Sequence[Mapping[str, Any]],
     market_as_of: str | None = None,
+    industry_labels: Mapping[str, str] | None = None,
 ) -> SectorSnapshot:
     """Every sector's members, medians and samples from the listed stocks, their ratios and the scan rows."""
     market = {str(row.get("symbol") or "").upper(): row for row in market_rows if row.get("symbol")}
@@ -233,6 +243,7 @@ def build_snapshot(
     names: dict[str, str] = {}
     values: dict[str, dict[str, float]] = {}
     loss: set[str] = set()
+    industries: dict[str, str] = {}
     for stock in stocks:
         ticker = stock.ticker.upper()
         name = (stock.sector or "").strip()
@@ -257,6 +268,9 @@ def build_snapshot(
         values[ticker] = own
         if row.get("loss") is True:
             loss.add(ticker)
+        industry = row.get("industry")
+        if isinstance(industry, str) and industry.strip():
+            industries[ticker] = industry.strip()
 
     members_by_key: dict[str, list[str]] = defaultdict(list)
     for ticker, key in company_sector.items():
@@ -291,6 +305,10 @@ def build_snapshot(
         loss=loss,
         ratio_periods=dict(ratio_periods),
         market_as_of=market_as_of,
+        industries=industries,
+        industry_labels={
+            key: label for key, label in (industry_labels or {}).items() if isinstance(key, str) and isinstance(label, str)
+        },
     )
 
 
@@ -447,25 +465,29 @@ async def sector_snapshot() -> SectorSnapshot:
         logger.info("sectors_market_unavailable", error=failure[1])
         rows: list[Any] = []
         as_of: str | None = None
+        industry_labels: dict[str, str] = {}
     else:
         rows = [row for row in universe.get("rows") or [] if isinstance(row, dict)]
         as_of = universe.get("as_of")
+        labels = universe.get("industries")
+        industry_labels = labels if isinstance(labels, dict) else {}
     key = (db.loaded_at, as_of)
     if _memo is not None and _memo[0] == key and as_of is not None:
         return _memo[1]
-    snapshot = build_snapshot(db.stocks, db.ratios, db.ratio_periods, rows, as_of)
+    snapshot = build_snapshot(db.stocks, db.ratios, db.ratio_periods, rows, as_of, industry_labels)
     _memo = (key, snapshot)
     return snapshot
 
 
-def _meta(snapshot: SectorSnapshot) -> DataMeta:
+def snapshot_meta(snapshot: SectorSnapshot, method_note: str = _NOTE_METHOD) -> DataMeta:
+    """Provenance of a snapshot; ``method_note`` says how it was used (``peer_service`` passes its own)."""
     fetched = snapshot.built_at
     if snapshot.market_as_of:
         try:
             fetched = datetime.fromisoformat(snapshot.market_as_of)
         except ValueError:
             pass
-    notes = [_NOTE_METHOD] + ([] if snapshot.market_as_of else [_NOTE_MARKET_DOWN])
+    notes = [method_note] + ([] if snapshot.market_as_of else [_NOTE_MARKET_DOWN])
     return DataMeta(
         source=SOURCE,
         fetched_at=fetched,
@@ -480,12 +502,12 @@ def _meta(snapshot: SectorSnapshot) -> DataMeta:
 
 async def get_company_sector_view(ticker: str) -> dict[str, Any]:
     snapshot = await sector_snapshot()
-    return with_meta(company_view(snapshot, ticker), _meta(snapshot))
+    return with_meta(company_view(snapshot, ticker), snapshot_meta(snapshot))
 
 
 async def get_sectors_view() -> dict[str, Any]:
     snapshot = await sector_snapshot()
-    return with_meta(sectors_view(snapshot), _meta(snapshot))
+    return with_meta(sectors_view(snapshot), snapshot_meta(snapshot))
 
 
 async def annotate_universe(payload: dict[str, Any]) -> dict[str, Any]:
@@ -520,5 +542,6 @@ __all__ = [
     "sector_key",
     "sector_snapshot",
     "sectors_view",
+    "snapshot_meta",
     "since_period",
 ]
