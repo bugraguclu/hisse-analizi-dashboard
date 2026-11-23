@@ -22,6 +22,11 @@ _RETRY_DELAY_SECONDS = 1.0
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
+def _thinks_by_default(model: str) -> bool:
+    """NVIDIA Nemotron chat models think unless `enable_thinking` is false."""
+    return "nemotron" in model.lower()
+
+
 class LLMError(Exception):
     """Provider failure, with a stable ``code`` for the client (never the provider's text)."""
 
@@ -151,6 +156,11 @@ class OpenAICompatibleChat:
         if tools:
             body["tools"] = list(tools)
             body["tool_choice"] = "auto"
+        if _thinks_by_default(self.model):
+            # Nemotron reasons before answering unless told not to: slower, and
+            # short or tool-calling turns can come back empty. A system prompt
+            # ("/no_think") or reasoning_effort does not switch it off; this does.
+            body["chat_template_kwargs"] = {"enable_thinking": False}
         for attempt in range(1, _ATTEMPTS + 1):
             acc = _Accumulator()
             try:

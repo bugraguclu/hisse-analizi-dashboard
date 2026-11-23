@@ -514,6 +514,24 @@ async def test_llm_client_streams_text_and_assembles_tool_calls() -> None:
     assert seen["auth"] == "Bearer k"
 
 
+@pytest.mark.parametrize(("model", "off"), [("nvidia/nemotron-3-ultra-550b-a55b", True), ("meta/llama-3.3-70b-instruct", False)])
+async def test_llm_client_turns_nemotron_thinking_off(model: str, off: bool) -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        body = _sse_body([{"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}])
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    client = OpenAICompatibleChat(api_key="k", base_url="https://llm.test/v1", model=model, timeout_seconds=5,
+                                  max_tokens=10, transport=httpx.MockTransport(handler))
+    _ = [item async for item in client.stream_chat([{"role": "user", "content": "x"}], None)]
+    # Other providers may reject the unknown field, so it is only sent to Nemotron.
+    assert ("chat_template_kwargs" in seen["body"]) is off
+    if off:
+        assert seen["body"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
 @pytest.mark.parametrize(
     ("status", "code", "attempts"),
     [(401, "llm_auth", 1), (429, "llm_busy", 2), (500, "llm_unavailable", 2), (400, "llm_bad_request", 1)],
