@@ -22,6 +22,7 @@ import {
   CALENDAR_COUNTRIES_STORAGE_KEY,
   CHART_PREF_KEYS,
   COST_STORAGE_PREFIX,
+  CUSTOM_PAGES_STORAGE_KEY,
   DRAWINGS_STORAGE_PREFIX,
   LOCAL_STORE_META_KEY,
   LOCALE_STORAGE_KEY,
@@ -29,6 +30,7 @@ import {
   MAX_BACKUP_BYTES,
   THEME_STORAGE_KEY,
   WATCHLISTS_STORAGE_KEY,
+  WIDGET_LAYOUTS_STORAGE_KEY,
   WORKSPACE_BACKUP_FORMAT,
   WORKSPACE_LIMITS,
   WORKSPACE_SCHEMA_VERSION,
@@ -45,11 +47,13 @@ import {
   sanitizeStoredLayout,
   sanitizeThemeValue,
   sanitizeWatchlists,
+  sanitizeWidgetStore,
   type LocalStoreMeta,
   type StoredWorkspaceLayout,
   type ThemePreference,
   type WorkspaceData,
   type WorkspacePreferences,
+  type WidgetStoreData,
   type WorkspaceSnapshot,
 } from "./schema.ts";
 import {
@@ -79,7 +83,8 @@ export type BackupValidationErrorCode =
   | "invalid-chart-prefs"
   | "invalid-drawings"
   | "invalid-costs"
-  | "invalid-preferences";
+  | "invalid-preferences"
+  | "invalid-widgets";
 
 export interface BackupCounts {
   watchlists: number;
@@ -90,6 +95,8 @@ export interface BackupCounts {
   drawings: number;
   costs: number;
   preferences: number;
+  /** The visitor's own pages ("Sayfalarım"). */
+  customPages: number;
 }
 
 export interface BackupPreview {
@@ -98,6 +105,7 @@ export interface BackupPreview {
   counts: BackupCounts;
   watchlistNames: string[];
   layoutPages: string[];
+  customPageNames: string[];
   hasChanges: boolean;
   warnings: string[];
 }
@@ -154,20 +162,27 @@ export function summarizeWorkspaceData(data: WorkspaceData, exportedAt: string |
     data.preferences.theme !== undefined,
   ].filter(Boolean).length;
 
+  const widgetLayoutPages = Object.keys(data.widgets?.layouts ?? {}).filter((key) => key !== "workspaceMigrated");
+  const customPages = data.widgets?.pages ?? [];
+  // A page customised in both the old card editor and the widget editor counts once.
+  const layoutPages = [...new Set([...Object.keys(data.layouts).map(layoutPageLabel), ...widgetLayoutPages])].sort();
+
   const counts: BackupCounts = {
     watchlists: data.watchlists.length,
     tickers: tickerCount,
-    layouts: Object.keys(data.layouts).length,
+    layouts: layoutPages.length,
     chartPrefs: Object.keys(data.chartPrefs).length,
     drawingSymbols: drawingEntries.length,
     drawings: drawingCount,
     costs: Object.keys(data.costs).length,
     preferences: prefCount,
+    customPages: customPages.length,
   };
 
   const hasChanges =
     counts.watchlists > 0 ||
     counts.layouts > 0 ||
+    counts.customPages > 0 ||
     counts.chartPrefs > 0 ||
     counts.drawings > 0 ||
     counts.costs > 0 ||
@@ -178,7 +193,8 @@ export function summarizeWorkspaceData(data: WorkspaceData, exportedAt: string |
     version,
     counts,
     watchlistNames: data.watchlists.map((w) => w.name || w.id),
-    layoutPages: Object.keys(data.layouts).map(layoutPageLabel).sort(),
+    layoutPages,
+    customPageNames: customPages.map((page) => (typeof page.name === "string" && page.name.trim() ? page.name.trim() : String(page.id))),
     hasChanges,
     warnings,
   };
@@ -341,7 +357,21 @@ export function validateWorkspaceBackup(rawContents: string): BackupValidationRe
       ? parsed.exportedAt
       : null;
 
-  const data: WorkspaceData = { watchlists, layouts, chartPrefs, drawings, costs, preferences };
+  // 7. Widget system
+  let widgets: WidgetStoreData | undefined;
+  if (rawData.widgets !== undefined) {
+    const clean = sanitizeWidgetStore(rawData.widgets);
+    if (!clean) return { valid: false, reason: "invalid-widgets" };
+    if (clean.dropped > 0) warnings.push(`widgets:${clean.dropped}`);
+    if (clean.layouts || clean.pages) {
+      widgets = {
+        ...(clean.layouts ? { layouts: clean.layouts } : {}),
+        ...(clean.pages ? { pages: clean.pages } : {}),
+      };
+    }
+  }
+
+  const data: WorkspaceData = { watchlists, layouts, chartPrefs, drawings, costs, preferences, ...(widgets ? { widgets } : {}) };
   const snapshot: WorkspaceSnapshot = {
     format: WORKSPACE_BACKUP_FORMAT,
     version: WORKSPACE_SCHEMA_VERSION,
@@ -361,6 +391,8 @@ function isPersonalStorageKey(key: string): boolean {
   return (
     key === WATCHLISTS_STORAGE_KEY ||
     key === LOCAL_STORE_META_KEY ||
+    key === WIDGET_LAYOUTS_STORAGE_KEY ||
+    key === CUSTOM_PAGES_STORAGE_KEY ||
     isAllowedLayoutKey(key) ||
     isKnownChartPrefKey(key) ||
     key.startsWith(DRAWINGS_STORAGE_PREFIX) ||
@@ -428,6 +460,10 @@ function writeWorkspaceData(
   for (const [key, layout] of Object.entries(data.layouts)) {
     storage.setItem(key, JSON.stringify(layout));
   }
+
+  // 2b. Widget system
+  if (data.widgets?.layouts) storage.setItem(WIDGET_LAYOUTS_STORAGE_KEY, JSON.stringify(data.widgets.layouts));
+  if (data.widgets?.pages) storage.setItem(CUSTOM_PAGES_STORAGE_KEY, JSON.stringify(data.widgets.pages));
 
   // 3. Chart prefs
   for (const key of CHART_PREF_KEYS) {

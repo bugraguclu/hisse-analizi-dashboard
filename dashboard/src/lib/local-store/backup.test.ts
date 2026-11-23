@@ -14,6 +14,7 @@ import { createMemoryArchiveStore } from "./idb.ts";
 import {
   CALENDAR_COUNTRIES_STORAGE_KEY,
   COST_STORAGE_PREFIX,
+  CUSTOM_PAGES_STORAGE_KEY,
   DRAWINGS_STORAGE_PREFIX,
   HOME_LAYOUT_STORAGE_KEY,
   LOCAL_STORE_META_KEY,
@@ -22,6 +23,7 @@ import {
   MAX_BACKUP_BYTES,
   THEME_STORAGE_KEY,
   WATCHLISTS_STORAGE_KEY,
+  WIDGET_LAYOUTS_STORAGE_KEY,
   WORKSPACE_BACKUP_FORMAT,
   WORKSPACE_SCHEMA_VERSION,
   migrateLocalStorage,
@@ -344,5 +346,81 @@ describe("export / import / rollback", () => {
     assert.equal(result.error, "QuotaExceededError");
     // Original state must be intact after automatic compensating rollback
     assert.deepEqual(readWorkspaceData(base), original);
+  });
+});
+
+describe("widget system (Sayfalarım) in backups", () => {
+  const widgetLayouts = {
+    workspaceMigrated: true,
+    home: { rows: [{ id: "r1", columns: [{ id: "c1", width: 12, widgets: [{ id: "w1", type: "market.index" }] }] }] },
+  };
+  const customPages = [
+    { id: "p-bank", name: "Bankalar", ticker: "GARAN", layout: { rows: [] } },
+    { id: "p-div", name: "Temettü Takibi", ticker: "TUPRS", layout: { rows: [] } },
+  ];
+
+  function widgetStorage(): StorageAdapter {
+    const storage = populatedStorage();
+    storage.setItem(WIDGET_LAYOUTS_STORAGE_KEY, JSON.stringify(widgetLayouts));
+    storage.setItem(CUSTOM_PAGES_STORAGE_KEY, JSON.stringify(customPages));
+    return storage;
+  }
+
+  test("exports custom pages and widget layouts and counts them in the preview", () => {
+    const exported = exportWorkspaceBackup(widgetStorage(), { now: new Date("2026-11-23T10:00:00Z") });
+    assert.deepEqual(exported.snapshot.data.widgets?.pages, customPages);
+    assert.deepEqual(exported.snapshot.data.widgets?.layouts, widgetLayouts);
+    assert.equal(exported.preview.counts.customPages, 2);
+    assert.deepEqual(exported.preview.customPageNames, ["Bankalar", "Temettü Takibi"]);
+    // "home" is customised in both the old and the new editor: listed once.
+    assert.equal(exported.preview.layoutPages.filter((page) => page === "home").length, 1);
+  });
+
+  test("restores custom pages into a clean browser and replaces existing ones", async () => {
+    const exported = exportWorkspaceBackup(widgetStorage(), { now: new Date("2026-11-23T10:00:00Z") });
+    const target = createMemoryStorage({
+      [CUSTOM_PAGES_STORAGE_KEY]: JSON.stringify([{ id: "p-old", name: "Eski", ticker: "THYAO", layout: { rows: [] } }]),
+    });
+    const imported = await importWorkspaceBackup(exported.json, { storage: target, archive: createMemoryArchiveStore() });
+    assert.equal(imported.ok, true);
+    assert.deepEqual(JSON.parse(target.getItem(CUSTOM_PAGES_STORAGE_KEY) ?? "null"), customPages);
+    assert.deepEqual(JSON.parse(target.getItem(WIDGET_LAYOUTS_STORAGE_KEY) ?? "null"), widgetLayouts);
+  });
+
+  test("a restore point rolls custom pages back exactly", async () => {
+    const storage = widgetStorage();
+    const archive = createMemoryArchiveStore();
+    const replacement = exportWorkspaceBackup(populatedStorage(), { now: new Date("2026-11-23T10:00:00Z") });
+    const imported = await importWorkspaceBackup(replacement.json, { storage, archive });
+    assert.equal(storage.getItem(CUSTOM_PAGES_STORAGE_KEY), null);
+    assert.ok(imported.preRestoreId);
+    await restoreFromArchive(imported.preRestoreId, { storage, archive });
+    assert.deepEqual(JSON.parse(storage.getItem(CUSTOM_PAGES_STORAGE_KEY) ?? "null"), customPages);
+  });
+
+  test("backups written before the widget system still validate", () => {
+    const legacy = exportWorkspaceBackup(populatedStorage(), { now: new Date("2026-11-23T10:00:00Z") });
+    assert.equal(legacy.snapshot.data.widgets, undefined);
+    const result = validateWorkspaceBackup(legacy.json);
+    assert.equal(result.valid, true);
+    if (result.valid) assert.equal(result.preview.counts.customPages, 0);
+  });
+
+  test("rejects a malformed widget payload and drops pages with bad ids", () => {
+    const base = { format: WORKSPACE_BACKUP_FORMAT, version: WORKSPACE_SCHEMA_VERSION, exportedAt: "2026-11-23T10:00:00Z" };
+    const tooMany = Array.from({ length: 13 }, (_, i) => ({ id: `p${i}`, name: `S${i}`, ticker: "THYAO", layout: { rows: [] } }));
+    for (const widgets of [[], { pages: {} }, { layouts: [] }, { pages: tooMany }]) {
+      const result = validateWorkspaceBackup(JSON.stringify({ ...base, data: { widgets } }));
+      assert.equal(result.valid, false, JSON.stringify(widgets).slice(0, 40));
+      if (!result.valid) assert.equal(result.reason, "invalid-widgets");
+    }
+    const mixed = validateWorkspaceBackup(
+      JSON.stringify({ ...base, data: { widgets: { pages: [{ id: "bad id!" }, customPages[0], customPages[0]] } } }),
+    );
+    assert.equal(mixed.valid, true);
+    if (mixed.valid) {
+      assert.deepEqual(mixed.snapshot.data.widgets?.pages, [customPages[0]]);
+      assert.ok(mixed.preview.warnings.includes("widgets:2"));
+    }
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
@@ -17,7 +18,6 @@ import type { EventOut } from "@/types";
 import { usePanel } from "@/components/workspace/panel";
 import { CardBody, CardHeading, DashboardCard, RowSkeleton } from "./ui";
 
-const HEADING_ID = "latest-events-heading";
 /** Rows shown in the card's default place; in a layout slot the whole feed is there to scroll. */
 const MAX_ITEMS = 6;
 
@@ -33,6 +33,7 @@ function eventTime(event: EventOut): Date | null {
 }
 
 export function LatestEventsCard({ className }: { className?: string }) {
+  const headingId = useId();
   const { t } = useLocale();
   const now = useNow();
   const disconnected = useIsDisconnected();
@@ -127,9 +128,9 @@ export function LatestEventsCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className} entranceOrder={3}>
+    <DashboardCard labelledBy={headingId} className={className} entranceOrder={3}>
       <CardHeading
-        id={HEADING_ID}
+        id={headingId}
         title={
           <span className="flex items-baseline gap-2">
             {t("dashboard.latestDevelopments")}

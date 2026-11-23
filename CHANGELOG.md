@@ -1,5 +1,25 @@
 # Değişiklik Günlüğü
 
+## Yayımlanmamış
+
+### Kişiselleştirilebilir sayfalar ve "Sayfalarım"
+
+Piyasa Özeti, Makro ve hisse sayfaları widget düzenleyicisini kullanır. Önceki düzenleyicide kaydedilmiş kartlar ilk açılışta yeni satır ve sütun düzenine aktarılır. Kartların sırası ve boyutları yeni ızgaraya uyarlanır.
+
+**Düzenle** (Piyasa, Hisse sayfalarının dördü, Makro):
+- Kartı sürükleyip bırakın: bir sütunun içine (üstüne/altına), bir sütunun yanına (yeni sütun) ya da iki satırın arasına (yeni satır). Nereye düşeceğini mavi bir çizgi gösterir; ekranın kenarına gelince sayfa kayar; Esc vazgeçer.
+- Sütunun sağ kenarını sürükleyerek genişlik (12 sütunluk ızgarada; dolu satırda iki sütunun arasındaki ayraç gibi), kartın alt kenarını sürükleyerek yükseklik. Çift tıklama yüksekliği otomatiğe döndürür. Grafik kartlarında grafik yeni yüksekliğe sığacak şekilde büyür ya da küçülür.
+- Kart menüsü: genişlik (çeyrek, üçte bir, yarım, üçte iki, dörtte üç, tam genişlik — tam genişlik yalnızca o kartı kendi satırına alır), yükseklik, taşı, ayarlar (görünüm, kompakt, kartın izlediği hisse) ve kaldır. Tutamak seçiliyken ok tuşları da kartı taşır.
+- Taşı (yukarı/aşağı/sola/sağa): kart sütunundaki sırasını değiştirir; sütunun ucuna gelince üst ya da alt satırdaki en yakın sütuna katılır, satırda yalnızsa yanında yer varsa o satıra geçer. Sola/sağa komşu sütunla yer değiştirir ya da komşu sütuna katılır. Ayrılan bir kart aynı tuşlarla eski yerine dönebilir. Telefonda kartlar bu menüyle yerleştirilir.
+- Satırdaki boş alanda ve sayfanın sonunda "+": widget galerisi (35 widget; sayfalardaki kart başlıklarıyla da aranır, ör. "bilanço", "destek"). Geri al / yinele (⌘Z, ⇧⌘Z), varsayılana dön; bir kartı kaldırınca çıkan bildirimdeki "Geri al" yalnızca o kartı geri getirir.
+- Düzenler bu tarayıcıda saklanır; hisse sayfasının düzeni her hisse için geçerli. Bütün kartlarını kaldırdığınız sayfa boş kalır, varsayılan düzen geri gelmez. Kişiselleştirdiğiniz bir sayfa açılırken önce varsayılan düzen görünüp sonra sizinkine dönüşmez: düzeniniz yüklenene kadar kart iskeletleri görünür. Telefonda kartlar tek sütunda, Piyasa sayfasında masaüstündeki sırayla (BIST 100, Takip Listesi, Piyasa genişliği, Son Gelişmeler).
+
+**Sayfalarım** (`/sayfalarim`): kendi sayfalarınız (en fazla 12). Boş sayfa ya da şablon (hisse özeti, temel, teknik, temettü ve bilanço, piyasa özeti, makro). Her sayfanın bir hissesi var; tek tek kartlar başka bir hisseyi izleyebilir ("GARAN için"); yalnızca Borsa İstanbul'da işlem gören kodlar seçilebilir. Yeniden adlandırma, çoğaltma, silme (geri alınabilir). Başlık ve not widget'ları; Makro sayfasının bölüm bağlantıları başlıklardan gelir.
+
+**Yedek:** "Çalışma alanı ve yedek" penceresindeki JSON yedeği ve geri yükleme noktaları kişisel sayfaları ve widget düzenlerini de içerir; geri yüklenen sayfalar yenilemeden görünür. Bu özellikten önce alınmış yedekler geçerliliğini korur. Düzenler cihazlar arasında kendiliğinden eşitlenmez; başka bir tarayıcıya yedek dosyasıyla taşınır.
+
+Kod: `dashboard/src/components/widgets/` — düzen işlemleri (`model.ts`) ve bırakma hedefi (`drop.ts`) saf fonksiyonlar, `npm test` testleri.
+
 ## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi

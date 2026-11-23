@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Columns2, Globe, LayoutDashboard, Newspaper, Search, type LucideIcon } from "lucide-react";
+import { BarChart3, BookOpen, Columns2, Globe, LayoutDashboard, LayoutGrid, Newspaper, Search, type LucideIcon } from "lucide-react";
 import type { TranslationKey } from "@/lib/i18n";
 
 /** Ticker used by stock-level nav items when the URL has none. */
@@ -20,6 +20,7 @@ export const SECTION_LABELS: Readonly<Record<string, TranslationKey>> = {
   atlas: "nav.atlas",
   endeks: "nav.indices",
   sektor: "nav.sectors",
+  sayfalarim: "nav.myPages",
 };
 
 export interface NavItem {
@@ -62,6 +63,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: () => "/atlas",
     isActive: (p) => /^\/(atlas|endeks|sektor)(\/|$)/.test(p),
   },
+  { key: "pages", labelKey: "nav.myPages", shortLabelKey: "nav.short.myPages", icon: LayoutGrid, href: () => "/sayfalarim", isActive: (p) => p.startsWith("/sayfalarim") },
 ];
 
 function safeDecode(value: string): string {

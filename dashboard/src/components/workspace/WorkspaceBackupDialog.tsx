@@ -468,6 +468,11 @@ export function WorkspaceBackupDialog() {
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
                     <dd className="font-mono font-medium text-foreground">
+                      {t("workspace.statCustomPages", { count: currentSummary.counts.customPages })}
+                    </dd>
+                  </div>
+                  <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
+                    <dd className="font-mono font-medium text-foreground">
                       {t("workspace.statCharts", { count: currentSummary.counts.chartPrefs })}
                     </dd>
                   </div>
@@ -567,6 +572,7 @@ export function WorkspaceBackupDialog() {
                       })}
                     </li>
                     <li>{t("workspace.statLayouts", { count: pendingImport.preview.counts.layouts })}</li>
+                    <li>{t("workspace.statCustomPages", { count: pendingImport.preview.counts.customPages })}</li>
                     <li>{t("workspace.statCharts", { count: pendingImport.preview.counts.chartPrefs })}</li>
                     <li>
                       {t("workspace.statDrawings", {

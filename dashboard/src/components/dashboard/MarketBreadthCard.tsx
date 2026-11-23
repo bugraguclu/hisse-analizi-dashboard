@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
 import { formatMarketDate, formatNumber, toFiniteNumber } from "@/lib/format";
@@ -14,7 +14,6 @@ import { useCompanies, useScreenerRows } from "./queries";
 import { usePanelSize } from "@/components/workspace/panel";
 import { CardBody, CardHeading, ChangePill, DashboardCard, GroupLabel, RowSkeleton } from "./ui";
 
-const HEADING_ID = "breadth-heading";
 /** Movers per list in the card's default place; in a layout slot both lists grow with the card. */
 const MOVER_COUNT = 5;
 const MOVER_ROW_HEIGHT = 26;
@@ -132,6 +131,7 @@ function MoverList({ title, movers, href }: { title: string; movers: Mover[]; hr
 }
 
 export function MarketBreadthCard({ className }: { className?: string }) {
+  const headingId = useId();
   const { t } = useLocale();
   const screenerQ = useScreenerRows();
   const companiesQ = useCompanies();
@@ -236,9 +236,9 @@ export function MarketBreadthCard({ className }: { className?: string }) {
   }
 
   return (
-    <DashboardCard labelledBy={HEADING_ID} className={className} entranceOrder={2}>
+    <DashboardCard labelledBy={headingId} className={className} entranceOrder={2}>
       <CardHeading
-        id={HEADING_ID}
+        id={headingId}
         className="border-b-0 pb-2"
         title={t("dashboard.breadth")}
         subtitle={breadth ? t(breadth.scope === "bist100" ? "dashboard.universeBist100" : "dashboard.universeAll") : undefined}

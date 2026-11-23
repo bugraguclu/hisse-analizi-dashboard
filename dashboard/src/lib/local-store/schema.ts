@@ -27,6 +27,9 @@ export const CALENDAR_COUNTRIES_STORAGE_KEY = "hisse.calendar.countries";
 export const MARKET_STRIP_PAUSED_STORAGE_KEY = "hisse.marketStrip.paused";
 export const LOCALE_STORAGE_KEY = "locale";
 export const THEME_STORAGE_KEY = "theme";
+/** Widget system: customised site pages ({ [page]: Layout }) and the visitor's own pages. */
+export const WIDGET_LAYOUTS_STORAGE_KEY = "hisse.layouts.v1";
+export const CUSTOM_PAGES_STORAGE_KEY = "hisse.pages.v1";
 
 export const CHART_PREF_KEYS = [
   "hisse.chart.index.v2",
@@ -63,7 +66,21 @@ export interface WorkspacePreferences {
   theme?: ThemePreference;
 }
 
+/**
+ * Widget-system state. Kept structurally checked but otherwise opaque here: the
+ * widget store (components/widgets/store.ts) sanitises both values on every read,
+ * so a restored entry can never put an invalid layout on screen.
+ */
+export interface WidgetStoreData {
+  /** `{ [builtInPage]: Layout }` plus the `workspaceMigrated` flag. */
+  layouts?: Record<string, unknown>;
+  /** `[{ id, name, ticker, layout }]`, at most MAX_CUSTOM_PAGES. */
+  pages?: Record<string, unknown>[];
+}
+
 export interface WorkspaceData {
+  /** Optional so backups written before the widget system still validate. */
+  widgets?: WidgetStoreData;
   watchlists: WatchlistRecord[];
   layouts: Record<string, StoredWorkspaceLayout>;
   chartPrefs: Record<string, Partial<ChartPrefs>>;
@@ -98,6 +115,9 @@ const MAX_GRID_ROWS = 1024;
 const MAX_INDICATORS = 12;
 const MAX_DRAWINGS_PER_SYMBOL = 200;
 const MAX_DRAWING_SYMBOLS = 200;
+const MAX_CUSTOM_PAGES = 12;
+const MAX_WIDGET_LAYOUT_PAGES = 32;
+const PAGE_ID_RE = /^[\w-]{1,64}$/;
 const MAX_COST_SYMBOLS = 200;
 const MAX_CALENDAR_COUNTRIES = 16;
 
@@ -531,7 +551,69 @@ export function readWorkspaceData(storage: StorageAdapter): WorkspaceData {
   const theme = sanitizeThemeValue(storage.getItem(THEME_STORAGE_KEY));
   if (theme) preferences.theme = theme;
 
-  return { watchlists, layouts, chartPrefs, drawings, costs, preferences };
+  // 7. Widget system (customised site pages and the visitor's own pages)
+  // Each key is checked on its own so one corrupt entry doesn't drop the other.
+  const widgetLayouts = sanitizeWidgetStore({ layouts: parseJson(storage.getItem(WIDGET_LAYOUTS_STORAGE_KEY)) })?.layouts;
+  const widgetPages = sanitizeWidgetStore({ pages: parseJson(storage.getItem(CUSTOM_PAGES_STORAGE_KEY)) })?.pages;
+  const widgets: WidgetStoreData = {
+    ...(widgetLayouts ? { layouts: widgetLayouts } : {}),
+    ...(widgetPages ? { pages: widgetPages } : {}),
+  };
+
+  return {
+    watchlists,
+    layouts,
+    chartPrefs,
+    drawings,
+    costs,
+    preferences,
+    ...(widgets.layouts || widgets.pages ? { widgets } : {}),
+  };
+}
+
+/**
+ * Structural check of the widget-system payload. Returns null when its shape is
+ * wrong (so a backup can be rejected); entries with a bad id are dropped.
+ */
+export function sanitizeWidgetStore(raw: unknown): { layouts?: Record<string, unknown>; pages?: Record<string, unknown>[]; dropped: number } | null {
+  if (raw === undefined || raw === null) return { dropped: 0 };
+  if (!isPlainRecord(raw)) return null;
+  let dropped = 0;
+  const out: { layouts?: Record<string, unknown>; pages?: Record<string, unknown>[]; dropped: number } = { dropped: 0 };
+  if (raw.layouts !== undefined && raw.layouts !== null) {
+    if (!isPlainRecord(raw.layouts)) return null;
+    const entries = Object.entries(raw.layouts);
+    if (entries.length > MAX_WIDGET_LAYOUT_PAGES + 1) return null;
+    const layouts: Record<string, unknown> = {};
+    for (const [key, value] of entries) {
+      if (key === "workspaceMigrated") {
+        if (value === true) layouts[key] = true;
+        continue;
+      }
+      if (!/^[a-z][\w.-]{0,63}$/.test(key) || !isPlainRecord(value) || !Array.isArray(value.rows)) {
+        dropped += 1;
+        continue;
+      }
+      layouts[key] = value;
+    }
+    if (Object.keys(layouts).length > 0) out.layouts = layouts;
+  }
+  if (raw.pages !== undefined && raw.pages !== null) {
+    if (!Array.isArray(raw.pages) || raw.pages.length > MAX_CUSTOM_PAGES) return null;
+    const pages: Record<string, unknown>[] = [];
+    const seen = new Set<string>();
+    for (const page of raw.pages) {
+      if (!isPlainRecord(page) || typeof page.id !== "string" || !PAGE_ID_RE.test(page.id) || seen.has(page.id)) {
+        dropped += 1;
+        continue;
+      }
+      seen.add(page.id);
+      pages.push(page);
+    }
+    if (pages.length > 0) out.pages = pages;
+  }
+  out.dropped = dropped;
+  return out;
 }
 
 export interface MigrationResult {

@@ -6,6 +6,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from "lucide-react";
 import { PANEL_CONTENT, TRANSIENT, usePanel, usePanelBody } from "@/components/workspace/panel";
 import { formatChangePercent, formatSigned, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSectionHeadingLevel } from "@/components/stock/heading-level";
 import { staggerDelay } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -85,12 +86,14 @@ export function CardHeading({
   action?: ReactNode;
   className?: string;
 }) {
+  // h3 under a heading the visitor placed above the card (or a custom page's section).
+  const Heading = useSectionHeadingLevel() === 3 ? "h3" : "h2";
   return (
     <div className={cn("flex shrink-0 items-baseline justify-between gap-3 border-b border-border px-4 py-3", className)}>
       <div className="min-w-0">
-        <h2 id={id} className="text-[13px] font-semibold text-foreground">
+        <Heading id={id} className="text-[13px] font-semibold text-foreground">
           {title}
-        </h2>
+        </Heading>
         {subtitle && <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>}
       </div>
       {action && <div className="shrink-0 text-xs">{action}</div>}

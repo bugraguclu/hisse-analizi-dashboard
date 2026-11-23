@@ -36,6 +36,7 @@ const translations = {
   "nav.atlas": { tr: "Kavram Atlası", en: "Concept Atlas", fr: "Atlas des concepts" },
   "nav.indices": { tr: "BIST Endeksleri", en: "BIST Indices", fr: "Indices BIST" },
   "nav.sectors": { tr: "KAP Sektörleri", en: "KAP Sectors", fr: "Secteurs KAP" },
+  "nav.myPages": { tr: "Sayfalarım", en: "My Pages", fr: "Mes pages" },
 
   // Dashboard
   "dashboard.marketOverview": { tr: "Piyasa Özeti", en: "Market Overview", fr: "Aperçu du marché" },
@@ -184,6 +185,7 @@ const translations = {
     en: "The previous deployment's files for this screen are no longer on the server. Reload the page to load the latest version.",
     fr: "Les fichiers d'une ancienne version de cet écran ne sont plus disponibles. Rechargez la page pour charger la dernière version.",
   },
+  "nav.short.myPages": { tr: "Sayfalarım", en: "My pages", fr: "Mes pages" },
   // The one site-wide disclaimer (components/layout/LegalNotice.tsx); cards carry none of their own.
   "legal.title": { tr: "Yasal uyarı", en: "Legal notice", fr: "Avertissement" },
   "legal.body": {
@@ -354,6 +356,7 @@ const translations = {
   "workspace.currentHint": { tr: "Takip listeleri, kart düzenleri, grafik ayarları, çizimler ve ortalama maliyetler bu tarayıcıda saklanır.", en: "Watchlists, card layouts, chart settings, drawings and average costs are stored in this browser.", fr: "Listes de suivi, dispositions, réglages de graphiques, tracés et coûts moyens sont enregistrés dans ce navigateur." },
   "workspace.statWatchlists": { tr: "{count} liste ({tickers} hisse)", en: "{count} lists ({tickers} stocks)", fr: "{count} listes ({tickers} actions)" },
   "workspace.statLayouts": { tr: "{count} sayfa düzeni", en: "{count} page layouts", fr: "{count} dispositions" },
+  "workspace.statCustomPages": { tr: "{count} kişisel sayfa", en: "{count} custom pages", fr: "{count} pages personnelles" },
   "workspace.statCharts": { tr: "{count} grafik profili", en: "{count} chart presets", fr: "{count} profils de graphique" },
   "workspace.statDrawings": { tr: "{count} çizim ({symbols} hisse)", en: "{count} drawings ({symbols} stocks)", fr: "{count} tracés ({symbols} actions)" },
   "workspace.statCosts": { tr: "{count} maliyet kaydı", en: "{count} cost entries", fr: "{count} coûts moyens" },

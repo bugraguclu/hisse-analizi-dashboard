@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, Plus, Trash2, WifiOff, X } from "lucide-react";
@@ -21,9 +21,9 @@ import { DEFAULT_WATCHLIST_ID, useWatchlists, type Watchlist, type WatchlistUndo
 import { useCompanies } from "./queries";
 import { CardBody, CardHeading, ChangePill, DashboardCard } from "./ui";
 
-const HEADING_ID = "watchlist-heading";
 
 export function WatchlistCard({ className }: { className?: string }) {
+  const headingId = useId();
   const { t } = useLocale();
   const { openWorkspaceManager } = useShell();
   const { lists, createList, deleteList, addTicker, removeTicker, undoChange } = useWatchlists();
@@ -110,9 +110,9 @@ export function WatchlistCard({ className }: { className?: string }) {
 
   return (
     // overflow-visible: the add-stock search dropdown must not be clipped by the card.
-    <DashboardCard labelledBy={HEADING_ID} className={cn("overflow-visible", className)} entranceOrder={1}>
+    <DashboardCard labelledBy={headingId} className={cn("overflow-visible", className)} entranceOrder={1}>
       <CardHeading
-        id={HEADING_ID}
+        id={headingId}
         title={t("dashboard.watchlist")}
         action={
           <div className="flex items-center gap-3">

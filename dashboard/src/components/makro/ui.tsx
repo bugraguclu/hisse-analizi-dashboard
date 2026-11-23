@@ -7,41 +7,9 @@ import { isApiError } from "@/lib/api";
 import { formatChangePercent, TREND_TEXT_CLASS, trendTone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
-import { DEFAULT_LAYOUT_ONLY, TileGroup } from "@/components/workspace/Workspace";
 import { TRANSIENT, usePanel } from "@/components/workspace/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMakroI18n, type MakroKey } from "./i18n";
-
-// ---------------------------------------------------------------------------
-// Page structure
-// ---------------------------------------------------------------------------
-
-/**
- * One titled block of the page ("Para politikası", "Enflasyon" …) with an anchor id.
- * It groups the tiles of the page's default layout; once the visitor arranges the
- * cards themselves the heading goes and the tiles stand on their own.
- */
-export function MacroSection({
-  id,
-  title,
-  children,
-  className,
-}: {
-  id: string;
-  title: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  const headingId = `${id}-title`;
-  return (
-    <TileGroup as="section" id={id} aria-labelledby={headingId} className={cn("scroll-mt-24 space-y-3", className)}>
-      <h2 id={headingId} {...DEFAULT_LAYOUT_ONLY} className="text-[15px] font-semibold tracking-tight text-foreground">
-        {title}
-      </h2>
-      {children}
-    </TileGroup>
-  );
-}
 
 /**
  * Flat panel with a text title row, optional right-aligned actions and a footnote.
