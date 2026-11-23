@@ -172,6 +172,7 @@ async function main() {
       "live-ratios", "sector", "live-news"]) {
       await capture(`/fundamentals/${t}/${item}`);
     }
+    await capture(`/fundamentals/${t}/peers`);
     for (const statement of ["balance-sheet", "income-statement", "cashflow"]) {
       for (const quarterly of [false, true]) await capture(`/fundamentals/${t}/${statement}?quarterly=${quarterly}`);
     }
