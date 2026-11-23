@@ -16,6 +16,7 @@ import { PriceChartCard } from "@/components/stock/PriceChartCard";
 import { QuoteStats } from "@/components/stock/QuoteStats";
 import { RatiosCard } from "@/components/stock/RatiosCard";
 import { SectorComparisonCard } from "@/components/stock/SectorComparisonCard";
+import { SimilarCompaniesCard } from "@/components/stock/SimilarCompaniesCard";
 import { TechnicalSummary } from "@/components/stock/TechnicalSummary";
 import type { WidgetComponents } from "./types";
 
@@ -30,6 +31,7 @@ export const STOCK_WIDGETS: WidgetComponents = {
   "stock.ratios": ({ ticker }) => <RatiosCard ticker={ticker} />,
   "stock.signals": ({ ticker }) => <AllTimeframeSignals ticker={ticker} />,
   "stock.sector": ({ ticker, options }) => <SectorComparisonCard ticker={ticker} compact={options.compact === true} />,
+  "stock.similar": ({ ticker, options }) => <SimilarCompaniesCard ticker={ticker} compact={options.compact === true} />,
   "stock.dividends": ({ ticker }) => <DividendHistory ticker={ticker} />,
   "stock.earnings": ({ ticker }) => <EarningsCalendar ticker={ticker} />,
   "stock.statements": ({ ticker }) => <FinancialStatements ticker={ticker} />,

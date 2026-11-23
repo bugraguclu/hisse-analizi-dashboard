@@ -1,4 +1,4 @@
-"""Sektör karşılaştırması okumaları — işlem gören hisselerin KAP sektörü ve son finansal oranları.
+"""Sektör karşılaştırması okumaları — işlem gören hisselerin KAP sektörü, son finansal oranları ve net satışları.
 
 Yalnızca okur; ``companies.sector`` universe.sync (WS1), ``financial_ratios`` fundamentals.ratios
 (WS3) tarafından yazılır.
@@ -6,6 +6,7 @@ Yalnızca okur; ``companies.sector`` universe.sync (WS1), ``financial_ratios`` f
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -54,6 +55,18 @@ def _number(value: Decimal | float | None) -> float | None:
     return None if value is None else float(value)
 
 
+def _revenue(text: str | None, financial_template: str | None) -> float | None:
+    """Net sales from ``inputs_json`` text; ``None`` for banks/insurers (their "revenue" is not
+    comparable — the ratios leave it out too) and for anything that is not a finite number."""
+    if text is None or financial_template == "true":
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
 class SectorRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -74,7 +87,12 @@ class SectorRepository:
         if not ids:
             return []
         columns: Sequence = [getattr(FinancialRatio, name) for name in RATIO_COLUMNS]
-        stmt = select(FinancialRatio.company_id, FinancialRatio.period, FinancialRatio.basis, *columns).where(
+        # Read as text (``#>>``) and parsed here: a cast in SQL would fail the whole query on one odd value.
+        revenue = FinancialRatio.inputs_json[("flows", "revenue")].astext.label("revenue_text")
+        template = FinancialRatio.inputs_json[("financial_template",)].astext.label("financial_template")
+        stmt = select(
+            FinancialRatio.company_id, FinancialRatio.period, FinancialRatio.basis, *columns, revenue, template
+        ).where(
             FinancialRatio.company_id.in_(ids),
             FinancialRatio.period >= since_period,
         )
@@ -84,7 +102,10 @@ class SectorRepository:
                 company_id=row.company_id,
                 period=row.period,
                 basis=row.basis,
-                values={name: _number(getattr(row, name)) for name in RATIO_COLUMNS},
+                values={
+                    **{name: _number(getattr(row, name)) for name in RATIO_COLUMNS},
+                    "revenue": _revenue(row.revenue_text, row.financial_template),
+                },
             )
             for row in rows
         ]

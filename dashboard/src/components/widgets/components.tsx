@@ -65,6 +65,7 @@ const LAZY_TYPES: ReadonlyArray<[Loader, readonly string[]]> = [
       "stock.ratios",
       "stock.signals",
       "stock.sector",
+      "stock.similar",
       "stock.dividends",
       "stock.earnings",
       "stock.statements",

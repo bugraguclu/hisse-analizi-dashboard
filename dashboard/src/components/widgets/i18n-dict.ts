@@ -42,6 +42,8 @@ const dict = {
   "w.stock.signals": { tr: "Zaman dilimi sinyalleri", en: "Signals by timeframe", fr: "Signaux par horizon" },
   "w.stock.signals.desc": { tr: "Saatlikten aylığa teknik al/sat sinyalleri", en: "Technical buy/sell signals from hourly to monthly", fr: "Signaux techniques de l'horaire au mensuel" },
   "w.stock.sector": { tr: "Sektör karşılaştırması", en: "Sector comparison", fr: "Comparaison sectorielle" },
+  "w.stock.similar": { tr: "Benzer şirketler", en: "Similar companies", fr: "Sociétés comparables" },
+  "w.stock.similar.desc": { tr: "Alt sektör, büyüklük ve marjlara göre en yakın şirketler ve seçilme nedenleri", en: "Closest companies by sub-sector, size and margins, with the reason for each pick", fr: "Sociétés les plus proches par sous-secteur, taille et marges, avec la raison de chaque choix" },
   "w.stock.sector.desc": { tr: "Hissenin çarpanları sektör medyanına karşı", en: "The stock's multiples against the sector median", fr: "Les multiples de l'action face à la médiane du secteur" },
   "w.stock.dividends": { tr: "Temettü geçmişi", en: "Dividend history", fr: "Historique des dividendes" },
   "w.stock.dividends.desc": { tr: "Yıllara göre temettü dağıtımı ve verim", en: "Dividends paid by year and yield", fr: "Dividendes versés par année et rendement" },

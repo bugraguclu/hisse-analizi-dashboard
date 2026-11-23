@@ -30,6 +30,7 @@ import {
   parseTimeframes,
   quoteFromFastInfo,
 } from "./parsers";
+import { parseCompanyPeers } from "./peers";
 import { parseCompanySector } from "./sector";
 import type { ChartPeriod, PriceHistory, StockIdentity } from "./types";
 
@@ -49,6 +50,7 @@ export const stockKeys = {
   liveRatios: (t: string) => ["stock", t, "liveRatios"] as const,
   dbRatios: (t: string) => ["stock", t, "dbRatios"] as const,
   sector: (t: string) => ["stock", t, "sector"] as const,
+  peers: (t: string) => ["stock", t, "peers"] as const,
   statement: (t: string, kind: StatementKind, quarterly: boolean) => ["stock", t, "statement", kind, quarterly] as const,
   dividends: (t: string) => ["stock", t, "dividends"] as const,
   holders: (t: string) => ["stock", t, "holders"] as const,
@@ -291,6 +293,19 @@ export function useCompanySector(ticker: string) {
     queryKey: stockKeys.sector(ticker),
     queryFn: ({ signal }) => api.companySector(ticker, signal),
     select: parseCompanySector,
+    staleTime: STALE_TIME.analysis,
+  });
+}
+
+/**
+ * The companies most similar to the stock (sub-sector, size, profile), each with
+ * its score and reasons. `data` is null when KAP lists no sector for it.
+ */
+export function useCompanyPeers(ticker: string) {
+  return useQuery({
+    queryKey: stockKeys.peers(ticker),
+    queryFn: ({ signal }) => api.companyPeers(ticker, signal),
+    select: parseCompanyPeers,
     staleTime: STALE_TIME.analysis,
   });
 }

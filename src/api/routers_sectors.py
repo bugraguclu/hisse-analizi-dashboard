@@ -1,13 +1,13 @@
-"""Sektör ortalamaları API'si — KAP sektörüne göre medyanlar ve emsaller.
+"""Sektör ortalamaları API'si — KAP sektörüne göre medyanlar, emsaller ve benzer şirketler.
 
 Hata sözleşmesi diğer uçlarla aynı: geçersiz sembol → 400, depo okunamıyor → 503 (kısa Türkçe
 ``detail``). Sektörü bilinmeyen hisse hata değildir: ``available: false`` döner.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from src.adapters.utils import InvalidInputError, MarketDataError, normalize_symbol
-from src.services import sector_service
+from src.services import peer_service, sector_service
 
 sectors_router = APIRouter(tags=["sectors"])
 
@@ -36,5 +36,28 @@ async def company_sector(ticker: str):
         raise HTTPException(status_code=400, detail=e.message) from e
     try:
         return await sector_service.get_company_sector_view(symbol)
+    except MarketDataError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+
+
+@sectors_router.get("/fundamentals/{ticker}/peers")
+async def company_peers(
+    ticker: str,
+    limit: int = Query(peer_service.DEFAULT_LIMIT, ge=1, le=peer_service.MAX_LIMIT),
+):
+    """Hisseye en çok benzeyen şirketler: benzerlik puanı (0–100), gerekçeler ve yan yana değerler.
+
+    Aday havuzu aynı KAP sektörü ve alt sektördür (TradingView ``industry``); alt sektörde en az
+    ``min_peers`` şirket yoksa sektöre genişler (``scope``/``fallback``). Puan ağırlıkları
+    ``weights`` alanındadır. ``reasons[]`` makineyle okunur (``same_industry``, ``same_sector``,
+    ``similar_size``, ``close_metric``) ve iki şirketin de değerini taşır; eksik değer 0 sayılmaz
+    (``unavailable``: hissenin değeri olmayan bileşenler, ``peers[].missing``: adayınki).
+    """
+    try:
+        symbol = normalize_symbol(ticker)
+    except InvalidInputError as e:
+        raise HTTPException(status_code=400, detail=e.message) from e
+    try:
+        return await peer_service.get_peers_view(symbol, limit)
     except MarketDataError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message) from e

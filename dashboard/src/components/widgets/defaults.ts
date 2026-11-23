@@ -24,8 +24,8 @@ export const DEFAULT_LAYOUTS: Readonly<Record<BuiltInPage, Layout>> = {
 
   /**
    * /hisse — key figures and the chart, the verdicts (scorecard, analysts),
-   * what is new (KAP, news), ratios and signals, the stock against its sector,
-   * dividends and the report calendar, then the statements.
+   * what is new (KAP, news), ratios and signals, the stock against its sector
+   * and its closest peers, dividends and the report calendar, then the statements.
    */
   "stock.overview": buildLayout("overview", [
     row([12, "stock.quote"]),
@@ -34,6 +34,7 @@ export const DEFAULT_LAYOUTS: Readonly<Record<BuiltInPage, Layout>> = {
     row([6, "stock.kap"], [6, "stock.news"]),
     row([6, "stock.ratios"], [6, "stock.signals"]),
     row([12, "stock.sector"]),
+    row([12, "stock.similar"]),
     row([6, "stock.dividends"], [6, "stock.earnings"]),
     row([12, "stock.statements"]),
   ]),
@@ -46,6 +47,7 @@ export const DEFAULT_LAYOUTS: Readonly<Record<BuiltInPage, Layout>> = {
   "stock.fundamental": buildLayout("fundamental", [
     row([6, "stock.scorecard", "stock.ratios"], [6, "stock.analysts", "stock.profile"]),
     row([12, "stock.sector"]),
+    row([12, "stock.similar"]),
     row([6, "stock.dividends"], [6, "stock.holders", "stock.earnings"]),
     row([12, "stock.statements"]),
   ]),
@@ -69,6 +71,7 @@ export const DEFAULT_LAYOUTS: Readonly<Record<BuiltInPage, Layout>> = {
         "stock.analysts",
         "stock.ratios",
         { type: "stock.sector", options: { compact: true } },
+        { type: "stock.similar", options: { compact: true } },
         "stock.profile",
         "stock.holders",
       ],

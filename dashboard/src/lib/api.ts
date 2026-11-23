@@ -25,6 +25,7 @@ import type {
   EventFacetsOut,
   EventContentOut,
   CompanySectorOut,
+  CompanyPeersOut,
 } from "@/types";
 import { recordApiMeta } from "./api-meta";
 
@@ -338,6 +339,9 @@ export const api = {
   /** The stock's KAP sector: each metric's sector median next to the stock's value, and the sector's companies. */
   companySector: (ticker: string, signal?: AbortSignal) =>
     get<CompanySectorOut>(`/fundamentals/${seg(ticker)}/sector`, "default", signal),
+  /** Companies most similar to the stock (sub-sector, size, profile), each with its score and reasons. */
+  companyPeers: (ticker: string, signal?: AbortSignal) =>
+    get<CompanyPeersOut>(`/fundamentals/${seg(ticker)}/peers`, "default", signal),
   liveNews: (ticker: string) =>
     get(`/fundamentals/${ticker}/live-news`),
   tickerNews: (ticker: string, hours = 48) =>
