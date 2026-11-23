@@ -3,6 +3,7 @@
 import { useLocale } from "@/lib/locale-context";
 import { StartupRecovery } from "@/components/shared/StartupRecovery";
 import { WorkspaceBackupDialog } from "@/components/workspace/WorkspaceBackupDialog";
+import { ServiceWorkerManager } from "@/components/pwa/ServiceWorkerManager";
 import { LegalNotice } from "./LegalNotice";
 import { MarketStrip } from "./MarketStrip";
 import { MobileNav } from "./MobileNav";
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <MobileNav />
       <LegalNotice />
       <WorkspaceBackupDialog />
+      <ServiceWorkerManager />
     </ShellProvider>
   );
 }

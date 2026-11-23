@@ -47,6 +47,8 @@ export async function generateMetadata(): Promise<Metadata> {
     applicationName: "Hisse Analizi",
     // app/favicon.ico is picked up by the file convention.
     formatDetection: { telephone: false },
+    // app/manifest.ts; iOS reads these when the site is added to the home screen.
+    appleWebApp: { capable: true, title: "Hisse Analizi", statusBarStyle: "default" },
     openGraph: { type: "website", siteName: "Hisse Analizi", title, description, locale: OPEN_GRAPH_LOCALES[locale] },
   };
 }

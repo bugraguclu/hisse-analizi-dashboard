@@ -1,5 +1,17 @@
 # Değişiklik Günlüğü
 
+## Yayınlanmamış
+
+### Uygulama internetsiz de açılır (service worker ve manifest)
+
+- Web uygulaması kurulabilir: `app/manifest.ts` (`/manifest.webmanifest`), 192/512 px ve maskable simgeler (`dashboard/public/icons/`), iOS için `appleWebApp` meta etiketleri. iOS'ta Web Push yalnızca ana ekrana eklenmiş sitede çalışır (iOS 16.4+).
+- `/sw.js` service worker'ı (`src/lib/pwa/service-worker.ts`, `app/sw.js/route.ts`) yalnızca üretim derlemesinde kaydedilir; `next dev`'de kaydedilmez, aynı origin'de kalmış eski bir worker silinir.
+- Sayfa açılışları önce ağdan gelir; başarılı HTML yanıtı derlemeye özel, en fazla 40 sayfalık önbelleğe yazılır. Bağlantı yokken (ya da 502/503/504'te) aynı adresin kayıtlı kopyası, yoksa `/offline` sayfası açılır. `/offline` kayıtlı sayfaları listeler ve son piyasa özetine götürür. Bağlantı 10 sn asılı kalırsa kayıtlı kopya gösterilir.
+- `/_next/static` dosyaları (içerik hash'li) önbellekten gelir. Yeni derleme etkinleşince eski derlemenin sayfa ve dosya önbellekleri birlikte silinir: kayıtlı bir sayfa, başvurduğu JS/CSS'ten uzun yaşamaz.
+- `/api/*` yanıtları Cache Storage'a hiç yazılmaz; çevrimdışı piyasa özeti eskisi gibi yerel depoda kalır.
+- Yeni sürüm: worker sürümü derleme kimliğidir (`.next/BUILD_ID`). Açık sekme yeni worker'ı bulunca "Yeni sürüm hazır · Yenile" bildirimi gösterir; sayfa yalnızca kullanıcı Yenile'ye basınca yenilenir. Başka sekmeler aynı bildirimi alır.
+- `/sw.js` `Cache-Control: no-cache, no-store` ve `Service-Worker-Allowed: /` ile sunulur (Next.js başlıkları ve `deploy/Caddyfile`). Web Docker imajı artık `public/` klasörünü de kopyalar.
+
 ## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi

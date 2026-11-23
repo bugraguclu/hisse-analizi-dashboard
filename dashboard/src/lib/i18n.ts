@@ -415,6 +415,19 @@ const translations = {
   "offline.backupShortcut": { tr: "Listeleri ve düzeni yedekle", en: "Back up lists & layout", fr: "Sauvegarder listes et disposition" },
   "status.offline": { tr: "Çevrimdışı (yerel kopya)", en: "Offline (local copy)", fr: "Hors ligne (copie locale)" },
 
+  // Installable app / service worker
+  "pwa.updateReady": { tr: "Yeni sürüm hazır", en: "New version ready", fr: "Nouvelle version prête" },
+  "pwa.updateDescription": { tr: "Yenilediğinizde güncel sürüm açılır.", en: "Reload to open the latest version.", fr: "Rechargez pour ouvrir la dernière version." },
+  "pwa.reload": { tr: "Yenile", en: "Reload", fr: "Recharger" },
+  "pwa.offlineTitle": { tr: "Bu sayfa çevrimdışı açılamıyor", en: "This page is not available offline", fr: "Cette page n'est pas disponible hors ligne" },
+  "pwa.offlineIntro": { tr: "Bağlantı yok ve bu sayfa bu cihazda henüz kayıtlı değil. Daha önce açtığınız sayfalar ve son piyasa özeti çevrimdışı da açılır.", en: "You are offline and this page has not been saved on this device yet. Pages you opened before and the latest market summary still open offline.", fr: "Vous êtes hors ligne et cette page n'est pas encore enregistrée sur cet appareil. Les pages déjà consultées et le dernier résumé du marché restent accessibles." },
+  "pwa.offlineOnlineIntro": { tr: "Bu sayfa, bağlantı yokken açılmak istenen ama cihazda kayıtlı olmayan sayfaların yerine gösterilir.", en: "This page stands in for pages that are opened offline but were not saved on this device.", fr: "Cette page remplace les pages ouvertes hors ligne qui n'ont pas été enregistrées sur cet appareil." },
+  "pwa.offlineRequested": { tr: "İstenen sayfa: {path}", en: "Requested page: {path}", fr: "Page demandée : {path}" },
+  "pwa.offlineRetry": { tr: "Tekrar dene", en: "Try again", fr: "Réessayer" },
+  "pwa.offlineSaved": { tr: "Çevrimdışı açılabilen sayfalar", en: "Pages available offline", fr: "Pages disponibles hors ligne" },
+  "pwa.offlineSavedNone": { tr: "Henüz kayıtlı sayfa yok. Çevrimiçiyken açtığınız sayfalar burada listelenir.", en: "No saved pages yet. Pages you open while online are listed here.", fr: "Aucune page enregistrée. Les pages consultées en ligne apparaîtront ici." },
+  "pwa.offlineSavedUnknown": { tr: "Kayıtlı sayfalar bu tarayıcıda listelenemiyor.", en: "Saved pages cannot be listed in this browser.", fr: "Les pages enregistrées ne peuvent pas être listées dans ce navigateur." },
+
 } as const;
 
 export type TranslationKey = keyof typeof translations;
