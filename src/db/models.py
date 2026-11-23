@@ -898,6 +898,152 @@ class Notification(Base):
 
 
 # ---------------------------------------------------------------------------
+# Anonymous devices: Web Push subscriptions and alert rules (migration 025)
+# ---------------------------------------------------------------------------
+
+ALERT_KINDS = ("price_above", "price_below", "change_pct", "kap")
+ALERT_REPEATS = ("once", "rearm")
+ALERT_DIRECTIONS = ("up", "down", "both")
+DELIVERY_STATUSES = ("pending", "processing", "sent", "failed", "skipped")
+
+
+class Device(Base):
+    """A browser identified only by a random secret it keeps locally (no accounts).
+
+    Only ``sha256(device key)`` is stored; the key itself never reaches the database.
+    """
+
+    __tablename__ = "devices"
+
+    id: Mapped[uuid.UUID] = _pk()
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    locale: Mapped[str] = mapped_column(String(5), default="tr", server_default="tr", nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    endpoint: Mapped[str] = mapped_column(String(2048), unique=True, nullable=False)
+    p256dh: Mapped[str] = mapped_column(String(200), nullable=False)
+    auth: Mapped[str] = mapped_column(String(100), nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
+class AlertRule(Base):
+    """Price threshold, daily change or new-KAP-disclosure alert of one device.
+
+    ``version`` changes only on user edits (optimistic concurrency for offline
+    clients); the worker's own state (``armed``, ``trigger_count``) does not bump it.
+    ``armed`` is NULL until the first evaluation decides which side of the threshold
+    the price is on, so a rule fires on a *crossing*, never just for being set.
+    """
+
+    __tablename__ = "alert_rules"
+    __table_args__ = (
+        CheckConstraint(f"kind IN {ALERT_KINDS}", name="ck_alert_rules_kind"),
+        CheckConstraint(f"repeat IN {ALERT_REPEATS}", name="ck_alert_rules_repeat"),
+        CheckConstraint(f"direction IS NULL OR direction IN {ALERT_DIRECTIONS}", name="ck_alert_rules_direction"),
+        CheckConstraint("min_severity IS NULL OR min_severity IN ('INFO', 'WATCH', 'HIGH')", name="ck_alert_rules_severity"),
+        Index("ix_alert_rules_device", "device_id", "created_at"),
+        Index("ix_alert_rules_company_kind", "company_id", "kind"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    threshold: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    repeat: Mapped[str] = mapped_column(String(10), default="once", server_default="once", nullable=False)
+    hysteresis_pct: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=Decimal("1.00"), server_default="1.00", nullable=False)
+    min_severity: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    armed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    trigger_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+    company: Mapped[Company] = relationship()
+
+
+class AlertDelivery(Base):
+    """Push outbox: one row per fired alert, unique per (device, dedup_key).
+
+    ``attempted_subscription_ids`` is committed *before* each send, so a crash or
+    retry never sends the same delivery to the same subscription twice; a send
+    that fails with a known error is removed from the list again and retried.
+    """
+
+    __tablename__ = "alert_deliveries"
+    __table_args__ = (
+        UniqueConstraint("device_id", "dedup_key", name="uq_alert_deliveries_device_dedup"),
+        CheckConstraint(f"status IN {DELIVERY_STATUSES}", name="ck_alert_deliveries_status"),
+        Index("ix_alert_deliveries_status_available", "status", "available_at"),
+        Index("ix_alert_deliveries_device_created", "device_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
+    )
+    rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="SET NULL"), nullable=True
+    )
+    dedup_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    ticker: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(String(500), nullable=False)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    ttl_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="pending", server_default="pending", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempted_subscription_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list, nullable=False
+    )
+    sent_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
+class StockNote(Base):
+    """A device's private note on one stock (migration 026). ``version`` guards offline edits."""
+
+    __tablename__ = "stock_notes"
+    __table_args__ = (UniqueConstraint("device_id", "company_id", name="uq_stock_notes_device_company"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
+# ---------------------------------------------------------------------------
 # News, AI usage, audit — unchanged
 # ---------------------------------------------------------------------------
 

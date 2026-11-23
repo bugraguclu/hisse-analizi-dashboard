@@ -18,6 +18,19 @@
 		>Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	}
 
+	# Service worker (dashboard/src/app/sw.js): root scope and never cached by the
+	# browser's HTTP cache, so a deployment reaches already-open tabs. `>` again
+	# overrides whatever the upstream sent.
+	@serviceWorker path /sw.js
+	header @serviceWorker {
+		>Cache-Control "no-cache, no-store, must-revalidate"
+		>Service-Worker-Allowed "/"
+	}
+
+	# Web app manifest: short cache, icons/name changes should land within an hour.
+	@manifest path /manifest.webmanifest
+	header @manifest >Cache-Control "public, max-age=3600"
+
 	encode zstd gzip
 
 	reverse_proxy dashboard:3000 {

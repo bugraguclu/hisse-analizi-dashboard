@@ -44,6 +44,37 @@ Her sayfadan açılan bir asistan, "Bu oran nasıl hesaplandı?", "THYAO'nun son
 
 Kod: `src/services/assistant/` (araçlar, yöntem rehberi, karne, kaynak listesi, sınırlar, akış), `src/api/routers_assistant.py`, `dashboard/src/components/assistant/`. Next.js proxy'si `text/event-stream` yanıtlarını tamponlamadan geçirir.
 
+### Uygulama internetsiz de açılır (service worker ve manifest)
+
+- Web uygulaması kurulabilir: `app/manifest.ts` (`/manifest.webmanifest`), 192/512 px ve maskable simgeler (`dashboard/public/icons/`), iOS için `appleWebApp` meta etiketleri. iOS'ta Web Push yalnızca ana ekrana eklenmiş sitede çalışır (iOS 16.4+).
+- `/sw.js` service worker'ı (`src/lib/pwa/service-worker.ts`, `app/sw.js/route.ts`) yalnızca üretim derlemesinde kaydedilir; `next dev`'de kaydedilmez, aynı origin'de kalmış eski bir worker silinir.
+- Sayfa açılışları önce ağdan gelir; başarılı HTML yanıtı derlemeye özel, en fazla 40 sayfalık önbelleğe yazılır. Bağlantı yokken (ya da 502/503/504'te) aynı adresin kayıtlı kopyası, yoksa `/offline` sayfası açılır. `/offline` kayıtlı sayfaları listeler ve son piyasa özetine götürür. Bağlantı 10 sn asılı kalırsa kayıtlı kopya gösterilir.
+- `/_next/static` dosyaları (içerik hash'li) önbellekten gelir. Yeni derleme etkinleşince eski derlemenin sayfa ve dosya önbellekleri birlikte silinir: kayıtlı bir sayfa, başvurduğu JS/CSS'ten uzun yaşamaz.
+- `/api/*` yanıtları Cache Storage'a hiç yazılmaz; çevrimdışı piyasa özeti eskisi gibi yerel depoda kalır.
+- Yeni sürüm: worker sürümü derleme kimliğidir (`.next/BUILD_ID`). Açık sekme yeni worker'ı bulunca "Yeni sürüm hazır · Yenile" bildirimi gösterir; sayfa yalnızca kullanıcı Yenile'ye basınca yenilenir. Başka sekmeler aynı bildirimi alır.
+- `/sw.js` `Cache-Control: no-cache, no-store` ve `Service-Worker-Allowed: /` ile sunulur (Next.js başlıkları ve `deploy/Caddyfile`). Web Docker imajı artık `public/` klasörünü de kopyalar.
+
+### Fiyat ve KAP alarmları (Web Push)
+
+- Yeni **Alarmlar** sayfası (`/alarmlar`) ve hisse sayfasında **Alarm kur** düğmesi. Alarm türleri: fiyat eşiğin üstüne çıkınca / altına inince (tek seferlik ya da %1 geri dönünce yeniden kurulan), günlük değişim ±%Y (seansta en fazla bir kez), yeni KAP bildirimi (tümü, "takip edilmesi gereken" ve üstü ya da yalnızca önemli; `Severity`).
+- Hesap yok: tarayıcı rastgele bir cihaz anahtarı üretir (`hisse.device.key.v1`), sunucu yalnızca SHA-256 özetini saklar. Anahtar çalışma alanı yedeğine dahildir; yedeği geri yükleyen tarayıcı aynı alarmlara erişir (yedek penceresi bunu uyarır). Anahtar içermeyen eski yedek mevcut anahtarı silmez.
+- Fiyat alarmları eşik *geçişinde* çalar: kurulduğunda fiyat zaten eşiğin ötesindeyse önce geri dönmesi gerekir. Market worker her kotasyon döngüsünden sonra, yalnızca seans saatlerinde ve bugünün seansına ait, 15 dakikadan taze kotasyonlarla değerlendirir (fiyatlar 15 dk gecikmeli; arayüz bunu yazar). Kullanıcının eşzamanlı düzenlemesi `version` korumasıyla worker'ın yazdığı durumu ezer.
+- KAP alarmları mevcut bildirim outbox'ından üretilir. Teslimat yeni `alert_deliveries` outbox'ıyla yapılır: `(cihaz, dedup_key)` tekil; abonelik kimliği gönderimden önce commit edilir, böylece yeniden deneme ya da çökme aynı aboneliğe ikinci kez göndermez. Bilinen hatalar üstel geri çekilmeyle yeniden denenir, `PUSH_MAX_ATTEMPTS` sonrası `failed` olur; süresi (TTL) geçen bildirim gönderilmez; 404/410/403 dönen abonelik silinir.
+- Bildirime tıklamak `/hisse/<KOD>` ya da `/events?ticker=<KOD>&event=<id>` sayfasını açar (yalnızca site içi adresler).
+- API (cihaz anahtarı `X-Device-Key` başlığında): `GET /push/config`, `PUT|DELETE /me/push/subscription`, `POST /me/push/test`, `GET|POST /me/alerts`, `PUT|DELETE /me/alerts/{id}` (`version` ile çakışma kontrolü, `409 version_conflict` + güncel kayıt), `GET /me/alerts/deliveries`, `DELETE /me`. Yazmalar `Idempotency-Key` kabul eder, oran sınırlıdır (`RATE_LIMIT_DEVICE_WRITE`, `RATE_LIMIT_PUSH_TEST`). Abonelik adresi yalnızca bilinen push servislerine (FCM, Mozilla, Apple, WNS) izin verir.
+- Migration `025_web_push_alerts` (`devices`, `push_subscriptions`, `alert_rules`, `alert_deliveries`; `023`'ün ardından). Yeni bağımlılık `pywebpush`. Worker'a `push` döngüsü eklendi.
+- Ortam: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`python scripts/generate_vapid_keys.py`). Anahtarlar yoksa özellik kapalıdır: alarmlar kaydedilir, bildirim gönderilmez, arayüz bunu söyler. `deploy/setup-oracle.sh` anahtarları ilk çalıştırmada üretir, sonrakilerde korur.
+- iOS: bildirimler yalnızca ana ekrana eklenmiş sitede çalışır (iOS 16.4+); Alarmlar sayfası adımları anlatır.
+
+### Çevrimdışı değişiklik kuyruğu ve hisse notları
+
+- Hisse sayfalarında kişisel **not** (ekle, düzenle, sil): cihazda hemen kaydedilir, sunucuda cihaz anahtarıyla saklanır (`GET /me/notes`, `PUT /me/notes/{kod}` `base_version` ile, `DELETE /me/notes/{kod}?base_version=`). Migration `026_stock_notes` (`025`'in ardından). Notlar çalışma alanı yedeğine dahildir; geri yüklenen not sunucuda yoksa yeniden oluşturulur, varsa sunucudaki kopya geçerlidir.
+- Alarm ve not değişiklikleri artık kalıcı bir kuyruktan (IndexedDB `hisse-analizi-local` v2, `outbox`) gider: bağlantı yokken ya da istek yanıtsız kaldığında saklanır, sayfa yenilense de kalır, bağlantı gelince sırayla gönderilir. Tetikleyiciler: `online`, sekmenin görünür olması, geri çekilmeli yeniden deneme ve destekleyen tarayıcılarda Background Sync (service worker, hiçbir sekme açık değilken de). Sayfa ve service worker aynı Web Lock'u kullanır; worker sayfayla aynı gönderim kodunu (`src/lib/offline-outbox/core.ts`) gömülü çalıştırır.
+- Her kayıt kendi `Idempotency-Key`'ini taşır: yanıtı kaybolan istek tekrarlandığında sunucu ilk yanıtı döner, değişiklik iki kez uygulanmaz. Aynı öğenin art arda çevrimdışı düzenlemeleri bir önceki yanıtın sürümüne zincirlenir; hiç gönderilmemiş düzenlemeler birleşir, gönderilmemiş oluştur+sil birbirini götürür.
+- Çakışma (`409 version_conflict`) ve reddedilen değişiklik sessizce atılmaz: üst şerit "Çakışma: THYAO notu siz çevrimdışıyken başka yerde değişti" ile **Benimkini kullan / Sunucudakini kullan** (reddedilende **Değişikliği bırak**) sunar; o öğenin sonraki değişiklikleri karar verilene kadar bekler. Bekleyenler için "2 değişiklik gönderilmeyi bekliyor".
+- Alarmlar sayfası son sunucu listesini cihazda tutar, kuyruktaki değişiklikleri üstüne "gönderilmeyi bekliyor" işaretiyle uygular; sayfa çevrimdışı da açılır.
+- Havuz incelemesinde kullanılmadığı için kaldırılan kuyruk iskeletinin yerine gelen bu katmanın iki gerçek çağıranı (notlar, alarmlar) ve sunucu uçları vardır.
+
 ## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi

@@ -1,5 +1,6 @@
 "use client";
 
+import { isFeatureEnabled } from "@/lib/demo";
 import Link from "next/link";
 import { useLocale } from "@/lib/locale-context";
 import { DataStatus } from "./DataStatus";
@@ -32,6 +33,11 @@ export function SiteFooter() {
             <Link href="/rehber" className="transition-colors hover:text-foreground">
               {t("nav.guide")}
             </Link>
+            {isFeatureEnabled("pushNotifications") ? (
+              <Link href="/alarmlar" className="transition-colors hover:text-foreground">
+                {t("nav.alerts")}
+              </Link>
+            ) : null}
           </nav>
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <LegalNoticeLink />

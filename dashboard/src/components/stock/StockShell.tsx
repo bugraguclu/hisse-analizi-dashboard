@@ -1,5 +1,6 @@
 "use client";
 
+import { isFeatureEnabled } from "@/lib/demo";
 import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { TickerSearch } from "@/components/shared/TickerSearch";
@@ -9,6 +10,7 @@ import { useStockIdentity } from "./hooks";
 import { StockIdentityContext, useShellIdentity } from "./identity-context";
 import { useStockI18n, type StockKey } from "./i18n";
 import { StockHeader } from "./StockHeader";
+import { StockNote } from "./StockNote";
 
 export type StockView = "overview" | "technical" | "fundamental" | "combined";
 
@@ -129,6 +131,7 @@ export function StockShell({
   return (
     <div className="mx-auto max-w-7xl">
       <StockHeader ticker={ticker} identity={identity} />
+      {isFeatureEnabled("mutations") ? <StockNote ticker={ticker} /> : null}
       <div className="mt-5 flex items-center gap-2">
         <div className="min-w-0 grow">
           <StockTabs ticker={ticker} active={view} hasActions={Boolean(actions)} />

@@ -91,6 +91,25 @@ class Settings(BaseSettings):
     outbox_retention_days: int = 30  # processed outbox rows older than this are purged
     notification_max_event_age_hours: int = 48  # older events are not e-mailed (backfills, outages)
 
+    # Web Push alerts (src/services/alert_service.py, src/services/push_service.py).
+    # Without both VAPID keys the feature is off: the API reports enabled=false and
+    # the worker does not send. Generate a pair with: python scripts/generate_vapid_keys.py
+    vapid_public_key: str = ""  # base64url, uncompressed P-256 point (65 bytes)
+    vapid_private_key: str = ""  # base64url raw 32-byte key (or PEM)
+    vapid_subject: str = "mailto:admin@example.com"  # contact for push services (mailto: or https:)
+    push_ttl_price_seconds: int = 3600  # a price alert older than this is useless; push services drop it
+    push_ttl_kap_seconds: int = 86400
+    push_timeout_seconds: float = 10.0
+    push_batch_size: int = 20
+    push_max_attempts: int = 5  # failed sends before a delivery is dead-lettered
+    push_retention_days: int = 30  # finished deliveries older than this are purged
+    alerts_max_rules_per_device: int = 50
+    alerts_max_subscriptions_per_device: int = 10
+    notes_max_per_device: int = 500
+    alerts_quote_max_age_seconds: int = 900  # price rules ignore quotes older than this
+    rate_limit_device_write: str = "60/minute"  # per client, on /me mutations
+    rate_limit_push_test: str = "5/minute"
+
     # Haber toplama (Faz 2)
     news_poll_enabled: bool = True
     news_poll_interval_seconds: int = 900  # 15 dakika
@@ -245,7 +264,7 @@ class Settings(BaseSettings):
                 raise ValueError(f"TRUSTED_PROXIES entry {item!r} is not an IP address or CIDR network") from exc
         return value
 
-    @field_validator("rate_limit_default", "rate_limit_admin", "assistant_rate_limit")
+    @field_validator("rate_limit_default", "rate_limit_admin", "assistant_rate_limit", "rate_limit_device_write", "rate_limit_push_test")
     @classmethod
     def _validate_rate_limit(cls, value: str) -> str:
         try:
@@ -262,6 +281,11 @@ class Settings(BaseSettings):
     def llm_effective_api_key(self) -> str:
         """LLM_API_KEY, else NVIDIA_API_KEY (empty = assistant disabled)."""
         return (self.llm_api_key or self.nvidia_api_key).strip()
+
+    @property
+    def push_enabled(self) -> bool:
+        """Web Push needs both halves of the VAPID key pair."""
+        return bool(self.vapid_public_key.strip() and self.vapid_private_key.strip())
 
     @property
     def is_production(self) -> bool:

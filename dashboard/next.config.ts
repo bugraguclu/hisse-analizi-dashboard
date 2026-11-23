@@ -65,6 +65,19 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      {
+        // The service worker must never be served from an HTTP cache, or a deployment
+        // would not reach open tabs (Caddy sets the same headers in production).
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
+        source: "/icons/:file*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400" }],
+      },
     ];
   },
 };

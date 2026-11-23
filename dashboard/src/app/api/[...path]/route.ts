@@ -34,6 +34,8 @@ const FORWARDED_REQUEST_HEADERS = [
   "if-modified-since",
   "if-none-match",
   "user-agent",
+  // Anonymous device identity for /me/* (alerts, push subscriptions, notes).
+  "x-device-key",
 ];
 
 const DROPPED_RESPONSE_HEADERS = [
@@ -221,3 +223,6 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
 export const GET = proxyRequest;
 export const HEAD = proxyRequest;
 export const POST = proxyRequest;
+export const PUT = proxyRequest;
+export const PATCH = proxyRequest;
+export const DELETE = proxyRequest;

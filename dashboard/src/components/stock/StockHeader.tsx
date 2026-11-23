@@ -1,5 +1,6 @@
 "use client";
 
+import { isFeatureEnabled } from "@/lib/demo";
 import { Info, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +14,7 @@ import {
   formatSigned,
   trendTone,
 } from "@/lib/format";
+import { AlertQuickAction } from "@/components/alerts/AlertQuickAction";
 import { ApiDataMeta } from "@/components/shared/DataMeta";
 import { sessionQuoteTime } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
@@ -164,6 +166,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
 
       <div className="flex min-h-7 flex-wrap items-center gap-2 md:col-start-1 md:row-start-2">
         <TechnicalSignal ticker={ticker} />
+        {isFeatureEnabled("pushNotifications") ? <AlertQuickAction ticker={ticker} currentPrice={quote?.last ?? null} /> : null}
       </div>
     </header>
   );

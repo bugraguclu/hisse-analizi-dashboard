@@ -306,6 +306,7 @@ Tüm ayarlar açıklamalarıyla [`.env.example`](./.env.example) dosyasındadır
 | `APP_ENV`, `DOMAIN`, `POSTGRES_PASSWORD` | Ortam (`development`, `production`), Caddy'nin alan adı, veritabanı parolası |
 | `DATABASE_URL`, `DATABASE_URL_SYNC` | PostgreSQL bağlantıları (async uygulama / Alembic) |
 | `ADMIN_API_KEY` | `X-Admin-Key` ile korunan yönetim uç noktaları; production'da zorunlu |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push alarmları (`python scripts/generate_vapid_keys.py`); boşsa bildirim gönderilmez |
 | `CORS_ORIGINS` | İzin verilen origin'ler |
 | `TRUSTED_PROXIES` | `X-Forwarded-For` başlığına güvenilen proxy adresleri (istemci bazlı oran sınırı) |
 | `RATE_LIMIT_DEFAULT`, `RATE_LIMIT_ADMIN` | İstemci başına genel ve yönetim uç noktası sınırları |
@@ -360,7 +361,7 @@ npm audit --omit=dev --audit-level=high
 
 OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/redoc`, JSON `/openapi.json` (yerelde; canlı sitede dışarı açık değildir).
 
-- Uç nokta grupları: sistem ve arşiv (`/health`, `/stats`, `/companies`, `/events`, `/prices`, `/financials`), `/technical`, `/fundamentals`, `/market`, `/macro`, `/news`, `/data`, `/assistant` ve `X-Admin-Key` ile korunan `/admin`, `/admin/data`, `/notifications`, `/outbox`.
+- Uç nokta grupları: sistem ve arşiv (`/health`, `/stats`, `/companies`, `/events`, `/prices`, `/financials`), `/technical`, `/fundamentals`, `/market`, `/macro`, `/news`, `/data`, `/assistant` ve `X-Admin-Key` ile korunan `/admin`, `/admin/data`, `/notifications`, `/outbox`. Hesapsız cihaz uçları (`/push/config`, `/me/...`: alarmlar, push aboneliği, hisse notları) tarayıcının ürettiği anahtarı `X-Device-Key` başlığında bekler.
 - Hata yanıtları `{"detail": "<Türkçe mesaj>"}` biçimindedir; istek doğrulama hataları (422) FastAPI'nin varsayılan biçimini kullanır. Her yanıt `X-Request-ID` taşır.
 - `POST /assistant/ask` yanıtı Server-Sent Events olarak akar (`meta`, `status`, `delta`, `discard`, `done` | `error`); `done` olayı kaynak listesini (`id`, `title`, `url`, `kind`, `cited`) ve yasal uyarıyı taşır. `GET /assistant/status` asistanın açık olup olmadığını söyler; anahtar yoksa `ask` 503 `assistant_not_configured` döner.
 - Geçersiz sembol 400, bilinmeyen sembol 404, veri sağlayıcı hatası 502/503 döner. `/events` toplam kayıt sayısını `X-Total-Count` başlığında verir.
@@ -396,8 +397,9 @@ OpenAPI sözleşmesi çalışma zamanında üretilir: Swagger `/docs`, ReDoc `/r
 
 - Piyasa verileri ücretsiz kaynaklardan gelir ve 15 dakika gecikmelidir; arayüz gecikmeyi belirtir.
 - Haberler (Google News) yalnızca BIST 100 şirketleri için toplanır.
-- Kullanıcı hesabı yoktur: site herkese açık, salt okunur bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur; takip listeleri, sayfa düzenleri ve "Sayfalarım" tarayıcıda saklanır (cihazlar arasında taşınmaz).
+- Kullanıcı hesabı yoktur: site herkese açık bir analiz ekranıdır. Yönetim işlemleri anahtarla korunur; takip listeleri, sayfa düzenleri ve "Sayfalarım" tarayıcıda saklanır (cihazlar arasında taşınmaz). Alarmlar ve hisse notları sunucuda, tarayıcının rastgele cihaz anahtarına bağlı tutulur; anahtar ve notlar çalışma alanı yedeğindedir. Çevrimdışı yapılan değişiklikler kuyrukta bekler, bağlantı gelince gönderilir.
 - Veri asistanı bir dil modeli kullanır: yanıtlar kaynak gösterir ama hata içerebilir; soru metni ve sayfa bağlamı yapılandırılan sağlayıcıya (varsayılan NVIDIA) gönderilir, sunucu günlüklerine yazılmaz.
+- iOS'ta Web Push yalnızca ana ekrana eklenmiş sitede çalışır (iOS 16.4+).
 - Worker tek replika çalışacak şekilde tasarlanmıştır (bkz. [Mimari](#mimari)).
 
 Değişiklik geçmişi [CHANGELOG.md](./CHANGELOG.md), yönetici özeti [PROJE_OZETI.md](./PROJE_OZETI.md), veri platformu ayrıntıları [docs/data-platform.md](./docs/data-platform.md) dosyasındadır.

@@ -11,6 +11,8 @@ import type { Drawing, DrawingKind, DrawingPoint } from "../../components/charts
 import type { ChartType, ChartUnit, IndicatorConfig, IndicatorKind, PriceScaleKind } from "../../components/charts/types.ts";
 import type { Locale } from "../i18n.ts";
 import type { StorageAdapter } from "./storage.ts";
+import { DEVICE_KEY_STORAGE_KEY, isValidDeviceKey } from "../device/device-key.ts";
+import { readNotes } from "../notes/notes-cache.ts";
 
 export const WORKSPACE_BACKUP_FORMAT = "hisse-analizi-workspace" as const;
 export const WORKSPACE_SCHEMA_VERSION = 1 as const;
@@ -87,6 +89,10 @@ export interface WorkspaceData {
   drawings: Record<string, Drawing[]>;
   costs: Record<string, number>;
   preferences: WorkspacePreferences;
+  /** Anonymous device key (alerts, push subscriptions, server-side notes). A secret. */
+  deviceKey?: string;
+  /** Personal stock notes (the server keeps them too, under the device key). */
+  notes?: Record<string, { text: string; updatedAt: string }>;
 }
 
 export interface WorkspaceSnapshot {
@@ -560,6 +566,14 @@ export function readWorkspaceData(storage: StorageAdapter): WorkspaceData {
     ...(widgetPages ? { pages: widgetPages } : {}),
   };
 
+  // 8. Device key
+  const rawDeviceKey = storage.getItem(DEVICE_KEY_STORAGE_KEY);
+  const deviceKey = isValidDeviceKey(rawDeviceKey) ? rawDeviceKey : undefined;
+
+  // 9. Stock notes
+  const notes: Record<string, { text: string; updatedAt: string }> = {};
+  for (const [ticker, note] of Object.entries(readNotes(storage))) notes[ticker] = { text: note.text, updatedAt: note.updatedAt };
+
   return {
     watchlists,
     layouts,
@@ -568,6 +582,8 @@ export function readWorkspaceData(storage: StorageAdapter): WorkspaceData {
     costs,
     preferences,
     ...(widgets.layouts || widgets.pages ? { widgets } : {}),
+    ...(deviceKey ? { deviceKey } : {}),
+    ...(Object.keys(notes).length ? { notes } : {}),
   };
 }
 

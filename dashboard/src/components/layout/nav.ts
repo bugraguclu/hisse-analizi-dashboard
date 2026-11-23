@@ -21,6 +21,7 @@ export const SECTION_LABELS: Readonly<Record<string, TranslationKey>> = {
   endeks: "nav.indices",
   sektor: "nav.sectors",
   sayfalarim: "nav.myPages",
+  alarmlar: "nav.alerts",
 };
 
 export interface NavItem {

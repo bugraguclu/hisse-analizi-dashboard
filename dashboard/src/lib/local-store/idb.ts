@@ -30,12 +30,17 @@ export interface BackupArchiveStore {
   remove(id: string): Promise<void>;
 }
 
-const DB_NAME = "hisse-analizi-local";
-const DB_VERSION = 1;
+// Version 2 adds the offline mutation outbox. The service worker opens the same
+// database (lib/pwa/service-worker.ts) and must create the same stores.
+export const LOCAL_DB_NAME = "hisse-analizi-local";
+export const LOCAL_DB_VERSION = 2;
+const DB_NAME = LOCAL_DB_NAME;
+const DB_VERSION = LOCAL_DB_VERSION;
 const BACKUPS_STORE = "backups";
 const OFFLINE_STORE = "offlineSnapshots";
+export const OUTBOX_STORE = "outbox";
 
-function openLocalDb(): Promise<IDBDatabase | null> {
+export function openLocalDb(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return Promise.resolve(null);
   return new Promise((resolve) => {
     try {
@@ -48,8 +53,16 @@ function openLocalDb(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains(OFFLINE_STORE)) {
           db.createObjectStore(OFFLINE_STORE, { keyPath: "key" });
         }
+        if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+          db.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
+        }
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        // Let a newer version (another tab, the service worker) upgrade the schema.
+        db.onversionchange = () => db.close();
+        resolve(db);
+      };
       request.onerror = () => resolve(null);
       request.onblocked = () => resolve(null);
     } catch {

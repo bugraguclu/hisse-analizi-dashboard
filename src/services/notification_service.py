@@ -30,6 +30,7 @@ from src.core.config import settings
 from src.core.enums import EventType, NotificationProvider, OutboxStatus, Severity
 from src.core.time import utcnow
 from src.db.models import NormalizedEvent
+from src.services.alert_service import KapEvent, enqueue_kap_alerts
 from src.db.repository import (
     ClaimedOutboxEntry,
     NotificationRepository,
@@ -123,6 +124,7 @@ class NotificationService:
             "retried": 0,
             "dead_lettered": 0,
             "errors": 0,
+            "push_enqueued": 0,
         }
 
         requeued, dead = await self.outbox_repo.reclaim_stuck(
@@ -161,6 +163,22 @@ class NotificationService:
                     stats["stale_skipped"] += 1
                     stats["processed"] += 1
                     continue
+
+                if event.event_type == EventType.KAP_DISCLOSURE:
+                    # Web Push alerts first: idempotent per (rule, event), so a retried
+                    # entry (e-mail failure below) never enqueues them twice.
+                    stats["push_enqueued"] += await enqueue_kap_alerts(
+                        self.session,
+                        KapEvent(
+                            id=event.id,
+                            company_id=event.company_id,
+                            ticker=event.ticker,
+                            title=event.title,
+                            excerpt=event.excerpt,
+                            severity=event.severity,
+                        ),
+                    )
+                    await self.session.commit()
 
                 rules = [
                     r for r in rules_by_company.get(event.company_id, []) if rule_matches(r, event.source_code, event.severity)

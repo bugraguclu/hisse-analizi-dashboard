@@ -11,6 +11,7 @@ import {
   validateWorkspaceBackup,
 } from "./backup.ts";
 import { createMemoryArchiveStore } from "./idb.ts";
+import { DEVICE_KEY_STORAGE_KEY } from "../device/device-key.ts";
 import {
   CALENDAR_COUNTRIES_STORAGE_KEY,
   COST_STORAGE_PREFIX,
@@ -422,5 +423,34 @@ describe("widget system (Sayfalarım) in backups", () => {
       assert.deepEqual(mixed.snapshot.data.widgets?.pages, [customPages[0]]);
       assert.ok(mixed.preview.warnings.includes("widgets:2"));
     }
+  });
+});
+
+describe("device key in the workspace backup", () => {
+  const KEY_A = "A".repeat(43);
+  const KEY_B = "b_-".repeat(14) + "x";
+
+  test("export carries the device key; restoring moves alerts/notes access to this browser", async () => {
+    const source = createMemoryStorage({ [DEVICE_KEY_STORAGE_KEY]: KEY_A });
+    const exported = exportWorkspaceBackup(source);
+    assert.equal(exported.snapshot.data.deviceKey, KEY_A);
+    assert.equal(exported.preview.counts.deviceKey, 1);
+
+    const target = createMemoryStorage({ [DEVICE_KEY_STORAGE_KEY]: KEY_B });
+    const result = await importWorkspaceBackup(exported.json, { storage: target, archive: createMemoryArchiveStore() });
+    assert.equal(result.ok, true);
+    assert.equal(target.getItem(DEVICE_KEY_STORAGE_KEY), KEY_A);
+  });
+
+  test("an older backup without a key keeps this browser's key", async () => {
+    const target = createMemoryStorage({ [DEVICE_KEY_STORAGE_KEY]: KEY_B });
+    const legacy = JSON.stringify({ format: WORKSPACE_BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), data: { watchlists: [] } });
+    await importWorkspaceBackup(legacy, { storage: target, archive: createMemoryArchiveStore() });
+    assert.equal(target.getItem(DEVICE_KEY_STORAGE_KEY), KEY_B);
+  });
+
+  test("a malformed key rejects the file", () => {
+    const bad = JSON.stringify({ format: WORKSPACE_BACKUP_FORMAT, version: 1, data: { deviceKey: "short" } });
+    assert.deepEqual(validateWorkspaceBackup(bad), { valid: false, reason: "invalid-device-key" });
   });
 });

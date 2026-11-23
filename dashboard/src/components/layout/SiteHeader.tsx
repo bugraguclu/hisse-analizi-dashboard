@@ -1,9 +1,10 @@
 "use client";
 
+import { isFeatureEnabled } from "@/lib/demo";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Menu, Search, Sparkles } from "lucide-react";
+import { Archive, Bell, Menu, Search, Sparkles } from "lucide-react";
 import { useAssistantStatus } from "@/components/assistant/client";
 import { TickerSearch, type TickerSearchHandle } from "@/components/shared/TickerSearch";
 import { SearchOverlay } from "@/components/shared/search/SearchOverlay";
@@ -230,6 +231,16 @@ export function SiteHeader() {
                 >
                   <Sparkles className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
                 </button>
+              ) : null}
+              {isFeatureEnabled("pushNotifications") ? (
+                <Link
+                  href="/alarmlar"
+                  aria-label={t("nav.alerts")}
+                  title={t("nav.alerts")}
+                  className={cn(ICON_BUTTON, "relative after:absolute after:-inset-1.5 after:content-['']")}
+                >
+                  <Bell className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
+                </Link>
               ) : null}
               <button
                 type="button"

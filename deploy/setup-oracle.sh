@@ -94,6 +94,20 @@ if [ ! -f .env ]; then
   set_env POSTGRES_PASSWORD "$(openssl rand -hex 24)"
   set_env ADMIN_API_KEY "$(openssl rand -hex 32)"
 fi
+# Web Push (VAPID) key pair: created once, kept on re-runs; a new pair would
+# invalidate every browser's alert subscription. Raw P-256 keys, base64url.
+b64url() { base64 | tr -d '\n=' | tr '+/' '-_'; }
+if [ -z "$(env_value VAPID_PRIVATE_KEY)" ] || [ -z "$(env_value VAPID_PUBLIC_KEY)" ]; then
+  log "Generating Web Push (VAPID) keys"
+  vapid_pem="$(openssl ecparam -name prime256v1 -genkey -noout)"
+  # EC private key DER: 30 77 02 01 01 04 20 <32-byte key> ...; the public SPKI DER ends with the 65-byte point.
+  set_env VAPID_PRIVATE_KEY "$(printf '%s\n' "$vapid_pem" | openssl ec -outform DER 2>/dev/null | tail -c +8 | head -c 32 | b64url)"
+  set_env VAPID_PUBLIC_KEY "$(printf '%s\n' "$vapid_pem" | openssl ec -pubout -outform DER 2>/dev/null | tail -c 65 | b64url)"
+  unset vapid_pem
+fi
+if [ -z "$(env_value VAPID_SUBJECT)" ] || [ "$(env_value VAPID_SUBJECT)" = "mailto:admin@example.com" ]; then
+  set_env VAPID_SUBJECT "https://${DOMAIN}"
+fi
 db_password="$(env_value POSTGRES_PASSWORD)"
 set_env APP_ENV production
 set_env DATABASE_URL "postgresql+asyncpg://hisse:${db_password}@db:5432/hisse_analizi"
