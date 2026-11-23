@@ -578,10 +578,10 @@ def test_status_reports_disabled_without_key(client: TestClient, monkeypatch: py
 
 def test_status_never_exposes_the_key(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "llm_api_key", "")
-    monkeypatch.setattr(settings, "nvidia_api_key", "nvapi-test-secret")
+    monkeypatch.setattr(settings, "nvidia_api_key", "placeholder-test-secret")
     response = client.get("/assistant/status")
     assert response.json()["enabled"] is True
-    assert "nvapi-test-secret" not in response.text
+    assert "placeholder-test-secret" not in response.text
 
 
 def test_ask_without_key_is_503(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
