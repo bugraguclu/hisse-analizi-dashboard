@@ -158,7 +158,8 @@ jobs:
         run: |
           npx expo prebuild --platform ios --no-install
       - name: Install iOS pods
-        run: pod install --project-directory=mobile/ios
+        working-directory: mobile/ios
+        run: pod install
       - name: Compile primary Expo app
         run: xcodebuild -workspace mobile/ios/HisseAnalizi.xcworkspace -scheme HisseAnalizi -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/hisse-expo-build" CODE_SIGNING_ALLOWED=NO build
       - name: Check shipped privacy manifests
