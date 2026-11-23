@@ -143,7 +143,8 @@ jobs:
   ios:
     name: iOS · Expo simulator build
     runs-on: macos-latest
-    timeout-minutes: 30
+    # A cold simulator build of the Expo app with all pods takes ~25-35 min.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
