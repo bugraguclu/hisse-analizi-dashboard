@@ -1,5 +1,20 @@
 # Değişiklik Günlüğü
 
+## Yayımlanmamış
+
+### Veri asistanı: kaynak gösteren açıklamalar
+
+Her sayfadan açılan bir asistan, "Bu oran nasıl hesaplandı?", "THYAO'nun son bilançosu ne söylüyor?", "Takip listemde bugün hangi KAP'lar var?" gibi soruları yalnızca Hisse Analizi'nin kendi verileriyle yanıtlar.
+
+- **Kaynaklar:** yanıttaki her bilgi numaralı bir kaynağa bağlanır: hisse, temel ve teknik analiz sayfaları, KAP bildirimleri (kap.org.tr ve bildirim detayı), Atlas ve Rehber'deki yöntem sayfaları, haberler, makro sayfası. Kaynaklar yanıtın altında listelenir; yanıtta geçmeyen ama incelenen veriler ayrı açılır.
+- **Veriler:** fiyat özeti, KAP tablolarından hesaplanan oranlar (girdileriyle), bilanço / gelir / nakit akış tabloları, analiz karnesi (web kartıyla aynı eşikler, her puanın girdisi), günlük teknik özet, KAP bildirimleri (veritabanı; ulaşılamazsa şirket başına canlı KAP listesi), haberler, politika faizi / enflasyon / piyasalar ve ekonomik takvim. Hesaplama yöntemleri `analysis_service` ile aynı formüllerden yazılmış bir yöntem rehberinden gelir.
+- **Sınırlar:** veri yoksa bunu söyler; al/sat/tut önerisi ve fiyat tahmini istenirse modele hiç sormadan nazikçe reddeder; her yanıtın altında "Yatırım tavsiyesi değildir" uyarısı. KAP ve haber metinleri talimat değil veri olarak işaretlenir, köşeli parantezleri kaynak numarası taklit edemez.
+- **Arayüz:** başlıktaki ✦ düğmesi ya da `⌘K` aramasında yazılan sorunun altındaki "Asistana sor" satırı. Masaüstünde sağdan açılan panel, telefonda tam ekran; sayfaya göre örnek sorular, akan yanıt ve hangi verinin okunduğunu söyleyen durum satırı, durdurma, yeni sohbet. Odak panelde kalır, Esc kapatır ve odağı açıldığı yere döndürür; yanıt bitince ekran okuyucuya duyurulur. Türkçe, İngilizce, Fransızca.
+- **Hız sınırı ve güvenlik:** IP başına `ASSISTANT_RATE_LIMIT` (varsayılan dakikada 6, günde 60), soru 500 karakter, en fazla 4 veri turu ve tur başına 6 sorgu, toplam 90 sn. Soru metni günlüklere yazılmaz.
+- **Yapılandırma:** `LLM_API_KEY` (ya da `NVIDIA_API_KEY`), `LLM_BASE_URL`, `LLM_MODEL`; varsayılan NVIDIA'nın OpenAI uyumlu uç noktası ve `nvidia/nemotron-3-ultra-550b-a55b`. Anahtar yoksa düğme görünmez, `/assistant/ask` 503 `assistant_not_configured` döner.
+
+Kod: `src/services/assistant/` (araçlar, yöntem rehberi, karne, kaynak listesi, sınırlar, akış), `src/api/routers_assistant.py`, `dashboard/src/components/assistant/`. Next.js proxy'si `text/event-stream` yanıtlarını tamponlamadan geçirir.
+
 ## 1.1.0 — 3 Ekim 2026
 
 ### Grafik kartları: sade araç çubuğu, birimler, karşılaştırma ve analist hedefi
