@@ -514,14 +514,40 @@ async def test_llm_client_streams_text_and_assembles_tool_calls() -> None:
     assert seen["auth"] == "Bearer k"
 
 
-@pytest.mark.parametrize(("status", "code"), [(401, "llm_auth"), (429, "llm_busy"), (500, "llm_unavailable"), (400, "llm_bad_request")])
-async def test_llm_client_maps_http_errors(status: int, code: str) -> None:
+@pytest.mark.parametrize(
+    ("status", "code", "attempts"),
+    [(401, "llm_auth", 1), (429, "llm_busy", 2), (500, "llm_unavailable", 2), (400, "llm_bad_request", 1)],
+)
+async def test_llm_client_maps_http_errors(status: int, code: str, attempts: int) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(status, json={"error": "secret detail"})
+
     client = OpenAICompatibleChat(api_key="k", base_url="https://llm.test/v1", model="m", timeout_seconds=5, max_tokens=10,
-                                  transport=httpx.MockTransport(lambda r: httpx.Response(status, json={"error": "secret detail"})))
+                                  transport=httpx.MockTransport(handler), retry_delay=0)
     with pytest.raises(LLMError) as info:
         async for _ in client.stream_chat([], None):
             pass
     assert info.value.code == code
+    assert len(requests) == attempts
+
+
+async def test_llm_client_retries_a_failed_connection_once() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectTimeout("slow", request=request)
+        return httpx.Response(200, content=_sse_body([{"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}]))
+
+    client = OpenAICompatibleChat(api_key="k", base_url="https://llm.test/v1", model="m", timeout_seconds=5, max_tokens=10,
+                                  transport=httpx.MockTransport(handler), retry_delay=0)
+    items = [item async for item in client.stream_chat([], None)]
+    assert calls["n"] == 2
+    assert isinstance(items[-1], Completion) and items[-1].content == "ok"
 
 
 # ---------------------------------------------------------------------------

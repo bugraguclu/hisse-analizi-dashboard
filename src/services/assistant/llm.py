@@ -6,6 +6,7 @@ Uses httpx (already a dependency) instead of the openai SDK: only ``POST
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass, field
@@ -15,6 +16,11 @@ import httpx
 
 from src.core.config import settings
 
+#: A request that failed before anything streamed (connection, 429/5xx) is tried once more.
+_ATTEMPTS = 2
+_RETRY_DELAY_SECONDS = 1.0
+_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
 
 class LLMError(Exception):
     """Provider failure, with a stable ``code`` for the client (never the provider's text)."""
@@ -23,6 +29,12 @@ class LLMError(Exception):
         super().__init__(code)
         self.code = code
         self.status = status
+
+
+class _Retryable(Exception):
+    def __init__(self, error: LLMError) -> None:
+        super().__init__(error.code)
+        self.error = error
 
 
 @dataclass
@@ -65,6 +77,44 @@ def _error_for_status(status: int) -> LLMError:
     return LLMError("llm_unavailable", status)
 
 
+@dataclass
+class _Accumulator:
+    content: list[str] = field(default_factory=list)
+    calls: dict[int, dict[str, str]] = field(default_factory=dict)
+    finish: str | None = None
+
+    def add(self, chunk: dict[str, Any]) -> str | None:
+        """Merge one streamed chunk; returns its text delta, if any."""
+        text_out: list[str] = []
+        for choice in chunk.get("choices") or []:
+            delta = choice.get("delta") or {}
+            text = delta.get("content")
+            if isinstance(text, str) and text:
+                self.content.append(text)
+                text_out.append(text)
+            for raw in delta.get("tool_calls") or []:
+                index = raw["index"] if isinstance(raw.get("index"), int) else len(self.calls)
+                slot = self.calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+                if raw.get("id"):
+                    slot["id"] = str(raw["id"])
+                function = raw.get("function") or {}
+                if function.get("name") and not slot["name"]:
+                    slot["name"] = str(function["name"])
+                if function.get("arguments"):
+                    slot["arguments"] += str(function["arguments"])
+            if choice.get("finish_reason"):
+                self.finish = str(choice["finish_reason"])
+        return "".join(text_out) or None
+
+    def completion(self) -> Completion:
+        tool_calls = [
+            ToolCall(id=slot["id"] or f"call_{index}", name=slot["name"], arguments=slot["arguments"] or "{}")
+            for index, slot in sorted(self.calls.items())
+            if slot["name"]
+        ]
+        return Completion(content="".join(self.content), tool_calls=tool_calls, finish_reason=self.finish)
+
+
 class OpenAICompatibleChat:
     """``POST {base_url}/chat/completions`` with SSE streaming and tool calls."""
 
@@ -77,13 +127,15 @@ class OpenAICompatibleChat:
         timeout_seconds: float,
         max_tokens: int,
         transport: httpx.AsyncBaseTransport | None = None,
+        retry_delay: float = _RETRY_DELAY_SECONDS,
     ) -> None:
         self.model = model
         self._api_key = api_key
         self._url = base_url.rstrip("/") + "/chat/completions"
-        self._timeout = httpx.Timeout(connect=10.0, read=timeout_seconds, write=10.0, pool=10.0)
+        self._timeout = httpx.Timeout(connect=15.0, read=timeout_seconds, write=15.0, pool=15.0)
         self._max_tokens = max_tokens
         self._transport = transport
+        self._retry_delay = retry_delay
 
     async def stream_chat(
         self, messages: Sequence[dict[str, Any]], tools: Sequence[dict[str, Any]] | None
@@ -99,17 +151,29 @@ class OpenAICompatibleChat:
         if tools:
             body["tools"] = list(tools)
             body["tool_choice"] = "auto"
-        headers = {"Authorization": f"Bearer {self._api_key}", "Accept": "text/event-stream"}
+        for attempt in range(1, _ATTEMPTS + 1):
+            acc = _Accumulator()
+            try:
+                async for text in self._stream_once(body, acc):
+                    yield TextDelta(text)
+            except _Retryable as e:
+                if attempt == _ATTEMPTS:
+                    raise e.error from e
+                await asyncio.sleep(self._retry_delay)
+                continue
+            yield acc.completion()
+            return
 
-        content: list[str] = []
-        calls: dict[int, dict[str, str]] = {}
-        finish: str | None = None
+    async def _stream_once(self, body: dict[str, Any], acc: _Accumulator) -> AsyncGenerator[str, None]:
+        headers = {"Authorization": f"Bearer {self._api_key}", "Accept": "text/event-stream"}
+        streamed = False
         try:
             async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
                 async with client.stream("POST", self._url, json=body, headers=headers) as response:
                     if response.status_code != 200:
                         await response.aread()
-                        raise _error_for_status(response.status_code)
+                        error = _error_for_status(response.status_code)
+                        raise _Retryable(error) if response.status_code in _RETRY_STATUSES else error
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -120,39 +184,23 @@ class OpenAICompatibleChat:
                             chunk = json.loads(data)
                         except ValueError:
                             continue
-                        if isinstance(chunk, dict) and chunk.get("error"):
+                        if not isinstance(chunk, dict):
+                            continue
+                        if chunk.get("error"):
                             raise LLMError("llm_unavailable")
-                        for choice in chunk.get("choices") or []:
-                            delta = choice.get("delta") or {}
-                            text = delta.get("content")
-                            if isinstance(text, str) and text:
-                                content.append(text)
-                                yield TextDelta(text)
-                            for raw in delta.get("tool_calls") or []:
-                                index = raw.get("index", 0) if isinstance(raw.get("index"), int) else len(calls)
-                                slot = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
-                                if raw.get("id"):
-                                    slot["id"] = str(raw["id"])
-                                function = raw.get("function") or {}
-                                if function.get("name") and not slot["name"]:
-                                    slot["name"] = str(function["name"])
-                                if function.get("arguments"):
-                                    slot["arguments"] += str(function["arguments"])
-                            if choice.get("finish_reason"):
-                                finish = str(choice["finish_reason"])
-        except LLMError:
+                        text = acc.add(chunk)
+                        if text:
+                            streamed = True
+                            yield text
+        except (LLMError, _Retryable):
             raise
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as e:
+            raise _Retryable(LLMError("llm_unavailable" if isinstance(e, httpx.ConnectError) else "llm_timeout")) from e
         except httpx.TimeoutException as e:
             raise LLMError("llm_timeout") from e
         except httpx.HTTPError as e:
-            raise LLMError("llm_unavailable") from e
-
-        tool_calls = [
-            ToolCall(id=slot["id"] or f"call_{index}", name=slot["name"], arguments=slot["arguments"] or "{}")
-            for index, slot in sorted(calls.items())
-            if slot["name"]
-        ]
-        yield Completion(content="".join(content), tool_calls=tool_calls, finish_reason=finish)
+            error = LLMError("llm_unavailable")
+            raise (error if streamed else _Retryable(error)) from e
 
 
 def configured_model() -> OpenAICompatibleChat | None:

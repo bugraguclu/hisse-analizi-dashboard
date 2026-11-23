@@ -25,7 +25,7 @@ ADVICE_REFUSAL = {
         "Hisse Analizi yatırım danışmanlığı yapmaz.\n\n"
         "Bunun yerine verileri açıklayabilirim, örneğin:\n"
         "- \"{ticker} için F/K ve PD/DD nasıl hesaplandı?\"\n"
-        "- \"{ticker}'nun son bilançosu ne söylüyor?\"\n"
+        "- \"{ticker} için son bilanço ne söylüyor?\"\n"
         "- \"{ticker} için son KAP bildirimleri neler?\""
     ),
     "en": (
