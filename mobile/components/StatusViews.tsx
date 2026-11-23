@@ -185,11 +185,14 @@ export function MetricTile({
   label,
   value,
   subValue,
+  detail,
   tone = "default",
 }: {
   label: string;
   value: string;
   subValue?: string | null;
+  /** Optional third line (e.g. the previous release). */
+  detail?: string | null;
   tone?: "default" | "up" | "down" | "accent" | "warn";
 }) {
   const colors = useThemeColors();
@@ -210,16 +213,31 @@ export function MetricTile({
         styles.metricTile,
         { backgroundColor: colors.bgSecondary, borderColor: colors.border },
       ]}
+      accessible
+      accessibilityLabel={[label, value || EMPTY_VALUE, subValue, detail]
+        .filter(Boolean)
+        .map((part) => (part === EMPTY_VALUE ? "veri yok" : part))
+        .join(", ")}
     >
-      <Text style={[styles.metricLabel, { color: colors.textMuted }]} numberOfLines={1}>
+      <Text style={[styles.metricLabel, { color: colors.textMuted }]} numberOfLines={2}>
         {label}
       </Text>
-      <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1}>
+      <Text
+        style={[styles.metricValue, { color: valueColor }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
         {value || EMPTY_VALUE}
       </Text>
       {subValue ? (
         <Text style={[styles.metricSub, { color: colors.textSecondary }]} numberOfLines={1}>
           {subValue}
+        </Text>
+      ) : null}
+      {detail ? (
+        <Text style={[styles.metricSub, { color: colors.textMuted }]} numberOfLines={1}>
+          {detail}
         </Text>
       ) : null}
     </View>

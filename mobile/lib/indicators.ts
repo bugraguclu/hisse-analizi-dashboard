@@ -183,7 +183,7 @@ export function computeWindowIndicators(
   };
 }
 
-export function latestFinite(series: IndicatorSeries | null | undefined): number | null {
+export function latestFinite(series: ReadonlyArray<number | null> | null | undefined): number | null {
   if (!series) return null;
   for (let i = series.length - 1; i >= 0; i -= 1) {
     const v = series[i];

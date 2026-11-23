@@ -20,12 +20,25 @@ export function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
+// Building an Intl formatter is expensive on Hermes; list rows and charts format
+// thousands of values, so one formatter per decimal count is reused.
+const numberFormatters = new Map<number, Intl.NumberFormat>();
+
+function numberFormatter(decimals: number): Intl.NumberFormat {
+  let formatter = numberFormatters.get(decimals);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("tr-TR", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    numberFormatters.set(decimals, formatter);
+  }
+  return formatter;
+}
+
 export function formatNumber(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;
-  const formatted = new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
+  const formatted = numberFormatter(decimals).format(value);
   return formatted.startsWith("-") ? `${MINUS_SIGN}${formatted.slice(1)}` : formatted;
 }
 
@@ -89,6 +102,27 @@ export function formatCompactTry(value: number | null | undefined, currency = "�
   if (abs >= 1e6) return `${sign}${formatNumber(abs / 1e6, 1)} Mn ${currency}`;
   if (abs >= 1e3) return `${sign}${formatNumber(abs / 1e3, 1)} B ${currency}`;
   return `${sign}${formatNumber(abs, 0)} ${currency}`;
+}
+
+/**
+ * Compact money for macro aggregates: "$2,7 Mr", "−$6,7 Mr", "−481,1 Mr ₺".
+ * `signed` adds "+" to positive values (balances and changes).
+ */
+export function formatCompactMoney(
+  value: number | null | undefined,
+  currency: "USD" | "TRY",
+  signed = false,
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;
+  const abs = Math.abs(value);
+  const sign = value < 0 ? MINUS_SIGN : signed && value > 0 ? "+" : "";
+  let body: string;
+  if (abs >= 1e12) body = `${formatNumber(abs / 1e12, 2)} Tr`;
+  else if (abs >= 1e9) body = `${formatNumber(abs / 1e9, 1)} Mr`;
+  else if (abs >= 1e6) body = `${formatNumber(abs / 1e6, 1)} Mn`;
+  else if (abs >= 1e3) body = `${formatNumber(abs / 1e3, 1)} B`;
+  else body = formatNumber(abs, 0);
+  return currency === "USD" ? `${sign}$${body}` : `${sign}${body} ₺`;
 }
 
 export function formatCompactCount(value: number | null | undefined): string {

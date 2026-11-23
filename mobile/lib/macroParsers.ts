@@ -21,7 +21,16 @@ import type {
   TcmbEvent,
   TcmbRatesOut,
 } from "../../dashboard/src/components/makro/types.ts";
-import { toFiniteNumber } from "./format.ts";
+import {
+  EMPTY_VALUE,
+  formatCompactMoney,
+  formatIstanbulDate,
+  formatMonthYear,
+  formatNumber,
+  formatPercent,
+  formatSignedPp,
+  toFiniteNumber,
+} from "./format.ts";
 
 export type MacroHistoryRange = "1y" | "3y" | "5y" | "10y" | "all";
 export type MacroMarketPeriod = "1ay" | "3ay" | "6ay" | "ytd" | "1y" | "2y" | "5y";
@@ -340,11 +349,14 @@ export function parseEconomicCalendar(resp: unknown): {
     return { available: false, rows: [], asOf: null };
   }
   const root = resp as Record<string, unknown>;
-  const rawRows = Array.isArray(root.events)
-    ? root.events
-    : Array.isArray(root.data)
-      ? root.data
-      : [];
+  // The live API returns `{ calendar: [...] }`; `events` / `data` are older shapes.
+  const rawRows = Array.isArray(root.calendar)
+    ? root.calendar
+    : Array.isArray(root.events)
+      ? root.events
+      : Array.isArray(root.data)
+        ? root.data
+        : [];
 
   const text = (v: unknown): string | null => {
     if (v === null || v === undefined) return null;
@@ -392,11 +404,153 @@ export function parseEconomicCalendar(resp: unknown): {
   };
 }
 
-export const MACRO_INDICATOR_GROUPS: readonly { id: MacroIndicator["group"]; label: string }[] = [
+/** YYYY-MM-DD of `ms` shifted by `days`, in Istanbul time (UTC+3, no DST). */
+export function istanbulDayKey(ms: number, days = 0): string {
+  return new Date(ms + 3 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Splits calendar rows around today: upcoming ones ascending (today first), released
+ * ones newest first. The backend returns the whole window in time order.
+ */
+export function splitCalendarRows(
+  rows: readonly EconomicCalendarEvent[],
+  todayKey: string,
+): { upcoming: EconomicCalendarEvent[]; recent: EconomicCalendarEvent[] } {
+  const upcoming: EconomicCalendarEvent[] = [];
+  const recent: EconomicCalendarEvent[] = [];
+  for (const row of rows) {
+    if (row.date > todayKey || (row.date === todayKey && row.actual === null)) upcoming.push(row);
+    else recent.push(row);
+  }
+  const key = (r: EconomicCalendarEvent) => `${r.date} ${r.time ?? "00:00"}`;
+  upcoming.sort((a, b) => key(a).localeCompare(key(b)));
+  recent.sort((a, b) => key(b).localeCompare(key(a)));
+  return { upcoming, recent };
+}
+
+export interface YieldCurvePoint {
+  key: string;
+  years: number;
+  label: string;
+  yield: number;
+  /** Daily change in percentage points. */
+  change: number | null;
+}
+
+export interface YieldCurveSummary {
+  points: YieldCurvePoint[];
+  policy: number | null;
+  /** 10Y − 2Y in percentage points (negative = inverted). */
+  spread2s10s: number | null;
+  /** TR 10Y − US 10Y in percentage points. */
+  spreadUs10y: number | null;
+  updatedAt: string | null;
+}
+
+/** TR government bond curve from `/macro/markets` (bond group with `tenor_years`). */
+export function buildYieldCurve(
+  instruments: readonly MarketQuote[],
+  policy: number | null,
+): YieldCurveSummary {
+  const points = instruments
+    .filter(
+      (q): q is MarketQuote & { tenor_years: number } =>
+        q.group === "bond" && typeof q.tenor_years === "number" && Number.isFinite(q.last),
+    )
+    .sort((a, b) => a.tenor_years - b.tenor_years)
+    .map((q) => ({
+      key: q.key,
+      years: q.tenor_years,
+      label: `${q.tenor_years}Y`,
+      yield: q.last,
+      change: toFiniteNumber(q.change),
+    }));
+  const two = points.find((p) => p.years === 2);
+  const ten = points.find((p) => p.years === 10);
+  const us10y = instruments.find((q) => q.key === "us10y");
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const updatedAt =
+    instruments
+      .filter((q) => q.group === "bond")
+      .map((q) => q.updated_at ?? "")
+      .sort()
+      .pop() || null;
+  return {
+    points,
+    policy,
+    spread2s10s: two && ten ? round2(ten.yield - two.yield) : null,
+    spreadUs10y: ten && us10y && Number.isFinite(us10y.last) ? round2(ten.yield - us10y.last) : null,
+    updatedAt,
+  };
+}
+
+/** Balances read better with an explicit sign ("+$2,7 Mr"); levels such as reserves do not. */
+const SIGNED_MONEY_INDICATORS = new Set(["current_account", "trade_balance", "budget_balance"]);
+
+/** Indicator value in its unit; mirrors web `IndicatorGrid.formatIndicatorValue`. */
+export function formatIndicatorValue(indicator: Pick<MacroIndicator, "key" | "unit">, value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return EMPTY_VALUE;
+  switch (indicator.unit) {
+    case "percent":
+      return formatPercent(value, 1);
+    case "index":
+      return formatNumber(value, 1);
+    case "USD":
+    case "TRY":
+      return formatCompactMoney(value, indicator.unit, SIGNED_MONEY_INDICATORS.has(indicator.key));
+    case "tonnes":
+      return `${formatNumber(value, 1)} ton`;
+    default:
+      return formatNumber(value, 2);
+  }
+}
+
+/** Change since the previous release in the series' unit (points for rates). */
+export function formatIndicatorChange(indicator: Pick<MacroIndicator, "unit" | "change">): string {
+  const { unit, change } = indicator;
+  if (change === null || !Number.isFinite(change)) return EMPTY_VALUE;
+  switch (unit) {
+    case "percent":
+      return formatSignedPp(change, 1);
+    case "USD":
+    case "TRY":
+      return formatCompactMoney(change, unit, true);
+    case "tonnes":
+      return `${change > 0 ? "+" : change < 0 ? "−" : ""}${formatNumber(Math.abs(change), 1)} ton`;
+    default: {
+      if (Math.abs(change) < 0.005) return formatNumber(0, 2);
+      return `${change > 0 ? "+" : "−"}${formatNumber(Math.abs(change), change % 1 === 0 ? 0 : 2)}`;
+    }
+  }
+}
+
+/** Reference period: "Eki 2026", "3. çeyrek 2026", "2025", "23 Eki 2026". */
+export function formatIndicatorPeriod(
+  period: string | null,
+  frequency: MacroIndicator["frequency"],
+): string {
+  if (!period) return EMPTY_VALUE;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(period);
+  if (!match) return formatIstanbulDate(period);
+  switch (frequency) {
+    case "month":
+      return formatMonthYear(period);
+    case "quarter":
+      return `${Math.ceil(Number(match[2]) / 3)}. çeyrek ${match[1]}`;
+    case "year":
+      return match[1];
+    default:
+      return formatIstanbulDate(period);
+  }
+}
+
+export const MACRO_INDICATOR_GROUPS:readonly { id: MacroIndicator["group"]; label: string }[] = [
   { id: "growth", label: "Büyüme" },
   { id: "labor", label: "İstihdam" },
   { id: "external", label: "Dış denge & rezervler" },
   { id: "fiscal", label: "Maliye" },
   { id: "prices", label: "Fiyatlar" },
-  { id: "monetary", label: "Para & küresel" },
+  { id: "monetary", label: "Para politikası" },
+  { id: "global", label: "Küresel" },
 ];

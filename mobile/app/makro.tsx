@@ -25,11 +25,18 @@ import {
   formatSignedPp,
 } from "../lib/format";
 import {
+  buildYieldCurve,
+  formatIndicatorChange,
+  formatIndicatorPeriod,
+  formatIndicatorValue,
+  istanbulDayKey,
   MACRO_INDICATOR_GROUPS,
   MACRO_MARKET_PERIODS,
   MACRO_RANGES,
   resolveRequestedMarketKey,
   sliceLastMonths,
+  splitCalendarRows,
+  type EconomicCalendarEvent,
   type MacroHistoryRange,
   type MacroMarketPeriod,
 } from "../lib/macroParsers";
@@ -82,6 +89,11 @@ export default function MakroScreen() {
   );
   const [calendarCountry, setCalendarCountry] = useState<"ALL" | "TR" | "US">("ALL");
   const [highImportanceOnly, setHighImportanceOnly] = useState(false);
+  const [calendarLimit, setCalendarLimit] = useState(30);
+
+  useEffect(() => {
+    setCalendarLimit(30);
+  }, [calendarCountry, highImportanceOnly]);
 
   const overview = useResource({
     key: "macro:overview",
@@ -112,12 +124,21 @@ export default function MakroScreen() {
     isEmpty: (data) => !data || data.points.length === 0,
   });
 
+  // One week back (latest releases) and three weeks ahead; the API's default two-month
+  // window is ~1.3 MB, too much to download and parse on a phone.
+  const todayKey = istanbulDayKey(Date.now());
   const calendar = useResource({
-    key: `macro:calendar:${calendarCountry}`,
+    key: `macro:calendar:${calendarCountry}:${highImportanceOnly ? "high" : "all"}:${todayKey}`,
+    cacheKey: `macro_calendar_${calendarCountry}_${highImportanceOnly ? "high" : "all"}`,
     enabled: tab === "calendar",
     fetcher: (signal) =>
       mobileApi.macroCalendar(
-        calendarCountry === "ALL" ? { countries: ["TR", "US"] } : { countries: [calendarCountry] },
+        {
+          countries: calendarCountry === "ALL" ? ["TR", "US"] : [calendarCountry],
+          start: istanbulDayKey(Date.now(), -7),
+          end: istanbulDayKey(Date.now(), 21),
+          importance: highImportanceOnly ? "high" : undefined,
+        },
         signal,
       ),
     isEmpty: (data) => data.rows.length === 0,
@@ -156,10 +177,15 @@ export default function MakroScreen() {
     [overview.data?.markets, resolvedMarketKey],
   );
 
-  const calendarRows = useMemo(() => {
+  const calendarSplit = useMemo(() => {
     const rows = calendar.data?.rows ?? [];
-    return highImportanceOnly ? rows.filter((r) => r.importance === "high") : rows;
-  }, [calendar.data?.rows, highImportanceOnly]);
+    return splitCalendarRows(highImportanceOnly ? rows.filter((r) => r.importance === "high") : rows, todayKey);
+  }, [calendar.data?.rows, highImportanceOnly, todayKey]);
+
+  const yieldCurve = useMemo(
+    () => buildYieldCurve(overview.data?.markets ?? [], overview.data?.corridor.policy ?? null),
+    [overview.data?.markets, overview.data?.corridor.policy],
+  );
 
   const data = overview.data;
 
@@ -179,6 +205,8 @@ export default function MakroScreen() {
             ]}
             onPress={() => setHistoryRange(r.id)}
             accessibilityRole="button"
+            accessibilityLabel={`Dönem ${r.label}`}
+            accessibilityState={{ selected: active }}
           >
             <Text
               style={{
@@ -199,11 +227,13 @@ export default function MakroScreen() {
     const history = marketHistory.data;
     const isYield = (history?.unit ?? selectedInstrument?.unit) === "percent";
     const periodChangeText =
-      history?.change_percent !== null && history?.change_percent !== undefined
-        ? isYield
-          ? formatBp((history.change ?? 0) * 100)
-          : formatSignedPercent(history.change_percent)
-        : null;
+      isYield
+        ? history?.change != null
+          ? formatBp(history.change * 100)
+          : null
+        : history?.change_percent != null
+          ? formatSignedPercent(history.change_percent)
+          : null;
 
     return (
       <SectionCard
@@ -231,6 +261,8 @@ export default function MakroScreen() {
                 ]}
                 onPress={() => setMarketPeriod(p.id)}
                 accessibilityRole="button"
+                accessibilityLabel={`Dönem ${p.label}`}
+                accessibilityState={{ selected: active }}
               >
                 <Text
                   style={{
@@ -308,6 +340,122 @@ export default function MakroScreen() {
       </SectionCard>
     );
   };
+
+  const renderYieldCurveCard = () => {
+    const { points, policy, spread2s10s, spreadUs10y, updatedAt } = yieldCurve;
+    return (
+      <SectionCard
+        title="Getiri Eğrisi"
+        subtitle={`TR devlet tahvili getirileri (vade)${updatedAt ? ` · ${formatIstanbulDate(updatedAt)}` : ""}`}
+      >
+        {points.length < 2 ? (
+          <EmptyCard
+            title="Getiri eğrisi oluşturulamadı"
+            message="Tahvil getirileri şu an dönmedi; piyasa verisi geldiğinde eğri burada çizilir."
+          />
+        ) : (
+          <>
+            <MultiLineChart
+              labels={points.map((p) => p.label)}
+              series={[
+                {
+                  id: "curve",
+                  label: "Getiri",
+                  values: points.map((p) => p.yield),
+                  color: colors.accent,
+                  strokeWidth: 2,
+                },
+              ]}
+              referenceLines={
+                policy !== null ? [{ value: policy, label: `Politika ${formatPercent(policy)}` }] : undefined
+              }
+              height={150}
+              formatValue={(v) => formatPercent(v)}
+              formatAxis={(v) => formatPercent(v, 1)}
+              accessibilityLabel={`Getiri eğrisi: ${points.map((p) => `${p.years} yıl ${formatPercent(p.yield)}`).join(", ")}${policy !== null ? `. Politika faizi ${formatPercent(policy)}` : ""}`}
+            />
+            <View style={styles.tileGrid}>
+              {points.map((p) => (
+                <MetricTile
+                  key={p.key}
+                  label={`${p.years} yıllık`}
+                  value={formatPercent(p.yield)}
+                  subValue={p.change !== null ? formatBp(p.change * 100) : null}
+                  tone={p.change === null || Math.abs(p.change) < 0.005 ? "default" : p.change > 0 ? "down" : "up"}
+                />
+              ))}
+              <MetricTile
+                label="10Y − 2Y farkı"
+                value={spread2s10s !== null ? formatBp(spread2s10s * 100) : EMPTY_VALUE}
+                subValue={spread2s10s === null ? null : spread2s10s < 0 ? "Ters eğri" : "Pozitif eğim"}
+              />
+              <MetricTile
+                label="TR 10Y − ABD 10Y"
+                value={spreadUs10y !== null ? formatSignedPp(spreadUs10y) : EMPTY_VALUE}
+              />
+            </View>
+            <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+              Getiriler basit yıllık; yükselen getiri (fiyat düşüşü) kırmızı gösterilir.
+            </Text>
+          </>
+        )}
+      </SectionCard>
+    );
+  };
+
+  const renderCalendarRow = (ev: EconomicCalendarEvent) => (
+    <View
+      key={ev.id}
+      style={[styles.calRow, { borderBottomColor: colors.border }]}
+      accessible
+      accessibilityLabel={[
+        formatIstanbulDate(ev.date),
+        ev.time,
+        ev.countryName || ev.countryCode,
+        ev.title,
+        ev.period,
+        `önem ${ev.importance === "high" ? "yüksek" : ev.importance === "mid" ? "orta" : "düşük"}`,
+        `açıklanan ${ev.actual ?? "yok"}`,
+        `beklenti ${ev.forecast ?? "yok"}`,
+        `önceki ${ev.previous ?? "yok"}`,
+      ]
+        .filter(Boolean)
+        .join(", ")}
+    >
+      <View style={styles.calTop}>
+        <Text style={{ color: colors.textMuted, fontSize: 11, fontVariant: ["tabular-nums"] }}>
+          {formatIstanbulDate(ev.date)}
+          {ev.time ? ` · ${ev.time}` : ""} · {ev.countryCode}
+          {ev.keyEvent ? " · Faiz kararı" : ""}
+        </Text>
+        <Text
+          style={{
+            fontSize: 10,
+            fontWeight: "700",
+            color:
+              ev.importance === "high" ? colors.down : ev.importance === "mid" ? colors.warn : colors.textMuted,
+          }}
+        >
+          {ev.importance === "high" ? "YÜKSEK" : ev.importance === "mid" ? "ORTA" : "DÜŞÜK"}
+        </Text>
+      </View>
+      <Text style={{ color: colors.textPrimary, fontSize: FontSize.sm, fontWeight: "600" }}>
+        {ev.title}
+        {ev.period ? ` (${ev.period})` : ""}
+      </Text>
+      <View style={styles.calValues}>
+        <Text style={{ color: colors.textSecondary, fontSize: 11, fontVariant: ["tabular-nums"] }}>
+          Açıklanan: <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{ev.actual ?? EMPTY_VALUE}</Text>
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 11, fontVariant: ["tabular-nums"] }}>
+          Beklenti: {ev.forecast ?? EMPTY_VALUE}
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 11, fontVariant: ["tabular-nums"] }}>
+          Önceki: {ev.previous ?? EMPTY_VALUE}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
@@ -497,7 +645,7 @@ export default function MakroScreen() {
                               },
                             ]}
                             onPress={() => setSelectedMarketKey(q.key)}
-                            accessibilityRole="button"
+                            accessibilityRole="button" accessibilityState={{ selected }} accessibilityHint="Geçmiş grafiğini gösterir"
                           >
                             <View style={{ flex: 1 }}>
                               <Text style={{ color: colors.textPrimary, fontSize: FontSize.sm, fontWeight: "600" }}>
@@ -581,6 +729,8 @@ export default function MakroScreen() {
                     </View>
                   ) : null}
                 </SectionCard>
+
+                {renderYieldCurveCard()}
 
                 <SectionCard
                   title="Enflasyon Özeti (TÜFE & ÜFE)"
@@ -690,7 +840,7 @@ export default function MakroScreen() {
                                   },
                                 ]}
                                 onPress={() => setSelectedMarketKey(q.key)}
-                                accessibilityRole="button"
+                                accessibilityRole="button" accessibilityState={{ selected }} accessibilityHint="Geçmiş grafiğini gösterir"
                               >
                                 <Text style={{ color: selected ? colors.accent : colors.textPrimary, fontSize: FontSize.sm, fontWeight: "600", flex: 1 }}>
                                   {q.name}
@@ -771,31 +921,24 @@ export default function MakroScreen() {
                   return (
                     <SectionCard key={group.id} title={group.label}>
                       <View style={styles.tileGrid}>
-                        {items.map((ind) => {
-                          const formattedVal =
-                            ind.unit === "percent"
-                              ? formatPercent(ind.value)
-                              : ind.unit === "USD"
-                                ? `$${formatNumber(ind.value, 1)}`
-                                : ind.unit === "TRY"
-                                  ? `${formatNumber(ind.value, 1)} ₺`
-                                  : formatNumber(ind.value, 1);
-                          return (
-                            <MetricTile
-                              key={ind.key}
-                              label={ind.name}
-                              value={formattedVal}
-                              subValue={
-                                [
-                                  ind.period ? formatMonthYear(ind.period) : null,
-                                  ind.previous !== null ? `Önc: ${formatNumber(ind.previous, 1)}` : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ") || null
-                              }
-                            />
-                          );
-                        })}
+                        {items.map((ind) => (
+                          <MetricTile
+                            key={ind.key}
+                            label={ind.name}
+                            value={formatIndicatorValue(ind, ind.value)}
+                            subValue={
+                              [
+                                formatIndicatorPeriod(ind.period, ind.frequency),
+                                ind.change !== null ? `Değ. ${formatIndicatorChange(ind)}` : null,
+                              ]
+                                .filter((part) => part && part !== EMPTY_VALUE)
+                                .join(" · ") || null
+                            }
+                            detail={
+                              ind.previous !== null ? `Önceki: ${formatIndicatorValue(ind, ind.previous)}` : null
+                            }
+                          />
+                        ))}
                       </View>
                     </SectionCard>
                   );
@@ -823,6 +966,8 @@ export default function MakroScreen() {
                           },
                         ]}
                         onPress={() => setCalendarCountry(c)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
                       >
                         <Text
                           style={{
@@ -845,6 +990,8 @@ export default function MakroScreen() {
                       },
                     ]}
                     onPress={() => setHighImportanceOnly((v) => !v)}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: highImportanceOnly }}
                   >
                     <Text
                       style={{
@@ -866,55 +1013,56 @@ export default function MakroScreen() {
                     message={calendar.error ?? "Bağlantı hatası."}
                     onRetry={calendar.reload}
                   />
-                ) : calendarRows.length === 0 ? (
+                ) : calendarSplit.upcoming.length === 0 && calendarSplit.recent.length === 0 ? (
                   <EmptyCard
                     title="Takvim kaydı bulunamadı"
-                    message="Seçili ülke ve önem filtresi için ekonomik açıklama bulunamadı."
+                    message="Seçili ülke ve önem filtresi için son bir hafta ve önümüzdeki üç haftada açıklama yok."
                   />
                 ) : (
                   <View style={{ gap: Spacing.xs }}>
-                    {calendarRows.slice(0, 25).map((ev) => (
-                      <View
-                        key={ev.id}
-                        style={[styles.calRow, { borderBottomColor: colors.border }]}
+                    {calendar.status === "stale" ? (
+                      <FreshnessBanner
+                        status={calendar.status}
+                        fetchedAt={calendar.fetchedAt}
+                        error={calendar.error}
+                        refreshing={calendar.refreshing}
+                        onRetry={calendar.reload}
+                      />
+                    ) : null}
+                    <Text style={[styles.subLabel, { color: colors.textMuted }]} accessibilityRole="header">
+                      YAKLAŞAN ({calendarSplit.upcoming.length})
+                    </Text>
+                    {calendarSplit.upcoming.length === 0 ? (
+                      <Text style={{ color: colors.textMuted, fontSize: FontSize.xs }}>
+                        Önümüzdeki üç haftada bu filtreye uyan açıklama yok.
+                      </Text>
+                    ) : (
+                      calendarSplit.upcoming.slice(0, calendarLimit).map(renderCalendarRow)
+                    )}
+                    {calendarSplit.upcoming.length > calendarLimit ? (
+                      <TouchableOpacity
+                        style={[styles.moreButton, { borderColor: colors.border }]}
+                        onPress={() => setCalendarLimit((n) => n + 30)}
+                        accessibilityRole="button"
                       >
-                        <View style={styles.calTop}>
-                          <Text style={{ color: colors.textMuted, fontSize: 11, fontVariant: ["tabular-nums"] }}>
-                            {formatIstanbulDate(ev.date)}
-                            {ev.time ? ` · ${ev.time}` : ""} · {ev.countryCode}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              fontWeight: "700",
-                              color:
-                                ev.importance === "high"
-                                  ? colors.down
-                                  : ev.importance === "mid"
-                                    ? colors.warn
-                                    : colors.textMuted,
-                            }}
-                          >
-                            {ev.importance === "high" ? "YÜKSEK" : ev.importance === "mid" ? "ORTA" : "DÜŞÜK"}
-                          </Text>
-                        </View>
-                        <Text style={{ color: colors.textPrimary, fontSize: FontSize.sm, fontWeight: "600" }}>
-                          {ev.title}
-                          {ev.period ? ` (${ev.period})` : ""}
+                        <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
+                          Daha fazla göster ({calendarSplit.upcoming.length - calendarLimit})
                         </Text>
-                        <View style={styles.calValues}>
-                          <Text style={{ color: colors.textSecondary, fontSize: 11, fontVariant: ["tabular-nums"] }}>
-                            Açıklanan: <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{ev.actual ?? EMPTY_VALUE}</Text>
-                          </Text>
-                          <Text style={{ color: colors.textSecondary, fontSize: 11, fontVariant: ["tabular-nums"] }}>
-                            Beklenti: {ev.forecast ?? EMPTY_VALUE}
-                          </Text>
-                          <Text style={{ color: colors.textSecondary, fontSize: 11, fontVariant: ["tabular-nums"] }}>
-                            Önceki: {ev.previous ?? EMPTY_VALUE}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
+                      </TouchableOpacity>
+                    ) : null}
+                    {calendarSplit.recent.length > 0 ? (
+                      <>
+                        <Text style={[styles.subLabel, { color: colors.textMuted }]} accessibilityRole="header">
+                          SON AÇIKLANANLAR
+                        </Text>
+                        {calendarSplit.recent.slice(0, 15).map(renderCalendarRow)}
+                      </>
+                    ) : null}
+                    {calendar.data?.asOf ? (
+                      <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                        Kaynak: TradingView · Güncelleme: {formatIstanbulDate(calendar.data.asOf)}
+                      </Text>
+                    ) : null}
                   </View>
                 )}
               </SectionCard>
@@ -987,4 +1135,10 @@ const styles = StyleSheet.create({
   },
   calTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   calValues: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
+  moreButton: {
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
 });

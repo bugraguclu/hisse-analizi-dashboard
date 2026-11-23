@@ -498,13 +498,17 @@ export const mobileApi = {
   },
 
   async macroCalendar(
-    params?: { countries?: string[] },
+    params?: { countries?: string[]; start?: string; end?: string; importance?: "high" | "mid" | "low" },
     signal?: AbortSignal,
   ): Promise<MacroCalendarPayload> {
     const search = new URLSearchParams();
     if (params?.countries && params.countries.length > 0) {
       search.set("countries", params.countries.join(","));
     }
+    // The default window is two calendar months (~1.3 MB for TR+US); phones ask for less.
+    if (params?.start) search.set("start", params.start);
+    if (params?.end) search.set("end", params.end);
+    if (params?.importance) search.set("importance", params.importance);
     const qs = search.toString();
     const raw = await fetchJson<unknown>(`/macro/calendar${qs ? `?${qs}` : ""}`, signal);
     return parseEconomicCalendar(raw);

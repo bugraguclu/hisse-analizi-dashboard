@@ -56,6 +56,22 @@ interface MultiLineChartProps {
   formatValue?: (value: number | null) => string;
   formatAxis?: (value: number) => string;
   emptyMessage?: string;
+  /** VoiceOver summary; defaults to range, last value, low and high of each series. */
+  accessibilityLabel?: string;
+}
+
+function describeSeries(
+  labels: readonly string[],
+  series: ReadonlyArray<{ label: string; values: ReadonlyArray<number | null> }>,
+  formatValue: (value: number | null) => string,
+): string {
+  const range = labels.length > 0 ? `${labels[0]} – ${labels[labels.length - 1]}` : "";
+  const parts = series.map((s) => {
+    const finite = s.values.filter((v): v is number => v !== null && Number.isFinite(v));
+    if (finite.length === 0) return `${s.label}: veri yok`;
+    return `${s.label}: son ${formatValue(latestFinite(s.values))}, en düşük ${formatValue(Math.min(...finite))}, en yüksek ${formatValue(Math.max(...finite))}`;
+  });
+  return [`Grafik, ${range}`, ...parts].join(". ");
 }
 
 function clampIndex(x: number, width: number, count: number): number {
@@ -74,6 +90,7 @@ export function MultiLineChart({
   formatValue = (v) => formatNumber(v, 2),
   formatAxis = (v) => formatNumber(v, 2),
   emptyMessage = "Bu aralık için çizilecek veri bulunamadı.",
+  accessibilityLabel,
 }: MultiLineChartProps) {
   const colors = useThemeColors();
   const [plotWidth, setPlotWidth] = useState(0);
@@ -140,8 +157,10 @@ export function MultiLineChart({
   const xMid = sampledLabels[Math.floor(sampledLabels.length / 2)] ?? "";
   const xEnd = sampledLabels[sampledLabels.length - 1] ?? "";
 
+  const summary = accessibilityLabel ?? describeSeries(sampledLabels, sampledSeries, formatValue);
+
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.wrapper} accessible accessibilityRole="image" accessibilityLabel={summary}>
       {/* Live legend / scrub readout */}
       <View style={styles.legendRow}>
         {displayIdx !== null ? (
@@ -369,7 +388,12 @@ export function MacdSubChart({
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View
+      style={styles.wrapper}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={`MACD grafiği, ${sLabels[0] ?? ""} – ${sLabels[sLabels.length - 1] ?? ""}. Son MACD ${formatNumber(latestFinite(sMacd), 2)}, sinyal ${formatNumber(latestFinite(sSig), 2)}, histogram ${formatNumber(latestFinite(sHist), 2)}`}
+    >
       <View style={styles.legendRow}>
         {displayIdx !== null ? (
           <Text style={[styles.scrubDate, { color: colors.textPrimary }]}>{sLabels[displayIdx]}</Text>
@@ -530,8 +554,19 @@ export function VerticalBarChart({
     setActiveIndex(clampIndex(e.nativeEvent.locationX, plotWidth, labels.length));
   };
 
+  const recentCount = Math.min(6, labels.length);
+  const barSummary = labels
+    .slice(-recentCount)
+    .map((label, i) => `${label} ${formatValue(values[values.length - recentCount + i] ?? null)}`)
+    .join(", ");
+
   return (
-    <View style={styles.wrapper}>
+    <View
+      style={styles.wrapper}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={`Çubuk grafik, ${labels.length} dönem. Son dönemler: ${barSummary}`}
+    >
       <View style={styles.legendRow}>
         <Text style={[styles.scrubDate, { color: colors.textPrimary }]}>{labels[displayIdx]}</Text>
         <Text style={[styles.legendText, { color: colors.accent, fontWeight: "700" }]}>
