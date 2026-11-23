@@ -31,20 +31,27 @@ import {
   DEFAULT_SCREENER_STATE,
   defaultSortDir,
   FEATURED_PRESETS,
+  FIELD_LABELS,
   FILTER_GROUPS,
   filterScreenerRows,
-  MOBILE_RANGE_KEYS,
   parseDecimalInput,
   PRESET_BY_ID,
   RANGE_BY_KEY,
+  RANGE_GROUPS,
   resolvePresetId,
+  ROW_SIGNAL_LABELS,
+  rowSignals,
   SCREENER_PRESETS,
-  SORT_OPTIONS,
+  sortLabel,
+  sortOptionsForView,
   sortScreenerRows,
+  TECH_RATING_LABELS,
+  techRating,
   toggleScreenerPreset,
+  VIEW_METRICS,
+  VIEWS,
   type CrossFilter,
   type NumericField,
-  type PresetId,
   type RangeKey,
   type RecFilter,
   type ScreenerFilterState,
@@ -56,67 +63,77 @@ import { useResource } from "../../lib/useResource";
 
 type FilterSheetTab = "presets" | "universe" | "advanced";
 
-function formatMetricCell(row: ScreenerStockRow, field: NumericField): { label: string; value: string } {
+/** Compact card labels; the sort sheet and VoiceOver use the longer FIELD_LABELS. */
+const CARD_LABELS: Partial<Record<NumericField, string>> = {
+  market_cap: "Piy. değeri",
+  turnover: "Hacim",
+  avg_turnover: "Ort. hacim",
+  dividend_yield: "Temettü",
+  sma50_dist: "SMA 50",
+  sma200_dist: "SMA 200",
+  high_52w_dist: "52H zirve",
+  low_52w_dist: "52H dip",
+  rel_volume: "Gör. hacim",
+  tech_rating: "Teknik",
+  perf_1w: "1H",
+  perf_1m: "1A",
+  perf_3m: "3A",
+  perf_ytd: "YBB",
+  perf_1y: "1Y",
+  target_price: "Hedef",
+  upside: "Potansiyel",
+  foreign_ratio: "Yabancı",
+  rsi: "RSI",
+};
+
+/** A screener value as shown on the result card; missing values are "—", never 0. */
+function formatScreenerField(row: ScreenerStockRow, field: NumericField): string {
+  const value = row[field];
   switch (field) {
     case "pe":
-      return {
-        label: "F/K",
-        value: row.pe !== undefined ? formatRatio(row.pe) : row.loss ? "Zarar" : EMPTY_VALUE,
-      };
+      return value !== undefined ? formatRatio(value) : row.loss ? "Zarar" : EMPTY_VALUE;
     case "pb":
-      return { label: "PD/DD", value: formatRatio(row.pb) };
     case "ev_ebitda":
-      return { label: "FD/FAVÖK", value: formatRatio(row.ev_ebitda) };
-    case "dividend_yield":
-      return { label: "Temettü", value: formatPercent(row.dividend_yield) };
-    case "roe":
-      return { label: "ROE", value: formatPercent(row.roe, 1) };
-    case "net_margin":
-      return { label: "Net marj", value: formatPercent(row.net_margin, 1) };
-    case "rsi":
-      return { label: "RSI", value: formatNumber(row.rsi, 1) };
-    case "sma50_dist":
-      return { label: "SMA50", value: formatSignedPercent(row.sma50_dist, 1) };
-    case "sma200_dist":
-      return { label: "SMA200", value: formatSignedPercent(row.sma200_dist, 1) };
-    case "upside":
-      return { label: "Potansiyel", value: formatSignedPercent(row.upside, 1) };
-    case "foreign_ratio":
-      return { label: "Yabancı", value: formatPercent(row.foreign_ratio, 1) };
-    case "market_cap":
-      return { label: "PD", value: formatCompactTry(row.market_cap) };
-    case "avg_turnover":
-      return { label: "Ort. hacim", value: formatCompactTry(row.avg_turnover) };
+      return formatRatio(value);
     case "rel_volume":
-      return { label: "Gör. hacim", value: formatRatio(row.rel_volume, 2) };
-    case "perf_1w":
-      return { label: "1H", value: formatSignedPercent(row.perf_1w, 1) };
-    case "high_52w_dist":
-      return { label: "52H zirve", value: formatSignedPercent(row.high_52w_dist, 1) };
-    case "low_52w_dist":
-      return { label: "52H dip", value: formatSignedPercent(row.low_52w_dist, 1) };
+      return formatRatio(value, 2);
+    case "dividend_yield":
+      return formatPercent(value);
+    case "roe":
+    case "net_margin":
+    case "foreign_ratio":
+      return formatPercent(value, 1);
+    case "rsi":
+      return formatNumber(value, 1);
+    case "close":
+    case "target_price":
+      return formatPrice(value);
+    case "market_cap":
+    case "turnover":
+    case "avg_turnover":
+      return formatCompactTry(value);
+    case "tech_rating": {
+      const rating = techRating(value);
+      return rating ? TECH_RATING_LABELS[rating] : EMPTY_VALUE;
+    }
     default:
-      return { label: "PD", value: formatCompactTry(row.market_cap) };
+      return formatSignedPercent(value, field === "change_pct" ? 2 : 1);
   }
 }
 
-function selectRowMetrics(state: ScreenerFilterState): NumericField[] {
-  const chosen: NumericField[] = [];
-  const push = (field: NumericField | undefined) => {
-    if (!field || field === "close" || field === "change_pct" || chosen.includes(field)) return;
-    chosen.push(field);
-  };
-  for (const id of state.presets) {
-    push(PRESET_BY_ID.get(id)?.highlightMetric);
-  }
-  if (state.sort !== "symbol" && state.sort !== "close" && state.sort !== "change_pct") {
-    push(state.sort as NumericField);
-  }
-  for (const fallback of ["pe", "pb", "dividend_yield", "roe", "rsi", "market_cap"] as const) {
-    if (chosen.length >= 4) break;
-    push(fallback);
-  }
-  return chosen.slice(0, 4);
+function RemovablePill({ text, onRemove }: { text: string; onRemove: () => void }) {
+  const colors = useThemeColors();
+  return (
+    <TouchableOpacity
+      style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
+      onPress={onRemove}
+      accessibilityRole="button"
+      accessibilityLabel={`${text} filtresini kaldır`}
+      hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+    >
+      <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>{text} ×</Text>
+    </TouchableOpacity>
+  );
 }
 
 export default function TaramaScreen() {
@@ -193,11 +210,12 @@ export default function TaramaScreen() {
 
   const breadth = useMemo(() => computeBreadth(filteredRows), [filteredRows]);
   const activeCount = useMemo(() => countActiveFilters(filters), [filters]);
-  const displayMetrics = useMemo(() => selectRowMetrics(filters), [filters]);
+  const displayMetrics = VIEW_METRICS[filters.view];
+  const allRangeKeys = useMemo(() => RANGE_GROUPS.flatMap((group) => group.keys), []);
 
   const openFilterSheet = () => {
     const drafts: Record<string, { min: string; max: string }> = {};
-    for (const key of MOBILE_RANGE_KEYS) {
+    for (const key of allRangeKeys) {
       const b = filters.ranges[key];
       drafts[key] = {
         min: b?.min !== undefined ? String(b.min) : "",
@@ -208,22 +226,21 @@ export default function TaramaScreen() {
     setFilterOpen(true);
   };
 
+  // Typed text stays in the draft (so "1," can be completed); only parsed bounds reach the filter.
   const applyRangeDraft = (key: RangeKey, side: "min" | "max", text: string) => {
-    setRangeDrafts((prev) => {
-      const current = prev[key] ?? { min: "", max: "" };
-      const updated = { ...current, [side]: text };
-      const minVal = parseDecimalInput(updated.min);
-      const maxVal = parseDecimalInput(updated.max);
-      setFilters((f) => {
-        const nextRanges = { ...f.ranges };
-        if (minVal === undefined && maxVal === undefined) {
-          delete nextRanges[key];
-        } else {
-          nextRanges[key] = { min: minVal, max: maxVal };
-        }
-        return { ...f, ranges: nextRanges };
-      });
-      return { ...prev, [key]: updated };
+    const current = rangeDrafts[key] ?? { min: "", max: "" };
+    const updated = { ...current, [side]: text };
+    setRangeDrafts((prev) => ({ ...prev, [key]: updated }));
+    const minVal = parseDecimalInput(updated.min);
+    const maxVal = parseDecimalInput(updated.max);
+    setFilters((f) => {
+      const nextRanges = { ...f.ranges };
+      if (minVal === undefined && maxVal === undefined) {
+        delete nextRanges[key];
+      } else {
+        nextRanges[key] = { min: minVal, max: maxVal };
+      }
+      return { ...f, ranges: nextRanges };
     });
   };
 
@@ -236,10 +253,8 @@ export default function TaramaScreen() {
     setSortOpen(false);
   };
 
-  const activeSortLabel = useMemo(() => {
-    const found = SORT_OPTIONS.find((o) => o.key === filters.sort)?.label ?? filters.sort;
-    return `${found} ${filters.dir === "asc" ? "↑" : "↓"}`;
-  }, [filters.dir, filters.sort]);
+  const activeSortLabel = `${sortLabel(filters.sort)} ${filters.dir === "asc" ? "↑" : "↓"}`;
+  const sortGroups = useMemo(() => sortOptionsForView(filters.view), [filters.view]);
 
   const renderStockRow = useCallback(
     ({ item }: { item: ScreenerStockRow }) => {
@@ -256,13 +271,32 @@ export default function TaramaScreen() {
         (item.kap_sector ? sectorLabelMap.get(item.kap_sector) : undefined) ??
         (item.sector ? sectorLabelMap.get(item.sector) : undefined) ??
         null;
+      const signals = filters.view === "technical" ? rowSignals(item) : [];
+      const metricText = displayMetrics
+        .map((field) => `${FIELD_LABELS[field]} ${formatScreenerField(item, field)}`)
+        .join(", ")
+        .split(EMPTY_VALUE)
+        .join("veri yok");
+      const a11yLabel = [
+        item.symbol,
+        item.name,
+        sectorName,
+        `fiyat ${formatScreenerField(item, "close")}`,
+        `günlük ${formatScreenerField(item, "change_pct")}`,
+        item.recommendation ? `analist önerisi ${item.recommendation}` : null,
+        metricText,
+        signals.length > 0 ? signals.map((s) => ROW_SIGNAL_LABELS[s]).join(", ") : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
 
       return (
         <TouchableOpacity
           style={[styles.stockCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
           onPress={() => router.push(`/stock/${item.symbol}` as never)}
           accessibilityRole="button"
-          accessibilityLabel={`${item.symbol} ${item.name ?? ""} analizini aç`}
+          accessibilityLabel={a11yLabel}
+          accessibilityHint="Hisse analizini açar"
         >
           <View style={styles.stockTopRow}>
             <View style={styles.stockIdentity}>
@@ -321,21 +355,48 @@ export default function TaramaScreen() {
 
           <View style={[styles.metricsRow, { borderTopColor: colors.border }]}>
             {displayMetrics.map((field) => {
-              const cell = formatMetricCell(item, field);
+              const sorted = filters.sort === field;
               return (
                 <View key={field} style={styles.metricCell}>
-                  <Text style={[styles.metricLabel, { color: colors.textMuted }]}>{cell.label}</Text>
-                  <Text style={[styles.metricValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {cell.value}
+                  <Text
+                    style={[styles.metricLabel, { color: sorted ? colors.accent : colors.textMuted }]}
+                    numberOfLines={1}
+                  >
+                    {CARD_LABELS[field] ?? FIELD_LABELS[field]}
+                    {sorted ? (filters.dir === "asc" ? " ↑" : " ↓") : ""}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.metricValue,
+                      { color: sorted ? colors.textPrimary : colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {formatScreenerField(item, field)}
                   </Text>
                 </View>
               );
             })}
           </View>
+
+          {signals.length > 0 ? (
+            <View style={styles.signalRow}>
+              {signals.map((signal) => (
+                <View
+                  key={signal}
+                  style={[styles.signalBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+                >
+                  <Text style={{ color: colors.textSecondary, fontSize: 10, fontWeight: "600" }}>
+                    {ROW_SIGNAL_LABELS[signal]}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </TouchableOpacity>
       );
     },
-    [colors, displayMetrics, router, sectorLabelMap],
+    [colors, displayMetrics, filters.dir, filters.sort, filters.view, router, sectorLabelMap],
   );
 
   const listHeader = (
@@ -405,6 +466,40 @@ export default function TaramaScreen() {
         })}
       </ScrollView>
 
+      {/* Column set (web table views) */}
+      <View style={styles.viewRow} accessibilityRole="tablist">
+        {VIEWS.map((view) => {
+          const active = filters.view === view.id;
+          return (
+            <TouchableOpacity
+              key={view.id}
+              style={[
+                styles.viewChip,
+                {
+                  backgroundColor: active ? colors.accent : colors.bgCard,
+                  borderColor: active ? colors.accent : colors.border,
+                },
+              ]}
+              onPress={() => setFilters((prev) => ({ ...prev, view: view.id }))}
+              accessibilityRole="tab"
+              accessibilityLabel={`${view.label} görünümü`}
+              accessibilityState={{ selected: active }}
+            >
+              <Text
+                style={{
+                  color: active ? "#ffffff" : colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: active ? "700" : "500",
+                }}
+                numberOfLines={1}
+              >
+                {view.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* Active filter summary pills */}
       {activeCount > 0 ? (
         <ScrollView
@@ -413,89 +508,69 @@ export default function TaramaScreen() {
           contentContainerStyle={styles.activeChipsRow}
         >
           {filters.index ? (
-            <TouchableOpacity
-              style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-              onPress={() => setFilters((p) => ({ ...p, index: "" }))}
-            >
-              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>
-                Endeks: {filters.index} ×
-              </Text>
-            </TouchableOpacity>
+            <RemovablePill
+              text={`Endeks: ${filters.index}`}
+              onRemove={() => setFilters((p) => ({ ...p, index: "" }))}
+            />
           ) : null}
           {filters.sector ? (
-            <TouchableOpacity
-              style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-              onPress={() => setFilters((p) => ({ ...p, sector: "" }))}
-            >
-              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>
-                Sektör: {sectorLabelMap.get(filters.sector) ?? filters.sector} ×
-              </Text>
-            </TouchableOpacity>
+            <RemovablePill
+              text={`Sektör: ${sectorLabelMap.get(filters.sector) ?? filters.sector}`}
+              onRemove={() => setFilters((p) => ({ ...p, sector: "" }))}
+            />
           ) : null}
           {filters.presets
             .filter((id) => !FEATURED_PRESETS.some((f) => f.id === id))
             .map((id) => (
-              <TouchableOpacity
+              <RemovablePill
                 key={id}
-                style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-                onPress={() => setFilters((p) => toggleScreenerPreset(p, id))}
-              >
-                <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>
-                  {PRESET_BY_ID.get(id)?.label ?? id} ×
-                </Text>
-              </TouchableOpacity>
+                text={PRESET_BY_ID.get(id)?.label ?? id}
+                onRemove={() => setFilters((p) => toggleScreenerPreset(p, id))}
+              />
             ))}
           {filters.rec ? (
-            <TouchableOpacity
-              style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-              onPress={() => setFilters((p) => ({ ...p, rec: "" }))}
-            >
-              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>
-                Öneri: {filters.rec} ×
-              </Text>
-            </TouchableOpacity>
+            <RemovablePill text={`Öneri: ${filters.rec}`} onRemove={() => setFilters((p) => ({ ...p, rec: "" }))} />
           ) : null}
           {filters.cross ? (
-            <TouchableOpacity
-              style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-              onPress={() => setFilters((p) => ({ ...p, cross: "" }))}
-            >
-              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>
-                {filters.cross === "golden" ? "Golden cross" : "Death cross"} ×
-              </Text>
-            </TouchableOpacity>
+            <RemovablePill
+              text={filters.cross === "golden" ? "Golden cross" : "Death cross"}
+              onRemove={() => setFilters((p) => ({ ...p, cross: "" }))}
+            />
           ) : null}
           {(Object.keys(filters.ranges) as RangeKey[]).map((key) => {
             const def = RANGE_BY_KEY.get(key);
             const b = filters.ranges[key];
             if (!def || !b) return null;
+            const fmt = (v: number) => formatNumber(v, Number.isInteger(v) ? 0 : 2);
             const text =
               b.min !== undefined && b.max !== undefined
-                ? `${def.shortLabel}: ${b.min}–${b.max}`
+                ? `${def.shortLabel}: ${fmt(b.min)}–${fmt(b.max)}`
                 : b.min !== undefined
-                  ? `${def.shortLabel} ≥ ${b.min}`
-                  : `${def.shortLabel} ≤ ${b.max}`;
+                  ? `${def.shortLabel} ≥ ${fmt(b.min)}`
+                  : `${def.shortLabel} ≤ ${fmt(b.max as number)}`;
             return (
-              <TouchableOpacity
+              <RemovablePill
                 key={key}
-                style={[styles.activePill, { backgroundColor: colors.accentLight, borderColor: colors.accent }]}
-                onPress={() =>
+                text={text}
+                onRemove={() => {
                   setFilters((p) => {
                     const nextRanges = { ...p.ranges };
                     delete nextRanges[key];
                     return { ...p, ranges: nextRanges };
-                  })
-                }
-              >
-                <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "600" }}>
-                  {text} ×
-                </Text>
-              </TouchableOpacity>
+                  });
+                  setRangeDrafts((prev) => ({ ...prev, [key]: { min: "", max: "" } }));
+                }}
+              />
             );
           })}
           <TouchableOpacity
             style={[styles.activePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
-            onPress={() => setFilters((p) => clearScreenerFilters(p))}
+            onPress={() => {
+              setFilters((p) => clearScreenerFilters(p));
+              setRangeDrafts({});
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Tüm filtreleri temizle"
           >
             <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "600" }}>
               Tümünü temizle
@@ -518,7 +593,10 @@ export default function TaramaScreen() {
       {/* Result count + Sort bar */}
       {universe.data ? (
         <View style={styles.summaryBar}>
-          <Text style={[styles.countText, { color: colors.textSecondary }]}>
+          <Text
+            style={[styles.countText, { color: colors.textSecondary }]}
+            accessibilityLabel={`${universe.data.rows.length} hisseden ${filteredRows.length} eşleşme, ${breadth.up} yükselen, ${breadth.down} düşen`}
+          >
             <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{filteredRows.length}</Text>
             {" / "}
             {universe.data.rows.length} hisse
@@ -531,6 +609,8 @@ export default function TaramaScreen() {
             style={[styles.sortPill, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
             onPress={() => setSortOpen(true)}
             accessibilityRole="button"
+            accessibilityLabel={`Sıralama: ${sortLabel(filters.sort)}, ${filters.dir === "asc" ? "artan" : "azalan"}`}
+            accessibilityHint="Sıralama seçeneklerini açar"
           >
             <Text style={{ color: colors.accent, fontSize: FontSize.xs, fontWeight: "600" }}>
               {activeSortLabel}
@@ -626,7 +706,7 @@ export default function TaramaScreen() {
         <View style={styles.sheetTabs}>
           {(
             [
-              { id: "presets", label: "Hazır (31)" },
+              { id: "presets", label: `Hazır (${SCREENER_PRESETS.length})` },
               { id: "universe", label: "Endeks & Sektör" },
               { id: "advanced", label: "Kriterler" },
             ] as const
@@ -686,6 +766,8 @@ export default function TaramaScreen() {
                           },
                         ]}
                         onPress={() => setFilters((prev) => toggleScreenerPreset(prev, preset.id))}
+                        accessibilityState={{ selected: active }}
+                        accessibilityHint={preset.ruleSummary}
                         accessibilityRole="button"
                       >
                         <View style={{ flex: 1 }}>
@@ -747,6 +829,8 @@ export default function TaramaScreen() {
                           },
                         ]}
                         onPress={() => setFilters((p) => ({ ...p, index: active ? "" : idx.code }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
                       >
                         <Text
                           style={{
@@ -798,6 +882,8 @@ export default function TaramaScreen() {
                         },
                       ]}
                       onPress={() => setFilters((p) => ({ ...p, sector: active ? "" : sec.key }))}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
                     >
                       <Text
                         style={{
@@ -831,6 +917,8 @@ export default function TaramaScreen() {
                           },
                         ]}
                         onPress={() => setFilters((p) => ({ ...p, rec }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
                       >
                         <Text style={{ color: active ? colors.accent : colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
                           {rec || "Hepsi"}
@@ -863,6 +951,8 @@ export default function TaramaScreen() {
                           },
                         ]}
                         onPress={() => setFilters((p) => ({ ...p, cross: opt.id }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
                       >
                         <Text style={{ color: active ? colors.accent : colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
                           {opt.label}
@@ -873,46 +963,61 @@ export default function TaramaScreen() {
                 </View>
               </View>
 
-              <View style={styles.groupBlock}>
-                <Text style={[styles.groupTitle, { color: colors.textMuted }]}>SAYISAL ARALIKLAR</Text>
-                {MOBILE_RANGE_KEYS.map((key) => {
-                  const def = RANGE_BY_KEY.get(key);
-                  if (!def) return null;
-                  const draft = rangeDrafts[key] ?? { min: "", max: "" };
-                  return (
-                    <View key={key} style={styles.rangeRow}>
-                      <Text style={{ color: colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
-                        {def.label}
-                      </Text>
-                      <View style={styles.rangeInputs}>
-                        <TextInput
-                          value={draft.min}
-                          onChangeText={(txt) => applyRangeDraft(key, "min", txt)}
-                          placeholder="Min"
-                          placeholderTextColor={colors.textMuted}
-                          keyboardType="numbers-and-punctuation"
-                          style={[
-                            styles.rangeInput,
-                            { color: colors.textPrimary, backgroundColor: colors.bgSecondary, borderColor: colors.border },
-                          ]}
-                        />
-                        <Text style={{ color: colors.textMuted }}>—</Text>
-                        <TextInput
-                          value={draft.max}
-                          onChangeText={(txt) => applyRangeDraft(key, "max", txt)}
-                          placeholder="Maks"
-                          placeholderTextColor={colors.textMuted}
-                          keyboardType="numbers-and-punctuation"
-                          style={[
-                            styles.rangeInput,
-                            { color: colors.textPrimary, backgroundColor: colors.bgSecondary, borderColor: colors.border },
-                          ]}
-                        />
+              {RANGE_GROUPS.map((group) => (
+                <View key={group.id} style={styles.groupBlock}>
+                  <Text style={[styles.groupTitle, { color: colors.textMuted }]} accessibilityRole="header">
+                    {(FILTER_GROUPS.find((g) => g.id === group.id)?.label ?? group.id).toLocaleUpperCase("tr")}
+                  </Text>
+                  {group.keys.map((key) => {
+                    const def = RANGE_BY_KEY.get(key);
+                    if (!def) return null;
+                    const draft = rangeDrafts[key] ?? { min: "", max: "" };
+                    const invalid = (text: string) => text.trim() !== "" && parseDecimalInput(text) === undefined;
+                    return (
+                      <View key={key} style={styles.rangeRow}>
+                        <Text style={{ color: colors.textPrimary, fontSize: FontSize.xs, fontWeight: "600" }}>
+                          {def.label}
+                        </Text>
+                        <View style={styles.rangeInputs}>
+                          <TextInput
+                            value={draft.min}
+                            onChangeText={(txt) => applyRangeDraft(key, "min", txt)}
+                            placeholder="Min"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="numbers-and-punctuation"
+                            accessibilityLabel={`${def.label} en az`}
+                            style={[
+                              styles.rangeInput,
+                              {
+                                color: colors.textPrimary,
+                                backgroundColor: colors.bgSecondary,
+                                borderColor: invalid(draft.min) ? colors.down : colors.border,
+                              },
+                            ]}
+                          />
+                          <Text style={{ color: colors.textMuted }}>–</Text>
+                          <TextInput
+                            value={draft.max}
+                            onChangeText={(txt) => applyRangeDraft(key, "max", txt)}
+                            placeholder="Maks"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="numbers-and-punctuation"
+                            accessibilityLabel={`${def.label} en çok`}
+                            style={[
+                              styles.rangeInput,
+                              {
+                                color: colors.textPrimary,
+                                backgroundColor: colors.bgSecondary,
+                                borderColor: invalid(draft.max) ? colors.down : colors.border,
+                              },
+                            ]}
+                          />
+                        </View>
                       </View>
-                    </View>
-                  );
-                })}
-              </View>
+                    );
+                  })}
+                </View>
+              ))}
             </SheetNoDrag>
           )}
 
@@ -955,38 +1060,56 @@ export default function TaramaScreen() {
             { paddingBottom: Math.max(insets.bottom, Spacing.lg) },
           ]}
         >
-          {SORT_OPTIONS.map((opt) => {
-            const active = filters.sort === opt.key;
-            return (
-              <TouchableOpacity
-                key={opt.key}
-                style={[
-                  styles.optionRow,
-                  {
-                    backgroundColor: active ? colors.accentLight : colors.bgSecondary,
-                    borderColor: active ? colors.accent : colors.border,
-                  },
-                ]}
-                onPress={() => handleSortPick(opt.key)}
-                accessibilityRole="button"
-              >
-                <Text
-                  style={{
-                    color: active ? colors.accent : colors.textPrimary,
-                    fontWeight: active ? "700" : "500",
-                    fontSize: FontSize.md,
-                  }}
-                >
-                  {opt.label}
-                </Text>
-                {active ? (
-                  <Text style={{ color: colors.accent, fontWeight: "700", fontSize: FontSize.sm }}>
-                    {filters.dir === "asc" ? "Artan ↑" : "Azalan ↓"}
-                  </Text>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
+          {(
+            [
+              { title: `${VIEWS.find((v) => v.id === filters.view)?.label ?? ""} görünümü`, keys: sortGroups.primary },
+              { title: "Diğer alanlar", keys: sortGroups.other },
+            ] as const
+          ).map((group) => (
+            <View key={group.title} style={styles.groupBlock}>
+              <Text style={[styles.groupTitle, { color: colors.textMuted }]} accessibilityRole="header">
+                {group.title.toLocaleUpperCase("tr")}
+              </Text>
+              {group.keys.map((key) => {
+                const active = filters.sort === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.optionRow,
+                      {
+                        backgroundColor: active ? colors.accentLight : colors.bgSecondary,
+                        borderColor: active ? colors.accent : colors.border,
+                      },
+                    ]}
+                    onPress={() => handleSortPick(key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={
+                      active
+                        ? `${sortLabel(key)}, ${filters.dir === "asc" ? "artan" : "azalan"}; yönü değiştirmek için dokunun`
+                        : sortLabel(key)
+                    }
+                  >
+                    <Text
+                      style={{
+                        color: active ? colors.accent : colors.textPrimary,
+                        fontWeight: active ? "700" : "500",
+                        fontSize: FontSize.md,
+                      }}
+                    >
+                      {sortLabel(key)}
+                    </Text>
+                    {active ? (
+                      <Text style={{ color: colors.accent, fontWeight: "700", fontSize: FontSize.sm }}>
+                        {filters.dir === "asc" ? "Artan ↑" : "Azalan ↓"}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
         </SheetScrollView>
       </BottomSheetModal>
     </View>
@@ -1081,11 +1204,28 @@ const styles = StyleSheet.create({
   changeText: { fontSize: FontSize.xs, fontWeight: "600", fontVariant: ["tabular-nums"] },
   metricsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     paddingTop: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: Spacing.sm,
+    rowGap: Spacing.sm,
   },
-  metricCell: { flex: 1, gap: 1 },
+  // Four columns per line: up to seven metrics fit in two rows on a phone.
+  metricCell: { width: "25%", paddingRight: Spacing.xs, gap: 1 },
+  signalRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
+  signalBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  viewRow: { flexDirection: "row", gap: Spacing.xs },
+  viewChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   metricLabel: { fontSize: 10 },
   metricValue: { fontSize: FontSize.xs, fontWeight: "600", fontVariant: ["tabular-nums"] },
   sheetTabs: {

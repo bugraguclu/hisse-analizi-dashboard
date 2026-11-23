@@ -79,8 +79,15 @@ export const RANGE_BY_KEY: ReadonlyMap<RangeKey, RangeFilterDef> = new Map(
   RANGE_FILTERS.map((def) => [def.key, def]),
 );
 
-/** Key range inputs exposed directly in the mobile advanced-filter sheet. */
-export const MOBILE_RANGE_KEYS: readonly RangeKey[] = ["pe", "pb", "dy", "roe", "rsi", "mcap", "chg", "upside"];
+/** Typed criteria grouped as in the web filter panel (every range filter is editable). */
+export const RANGE_GROUPS: readonly { id: FilterGroup; keys: readonly RangeKey[] }[] = [
+  { id: "valuation", keys: ["pe", "pb", "evebitda", "dy"] },
+  { id: "profitability", keys: ["roe", "nm"] },
+  { id: "scale", keys: ["mcap", "vol"] },
+  { id: "technical", keys: ["rsi", "sma50", "sma200", "hi52", "lo52", "rvol"] },
+  { id: "performance", keys: ["chg", "p1w", "p1m", "p3m", "pytd", "p1y"] },
+  { id: "analyst", keys: ["upside", "foreign"] },
+];
 
 export interface Bounds {
   min?: number;
@@ -91,47 +98,104 @@ export type Ranges = Partial<Record<RangeKey, Bounds>>;
 export type CrossFilter = "" | "golden" | "death";
 export type RecFilter = "" | "AL" | "TUT" | "SAT";
 
-export type SortKey =
-  | "market_cap"
-  | "close"
-  | "change_pct"
-  | "pe"
-  | "pb"
-  | "ev_ebitda"
-  | "dividend_yield"
-  | "roe"
-  | "net_margin"
-  | "rsi"
-  | "sma200_dist"
-  | "upside"
-  | "foreign_ratio"
-  | "avg_turnover"
-  | "rel_volume"
-  | "perf_1w"
-  | "high_52w_dist"
-  | "low_52w_dist"
-  | "symbol";
+/** Every numeric column of the universe can be sorted on, as on the web table. */
+export type SortKey = NumericField | "symbol";
 
 export type SortDir = "asc" | "desc";
 
-export const SORT_OPTIONS: readonly { key: SortKey; label: string; defaultDir: SortDir }[] = [
-  { key: "market_cap", label: "Piyasa değeri", defaultDir: "desc" },
-  { key: "change_pct", label: "Günlük değişim", defaultDir: "desc" },
-  { key: "close", label: "Fiyat", defaultDir: "desc" },
-  { key: "pe", label: "F/K", defaultDir: "asc" },
-  { key: "pb", label: "PD/DD", defaultDir: "asc" },
-  { key: "dividend_yield", label: "Temettü verimi", defaultDir: "desc" },
-  { key: "roe", label: "ROE", defaultDir: "desc" },
-  { key: "rsi", label: "RSI (14)", defaultDir: "asc" },
-  { key: "upside", label: "Hedef potansiyel", defaultDir: "desc" },
-  { key: "avg_turnover", label: "Ort. hacim", defaultDir: "desc" },
-  { key: "symbol", label: "Hisse kodu", defaultDir: "asc" },
-];
+/** Short column labels (cards, sort menu, VoiceOver). */
+export const FIELD_LABELS: Record<NumericField, string> = {
+  close: "Fiyat",
+  change_pct: "Günlük değişim",
+  turnover: "Hacim",
+  avg_turnover: "Ort. hacim",
+  market_cap: "Piyasa değeri",
+  pe: "F/K",
+  pb: "PD/DD",
+  ev_ebitda: "FD/FAVÖK",
+  dividend_yield: "Temettü verimi",
+  roe: "ROE",
+  net_margin: "Net marj",
+  rsi: "RSI (14)",
+  sma50_dist: "SMA 50 uzaklığı",
+  sma200_dist: "SMA 200 uzaklığı",
+  tech_rating: "Teknik puan",
+  rel_volume: "Göreli hacim",
+  high_52w_dist: "52H zirveye uzaklık",
+  low_52w_dist: "52H dibe uzaklık",
+  perf_1w: "1 hafta",
+  perf_1m: "1 ay",
+  perf_3m: "3 ay",
+  perf_ytd: "Yılbaşından beri",
+  perf_1y: "1 yıl",
+  target_price: "Hedef fiyat",
+  upside: "Hedef potansiyel",
+  foreign_ratio: "Yabancı payı",
+};
+
+/** Mirrors web `ASCENDING_FIRST`: names and cheapness ascend, everything else largest first. */
+const ASCENDING_FIRST: ReadonlySet<SortKey> = new Set<SortKey>(["symbol", "pe", "pb", "ev_ebitda", "low_52w_dist"]);
 
 export function defaultSortDir(key: SortKey): SortDir {
-  const ascFirst: ReadonlySet<SortKey> = new Set(["symbol", "pe", "pb", "ev_ebitda", "low_52w_dist", "rsi"]);
-  return ascFirst.has(key) ? "asc" : "desc";
+  return ASCENDING_FIRST.has(key) ? "asc" : "desc";
 }
+
+export function sortLabel(key: SortKey): string {
+  return key === "symbol" ? "Hisse kodu" : FIELD_LABELS[key];
+}
+
+// ---------------------------------------------------------------------------
+// Views (the web table's column sets)
+// ---------------------------------------------------------------------------
+
+export type ViewKey = "overview" | "fundamentals" | "technical" | "performance" | "analyst";
+
+export const VIEWS: readonly { id: ViewKey; label: string }[] = [
+  { id: "overview", label: "Genel" },
+  { id: "fundamentals", label: "Temel" },
+  { id: "technical", label: "Teknik" },
+  { id: "performance", label: "Performans" },
+  { id: "analyst", label: "Analist" },
+];
+
+/**
+ * Metric columns per view, after the always-visible price and daily change.
+ * Same sets as web `VIEW_COLUMNS` (sector, recommendation and signals render as badges).
+ */
+export const VIEW_METRICS: Record<ViewKey, readonly NumericField[]> = {
+  overview: ["turnover", "market_cap", "pe", "pb", "dividend_yield"],
+  fundamentals: ["market_cap", "pe", "pb", "ev_ebitda", "dividend_yield", "roe", "net_margin"],
+  technical: ["rsi", "sma50_dist", "sma200_dist", "high_52w_dist", "low_52w_dist", "rel_volume", "tech_rating"],
+  performance: ["perf_1w", "perf_1m", "perf_3m", "perf_ytd", "perf_1y", "avg_turnover"],
+  analyst: ["target_price", "upside", "foreign_ratio", "market_cap"],
+};
+
+/** Sort fields offered in the sort sheet for a view: its own columns first, then the rest. */
+export function sortOptionsForView(view: ViewKey): { primary: SortKey[]; other: SortKey[] } {
+  const primary: SortKey[] = ["symbol", "close", "change_pct", ...VIEW_METRICS[view]];
+  const all = Object.keys(FIELD_LABELS) as NumericField[];
+  return { primary, other: all.filter((field) => !primary.includes(field)) };
+}
+
+export type TechRating = "strongBuy" | "buy" | "neutral" | "sell" | "strongSell";
+
+/** TradingView's own buckets for Recommend.All (web `techRating`). */
+export function techRating(value: number | undefined): TechRating | null {
+  if (value === undefined || !Number.isFinite(value)) return null;
+  if (value > 0.5) return "strongBuy";
+  if (value > 0.1) return "buy";
+  if (value >= -0.1) return "neutral";
+  if (value >= -0.5) return "sell";
+  return "strongSell";
+}
+
+export const TECH_RATING_LABELS: Record<TechRating, string> = {
+  strongBuy: "Güçlü al",
+  buy: "Al",
+  neutral: "Nötr",
+  sell: "Sat",
+  strongSell: "Güçlü sat",
+};
 
 export type PresetId =
   | "low_pe" | "pe_below_sector" | "low_pb" | "pb_below_sector" | "low_ev_ebitda" | "high_dividend"
@@ -206,6 +270,44 @@ export const SCREENER_PRESETS: readonly PresetDef[] = [
   { id: "high_foreign", label: "Yüksek yabancı payı", ruleSummary: "Yabancı payı ≥ %30", group: "analyst", ranges: { foreign: { min: 30 } }, sort: ["foreign_ratio", "desc"], highlightMetric: "foreign_ratio" },
 ];
 
+/** View a quick screen opens in (web `PresetDef.view`); scale presets keep the current one. */
+export const PRESET_VIEWS: Partial<Record<PresetId, ViewKey>> = {
+  low_pe: "fundamentals", pe_below_sector: "fundamentals", low_pb: "fundamentals", pb_below_sector: "fundamentals",
+  low_ev_ebitda: "fundamentals", high_dividend: "fundamentals", profitable: "fundamentals", high_roe: "fundamentals",
+  roe_above_sector: "fundamentals", high_net_margin: "fundamentals",
+  liquid: "performance",
+  uptrend: "technical", golden_cross: "technical", death_cross: "technical", near_high: "technical",
+  near_low: "technical", rsi_oversold: "technical", rsi_overbought: "technical", volume_spike: "technical",
+  top_gainers: "performance", top_losers: "performance", day_gainers: "performance", day_losers: "performance",
+  week_gainers: "performance",
+  buy_rec: "analyst", sell_rec: "analyst", high_upside: "analyst", high_foreign: "analyst",
+};
+
+export type RowSignal = "oversold" | "overbought" | "golden" | "death" | "nearHigh" | "nearLow" | "volumeSpike";
+
+export const ROW_SIGNAL_LABELS: Record<RowSignal, string> = {
+  oversold: "Aşırı satım",
+  overbought: "Aşırı alım",
+  golden: "Golden cross",
+  death: "Death cross",
+  nearHigh: "52H zirveye yakın",
+  nearLow: "52H dibe yakın",
+  volumeSpike: "Hacim artışı",
+};
+
+/** Technical badges — same thresholds as the quick screens (web `rowSignals`). */
+export function rowSignals(row: ScreenerStockRow): RowSignal[] {
+  const out: RowSignal[] = [];
+  if (row.cross === "golden") out.push("golden");
+  if (row.cross === "death") out.push("death");
+  if (row.rsi !== undefined && row.rsi <= RSI_OVERSOLD) out.push("oversold");
+  if (row.rsi !== undefined && row.rsi >= RSI_OVERBOUGHT) out.push("overbought");
+  if (row.high_52w_dist !== undefined && row.high_52w_dist >= -NEAR_52W_PCT) out.push("nearHigh");
+  if (row.low_52w_dist !== undefined && row.low_52w_dist <= NEAR_52W_PCT) out.push("nearLow");
+  if (row.rel_volume !== undefined && row.rel_volume >= VOLUME_SPIKE) out.push("volumeSpike");
+  return out;
+}
+
 export const FEATURED_PRESETS: readonly PresetDef[] = SCREENER_PRESETS.filter((p) => p.featured);
 export const PRESET_BY_ID: ReadonlyMap<PresetId, PresetDef> = new Map(SCREENER_PRESETS.map((p) => [p.id, p]));
 
@@ -231,6 +333,8 @@ export interface ScreenerFilterState {
   cross: CrossFilter;
   rec: RecFilter;
   ranges: Ranges;
+  /** Column set shown on each result card (web table view). */
+  view: ViewKey;
   sort: SortKey;
   dir: SortDir;
 }
@@ -243,6 +347,7 @@ export const DEFAULT_SCREENER_STATE: ScreenerFilterState = {
   cross: "",
   rec: "",
   ranges: {},
+  view: "overview",
   sort: "market_cap",
   dir: "desc",
 };
@@ -267,6 +372,7 @@ export function toggleScreenerPreset(state: ScreenerFilterState, presetId: Prese
   return {
     ...state,
     presets: nextPresets,
+    view: PRESET_VIEWS[presetId] ?? state.view,
     sort: preset.sort?.[0] ?? state.sort,
     dir: preset.sort?.[1] ?? state.dir,
   };
@@ -275,6 +381,7 @@ export function toggleScreenerPreset(state: ScreenerFilterState, presetId: Prese
 export function clearScreenerFilters(state: ScreenerFilterState): ScreenerFilterState {
   return {
     ...DEFAULT_SCREENER_STATE,
+    view: state.view,
     sort: state.sort,
     dir: state.dir,
   };
