@@ -14,6 +14,15 @@ describe("externalLinking", () => {
     assert.equal(normalizeTicker("bad-ticker!"), null);
   });
 
+  it("honours ?section= on stock/ links and ignores unknown sections", () => {
+    const analysis = readExternalAppUrl("hisseanalizi://stock/THYAO?section=analiz");
+    assert.ok(analysis && "action" in analysis && analysis.action.kind === "stock");
+    assert.equal(analysis.action.section, "analiz");
+    const unknown = readExternalAppUrl("hisseanalizi://stock/THYAO?section=xyz");
+    assert.ok(unknown && "action" in unknown && unknown.action.kind === "stock");
+    assert.equal(unknown.action.section, "hisse");
+  });
+
   it("parses custom-scheme stock, screener, events, and macro URLs", () => {
     const stock = readExternalAppUrl("hisseanalizi://analiz/garan?source=notification");
     assert.ok(stock && "action" in stock);

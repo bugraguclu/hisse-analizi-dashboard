@@ -129,7 +129,10 @@ export function readExternalAppUrl(rawUrl: string): ExternalLinkReading | null {
   }
 
   if (STOCK_SECTIONS.has(head as StockSection) || head === "stock") {
-    const section: StockSection = head === "stock" ? "hisse" : (head as StockSection);
+    // `stock/THYAO?section=analiz` is accepted too; an unknown section falls back to the overview.
+    const requested = (url.searchParams.get("section") ?? "").toLowerCase() as StockSection;
+    const section: StockSection =
+      head === "stock" ? (STOCK_SECTIONS.has(requested) ? requested : "hisse") : (head as StockSection);
     const rawTicker = segments[1] ?? url.searchParams.get("ticker") ?? "";
     const ticker = normalizeTicker(rawTicker);
     if (!ticker) {
