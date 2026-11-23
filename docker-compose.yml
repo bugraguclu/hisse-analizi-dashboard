@@ -11,6 +11,14 @@ x-backend-db-urls: &backend-db-urls
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
   DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-hisse}:${POSTGRES_PASSWORD:-hisse}@db:5432/${POSTGRES_DB:-hisse_analizi}
 
+# Web Push (VAPID) keys for the API (/push/config) and the worker (sender). Also
+# read from .env via env_file; listed here so the dependency is visible. Empty =
+# alerts are stored but not sent.
+x-push-vars: &push-vars
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+
 services:
   db:
     image: postgres:16-alpine
@@ -46,7 +54,7 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      <<: *backend-db-urls
+      <<: [*backend-db-urls, *push-vars]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -70,7 +78,7 @@ services:
     command: python -m src.workers.run_workers
     env_file: .env
     environment:
-      <<: *backend-db-urls
+      <<: [*backend-db-urls, *push-vars]
       WORKER_SINGLE_REPLICA: "true"
     depends_on:
       migrate:

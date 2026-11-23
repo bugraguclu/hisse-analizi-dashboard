@@ -108,6 +108,7 @@ export interface LoadedWorker {
     extractAssetUrls(html: string): string[];
     requestKind(request: Request): string | null;
     pageKey(url: string): string;
+    safeAppPath(raw: unknown): string;
   };
   caches: FakeCacheStorage;
   dispatch(type: string, event: Record<string, unknown>): Promise<unknown[]>;

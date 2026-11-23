@@ -12,6 +12,7 @@
  */
 
 import type { Locale } from "../i18n.ts";
+import { DEVICE_KEY_STORAGE_KEY, isValidDeviceKey } from "../device/device-key.ts";
 import {
   createIndexedDbArchiveStore,
   type BackupArchiveStore,
@@ -79,7 +80,8 @@ export type BackupValidationErrorCode =
   | "invalid-chart-prefs"
   | "invalid-drawings"
   | "invalid-costs"
-  | "invalid-preferences";
+  | "invalid-preferences"
+  | "invalid-device-key";
 
 export interface BackupCounts {
   watchlists: number;
@@ -90,6 +92,8 @@ export interface BackupCounts {
   drawings: number;
   costs: number;
   preferences: number;
+  /** 1 when the backup carries the device key (alerts and notes on the server). */
+  deviceKey: number;
 }
 
 export interface BackupPreview {
@@ -163,6 +167,7 @@ export function summarizeWorkspaceData(data: WorkspaceData, exportedAt: string |
     drawings: drawingCount,
     costs: Object.keys(data.costs).length,
     preferences: prefCount,
+    deviceKey: data.deviceKey ? 1 : 0,
   };
 
   const hasChanges =
@@ -171,7 +176,8 @@ export function summarizeWorkspaceData(data: WorkspaceData, exportedAt: string |
     counts.chartPrefs > 0 ||
     counts.drawings > 0 ||
     counts.costs > 0 ||
-    counts.preferences > 0;
+    counts.preferences > 0 ||
+    counts.deviceKey > 0;
 
   return {
     exportedAt,
@@ -336,12 +342,19 @@ export function validateWorkspaceBackup(rawContents: string): BackupValidationRe
     }
   }
 
+  // 7. Device key
+  let deviceKey: string | undefined;
+  if (rawData.deviceKey !== undefined) {
+    if (!isValidDeviceKey(rawData.deviceKey)) return { valid: false, reason: "invalid-device-key" };
+    deviceKey = rawData.deviceKey;
+  }
+
   const exportedAt =
     typeof parsed.exportedAt === "string" && !Number.isNaN(Date.parse(parsed.exportedAt))
       ? parsed.exportedAt
       : null;
 
-  const data: WorkspaceData = { watchlists, layouts, chartPrefs, drawings, costs, preferences };
+  const data: WorkspaceData = { watchlists, layouts, chartPrefs, drawings, costs, preferences, ...(deviceKey ? { deviceKey } : {}) };
   const snapshot: WorkspaceSnapshot = {
     format: WORKSPACE_BACKUP_FORMAT,
     version: WORKSPACE_SCHEMA_VERSION,
@@ -368,7 +381,8 @@ function isPersonalStorageKey(key: string): boolean {
     key === CALENDAR_COUNTRIES_STORAGE_KEY ||
     key === MARKET_STRIP_PAUSED_STORAGE_KEY ||
     key === LOCALE_STORAGE_KEY ||
-    key === THEME_STORAGE_KEY
+    key === THEME_STORAGE_KEY ||
+    key === DEVICE_KEY_STORAGE_KEY
   );
 }
 
@@ -410,6 +424,8 @@ function writeWorkspaceData(
       // Preserve locale/theme if the backup did not include them.
       if (key === LOCALE_STORAGE_KEY && data.preferences.locale === undefined) continue;
       if (key === THEME_STORAGE_KEY && data.preferences.theme === undefined) continue;
+      // An older backup without a device key must not orphan this browser's alerts.
+      if (key === DEVICE_KEY_STORAGE_KEY && data.deviceKey === undefined) continue;
       storage.removeItem(key);
     }
   }
@@ -459,6 +475,11 @@ function writeWorkspaceData(
   }
   if (data.preferences.theme) {
     storage.setItem(THEME_STORAGE_KEY, data.preferences.theme);
+  }
+
+  // 7. Device key (restoring it brings back that device's alerts and notes)
+  if (data.deviceKey) {
+    storage.setItem(DEVICE_KEY_STORAGE_KEY, data.deviceKey);
   }
 
   // Stamp schema metadata

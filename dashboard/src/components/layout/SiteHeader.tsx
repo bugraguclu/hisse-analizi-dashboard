@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Menu, Search } from "lucide-react";
+import { Archive, Bell, Menu, Search } from "lucide-react";
 import { TickerSearch, type TickerSearchHandle } from "@/components/shared/TickerSearch";
 import { SearchOverlay } from "@/components/shared/search/SearchOverlay";
 import { useSearchHotkey } from "@/components/shared/search/use-search-hotkey";
@@ -214,6 +214,14 @@ export function SiteHeader() {
               >
                 <Search className="h-5 w-5" aria-hidden="true" />
               </button>
+              <Link
+                href="/alarmlar"
+                aria-label={t("nav.alerts")}
+                title={t("nav.alerts")}
+                className={cn(ICON_BUTTON, "relative after:absolute after:-inset-1.5 after:content-['']")}
+              >
+                <Bell className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
+              </Link>
               <button
                 type="button"
                 onClick={() => openWorkspaceManager("backup")}

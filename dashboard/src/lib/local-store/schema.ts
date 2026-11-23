@@ -11,6 +11,7 @@ import type { Drawing, DrawingKind, DrawingPoint } from "../../components/charts
 import type { ChartType, ChartUnit, IndicatorConfig, IndicatorKind, PriceScaleKind } from "../../components/charts/types.ts";
 import type { Locale } from "../i18n.ts";
 import type { StorageAdapter } from "./storage.ts";
+import { DEVICE_KEY_STORAGE_KEY, isValidDeviceKey } from "../device/device-key.ts";
 
 export const WORKSPACE_BACKUP_FORMAT = "hisse-analizi-workspace" as const;
 export const WORKSPACE_SCHEMA_VERSION = 1 as const;
@@ -70,6 +71,8 @@ export interface WorkspaceData {
   drawings: Record<string, Drawing[]>;
   costs: Record<string, number>;
   preferences: WorkspacePreferences;
+  /** Anonymous device key (alerts, push subscriptions, server-side notes). A secret. */
+  deviceKey?: string;
 }
 
 export interface WorkspaceSnapshot {
@@ -531,7 +534,11 @@ export function readWorkspaceData(storage: StorageAdapter): WorkspaceData {
   const theme = sanitizeThemeValue(storage.getItem(THEME_STORAGE_KEY));
   if (theme) preferences.theme = theme;
 
-  return { watchlists, layouts, chartPrefs, drawings, costs, preferences };
+  // 7. Device key
+  const rawDeviceKey = storage.getItem(DEVICE_KEY_STORAGE_KEY);
+  const deviceKey = isValidDeviceKey(rawDeviceKey) ? rawDeviceKey : undefined;
+
+  return { watchlists, layouts, chartPrefs, drawings, costs, preferences, ...(deviceKey ? { deviceKey } : {}) };
 }
 
 export interface MigrationResult {

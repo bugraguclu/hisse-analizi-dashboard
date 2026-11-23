@@ -1618,9 +1618,25 @@ async def _quotes_loop(stop: asyncio.Event) -> None:
             logger.error("market_quotes_cycle_failed", error=f"{type(e).__name__}: {e}")
             await sleep_or_stop(stop, ERROR_RETRY_SECONDS)
             continue
+        await evaluate_price_alerts(now)
         if ms.in_quote_window(now):
             elapsed = _time.monotonic() - cycle_started
             await sleep_or_stop(stop, max(1.0, settings.market_quote_interval_seconds - elapsed))
+
+
+async def evaluate_price_alerts(now: datetime) -> dict[str, int] | None:
+    """Price / daily-change alert rules against the quotes just stored (session hours only)."""
+    from src.services.alert_service import evaluate_quote_rules
+
+    try:
+        async with async_session_factory() as session:
+            stats = await evaluate_quote_rules(session, now)
+    except Exception as e:  # alerts must never break the quote loop
+        logger.error("price_alerts_failed", error=f"{type(e).__name__}: {e}")
+        return None
+    if stats.get("fired") or stats.get("conflicts"):
+        logger.info("price_alerts_evaluated", **stats)
+    return stats
 
 
 async def _last_success(job: str) -> datetime | None:

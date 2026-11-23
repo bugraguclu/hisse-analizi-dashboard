@@ -3,6 +3,7 @@
 Run with: python -m src.workers.run_workers
 
 CONCURRENCY SAFETY:
+- Web Push deliveries (push_loop) are claimed like the e-mail outbox (SKIP LOCKED).
 - Source polling is serialized per source by PostgreSQL advisory locks (also against
   the API's admin poll/backfill triggers); outbox entries are claimed with
   SELECT ... FOR UPDATE SKIP LOCKED and notifications are deduplicated by a unique
@@ -41,6 +42,7 @@ from src.db.session import dispose_engine
 from src.workers.news_worker import news_loop
 from src.workers.notification_worker import notification_loop
 from src.workers.polling_worker import polling_loop
+from src.workers.push_worker import push_loop
 
 logger = structlog.get_logger(__name__)
 
@@ -102,6 +104,7 @@ async def main() -> int:
     cooperative = [
         asyncio.create_task(polling_loop(stop), name="polling"),
         asyncio.create_task(notification_loop(stop), name="notifications"),
+        asyncio.create_task(push_loop(stop), name="push"),
     ]
     for name, loop_factory in load_data_platform_loops():
         cooperative.append(asyncio.create_task(loop_factory(stop), name=name))

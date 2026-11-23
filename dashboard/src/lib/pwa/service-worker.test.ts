@@ -183,3 +183,42 @@ describe("service worker script", () => {
     assert.ok(keys.includes("/hisse/T59") && !keys.includes("/hisse/T0"), "least recently saved pages go first");
   });
 });
+
+describe("service worker push notifications", () => {
+  const pushEvent = (payload: unknown) => ({
+    data: {
+      json: () => (typeof payload === "string" ? JSON.parse(payload) : payload),
+      text: () => String(payload),
+    },
+  });
+
+  test("shows the alert with its tag and keeps the target path", async () => {
+    const worker = loadWorker();
+    await worker.dispatch("push", pushEvent({ title: "THYAO 300,00 TL üstüne çıktı", body: "Son fiyat", tag: "alert-1", url: "/hisse/THYAO" }));
+    const [shown] = worker.state.notifications as Array<{ title: string; options: { tag: string; data: { url: string } } }>;
+    assert.equal(shown.title, "THYAO 300,00 TL üstüne çıktı");
+    assert.equal(shown.options.tag, "alert-1");
+    assert.equal(shown.options.data.url, "/hisse/THYAO");
+  });
+
+  test("a malformed or foreign target never leaves the app", async () => {
+    const worker = loadWorker();
+    assert.equal(worker.helpers.safeAppPath("https://evil.example/x"), "/alarmlar");
+    assert.equal(worker.helpers.safeAppPath("//evil.example/x"), "/alarmlar");
+    assert.equal(worker.helpers.safeAppPath("/events?ticker=THYAO&event=abc"), "/events?ticker=THYAO&event=abc");
+    await worker.dispatch("push", { data: { json: () => { throw new SyntaxError("bad"); }, text: () => "plain text" } });
+    const [shown] = worker.state.notifications as Array<{ title: string; options: { body: string } }>;
+    assert.equal(shown.title, "Hisse Analizi");
+    assert.equal(shown.options.body, "plain text");
+  });
+
+  test("clicking opens the alert's page", async () => {
+    const worker = loadWorker();
+    let closed = false;
+    await worker.dispatch("notificationclick", {
+      notification: { data: { url: "/events?ticker=THYAO&event=e1" }, close: () => { closed = true; } },
+    });
+    assert.ok(closed);
+    assert.deepEqual(worker.state.opened, [`${ORIGIN}/events?ticker=THYAO&event=e1`]);
+  });
+});

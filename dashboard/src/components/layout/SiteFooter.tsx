@@ -32,6 +32,9 @@ export function SiteFooter() {
             <Link href="/rehber" className="transition-colors hover:text-foreground">
               {t("nav.guide")}
             </Link>
+            <Link href="/alarmlar" className="transition-colors hover:text-foreground">
+              {t("nav.alerts")}
+            </Link>
           </nav>
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <LegalNoticeLink />

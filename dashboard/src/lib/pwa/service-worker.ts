@@ -267,6 +267,66 @@ self.addEventListener("fetch", function (event) {
   else if (kind === "asset") event.respondWith(staleWhileRevalidate(event));
 });
 
+// --- Web Push (alerts) -------------------------------------------------------------
+
+/** Only same-origin app paths may be opened from a notification. */
+function safeAppPath(raw) {
+  try {
+    var url = new URL(typeof raw === "string" && raw ? raw : "/alarmlar", self.location.origin);
+    if (url.origin !== self.location.origin) return "/alarmlar";
+    return url.pathname + url.search + url.hash;
+  } catch (error) {
+    return "/alarmlar";
+  }
+}
+
+function parsePush(event) {
+  var data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (error) {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  return {
+    title: typeof data.title === "string" && data.title ? data.title : "Hisse Analizi",
+    options: {
+      body: typeof data.body === "string" ? data.body : "",
+      tag: typeof data.tag === "string" && data.tag ? data.tag : undefined,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: safeAppPath(data.url), deliveryId: data.deliveryId || null },
+    },
+  };
+}
+
+self.addEventListener("push", function (event) {
+  var message = parsePush(event);
+  event.waitUntil(self.registration.showNotification(message.title, message.options));
+});
+
+function openAppPath(path) {
+  var target = new URL(path, self.location.origin).href;
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (windows) {
+    for (var i = 0; i < windows.length; i += 1) {
+      var client = windows[i];
+      if (client.url === target && "focus" in client) return client.focus();
+    }
+    for (var j = 0; j < windows.length; j += 1) {
+      var candidate = windows[j];
+      if ("navigate" in candidate && "focus" in candidate) {
+        return candidate.navigate(target).then(function (navigated) { return (navigated || candidate).focus(); });
+      }
+    }
+    return self.clients.openWindow(target);
+  });
+}
+
+self.addEventListener("notificationclick", function (event) {
+  event.notification.close();
+  var data = event.notification.data || {};
+  event.waitUntil(openAppPath(safeAppPath(data.url)));
+});
+
 self.__hisseSw = {
   VERSION: VERSION,
   STATIC_CACHE: STATIC_CACHE,
@@ -275,5 +335,7 @@ self.__hisseSw = {
   requestKind: requestKind,
   pageKey: pageKey,
   isCacheablePage: isCacheablePage,
+  safeAppPath: safeAppPath,
+  parsePush: parsePush,
 };
 `;

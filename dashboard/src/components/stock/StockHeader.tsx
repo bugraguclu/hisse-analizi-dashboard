@@ -13,6 +13,7 @@ import {
   formatSigned,
   trendTone,
 } from "@/lib/format";
+import { AlertQuickAction } from "@/components/alerts/AlertQuickAction";
 import { ApiDataMeta } from "@/components/shared/DataMeta";
 import { sessionQuoteTime } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
@@ -164,6 +165,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
 
       <div className="flex min-h-7 flex-wrap items-center gap-2 md:col-start-1 md:row-start-2">
         <TechnicalSignal ticker={ticker} />
+        <AlertQuickAction ticker={ticker} currentPrice={quote?.last ?? null} />
       </div>
     </header>
   );
