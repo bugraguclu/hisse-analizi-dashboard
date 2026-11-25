@@ -212,7 +212,23 @@ function PageScreen({ page, pages, onCreate, initialEditing }: { page: CustomPag
     <div className="mx-auto max-w-7xl">
       <PageHeader
         eyebrow={t("pages.eyebrow")}
-        title={<span className="break-words">{page.name}</span>}
+        title={
+          <span className="inline-flex max-w-full items-center gap-2">
+            <span className="min-w-0 break-words">{page.name}</span>
+            {editor.editing ? (
+              <Button
+                variant="ghost"
+                size="md"
+                aria-label={t("pages.rename")}
+                title={t("pages.rename")}
+                onClick={() => setDialog("rename")}
+                className="w-8 px-0"
+              >
+                <Pencil aria-hidden />
+              </Button>
+            ) : null}
+          </span>
+        }
         actions={
           <>
             {stockUsage.followingPage > 0 ? (
