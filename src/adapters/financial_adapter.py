@@ -484,8 +484,10 @@ def ttm_flows(
     With ``quarter_factors`` (IAS 29 reporters) the four quarters are the companies'
     own figures (:func:`discrete_quarter_values`): every second or third quarter ``q``
     of the window also subtracts YTD(q − 3) × (factor(q) − 1). An item is ``None`` when
-    that cumulative value or the factor is missing. At a fiscal year end the annual
-    figure stays the TTM.
+    that cumulative value is missing. A missing *factor* (the CPI series does not reach that
+    quarter yet, or has a gap) makes the whole window unknowable, like a missing period:
+    ``None``, so callers fall back to the last fiscal year instead of showing a TTM whose
+    every flow is empty. At a fiscal year end the annual figure stays the TTM.
     """
     parsed = parse_period(period)
     if parsed is None or period not in items_by_period:
@@ -508,6 +510,8 @@ def ttm_flows(
     year, month = parsed
     for q_year, q_month in (shift_months(year, month, -3 * i) for i in range(4)):
         factor = reexpression_factor(period_label(q_year, q_month), quarter_factors, fiscal_year_end_month)
+        if factor is None:
+            return None
         if factor == 1.0:
             continue
         base_items = items_by_period.get(period_label(*shift_months(q_year, q_month, -3)))
@@ -516,7 +520,7 @@ def ttm_flows(
             base = to_number(base_items.get(key)) if base_items is not None else None
             result[key] = (
                 value - base * (factor - 1)
-                if value is not None and base is not None and factor is not None
+                if value is not None and base is not None
                 else None
             )
     return result

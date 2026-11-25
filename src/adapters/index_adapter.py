@@ -235,8 +235,14 @@ def _ticker_info(
     official: dict[str, Any] | None = None,
     capital: market_service.CompanyCapital | None = None,
     stored_capital: float | None = None,
+    ttm_earnings: float | None = None,
 ) -> dict[str, Any]:
-    """Live key stats in the historical ``Ticker.fast_info`` shape (+ change fields)."""
+    """Live key stats in the historical ``Ticker.fast_info`` shape (+ change fields).
+
+    P/E follows :func:`market_service.price_to_earnings` (market cap / stored TTM parent net
+    income), the same figure as fast-info and the ratios card; İş Yatırım's card F/K is only the
+    fallback when the store has no earnings.
+    """
     quote = quote or {}
     metrics = metrics or {}
     last_price = quote.get("last")
@@ -251,6 +257,9 @@ def _ticker_info(
         pb_ratio = None
     if pb_ratio is None:
         pb_ratio = metrics.get("pb_ratio")
+    pe_ratio, pe_source = market_service.price_to_earnings(
+        market_cap if count.capital is not None else None, ttm_earnings, metrics.get("pe_ratio")
+    )
     figures = market_service.official_session_figures(official, quote.get("session_date"))
     return {
         "currency": quote.get("currency") or "TRY",
@@ -267,7 +276,7 @@ def _ticker_info(
         "amount": figures[1] if figures is not None else quote.get("turnover"),
         "market_cap": market_cap,
         "shares": shares,
-        "pe_ratio": metrics.get("pe_ratio"),
+        "pe_ratio": pe_ratio,
         "pb_ratio": pb_ratio,
         "year_high": stats.get("year_high"),
         "year_low": stats.get("year_low"),
@@ -285,6 +294,7 @@ def _ticker_info(
         "shares_source": count.source if count.capital is not None else (
             market_service.SHARES_SOURCE_MARKET if shares is not None else None
         ),
+        "pe_source": pe_source,
     }
 
 
@@ -315,6 +325,7 @@ async def get_ticker_history(
                 "daily_bars": market_service.get_daily_bars(ticker),
                 "official": market_service.get_official_quote(ticker),
                 "paid_in": market_service.get_paid_in_capitals(),
+                "earnings": market_service.get_ttm_earnings(),
             },
             ticker,
         )
@@ -328,9 +339,10 @@ async def get_ticker_history(
             official=official,
             capital=market_service.company_capital(ticker, official),
             stored_capital=(parts["paid_in"] or {}).get(ticker),
+            ttm_earnings=(parts.get("earnings") or {}).get(ticker),
         )
         quote_meta = market_service.with_official_provenance(
-            quotes.meta if quotes else None, {k: info.get(k) for k in ("volume_source", "shares_source")}
+            quotes.meta if quotes else None, {k: info.get(k) for k in ("volume_source", "shares_source", "pe_source")}
         )
         return {
             "ticker": ticker,

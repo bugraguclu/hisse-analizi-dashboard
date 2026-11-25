@@ -329,7 +329,10 @@ def daily_stats(frame: pd.DataFrame, now: datetime | None = None) -> dict[str, f
     if frame.empty:
         return stats
     current = pd.Timestamp(now or now_istanbul()).tz_convert(ISTANBUL_TZ)
-    last_year = frame[frame.index >= current - pd.DateOffset(years=1)]
+    # Calendar-date cutoff (the sessions after the same date a year ago): the same range all
+    # day long — comparing 09:00 bar stamps with the clock made it change at 09:00.
+    cutoff = current.normalize() - pd.DateOffset(years=1) + pd.Timedelta(days=1)
+    last_year = frame[frame.index >= cutoff]
     if not last_year.empty:
         stats["year_high"] = finite_float(last_year["High"].max())
         stats["year_low"] = finite_float(last_year["Low"].min())

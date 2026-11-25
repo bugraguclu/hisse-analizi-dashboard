@@ -157,10 +157,12 @@ def _snapshot_from_scan(
     official: Mapping[str, Any] | None = None,
     capital: market_service.CompanyCapital | None = None,
     stored_capital: float | None = None,
+    ttm_earnings: float | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """fast-info block from a scanner row (+ İş Yatırım card ``metrics``, OneEndeks ``official``
-    quote, the company's ``capital``/equity and ``companies.paid_in_capital``)."""
+    quote, the company's ``capital``/equity, ``companies.paid_in_capital`` and the stored TTM
+    parent net income — the P/E denominator, see :func:`market_service.price_to_earnings`)."""
     last = to_number(row.get("close"))
     change_abs = to_number(row.get("change_abs"))
     previous_close = round(last - change_abs, 4) if last is not None and change_abs is not None else None
@@ -186,6 +188,11 @@ def _snapshot_from_scan(
         market_cap if count.capital is not None else None,
         capital.equity if capital else None,
         row.get("price_book_fq"),
+    )
+    pe_ratio, pe_source = market_service.price_to_earnings(
+        market_cap if count.capital is not None else None,
+        ttm_earnings,
+        row.get("price_earnings_ttm"),
     )
 
     figures = market_service.official_session_figures(dict(official) if official else None, session_date)
@@ -219,7 +226,7 @@ def _snapshot_from_scan(
         "amount": amount,
         "market_cap": round(market_cap, 2) if market_cap is not None else None,
         "shares": shares,
-        "pe_ratio": _round(row.get("price_earnings_ttm")),
+        "pe_ratio": pe_ratio,
         "pb_ratio": pb_ratio,
         "year_high": year_high,
         "year_low": year_low,
@@ -236,10 +243,11 @@ def _snapshot_from_scan(
         "volume_source": volume_source,
         "shares_source": shares_source,
         "pb_source": pb_source,
+        "pe_source": pe_source,
     }
 
 
-_SOURCE_FIELDS = ("volume_source", "shares_source", "pb_source")
+_SOURCE_FIELDS = ("volume_source", "shares_source", "pb_source", "pe_source")
 
 
 @cached(TTL_METRICS, "fund_metrics")
@@ -262,11 +270,12 @@ async def _company_metrics_or_empty(ticker: str) -> dict[str, Any]:
 async def _market_snapshot(ticker: str) -> tuple[dict[str, Any], DataMeta]:
     """Store-first scanner row (quote + extras; see ``market_service.get_snapshot_row``) + company card
     + İş Yatırım OneEndeks (official lots / TL turnover, paid-in capital, parent equity)."""
-    (row, meta), metrics, official, stored_capitals = await asyncio.gather(
+    (row, meta), metrics, official, stored_capitals, earnings = await asyncio.gather(
         market_service.get_snapshot_row(ticker, _SNAPSHOT_COLUMNS),
         _company_metrics_or_empty(ticker),
         market_service.get_official_quote(ticker),
         market_service.get_paid_in_capitals(),
+        market_service.get_ttm_earnings(),
     )
     if not row or to_number(row.get("close")) is None:
         raise SymbolNotFoundError(ticker)
@@ -276,8 +285,9 @@ async def _market_snapshot(ticker: str) -> tuple[dict[str, Any], DataMeta]:
         official=official,
         capital=market_service.company_capital(ticker, official),
         stored_capital=(stored_capitals or {}).get(ticker),
+        ttm_earnings=(earnings or {}).get(ticker),
     )
-    sources = {key: snapshot.get(key) for key in _SOURCE_FIELDS}
+    sources ={key: snapshot.get(key) for key in _SOURCE_FIELDS}
     return snapshot, market_service.with_official_provenance(meta, sources) or meta
 
 

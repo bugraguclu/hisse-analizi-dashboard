@@ -330,6 +330,34 @@ class FundamentalsRepository:
         q = q.order_by(FinancialRatio.period.desc(), FinancialRatio.basis)
         return list((await self.session.execute(q)).scalars().all())
 
+    async def latest_ttm_earnings(self, tickers: Iterable[str] | None = None) -> dict[str, float]:
+        """Trailing-twelve-month parent net income (TL) of each company's newest TTM ratio row.
+
+        The figure the stored ``pe_ratio`` divides by (``analysis_service.compute_financial_ratios``:
+        ``net_income_parent``, else ``net_income``), so a live P/E = live market cap / this value
+        matches the ratios card. Companies whose newest TTM row has no flows are left out.
+        """
+        flows = FinancialRatio.inputs_json["flows"]
+        earnings = func.coalesce(flows["net_income_parent"].astext, flows["net_income"].astext)
+        q = (
+            select(Company.ticker, earnings.label("earnings"))
+            .join(Company, Company.id == FinancialRatio.company_id)
+            .where(FinancialRatio.basis == "ttm", earnings.is_not(None))
+            .distinct(FinancialRatio.company_id)
+            .order_by(FinancialRatio.company_id, FinancialRatio.period.desc())
+        )
+        if tickers is not None:
+            q = q.where(Company.ticker.in_(list(tickers)))
+        result: dict[str, float] = {}
+        for ticker, raw in (await self.session.execute(q)).all():
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                result[ticker] = value
+        return result
+
     async def replace_ratios(self, company_id: uuid.UUID, rows: Sequence[Mapping[str, Any]]) -> int:
         """Upsert ratio rows by (period, basis) and delete the company's other rows."""
         if rows:

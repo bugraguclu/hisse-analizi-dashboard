@@ -639,6 +639,12 @@ NOTE_PB = {
     PB_SOURCE_EQUITY: "PD/DD: son çeyrek ana ortaklık özkaynakları",
     PB_SOURCE_TRADINGVIEW: "PD/DD: TradingView (son çeyrek)",
 }
+PE_SOURCE_STATEMENTS = "statements_ttm"  # market cap / stored TTM parent net income (ratios card)
+PE_SOURCE_PROVIDER = "provider"  # TradingView price_earnings_ttm / İş Yatırım card (no stored earnings)
+NOTE_PE = {
+    PE_SOURCE_STATEMENTS: "F/K: son 12 ay ana ortaklık net kârı (KAP tabloları)",
+    PE_SOURCE_PROVIDER: "F/K: veri sağlayıcısı",
+}
 
 
 @dataclass(frozen=True)
@@ -717,6 +723,22 @@ async def get_paid_in_capitals() -> dict[str, float] | None:
     return await _read_paid_in_capitals()
 
 
+async def _read_ttm_earnings() -> dict[str, float] | None:
+    from src.db.repositories.fundamentals import FundamentalsRepository
+
+    async def call() -> dict[str, float]:
+        async with async_session_factory() as session:
+            return await FundamentalsRepository(session).latest_ttm_earnings()
+
+    return await _store("read_ttm_earnings", call, None)
+
+
+@cached(TTL_PAID_IN_CAPITAL, "market_ttm_earnings")
+async def get_ttm_earnings() -> dict[str, float] | None:
+    """Newest stored TTM parent net income by ticker (``None`` when the store is unavailable)."""
+    return await _read_ttm_earnings()
+
+
 @dataclass(frozen=True)
 class ShareCount:
     capital: float | None  # exact paid-in capital, TL (SASA: 52,501,931,146.27)
@@ -773,6 +795,29 @@ def price_to_book(market_cap: Any, equity: Any, provider_pb_fq: Any) -> tuple[fl
     return None, None
 
 
+def price_to_earnings(market_cap: Any, ttm_earnings: Any, provider_pe: Any) -> tuple[float | None, str | None]:
+    """``(P/E rounded to 2 decimals, source)`` — one F/K for every payload of a company.
+
+    Market cap (last × paid-in capital) / the stored TTM parent net income — the
+    ratios card's own definition (:func:`analysis_service.compute_financial_ratios`), so
+    the quote strip, the chart header and the ratios card agree. TradingView's
+    ``price_earnings_ttm`` and İş Yatırım's card F/K disagree with it and with each other
+    (THYAO 3.77 vs 3.94 vs 3.0; after bonus issues TradingView keeps the old share count:
+    EFOR 9.46). A loss (non-positive earnings) has no P/E (``None``) — the ratios card
+    shows none either; the provider figure is used only when no stored earnings exist.
+    """
+    cap = _positive(market_cap)
+    earnings = finite_float(ttm_earnings)
+    if cap is not None and earnings is not None:
+        if earnings <= 0:
+            return None, PE_SOURCE_STATEMENTS
+        return round(cap / earnings, 2), PE_SOURCE_STATEMENTS
+    fallback = finite_float(provider_pe)
+    if fallback is not None and fallback > 0:
+        return round(fallback, 2), PE_SOURCE_PROVIDER
+    return None, None
+
+
 def official_session_figures(official: dict[str, Any] | None, session_date: Any) -> tuple[float, float | None] | None:
     """``(lots, TL turnover)`` of an official quote when it describes ``session_date``, else ``None``.
 
@@ -809,6 +854,9 @@ def official_notes(sources: dict[str, str | None]) -> list[str]:
     pb = sources.get("pb_source")
     if pb in NOTE_PB:
         notes.append(NOTE_PB[pb])
+    pe = sources.get("pe_source")
+    if pe in NOTE_PE:
+        notes.append(NOTE_PE[pe])
     return notes
 
 
@@ -1194,7 +1242,9 @@ def weekly_from_daily(frame: pd.DataFrame) -> pd.DataFrame:
     first_session = pd.Series([ts.date() for ts in local], index=frame.index).groupby(weeks, sort=True).min()
     weekly = pd.DataFrame(
         {
-            "Open": grouped["Open"].first(),
+            # The first session's open, never a later day's: ``first()`` skips NaN and would
+            # put Tuesday's open on a week whose Monday open is missing (``clean_bars``).
+            "Open": grouped["Open"].nth(0).set_axis(sorted(set(weeks))),
             "High": grouped["High"].max(),
             "Low": grouped["Low"].min(),
             "Close": grouped["Close"].last(),
@@ -1205,6 +1255,19 @@ def weekly_from_daily(frame: pd.DataFrame) -> pd.DataFrame:
         [pd.Timestamp(datetime.combine(first_session[week], time(9, 0))) for week in weekly.index]
     ).tz_localize(ISTANBUL_TZ).rename("Date")
     return weekly
+
+
+def _daily_reference(daily: pd.DataFrame, window: pd.DataFrame, before: pd.DataFrame) -> dict[str, Any]:
+    """Period-change base of a weekly window: the last close before its first week — the close of
+    the weekly bar before the window, but dated with its own session from the daily bars (that
+    bar's stamp is its *first* session, Monday, while its close is Friday's)."""
+    reference = price.period_reference(before)
+    if window.empty or daily.empty or reference["reference_close"] is None:
+        return reference
+    first = pd.Timestamp(window.index[0])
+    week_start = (first - pd.Timedelta(days=first.weekday())).normalize()
+    daily_reference = price.period_reference(daily[daily.index < week_start])
+    return daily_reference if daily_reference["reference_close"] is not None else reference
 
 
 @dataclass
@@ -1241,14 +1304,14 @@ async def get_chart_window(
             stored = await stored_daily_bars(symbol, min_start=start_ts.date() - margin, now=now)
         if stored is not None and stored.meta.served_from != "stale":
             window, before = price.split_chart_window(weekly_from_daily(stored.frame), spec, current)
-            return ChartWindow(window, price.period_reference(before), stored.meta, before)
+            return ChartWindow(window, _daily_reference(stored.frame, window, before), stored.meta, before)
     try:
         window, before, reference = await price.get_chart_window_parts(symbol, spec)
     except MarketDataError:
         if stored is None or stored.frame.empty:
             raise
         window, before = price.split_chart_window(weekly_from_daily(stored.frame), spec, current)
-        return ChartWindow(window, price.period_reference(before), stored.meta, before)
+        return ChartWindow(window, _daily_reference(stored.frame, window, before), stored.meta, before)
     last = pd.Timestamp(window.index[-1]).date() if not window.empty else None
     meta = build_meta(source=TV_SOURCE, fetched_at=datetime.now(UTC), served_from="live", as_of=last, symbol=symbol)
     return ChartWindow(window, reference, meta, before)

@@ -84,7 +84,7 @@ def test_pb_is_market_cap_over_latest_quarter_equity_then_price_book_fq_never_th
     fixed = fs._snapshot_from_scan(BIMAS_ROW, BIMAS_CARD, official=BIMAS_OFFICIAL,
                                    capital=ms.company_capital("BIMAS", BIMAS_OFFICIAL), now=AFTER_CLOSE)
     assert fixed["pb_ratio"] == 2.59 and fixed["pb_source"] == ms.PB_SOURCE_EQUITY
-    assert fixed["pe_ratio"] == 18.97  # P/E stays TradingView price_earnings_ttm
+    assert fixed["pe_ratio"] == 18.97  # no stored TTM earnings: TradingView price_earnings_ttm
 
 
 # --- share count / market cap ---------------------------------------------------------------

@@ -2,6 +2,16 @@
 
 ## Yayımlanmamış
 
+### Hesap doğruluğu denetimi ve geçmiş verisiyle testler
+
+Ayrıntılar: [docs/hesap-denetimi-2026-11.md](./docs/hesap-denetimi-2026-11.md).
+
+- **Tek F/K:** fiyat şeridi, grafik başlığı ve oran kartı aynı F/K'yı gösterir: piyasa değeri ÷ son 12 ay ana ortaklık net kârı (KAP tabloları). Önceden üç farklı kaynak vardı (THYAO 3,0 / 3,94 / 3,77). Zarar eden şirkette F/K boş kalır. Depoda kâr yoksa sağlayıcının değeri gösterilir. Yanıtlara `pe_source` alanı eklendi.
+- **TMS 29:** tek bir ay TÜFE verisi eksikse oran kartı boş kalmak yerine son mali yıla düşer.
+- **Oranlar:** önceki yıl özkaynağı negatifken ROE artık şişmiyor (%1.000 yerine %20). Büyüme ve ROE, ana ortaklık ile toplam rakamları karıştırmıyor. Nakit bilinmiyorsa net borç ve FD/FAVÖK boş kalıyor (0 sayılmıyor). Küçük tutarlar KAP birimine yuvarlanırken 0 olmuyor.
+- **Piyasa:** 52 haftalık aralık günün saatine bağlı değil. Haftalık açılış ilk seansın açılışı. Haftalık grafikte dönem bazının tarihi kapanışın kendi günü.
+- **Testler:** 7 şirketin kaydedilmiş gerçek verisinden sabit bir kopya oluşturuldu (`tests/fixtures/recorded_history.json`). Göstergeler bağımsız bir referans uygulamayla karşılaştırılıyor, çeyrek/TTM/oran zincirleri yeniden hesaplanıyor, TMS 29 katsayıları TÜİK TÜFE'siyle doğrulanıyor. Ayrıca 3.507 kapanış İş Yatırım resmî serisiyle canlı karşılaştırılıyor. Birim test sayısı 1.391'den 1.495'e çıktı (+1 canlı entegrasyon testi).
+
 ### KAP bildirimlerinin PDF ekleri okunuyor
 
 Birçok bildirim yalnızca "açıklama ekte yer almaktadır" der ve asıl içerik PDF ekindedir (MKK pay sahipliği tabloları, genel kurul tutanakları, fon kullanım raporları, Eurobond duyuruları). Bildirim panelinde bu eklerin yalnızca dosya adı görünüyordu; artık metni de görünüyor.

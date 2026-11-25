@@ -143,11 +143,30 @@ def _growth(current: float | None, previous: float | None, *, digits: int | None
 
 
 def _average(current: float | None, previous: float | None) -> float | None:
+    """Mean of the opening and closing balance; the closing balance alone when the opening one is
+    missing or not positive (a company leaving negative equity: averaging 500 with −480 would turn
+    a 100 profit into a 1,000 % ROE)."""
     if current is None:
         return None
-    if previous is None:
+    if previous is None or previous <= 0:
         return current
     return (current + previous) / 2
+
+
+def _same_basis(
+    current: Mapping[str, Any], previous: Mapping[str, Any], preferred: str, fallback: str
+) -> tuple[float | None, float | None]:
+    """``(current, previous)`` of ``preferred`` (parent share), else of ``fallback`` (total) — never one
+    of each: growth or an average across a parent and a total figure compares different things.
+    ``current`` alone falls back on its own when ``previous`` has neither."""
+    cur_p, prev_p = to_number(current.get(preferred)), to_number(previous.get(preferred))
+    cur_f, prev_f = to_number(current.get(fallback)), to_number(previous.get(fallback))
+    if cur_p is not None and (prev_p is not None or prev_f is None):
+        return cur_p, prev_p
+    if cur_f is not None and (prev_f is not None or (prev_p is None and cur_p is None)):
+        return cur_f, prev_f
+    # current has only the parent figure and previous only the total (or vice versa): no pair
+    return (cur_p if cur_p is not None else cur_f), None
 
 
 def _is_financial(items: Mapping[str, Any], template: str | None, is_bank: bool | None) -> bool:
@@ -186,7 +205,11 @@ def derive_financial_amounts(
     debt = to_number(items.get("financial_debt"))
     net_debt = None
     if debt is not None:
-        net_debt = debt - (to_number(items.get("cash")) or 0.0) - (to_number(items.get("short_term_investments")) or 0.0)
+        cash = to_number(items.get("cash"))
+        # Missing cash is unknown, not zero (it would overstate net debt and EV); a missing
+        # short-term investments line means the company reports none.
+        if cash is not None:
+            net_debt = debt - cash - (to_number(items.get("short_term_investments")) or 0.0)
     cap = to_number(market_cap)
     enterprise_value = None
     if cap is not None and cap > 0 and net_debt is not None:
@@ -231,26 +254,15 @@ def compute_financial_ratios(
 
     revenue = None if financial else num(current, "revenue")
     net_income = num(current, "net_income")
-    parent_income = num(current, "net_income_parent")
-    if parent_income is None:
-        parent_income = net_income
     equity = num(current, "total_equity")
-    parent_equity = num(current, "parent_equity")
-    if parent_equity is None:
-        parent_equity = equity
-    prev_parent_equity = num(prev, "parent_equity")
-    if prev_parent_equity is None:
-        prev_parent_equity = num(prev, "total_equity")
+    parent_income, prev_parent_income = _same_basis(current, prev, "net_income_parent", "net_income")
+    parent_equity, prev_parent_equity = _same_basis(current, prev, "parent_equity", "total_equity")
 
     amounts = derive_financial_amounts(current, market_cap, is_bank=financial)
     ebitda = amounts["ebitda"]
     cap = to_number(market_cap)
     if cap is not None and cap <= 0:
         cap = None
-
-    prev_parent_income = num(prev, "net_income_parent")
-    if prev_parent_income is None:
-        prev_parent_income = num(prev, "net_income")
 
     avg_equity = _average(parent_equity, prev_parent_equity)
     avg_assets = _average(num(current, "total_assets"), num(prev, "total_assets"))

@@ -450,9 +450,17 @@ def _restatement_factors(
 
 
 def _rescale(value: float, factor: float, unit: float = 1.0) -> float:
-    """``value × factor`` rounded to the reporting unit (removes float noise)."""
+    """``value × factor`` rounded to the reporting unit (removes float noise).
+
+    A non-zero amount smaller than half a unit (400,000 TL × 0.85 in a million-TL report)
+    is rounded to whole TL instead — rounding it to the unit would fabricate a 0.
+    """
     step = unit if unit and unit > 0 else 1.0
-    return round(value * factor / step) * step
+    scaled = value * factor
+    rounded = round(scaled / step) * step
+    if rounded == 0 and scaled != 0:
+        return float(round(scaled))
+    return rounded
 
 
 def _period_unit(kap: Mapping[str, Any] | None, period: str, section: str = "balance") -> float:
