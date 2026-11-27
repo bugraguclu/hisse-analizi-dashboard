@@ -48,7 +48,7 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-[95] bg-black/40 motion-dialog" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-[96] max-h-[calc(100dvh-2rem)] w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)] outline-none motion-dialog">
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-[96] max-h-[calc(100dvh-2rem)] w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-[var(--shadow-dialog)] outline-none motion-dialog">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-base font-semibold text-foreground">{t("keys.title")}</Dialog.Title>
@@ -56,9 +56,9 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
             </div>
             <Dialog.Close
               aria-label={t("event.close")}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="close-icon-btn -mr-1.5 -mt-1 shrink-0"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" strokeWidth={1.75} />
             </Dialog.Close>
           </div>
           <div className="mt-4 grid gap-5 sm:grid-cols-2">

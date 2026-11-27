@@ -62,7 +62,7 @@ export function WidgetSettingsDialog({
     >
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-(--motion-fade) data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
-        <Dialog.Popup className="fixed left-1/2 top-[12vh] z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-border bg-card text-foreground shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)] outline-none motion-popover">
+        <Dialog.Popup className="fixed left-1/2 top-[12vh] z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-border bg-card text-foreground shadow-[var(--shadow-dialog)] outline-none motion-popover">
           {active ? (
             <SettingsForm
               key={active.widget.id}

@@ -39,7 +39,7 @@ function TechnicalSignal({ ticker }: { ticker: string }) {
   return (
     <InfoPopover
       label={t("header.signalInfo")}
-      triggerClassName="h-7 border border-border px-2 text-xs pointer-coarse:h-8"
+      triggerClassName="h-7 rounded-md border border-border bg-card px-2.5 text-xs pointer-coarse:h-8"
       trigger={
         <>
           <span className="text-muted-foreground">{t("header.technicalSignal")}:</span>
@@ -90,7 +90,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
             </>
           ) : null}
         </p>
-        <h1 className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[28px] font-semibold leading-tight text-foreground md:text-[32px]">
+        <h1 className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[clamp(1.625rem,1.35rem+0.9vw,2rem)] font-medium leading-[1.15] tracking-[-0.018em] text-foreground">
           <span>{ticker}</span>
           {name ? (
             <span className="min-w-0 font-sans text-base font-normal leading-snug text-muted-foreground md:text-lg" title={legalName ?? undefined}>

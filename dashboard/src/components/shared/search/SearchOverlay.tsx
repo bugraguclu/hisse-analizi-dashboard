@@ -119,7 +119,7 @@ export function SearchOverlay({
       >
         <div
           ref={panelRef}
-          className="mx-auto max-w-2xl rounded-xl border border-border/80 bg-background/95 px-2 pb-2 shadow-[0_18px_36px_-12px_rgb(0_0_0/0.25)] backdrop-blur-sm"
+          className="mx-auto max-w-2xl rounded-xl border border-border bg-popover px-2 pb-2 text-popover-foreground shadow-[var(--shadow-dialog)]"
         >
           <SheetHandle onClose={() => closeRef.current()} label={t("shell.closeSearch")} className="py-1.5" />
           <TickerSearch ref={searchRef} variant="overlay" autoFocus onClose={() => closeRef.current()} />

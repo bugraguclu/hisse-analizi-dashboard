@@ -518,7 +518,7 @@ export function TickerSearch({
             "overflow-hidden border border-border bg-popover text-popover-foreground",
             overlay
               ? "mt-2 rounded-md"
-              : "absolute right-0 top-full z-50 mt-1 w-full min-w-80 rounded-lg shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]",
+              : "absolute right-0 top-full z-50 mt-1 w-full min-w-80 rounded-lg shadow-[var(--shadow-popover)]",
           )}
         >
           {showRows ? (

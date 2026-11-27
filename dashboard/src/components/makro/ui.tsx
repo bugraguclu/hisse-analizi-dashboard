@@ -304,7 +304,7 @@ export function InfoPopover({ label, children, className }: { label: string; chi
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} className="z-50">
-          <Popover.Popup className="max-w-[min(22rem,calc(100vw-2rem))] rounded-md border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-lg outline-none">
+          <Popover.Popup className="max-w-[min(22rem,calc(100vw-2rem))] rounded-md border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-[var(--shadow-popover)] outline-none">
             {children}
           </Popover.Popup>
         </Popover.Positioner>

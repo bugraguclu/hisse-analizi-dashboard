@@ -81,7 +81,7 @@ function TypeMenu({ value, onChange, compact }: { value: ChartType; onChange: (t
   return (
     <ReleaseMenu
       trigger={
-        <ChipButton aria-label={`${t("type.label")}: ${t(TYPE_LABEL[value].label)}`} title={t("type.label")} className="border-border">
+        <ChipButton aria-label={`${t("type.label")}: ${t(TYPE_LABEL[value].label)}`} title={t("type.label")}>
           <ChartTypeIcon type={value} />
           {compact ? null : <span>{t(TYPE_LABEL[value].label)}</span>}
           <ChevronDown className="!h-3 !w-3 text-muted-foreground" />
@@ -317,14 +317,14 @@ export function ChartToolbar(props: ChartToolbarProps) {
   const set: SetPref = (key, value) => onPrefsChange({ ...prefs, [key]: value });
   const fullscreenButton =
     mode === "card" ? (
-      <ChipButton data-chart-action="fullscreen" onClick={onFullscreen} title={t("action.fullscreen")} className="ml-0.5 border-border px-2">
+      <ChipButton data-chart-action="fullscreen" onClick={onFullscreen} title={t("action.fullscreen")}>
         <Maximize2 />
         <span className="hidden sm:inline">{t("action.fullscreenShort")}</span>
       </ChipButton>
     ) : null;
 
   return (
-    <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex items-center gap-x-1", !simple && "flex-wrap gap-y-1.5", className)}>
+    <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex items-center gap-x-1.5", !simple && "flex-wrap gap-y-1.5", className)}>
       <TypeMenu value={prefs.type} onChange={(type) => set("type", type)} compact={compact} />
       <UnitMenu value={prefs.unit} onChange={(unit) => set("unit", unit)} period={period} compact={compact} />
       {features.indicators ? (
@@ -399,12 +399,12 @@ function SimpleRest({
           {compact ? null : t("action.measure")}
         </ChipButton>
       ) : null}
-      <div className="ml-auto flex items-center gap-0.5">
+      <div className="ml-auto flex items-center gap-1.5">
         <ReleaseMenu
           onOpenChange={changeMenu}
           onOpenChangeComplete={finishMenu}
           trigger={
-            <ChipButton title={t("more.title")} aria-label={t("more.title")} className="px-1.5">
+            <ChipButton title={t("more.title")} aria-label={t("more.title")}>
               <Ellipsis />
               {compact ? null : <span>{t("more.button")}</span>}
             </ChipButton>

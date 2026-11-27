@@ -174,7 +174,7 @@ export function SectorHubView() {
               <li key={key}>
                 <Link
                   href={sectorPageHref(key)}
-                  className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+                  className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:border-foreground/35 hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {sectorLabel(key, locale)}
                 </Link>

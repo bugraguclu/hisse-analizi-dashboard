@@ -121,14 +121,14 @@ function EventDetailDialog({ eventId, onClose }: { eventId: string | null; onClo
     <Dialog.Root open={eventId !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/50 motion-dialog" />
-        <Dialog.Popup className="card-surface fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden shadow-[0_24px_48px_-16px_rgb(0_0_0/0.4)] outline-none motion-dialog">
+        <Dialog.Popup className="card-surface fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden shadow-[var(--shadow-dialog)] outline-none motion-dialog">
           <div className="flex items-center justify-between gap-3 border-b border-border py-2 pl-5 pr-3">
             <Dialog.Title className="text-[13px] font-semibold text-foreground">{t("kap.detailTitle")}</Dialog.Title>
             <Dialog.Close
               aria-label={t("common.close")}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              className="close-icon-btn"
             >
-              <X aria-hidden className="h-4 w-4" />
+              <X aria-hidden className="h-4 w-4" strokeWidth={1.75} />
             </Dialog.Close>
           </div>
           <div className="space-y-4 overflow-y-auto p-5 scrollbar-thin">

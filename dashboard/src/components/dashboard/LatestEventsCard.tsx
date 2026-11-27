@@ -140,7 +140,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
         action={
           <Link
             href="/events"
-            className="inline-flex items-center gap-1 rounded-sm text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            className="inline-flex min-h-6 items-center gap-1 rounded-sm text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
           >
             {t("common.viewAll")} <ArrowRight className="h-3 w-3" aria-hidden="true" />
           </Link>

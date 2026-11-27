@@ -55,9 +55,8 @@ export function MobileNav() {
       }
     }
     document.addEventListener("keydown", handleKeyDown);
-    // The drawer is lg:hidden: widening the viewport (e.g. rotating a tablet) would
-    // hide it while the page stays scroll-locked, so close it instead.
-    const desktop = window.matchMedia("(min-width: 64rem)");
+    // The drawer is xl:hidden: widening the viewport past 1280px closes it cleanly.
+    const desktop = window.matchMedia("(min-width: 80rem)");
     function handleViewportChange() {
       if (desktop.matches) closeMobileNav();
     }
@@ -73,7 +72,7 @@ export function MobileNav() {
   if (!present) return null;
   const ending = mobileNavOpen ? undefined : "";
   return (
-    <div className={cn("fixed inset-0 z-50 lg:hidden", !mobileNavOpen && "pointer-events-none")} inert={!mobileNavOpen} aria-hidden={!mobileNavOpen || undefined}>
+    <div className={cn("fixed inset-0 z-50 xl:hidden", !mobileNavOpen && "pointer-events-none")} inert={!mobileNavOpen} aria-hidden={!mobileNavOpen || undefined}>
       <div
         className="motion-panel absolute inset-0 bg-black/40"
         data-presence=""
@@ -101,9 +100,9 @@ export function MobileNav() {
             type="button"
             onClick={closeMobileNav}
             aria-label={t("shell.closeMenu")}
-            className="motion-press -mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+            className="close-icon-btn -mr-1.5 text-foreground"
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <X className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
         </div>
 

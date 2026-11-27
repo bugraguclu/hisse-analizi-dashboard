@@ -81,9 +81,9 @@ function DesktopNav() {
   const { t } = useLocale();
   const ticker = tickerFromPath(pathname) ?? DEFAULT_TICKER;
   return (
-    <nav aria-label={t("shell.mainNav")} className="hidden h-full lg:block">
-      {/* Seven sections: a little tighter until xl, so the bar fits a 1024px window. */}
-      <ul className="flex h-full items-stretch gap-5 xl:gap-6">
+    <nav aria-label={t("shell.mainNav")} className="hidden h-full xl:block">
+      {/* Two-breakpoint bar (belif 94659b7): desktop nav starts at xl (1280px) so 1024px never overflows. */}
+      <ul className="flex h-full items-stretch gap-4 2xl:gap-6">
         {NAV_ITEMS.map((item) => {
           const active = item.isActive(pathname);
           return (
@@ -109,7 +109,7 @@ function DesktopNav() {
 }
 
 const ICON_BUTTON =
-  "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring md:h-8 md:w-8";
 
 /**
  * Top navigation: wordmark, section links (lg+), stock search, language and theme.
@@ -173,36 +173,35 @@ export function SiteHeader() {
             "data-pin:fixed data-search:fixed has-[input:focus]:fixed data-kbd:has-[:focus-visible]:fixed",
           )}
         >
-          <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 lg:gap-6 xl:gap-8">
-            <button
-              ref={mobileNavTriggerRef}
-              type="button"
-              onClick={openMobileNav}
-              aria-label={t("shell.openMenu")}
-              aria-expanded={mobileNavOpen}
-              aria-controls="mobile-navigation"
-              className={cn(ICON_BUTTON, "-ml-1.5 text-foreground lg:hidden")}
-            >
-              <Menu className="h-5 w-5" aria-hidden="true" />
-            </button>
+          <div className="mx-auto grid h-14 max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-2 max-[359px]:flex max-[359px]:justify-between md:flex md:gap-3 xl:gap-5 2xl:gap-8">
+            <div className="flex items-center justify-self-start md:contents">
+              <button
+                ref={mobileNavTriggerRef}
+                type="button"
+                onClick={openMobileNav}
+                aria-label={t("shell.openMenu")}
+                aria-expanded={mobileNavOpen}
+                aria-controls="mobile-navigation"
+                className={cn(ICON_BUTTON, "-ml-1.5 text-foreground xl:hidden")}
+              >
+                <Menu className="h-[18px] w-[18px] md:h-4 md:w-4" aria-hidden="true" strokeWidth={1.75} />
+              </button>
+            </div>
 
             <Link
               href="/"
               aria-label={t("shell.home")}
-              className="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              className="shrink-0 justify-self-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
             >
               <Wordmark />
             </Link>
 
             <DesktopNav />
 
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <div className="hidden w-52 md:block xl:w-64">
+            <div className="flex shrink-0 items-center justify-self-end gap-0.5 md:ml-auto md:gap-1.5">
+              <div className="hidden w-52 md:block xl:w-48 2xl:w-60">
                 <TickerSearch ref={desktopSearchRef} shortcutHint />
               </div>
-              {/* A toggle: a second press closes. It stays a magnifier — the sheet's own ✕ is
-                  the visible way out, and two ✕ a thumb apart would ask which one to press.
-                  The ::after ring takes the hit area to 44 px without changing the look. */}
               <button
                 ref={searchButtonRef}
                 type="button"
@@ -213,11 +212,11 @@ export function SiteHeader() {
                 aria-controls={mobileSearchOpen ? searchOverlayId : undefined}
                 className={cn(
                   ICON_BUTTON,
-                  "relative text-foreground after:absolute after:-inset-1.5 after:content-[''] md:hidden",
+                  "text-foreground md:hidden",
                   mobileSearchOpen && "bg-muted",
                 )}
               >
-                <Search className="h-5 w-5" aria-hidden="true" />
+                <Search className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
               </button>
               {assistantEnabled ? (
                 <button

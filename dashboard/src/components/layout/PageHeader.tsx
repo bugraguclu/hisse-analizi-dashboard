@@ -23,7 +23,7 @@ export function PageHeader({
     <header className={cn("flex flex-wrap items-end justify-between gap-x-8 gap-y-3 border-b border-border pb-4", className)}>
       <div className="min-w-0 space-y-1">
         {eyebrow ? <p className="text-xs text-muted-foreground first-letter:uppercase">{eyebrow}</p> : null}
-        <h1 className="text-[28px] font-semibold leading-tight text-foreground md:text-[32px]">{title}</h1>
+        <h1 className="text-[clamp(1.625rem,1.35rem+0.9vw,2rem)] font-medium leading-[1.15] tracking-[-0.018em] text-foreground">{title}</h1>
         {description ? <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}

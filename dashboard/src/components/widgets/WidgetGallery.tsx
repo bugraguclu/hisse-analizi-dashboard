@@ -85,7 +85,7 @@ export function WidgetGallery({
         <Dialog.Popup
           initialFocus={searchRef}
           className={cn(
-            "fixed inset-x-0 bottom-0 top-12 z-50 flex flex-col rounded-t-xl border border-border bg-card text-foreground shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)] outline-none",
+            "fixed inset-x-0 bottom-0 top-12 z-50 flex flex-col rounded-t-xl border border-border bg-card text-foreground shadow-[var(--shadow-dialog)] outline-none",
             "motion-panel motion-panel-slide [--motion-panel-offset:0_1.5rem]",
             "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-[8vh] md:max-h-[84vh] md:w-[min(56rem,calc(100vw-3rem))] md:transform-[translateX(-50%)] md:rounded-xl",
           )}
@@ -97,9 +97,9 @@ export function WidgetGallery({
             </div>
             <Dialog.Close
               aria-label={t("settings.close")}
-              className="-mr-2 inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              className="close-icon-btn -mr-2 shrink-0"
             >
-              <X aria-hidden className="size-4" />
+              <X aria-hidden className="size-4" strokeWidth={1.75} />
             </Dialog.Close>
           </div>
 

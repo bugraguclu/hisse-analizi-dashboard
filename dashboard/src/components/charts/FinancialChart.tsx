@@ -2104,7 +2104,7 @@ function EventTooltip({
       role={tip.pinned ? "dialog" : "tooltip"}
       aria-label={tip.pinned ? t("event.count", { n: events.length }) : undefined}
       className={cn(
-        "absolute z-[6] rounded-md border border-border bg-popover p-2.5 text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]",
+        "absolute z-[6] rounded-md border border-border bg-popover p-2.5 text-popover-foreground shadow-[var(--shadow-popover)]",
         tip.pinned ? "pointer-events-auto" : "pointer-events-none",
       )}
       style={{ left, top: tip.y - 14, width, transform: "translateY(-100%)" }}

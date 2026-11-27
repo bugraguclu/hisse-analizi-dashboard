@@ -160,10 +160,10 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
                     href={indexPageHref(item.slug)}
                     aria-current={current ? "page" : undefined}
                     className={cn(
-                      "inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                       current
-                        ? "border-foreground bg-foreground font-medium text-background"
-                        : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
                     )}
                   >
                     {item.name[locale]}

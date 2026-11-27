@@ -242,7 +242,7 @@ export function InfoPopover({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} collisionPadding={12} className="z-50">
-          <MotionPopoverPopup className="max-w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)] outline-none">
+          <MotionPopoverPopup className="max-w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-[var(--shadow-popover)] outline-none">
             {children}
           </MotionPopoverPopup>
         </Popover.Positioner>

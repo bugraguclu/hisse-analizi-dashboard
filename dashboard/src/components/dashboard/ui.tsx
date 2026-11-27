@@ -130,7 +130,7 @@ export function GroupLabel({
     >
       <span className="min-w-0 truncate">{children}</span>
       {action && (
-        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal normal-case tracking-normal text-primary underline-offset-4 group-hover:underline">
+        <span className="inline-flex min-h-6 shrink-0 items-center gap-1 text-xs font-normal normal-case tracking-normal text-muted-foreground underline-offset-4 transition-colors group-hover:text-foreground group-hover:underline">
           {action} <ArrowRight className="h-3 w-3" aria-hidden="true" />
         </span>
       )}

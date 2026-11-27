@@ -224,7 +224,7 @@ export function EventsSearchBox({
       </span>
 
       {expanded ? (
-        <div className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]">
+        <div className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-[var(--shadow-popover)]">
           {matches.length > 0 ? (
             <ul
               id={listboxId}

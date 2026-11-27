@@ -29,7 +29,7 @@ export { useShellIdentity };
  * aria-current="page" and an ink underline). On phones the row starts at the
  * viewport edge and scrolls sideways when the tabs overflow.
  */
-function StockTabs({ ticker, active, hasActions }: { ticker: string; active: StockView; hasActions: boolean }) {
+function StockTabs({ ticker, active }: { ticker: string; active: StockView }) {
   const { t } = useStockI18n();
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -47,16 +47,10 @@ function StockTabs({ ticker, active, hasActions }: { ticker: string; active: Sto
   }, [active]);
 
   return (
-    <nav
-      aria-label={t("tabs.label")}
-      className={cn(
-        "relative -ml-4 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border md:ml-0",
-        !hasActions && "-mr-4 md:mr-0",
-      )}
-    >
+    <nav aria-label={t("tabs.label")} className="relative min-w-0">
       <ul
         ref={listRef}
-        className="relative flex overflow-x-auto px-1.5 scrollbar-none max-md:mask-fade-x md:-mx-2.5 md:px-0"
+        className="relative -mx-1.5 flex overflow-x-auto scrollbar-none fb-fade-x sm:-mx-2.5"
       >
         {TABS.map((tab) => {
           const current = tab.view === active;
@@ -66,13 +60,13 @@ function StockTabs({ ticker, active, hasActions }: { ticker: string; active: Sto
                 href={tab.href(ticker)}
                 aria-current={current ? "page" : undefined}
                 className={cn(
-                  "relative flex h-10 items-center whitespace-nowrap rounded-sm px-2.5 text-[13px] font-medium transition-colors",
+                  "relative flex h-10 items-center whitespace-nowrap rounded-sm px-1.5 text-[11.5px] font-medium transition-colors sm:px-2.5 sm:text-[13px]",
                   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
                   current ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {t(tab.label)}
-                {current ? <span aria-hidden className="absolute inset-x-2.5 bottom-0 h-0.5 bg-foreground" /> : null}
+                {current ? <span aria-hidden className="absolute inset-x-1.5 -bottom-px h-0.5 bg-foreground sm:inset-x-2.5" /> : null}
               </Link>
             </li>
           );
@@ -132,11 +126,11 @@ export function StockShell({
     <div className="mx-auto max-w-7xl">
       <StockHeader ticker={ticker} identity={identity} />
       {isFeatureEnabled("mutations") ? <StockNote ticker={ticker} /> : null}
-      <div className="mt-5 flex items-center gap-2">
+      <div className="mt-5 flex items-end gap-3 border-b border-border">
         <div className="min-w-0 grow">
-          <StockTabs ticker={ticker} active={view} hasActions={Boolean(actions)} />
+          <StockTabs ticker={ticker} active={view} />
         </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 items-center gap-2 pb-1.5">{actions}</div> : null}
       </div>
       <StockIdentityContext.Provider value={identity}>
         <div className="mt-6">{children}</div>

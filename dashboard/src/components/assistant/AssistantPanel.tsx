@@ -417,7 +417,7 @@ export function AssistantPanel() {
                 <RotateCcw aria-hidden="true" className="h-4 w-4" />
               </button>
             ) : null}
-            <Dialog.Close className={ICON_BUTTON} aria-label={t("assistant.close")} title={`${t("assistant.close")} (Esc)`}>
+            <Dialog.Close className="close-icon-btn" aria-label={t("assistant.close")} title={`${t("assistant.close")} (Esc)`}>
               <X aria-hidden="true" className="h-4 w-4" />
             </Dialog.Close>
           </div>

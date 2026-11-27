@@ -123,7 +123,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                 setNotice(null);
               }}
               aria-expanded={editing}
-              className="rounded-sm text-xs text-primary underline-offset-4 motion-press hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              className="inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline-offset-4 motion-press hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
             >
               {editing ? t("watchlist.done") : t("watchlist.editLists")}
             </button>

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Hourglass, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useMakroI18n } from "@/components/makro/i18n";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
 import { headingLabel } from "@/components/widgets/basic";
@@ -40,7 +42,7 @@ function RefreshButton() {
       onClick={refresh}
       disabled={busy}
       aria-busy={busy}
-      className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-ring"
+      className={cn(buttonVariants({ variant: "outline", size: "md" }), "disabled:cursor-wait disabled:opacity-70")}
     >
       {fetching && !refreshing ? (
         <Hourglass className="h-3.5 w-3.5 skeleton-pulse" aria-hidden />

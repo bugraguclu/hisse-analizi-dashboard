@@ -35,7 +35,7 @@ export interface TooltipRow {
 /** Crosshair readout: title (date), then one row per series — value strong, name muted. */
 export function ChartTooltipBox({ title, rows }: { title: string; rows: TooltipRow[] }) {
   return (
-    <div className="min-w-36 rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-lg">
+    <div className="min-w-36 rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-[var(--shadow-popover)]">
       <p className="mb-1 text-[11px] text-muted-foreground">{title}</p>
       <ul className="space-y-0.5">
         {rows.map((row) => (

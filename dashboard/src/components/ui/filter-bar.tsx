@@ -750,7 +750,7 @@ export function FilterMenu({
           className={cn(
             "absolute inset-x-0 top-full z-30 border border-border bg-popover text-popover-foreground",
             // Two-layer shadow: one layer disappeared over the rows it covers.
-            "shadow-[0_18px_36px_-12px_rgb(0_0_0/0.18),0_4px_10px_-4px_rgb(0_0_0/0.06)]",
+            "shadow-[var(--shadow-popover)]",
             anchorRight ? "sm:left-auto sm:right-0" : "sm:left-0 sm:right-auto",
             "sm:w-[max(100%,250px)]",
             variant === "list"

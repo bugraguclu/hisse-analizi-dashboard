@@ -15,9 +15,9 @@ export interface SegmentedOption<T extends string | number> {
 }
 
 const SIZE_CLASS = {
-  xs: "h-6 px-2 text-[10px]",
-  sm: "h-7 px-2.5 text-[11px]",
-  md: "h-8 px-3 text-xs",
+  xs: "h-[22px] px-2 text-[10px]",
+  sm: "h-[26px] px-2.5 text-[11px]",
+  md: "h-7 px-3 text-xs",
 } as const;
 
 /**
@@ -85,7 +85,7 @@ export function SegmentedControl<T extends string | number>({
       role="radiogroup"
       aria-label={label}
       className={cn(
-        "relative flex max-w-full overflow-x-auto scrollbar-none",
+        "relative flex max-w-full overflow-x-auto scrollbar-none fb-fade-x",
         pill ? "w-fit gap-0.5 rounded-md border border-border p-0.5" : "gap-1 border-b border-border",
         className,
       )}

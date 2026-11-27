@@ -78,28 +78,31 @@
 }
 
 :root {
-  /* Neutral "paper" palette: warm off-white page, white panels, ink text.
-     Hue 80 at chroma <= 0.006 reads as neutral, never blue. */
-  --background: oklch(0.975 0.003 85);
+  /* Neutral "paper" palette: warm porcelain page (#f5f4f1), white panels, ink text.
+     Hue 85 at chroma <= 0.006 reads as neutral warm paper, never blue. */
+  --background: oklch(0.968 0.004 85);
   --foreground: oklch(0.205 0.006 75);
-  --card: oklch(0.997 0.001 85);
+  --card: oklch(0.998 0.001 85);
   --card-foreground: oklch(0.205 0.006 75);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.205 0.006 75);
   /* Ink blue: links, focus, the selected tab — used sparingly. */
   --primary: oklch(0.47 0.115 252);
   --primary-foreground: oklch(0.985 0.002 85);
-  --secondary: oklch(0.948 0.004 85);
+  --secondary: oklch(0.944 0.004 85);
   --secondary-foreground: oklch(0.25 0.006 75);
-  --muted: oklch(0.948 0.004 85);
-  --muted-foreground: oklch(0.5 0.008 75);
-  --accent: oklch(0.948 0.004 85);
+  --muted: oklch(0.944 0.004 85);
+  --muted-foreground: oklch(0.48 0.008 75);
+  --accent: oklch(0.944 0.004 85);
   --accent-foreground: oklch(0.205 0.006 75);
   --destructive: oklch(0.545 0.2 26);
   --destructive-foreground: oklch(0.985 0.002 85);
-  --border: oklch(0.912 0.004 85);
-  --input: oklch(0.885 0.005 85);
+  --border: oklch(0.902 0.005 85);
+  --input: oklch(0.875 0.005 85);
   --ring: oklch(0.47 0.115 252);
+  /* Restrained surface elevation (yemek-takibi / belif discipline: crisp hairlines first). */
+  --shadow-popover: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 24px rgb(0 0 0 / 0.07);
+  --shadow-dialog: 0 2px 6px rgb(0 0 0 / 0.06), 0 14px 32px rgb(0 0 0 / 0.12);
   /* Categorical chart palette — deliberately avoids the green/red hues reserved for
      --up/--down: ink blue, ochre, plum, teal, warm grey. */
   --chart-1: oklch(0.5 0.12 252);
@@ -114,8 +117,8 @@
   --down: oklch(0.545 0.2 26);
   /* Darkened for AA: ≥4.5:1 as text on its own bg-warn/10 chip and on cards. */
   --warn: oklch(0.52 0.11 68);
-  --surface: oklch(0.965 0.003 85);
-  --grid: oklch(0.925 0.004 85);
+  --surface: oklch(0.96 0.003 85);
+  --grid: oklch(0.922 0.004 85);
 }
 
 .dark {
@@ -139,6 +142,8 @@
   --border: oklch(0.29 0.003 75);
   --input: oklch(0.32 0.003 75);
   --ring: oklch(0.75 0.095 250);
+  --shadow-popover: 0 1px 2px rgb(0 0 0 / 0.24), 0 8px 24px rgb(0 0 0 / 0.32);
+  --shadow-dialog: 0 2px 6px rgb(0 0 0 / 0.3), 0 14px 36px rgb(0 0 0 / 0.44);
   --chart-1: oklch(0.73 0.1 250);
   --chart-2: oklch(0.8 0.12 78);
   --chart-3: oklch(0.72 0.12 320);
@@ -188,17 +193,58 @@
   }
 }
 
-/* Motion values are set on html by lib/motion.ts. */
+/* Motion values are set on html by lib/motion.ts.
+   Controls stay poised on press (yemek-takibi app.css / 2445a732): color & border
+   transitions only — no scale bounce or brightness wash. */
 .motion-press {
-  transition: scale var(--motion-press) var(--motion-ease-out),
-    opacity var(--motion-press) var(--motion-ease-out),
+  transition: opacity var(--motion-press) var(--motion-ease-out),
     background-color var(--motion-press) var(--motion-ease-out),
     border-color var(--motion-press) var(--motion-ease-out),
     color var(--motion-press) var(--motion-ease-out);
 }
 .motion-press:active:not(:disabled, [aria-disabled="true"]) {
-  scale: var(--motion-scale-press);
-  filter: brightness(.88);
+  opacity: 0.88;
+}
+
+/* Modal/drawer close X (yemek-takibi 2445a732): backgroundless; darkens on mouse hover,
+   thickens stroke when pressed or tapped. */
+.close-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 2rem;
+  min-block-size: 2rem;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  transition: color var(--motion-press) var(--motion-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .close-icon-btn:hover:not(:disabled) {
+    color: var(--foreground);
+  }
+}
+.close-icon-btn:active:not(:disabled) {
+  color: var(--foreground);
+}
+.close-icon-btn:active:not(:disabled) svg {
+  stroke-width: 2.6;
+}
+.close-icon-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .close-icon-btn {
+    min-inline-size: 2.5rem;
+    min-block-size: 2.5rem;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(a:any-link, button, summary, input, select, textarea):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 .motion-fade {
   transition: opacity var(--motion-fade) var(--motion-ease-out);
@@ -405,8 +451,7 @@
 
 @keyframes card-in {
   from {
-    opacity: 0.8;
-    translate: 0 5px;
+    opacity: 0.88;
   }
 }
 

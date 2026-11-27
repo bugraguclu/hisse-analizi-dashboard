@@ -374,7 +374,7 @@ function PageDialog({ open, title, onClose, wide = false, children }: { open: bo
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-(--motion-fade) data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
         <Dialog.Popup
           className={cn(
-            "fixed left-1/2 top-[10vh] z-50 max-h-[80vh] -translate-x-1/2 overflow-y-auto rounded-xl border border-border bg-card text-foreground shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)] outline-none motion-popover",
+            "fixed left-1/2 top-[10vh] z-50 max-h-[80vh] -translate-x-1/2 overflow-y-auto rounded-xl border border-border bg-card text-foreground shadow-[var(--shadow-dialog)] outline-none motion-popover",
             wide ? "w-[min(44rem,calc(100vw-2rem))]" : "w-[min(26rem,calc(100vw-2rem))]",
           )}
         >
@@ -382,9 +382,9 @@ function PageDialog({ open, title, onClose, wide = false, children }: { open: bo
             <Dialog.Title className="min-w-0 grow truncate text-[15px] font-semibold">{title}</Dialog.Title>
             <Dialog.Close
               aria-label={t("settings.close")}
-              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              className="close-icon-btn"
             >
-              <X aria-hidden className="size-4" />
+              <X aria-hidden className="size-4" strokeWidth={1.75} />
             </Dialog.Close>
           </div>
           <div className="p-5">{children}</div>

@@ -213,10 +213,10 @@ export function SectorDetailView({ sectorKey }: { sectorKey: string }) {
                     href={sectorPageHref(key)}
                     aria-current={current ? "page" : undefined}
                     className={cn(
-                      "inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                       current
-                        ? "border-foreground bg-foreground font-medium text-background"
-                        : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
                     )}
                   >
                     {sectorLabel(key, locale)}
@@ -227,7 +227,7 @@ export function SectorDetailView({ sectorKey }: { sectorKey: string }) {
             <li>
               <Link
                 href="/sektor"
-                className="inline-flex items-center rounded-full border border-dashed border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                className="inline-flex h-7 items-center rounded-md border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-foreground/35 hover:text-foreground"
               >
                 {copy.allSectorsLink} →
               </Link>

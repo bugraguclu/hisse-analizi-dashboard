@@ -117,17 +117,17 @@ export function AtlasHubView() {
       </div>
 
       {/* Category chips + quick filter */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label={copy.eyebrow}>
           <button
             type="button"
             onClick={() => setCategory("all")}
             aria-pressed={category === "all"}
             className={cn(
-              "motion-press rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              "motion-press inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
               category === "all"
                 ? "border-foreground bg-foreground text-background"
-                : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
             )}
           >
             {copy.all} ({ATLAS_CONCEPTS.length})
@@ -142,10 +142,10 @@ export function AtlasHubView() {
                 onClick={() => setCategory(cat)}
                 aria-pressed={active}
                 className={cn(
-                  "motion-press rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  "motion-press inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                   active
                     ? "border-foreground bg-foreground text-background"
-                    : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                    : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
                 )}
               >
                 {ATLAS_CATEGORY_LABELS[cat][locale]} ({count})
@@ -154,7 +154,7 @@ export function AtlasHubView() {
           })}
         </div>
 
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full shrink-0 sm:w-64">
           <Search
             aria-hidden="true"
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -165,7 +165,7 @@ export function AtlasHubView() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder={copy.searchPlaceholder}
             aria-label={copy.searchLabel}
-            className="h-9 w-full rounded-md border border-input bg-card pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+            className="h-8 w-full rounded-md border border-input bg-card pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
           />
           {query && (
             <button
@@ -203,7 +203,7 @@ export function AtlasHubView() {
                       {ATLAS_CATEGORY_LABELS[concept.category][locale]}
                     </span>
                   </div>
-                  <h2 className="text-base font-semibold leading-snug text-foreground group-hover:text-primary sm:text-[17px]">
+                  <h2 className="text-base font-medium leading-snug text-foreground sm:text-[17px]">
                     {concept.title[locale]}
                   </h2>
                   <p className="text-[13px] leading-relaxed text-muted-foreground">{concept.cardDesc[locale]}</p>
@@ -211,7 +211,7 @@ export function AtlasHubView() {
                     {copy.actionCount(concept.actions.length)}
                   </p>
                 </div>
-                <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-primary sm:inline-flex">
+                <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground sm:inline-flex">
                   {copy.readMore}
                   <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
                 </span>
@@ -228,7 +228,7 @@ export function AtlasHubView() {
           className="group card-surface flex items-start justify-between gap-4 p-5 transition-colors hover:border-foreground/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <div className="space-y-1">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-muted-foreground">
               <Compass className="h-3.5 w-3.5" aria-hidden="true" />
               /endeks
             </span>
@@ -243,7 +243,7 @@ export function AtlasHubView() {
           className="group card-surface flex items-start justify-between gap-4 p-5 transition-colors hover:border-foreground/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <div className="space-y-1">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-muted-foreground">
               <Layers className="h-3.5 w-3.5" aria-hidden="true" />
               /sektor
             </span>

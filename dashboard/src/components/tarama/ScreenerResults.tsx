@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Download, Inbox } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RowSkeleton } from "@/components/dashboard/ui";
@@ -99,9 +100,9 @@ export function ScreenerResults({
             onClick={onExport}
             disabled={status !== "ready" || slice.total === 0}
             title={t("results.exportTitle")}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40"
+            className={buttonVariants({ variant: "outline", size: "md" })}
           >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            <Download aria-hidden="true" />
             {t("results.export")}
           </button>
         </div>
