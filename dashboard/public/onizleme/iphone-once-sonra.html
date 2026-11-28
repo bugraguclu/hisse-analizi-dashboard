@@ -1,0 +1,1809 @@
+<!doctype html>
+<html lang="tr" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+
+<title>iPhone analiz ekranları: önce / sonra</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 16px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans:
+    -apple-system-body, ui-sans-serif, -apple-system, system-ui, "Segoe UI",
+    Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji",
+    "Segoe UI Symbol";
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 8px);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  -webkit-font-smoothing: antialiased;
+  font-size: var(--font-size-base);
+  line-height: calc(var(--font-size-base) * 1.625);
+  font-weight: var(--font-weight-normal);
+}
+
+.cursor-interaction {
+  cursor: var(--cursor-interaction, pointer);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: var(--cursor-interaction, pointer);
+  text-decoration: none;
+  text-underline-offset: 2px;
+  font-weight: inherit;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+.table {
+  font-family: var(--font-sans);
+}
+
+h1 {
+  font-size: calc(var(--font-size-base) * 1.5);
+  line-height: 1.3333333333;
+}
+
+h2 {
+  font-size: calc(var(--font-size-base) * 1.25);
+  line-height: 1.4;
+}
+h3 {
+  font-size: calc(var(--font-size-base) * 1.125);
+  line-height: 1.5555555556;
+}
+h4 {
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+h5,
+h6 {
+  font-size: var(--font-size-base);
+  line-height: calc(var(--font-size-base) * 1.625);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+b,
+strong,
+th {
+  font-weight: 600;
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+pre,
+pre code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: calc(var(--font-size-base) * 0.875);
+  line-height: calc(var(--font-size-base) * 1.625);
+  font-family: var(--font-sans);
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.table :is(th, td):not(:last-child) {
+  padding-inline-end: calc(var(--font-size-base) * 1.5);
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead :is(th, td) {
+  border-bottom-color: var(--border-strong, var(--input));
+  padding-block: calc(var(--font-size-base) / 2);
+  line-height: var(--font-size-base);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+.table tbody :is(th, td) {
+  padding-block: calc(var(--font-size-base) * 0.625);
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 8px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+.widget {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  box-shadow: 0 0 0 0.5px var(--border-strong, var(--border));
+  color: var(--foreground);
+  background: var(--background);
+}
+
+#widget > :not(.card, .widget, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  border: 1px solid var(--border);
+  corner-shape: var(--corner-shape);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--font-sans);
+  padding: 5px 12px;
+  border-color: color-mix(
+    in oklab,
+    light-dark(var(--primary-foreground), var(--foreground)) 5%,
+    transparent
+  );
+  border-radius: var(--radius-2xl);
+  color: light-dark(var(--primary-foreground), var(--foreground));
+  background: light-dark(var(--foreground), var(--popover));
+  box-shadow: 0 8px 18px rgb(15 23 42 / 20%);
+  letter-spacing: -0.15px;
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: color-mix(in srgb, var(--foreground) 40%, var(--muted-foreground));
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  font-family: var(--font-sans);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 1;
+}
+
+small,
+.text-small {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+/* Match inline alignment without overriding a containing flex or grid layout. */
+.btn,
+.nav-link,
+.form-control,
+.form-select,
+.form-range,
+.form-check {
+  vertical-align: middle;
+}
+
+.btn,
+.nav-link {
+  --btn-size: calc(12px + 2 * var(--control-spacing, 12px));
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  corner-shape: var(--corner-shape);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: inherit;
+  font-family: var(--font-sans);
+  height: fit-content;
+  min-height: var(--btn-size);
+  padding-inline: var(--control-spacing, 12px);
+  border-color: transparent;
+  border-radius: var(--radius-full);
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+}
+
+.btn {
+  border-color: var(--border);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+}
+
+/* Codex Button size="compact"; appearance stays with the button variant. */
+.btn-sm {
+  --btn-size: 24px;
+  padding-inline: 8px;
+  font-size: calc(var(--font-size-base) * 12 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 12 / 16), 1px);
+  line-height: 16px;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: var(--cursor-interaction, pointer);
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: light-dark(
+    color-mix(in srgb, var(--foreground) 5.5%, transparent),
+    color-mix(in srgb, var(--foreground) 8%, transparent)
+  );
+}
+
+.nav-link:not(:disabled):not([aria-disabled="true"]):hover {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.btn-primary {
+  border-color: var(--border);
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: border-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: border-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--muted-foreground);
+  background: light-dark(
+    color-mix(in srgb, var(--foreground) 5.5%, transparent),
+    color-mix(in srgb, var(--foreground) 8%, transparent)
+  );
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+/* Shared preview chrome; product styles stay inside each variant. */
+.viz-dotted-background {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--foreground) 14%, transparent) 0.8px,
+    transparent 0.8px
+  );
+  background-position: center;
+  background-size: 16px 16px;
+}
+
+.viz-carousel {
+  position: relative;
+  min-width: 0;
+}
+
+.viz-carousel:has(> .viz-carousel-controls) {
+  min-height: calc(60px + var(--viz-carousel-picker-height, 0px));
+  padding-bottom: 60px;
+}
+
+.viz-carousel > [data-variant][hidden] {
+  display: none !important;
+}
+
+.viz-carousel > [data-variant] {
+  isolation: isolate;
+}
+
+.viz-carousel-controls {
+  --viz-carousel-hover: light-dark(
+    color-mix(in srgb, var(--foreground) 5.4%, transparent),
+    color-mix(in srgb, var(--foreground) 7.8%, transparent)
+  );
+  position: absolute;
+  z-index: 2;
+  bottom: 8px;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  /* Leave room for the host's design-controls launcher at the trailing edge. */
+  max-width: calc(100% - 96px);
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+  /* Match the settings dropdown chrome independently of the content font size. */
+  font-size: 13px;
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+/* Keep authored mockup button styles out of the shared carousel chrome. */
+.viz-carousel-controls button,
+.viz-carousel-picker > summary {
+  display: flex !important;
+  height: auto !important;
+  min-height: 30px;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px;
+  padding: 0 6px !important;
+  -webkit-app-region: no-drag;
+  border: 0 !important;
+  border-radius: 14px !important;
+  color: inherit !important;
+  background: transparent !important;
+  font: inherit !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.viz-carousel-controls > button,
+.viz-carousel-picker > summary {
+  position: relative;
+  isolation: isolate;
+}
+
+.viz-carousel-controls > button {
+  --icon-size: 16px;
+  width: 30px !important;
+  padding: 0 !important;
+}
+
+.viz-carousel-picker > summary {
+  padding-inline: 12px !important;
+}
+
+.viz-carousel-controls .viz-carousel-caret {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin: 0;
+  color: inherit;
+  transform: rotate(180deg);
+}
+
+.viz-carousel-controls > button > svg,
+.viz-carousel-controls .viz-carousel-caret,
+.viz-carousel-count {
+  opacity: 0.5;
+}
+
+.viz-carousel-controls > button::before,
+.viz-carousel-picker > summary::before {
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border-radius: 12px;
+  content: "";
+  pointer-events: none;
+}
+
+.viz-carousel-controls > button:hover::before,
+.viz-carousel-picker > summary:hover::before {
+  background: var(--viz-carousel-hover);
+}
+
+.viz-carousel-controls > button,
+.viz-carousel-controls [data-lucide],
+.viz-carousel-controls .lucide {
+  flex-shrink: 0;
+}
+
+.viz-carousel-picker {
+  min-width: 0;
+}
+
+.viz-carousel-picker > summary {
+  min-width: 0;
+  list-style: none;
+}
+
+.viz-carousel-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.viz-carousel-count {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.viz-carousel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-carousel-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  box-shadow: 0 4px 12px light-dark(rgb(0 0 0 / 6%), rgb(0 0 0 / 25%));
+}
+
+.viz-carousel-options > button {
+  border-radius: max(0px, calc(var(--radius-lg) - 5px)) !important;
+  width: 100% !important;
+  min-height: 28px;
+  justify-content: flex-start !important;
+  padding: 4px 8px !important;
+  font-size: var(--font-size-small) !important;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.viz-carousel-options > [aria-current="true"],
+.viz-carousel-options > button:hover {
+  background: var(--viz-carousel-hover) !important;
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  padding-inline: calc(4px + var(--control-spacing, 12px) / 2);
+  border-color: var(--input);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--popover) 96%, transparent);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.4285714286;
+}
+.form-control:is(
+  [type="file"],
+  [type="date"],
+  [type="datetime-local"],
+  [type="month"],
+  [type="week"],
+  [type="color"]
+) {
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  line-height: 18px;
+}
+.form-control:is(
+  [type="date"],
+  [type="datetime-local"],
+  [type="month"],
+  [type="week"]
+) {
+  padding-inline: var(--control-spacing, 12px);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+  padding: 0;
+}
+
+.form-control[type="file"]::file-selector-button {
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+  min-height: calc(10px + 2 * var(--control-spacing, 12px));
+  padding-inline: var(--control-spacing, 12px);
+  margin-inline-end: var(--control-spacing, 12px);
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  resize: vertical;
+  min-height: 96px;
+  padding: 8px 10px;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: none;
+}
+.form-control:disabled {
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  opacity: 1;
+}
+.form-control[aria-invalid="true"] {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 20%, transparent);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: fit-content;
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  margin: 0;
+  /* The secondary icon role is 14px at compact density and 16px at web density. */
+  --icon-size: calc(10px + var(--control-spacing, 12px) / 2);
+  /* Settings dropdowns retain a 12px inset and a 4px text-to-chevron gap. */
+  padding: 0 calc(16px + var(--icon-size)) 0 12px;
+  outline: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent calc(50% - 0.6px),
+      var(--muted-foreground) calc(50% - 0.6px) calc(50% + 0.6px),
+      transparent calc(50% + 0.6px)
+    ),
+    linear-gradient(
+      135deg,
+      transparent calc(50% - 0.6px),
+      var(--muted-foreground) calc(50% - 0.6px) calc(50% + 0.6px),
+      transparent calc(50% + 0.6px)
+    );
+  background-position:
+    calc(100% - 12px - var(--icon-size) / 2) 50%,
+    calc(100% - 12px - var(--icon-size) * 0.18) 50%;
+  background-repeat: no-repeat;
+  background-size: calc(var(--icon-size) * 0.32) calc(var(--icon-size) * 0.32);
+  cursor: var(--cursor-interaction, default);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+}
+
+.form-select :is(option, optgroup) {
+  color: var(--popover-foreground);
+  background-color: var(--popover);
+}
+
+.form-select :is(option, optgroup):disabled {
+  color: var(--muted-foreground);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: light-dark(
+    color-mix(in srgb, var(--foreground) 5.5%, transparent),
+    color-mix(in srgb, var(--foreground) 8%, transparent)
+  );
+}
+
+.form-select:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+.form-select:disabled {
+  opacity: 0.4;
+}
+
+.form-check {
+  display: flex;
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  corner-shape: round;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  width: calc(10px + var(--control-spacing, 12px) / 2);
+  height: calc(10px + var(--control-spacing, 12px) / 2);
+  border-color: var(--border-strong, var(--input));
+  border-radius: calc(var(--radius-sm) / 2);
+  background-color: transparent;
+  color: var(--foreground);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:is(:checked, :indeterminate) {
+  border-color: var(--border-strong, var(--input));
+  background-color: color-mix(in srgb, var(--popover) 96%, transparent);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+  background-color: var(--foreground);
+}
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:indeterminate::before {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 65%;
+  height: 6.65%;
+  margin: auto;
+  border-radius: var(--radius-full);
+  background: var(--foreground);
+  mask: none;
+  content: "";
+}
+
+.form-check-input[type="radio"] {
+  border-radius: var(--radius-full);
+  width: 16px;
+  height: 16px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--input);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 0;
+  background: radial-gradient(
+    circle,
+    var(--primary-foreground) 0 3px,
+    var(--foreground) 3px
+  );
+  box-shadow: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:focus-visible {
+  border-color: var(--ring);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+.form-check:not(.form-switch) .form-check-input[type="radio"]:disabled,
+.form-check:not(.form-switch)
+  .form-check-input[type="radio"]:disabled
+  + .form-check-label {
+  opacity: 0.5;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+  border-color: #fff;
+  background: #fff;
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--blue);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+  outline: none;
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  accent-color: var(--primary);
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  outline: none;
+  border-radius: var(--radius-full);
+  color: var(--foreground);
+  background: transparent;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  background: var(--form-range-track, var(--border));
+  height: 2px;
+  border-radius: var(--radius-full);
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  margin-top: -9px;
+  border-color: transparent;
+  background: currentColor;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Outline the native track and thumb, preserving the larger input hit area. */
+.form-range:focus-visible::-webkit-slider-runnable-track {
+  outline: 2px auto Highlight;
+  outline-color: -webkit-focus-ring-color;
+}
+
+.form-range::-moz-range-track {
+  background: var(--form-range-track, var(--border));
+  height: 2px;
+  border-radius: var(--radius-full);
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  border-color: transparent;
+  background: currentColor;
+  box-shadow: var(--shadow-sm);
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+.form-range:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  .is-selected
+) {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--blue);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.viz-carousel-controls :is(button, summary):focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+
+/* Web recipes are the default, including on renderers without inline style queries. */
+@supports (border-radius: if(style(--corner-shape: round): 1px; else: 2px)) {
+  /* Match the host's proportional text-sm scale at every text preference. */
+  .tooltip,
+  .viz-badge,
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    font-size: if(
+      style(--corner-shape: round): round(
+          nearest,
+          calc(var(--font-size-base) * 14 / 16),
+          1px
+        );
+        else: round(nearest, calc(var(--font-size-base) * 13 / 14), 1px)
+    );
+  }
+
+  .btn-sm {
+    font-size: if(
+      style(--corner-shape: round): round(
+          nearest,
+          calc(var(--font-size-base) * 12 / 16),
+          1px
+        );
+        else: round(nearest, calc(var(--font-size-base) * 12 / 14), 1px)
+    );
+  }
+
+  .btn,
+  .nav-link,
+  .form-select {
+    border-radius: if(
+      style(--corner-shape: round): var(--radius-full); else: var(--radius-lg)
+    );
+  }
+
+  .form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+    border-radius: if(
+      style(--corner-shape: round): calc(var(--radius-sm) / 2);
+        else: calc(var(--radius-lg) * 0.4)
+    );
+  }
+
+  .tooltip {
+    font-weight: if(
+      style(--corner-shape: round): 600; else: var(--font-weight-normal)
+    );
+  }
+}
+
+@media (pointer: coarse) {
+  .viz-carousel:has(> .viz-carousel-controls) {
+    min-height: calc(76px + var(--viz-carousel-picker-height, 0px));
+    padding-bottom: 76px;
+  }
+
+  .btn,
+  .nav-link,
+  .viz-carousel-controls button,
+  .viz-carousel-picker > summary,
+  .form-control,
+  .form-select {
+    --btn-size: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, calc(var(--font-size-base) * 14 / 16));
+    font-size: max(
+      16px,
+      round(nearest, calc(var(--font-size-base) * 14 / 16), 1px)
+    );
+  }
+  .form-control:is(
+    [type="file"],
+    [type="date"],
+    [type="datetime-local"],
+    [type="month"],
+    [type="week"],
+    [type="time"],
+    [type="color"]
+  ) {
+    height: 44px;
+    min-height: 44px;
+    font-size: max(16px, calc(var(--font-size-base) * 14 / 16));
+    font-size: max(
+      16px,
+      round(nearest, calc(var(--font-size-base) * 14 / 16), 1px)
+    );
+  }
+
+  .form-control[type="file"]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type="color"] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type="date"],
+    [type="datetime-local"],
+    [type="month"],
+    [type="time"],
+    [type="week"]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: "";
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html>body{padding:0}</style>
+</head>
+<body>
+<header style="max-width:1000px;margin:0 auto 24px;padding:0 12px">
+<h1 style="font-size:24px;margin-bottom:8px">iPhone analiz ekranları: önce / sonra</h1>
+<p>Tasarım karşılaştırması · 23 Kasım 2026. “Önce” eski ekran kodunun canlandırmasıdır; “Sonra” bir tasarım önerisidir. Mobil uygulamada uygulanmış özellikleri göstermez. Bütün fiyatlar ve veriler temsilîdir.</p>
+<p><a href="/">Hisse Analizi’ne dön</a> · Görseller: <a href="/onizleme/iphone-analiz/tarama-once-sonra.png">Tarama</a> · <a href="/onizleme/iphone-analiz/teknik-once-sonra.png">Teknik</a> · <a href="/onizleme/iphone-analiz/temel-once-sonra.png">Temel</a> · <a href="/onizleme/iphone-analiz/makro-once-sonra.png">Makro</a></p>
+</header>
+
+
+<div id="ha-iphone-comparison">
+  <div class="ha-view-picker" role="group" aria-label="Karşılaştırılacak ekran">
+    <button type="button" class="btn btn-primary" data-screen="tarama" aria-pressed="true">Tarama</button>
+    <button type="button" class="btn" data-screen="hisse" aria-pressed="false">Hisse analizi</button>
+    <button type="button" class="btn" data-screen="makro" aria-pressed="false">Makro</button>
+  </div>
+  <div class="ha-compare-grid viz-dotted-background" aria-live="polite">
+    <section class="ha-side" aria-label="Önce, mevcut kodun görsel canlandırması">
+      <div class="ha-caption"><strong>ÖNCE</strong><span>23 Kasım sürümünün canlandırması</span></div>
+      <div class="ha-phone" id="ha-before">
+        <div class="ha-status"><span>9:41</span><span class="ha-island" aria-hidden="true"></span><span>5G ▰</span></div>
+        <div class="ha-app-main" data-before-main></div>
+        <div class="ha-home-indicator" aria-hidden="true"></div>
+      </div>
+    </section>
+    <section class="ha-side" aria-label="Sonra, örnek verilerle tasarım önerisi">
+      <div class="ha-caption"><strong>SONRA</strong><span>Tasarım önerisi · örnek veriler</span></div>
+      <div class="ha-phone" id="ha-after">
+        <div class="ha-status"><span>9:41</span><span class="ha-island" aria-hidden="true"></span><span>5G ▰</span></div>
+        <div class="ha-app-main" data-after-main></div>
+        <div class="ha-home-indicator" aria-hidden="true"></div>
+      </div>
+    </section>
+  </div>
+  <div class="ha-change-label" data-change-label>Seçilen tarama adından, filtrelenmiş hisse sonuçlarına.</div>
+</div>
+
+<style>
+  #ha-iphone-comparison { width:100%; }
+  #ha-iphone-comparison .ha-view-picker { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding-right:88px; }
+  #ha-iphone-comparison .ha-compare-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px; padding:16px 10px 10px; align-items:stretch; }
+  #ha-iphone-comparison .ha-side { min-width:0; display:flex; flex-direction:column; }
+  #ha-iphone-comparison .ha-caption { display:flex; flex-wrap:wrap; align-items:baseline; gap:5px 10px; margin:0 3px 12px; color:var(--foreground); }
+  #ha-iphone-comparison .ha-caption strong { font-weight:500; }
+  #ha-iphone-comparison .ha-caption span { color:var(--muted-foreground); font-size:12px; }
+  #ha-iphone-comparison .ha-change-label { margin-top:12px; color:var(--foreground); }
+  #ha-iphone-comparison .ha-phone {
+    --ha-bg:light-dark(#f7f6f3,#0e0e0e); --ha-card:light-dark(#fdfcfa,#161616); --ha-subtle:light-dark(#efede8,#1a1a1a);
+    --ha-text:light-dark(#1d1c1a,#eceae4); --ha-secondary:light-dark(#45423d,#c7c3ba); --ha-muted:light-dark(#6f6b63,#969188);
+    --ha-line:light-dark(#e3e0d8,#2b2b2b); --ha-accent:light-dark(#2557a7,#6ea3f7); --ha-tint:light-dark(#e7edf7,#1c283d);
+    --ha-up:light-dark(#16804a,#42c77d); --ha-down:light-dark(#c8322b,#eb5f57);
+    width:100%; max-width:350px; margin:0 auto; min-height:650px; box-sizing:border-box; display:flex; flex-direction:column; flex:1;
+    background:var(--ha-bg); color:var(--ha-text); border:1px solid var(--ha-line); border-radius:32px; padding:0 0 10px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:13px; line-height:1.45;
+  }
+  #ha-iphone-comparison .ha-phone * { box-sizing:border-box; }
+  #ha-iphone-comparison .ha-phone button { font:inherit; color:inherit; cursor:inherit; }
+  #ha-iphone-comparison .ha-status { height:49px; padding:14px 22px 9px; display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:500; }
+  #ha-iphone-comparison .ha-island { width:76px; height:19px; background:var(--ha-text); border-radius:14px; }
+  #ha-iphone-comparison .ha-app-main { flex:1; display:flex; flex-direction:column; min-height:578px; position:relative; }
+  #ha-iphone-comparison .ha-content { padding:14px 16px 18px; display:flex; flex-direction:column; gap:15px; flex:1; }
+  #ha-iphone-comparison .ha-row { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+  #ha-iphone-comparison .ha-column { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  #ha-iphone-comparison .ha-title { font-size:25px; font-weight:700; letter-spacing:-.7px; margin:0; line-height:1.2; }
+  #ha-iphone-comparison .ha-eyebrow { color:var(--ha-muted); font-size:11px; letter-spacing:.6px; }
+  #ha-iphone-comparison .ha-muted { color:var(--ha-muted); }
+  #ha-iphone-comparison .ha-small { font-size:11px; }
+  #ha-iphone-comparison .ha-medium { font-weight:600; }
+  #ha-iphone-comparison .ha-number { font-variant-numeric:tabular-nums; }
+  #ha-iphone-comparison .ha-big-number { font-size:29px; line-height:1.15; letter-spacing:-.8px; font-weight:600; font-variant-numeric:tabular-nums; }
+  #ha-iphone-comparison .ha-up { color:var(--ha-up); }
+  #ha-iphone-comparison .ha-down { color:var(--ha-down); }
+  #ha-iphone-comparison .ha-box { padding:15px; border:1px solid var(--ha-line); border-radius:12px; background:var(--ha-card); display:flex; flex-direction:column; gap:8px; }
+  #ha-iphone-comparison .ha-original-note { color:var(--ha-secondary); font-size:15px; }
+  #ha-iphone-comparison .ha-btn { border:1px solid var(--ha-line); background:var(--ha-card); border-radius:8px; padding:7px 10px; font-weight:500; white-space:nowrap; }
+  #ha-iphone-comparison .ha-btn[aria-pressed="true"] { background:var(--ha-tint); color:var(--ha-accent); border-color:var(--ha-accent); }
+  #ha-iphone-comparison .ha-text-btn { padding:3px 0; background:none; border:0; color:var(--ha-accent); text-align:left; }
+  #ha-iphone-comparison .ha-badge { align-self:flex-start; display:inline-flex; gap:4px; align-items:center; color:var(--ha-accent); background:var(--ha-tint); border-radius:5px; padding:4px 7px; font-size:11px; }
+  #ha-iphone-comparison .ha-subnav { display:flex; gap:5px; padding:0; }
+  #ha-iphone-comparison .ha-subnav .ha-btn { flex:1; padding:7px 1px; font-size:11px; }
+  #ha-iphone-comparison .ha-bottomnav { display:flex; justify-content:space-around; gap:5px; padding:12px 10px; background:var(--ha-card); border-top:1px solid var(--ha-line); }
+  #ha-iphone-comparison .ha-bottomnav span { color:var(--ha-muted); font-size:11px; }
+  #ha-iphone-comparison .ha-bottomnav .ha-active { color:var(--ha-accent); font-weight:600; }
+  #ha-iphone-comparison .ha-home-indicator { height:4px; width:95px; margin:10px auto 0; background:var(--ha-text); border-radius:8px; opacity:.75; }
+  #ha-iphone-comparison .ha-list-head { display:grid; grid-template-columns:1.2fr 1fr .7fr; gap:5px; font-size:11px; color:var(--ha-muted); padding:0 0 8px; border-bottom:1px solid var(--ha-line); }
+  #ha-iphone-comparison .ha-list-head span:not(:first-child) { text-align:right; }
+  #ha-iphone-comparison .ha-stock-row { display:grid; grid-template-columns:1.2fr 1fr .7fr; gap:5px; padding:13px 0; align-items:center; background:none; border:0; border-bottom:1px solid var(--ha-line); width:100%; text-align:left; }
+  #ha-iphone-comparison .ha-stock-row .ha-column:not(:first-child) { text-align:right; align-items:flex-end; }
+  #ha-iphone-comparison .ha-stock-row strong { font-weight:600; }
+  #ha-iphone-comparison .ha-stock-row:last-child { border-bottom:0; }
+  #ha-iphone-comparison .ha-spark { display:block; width:55px; height:19px; }
+  #ha-iphone-comparison .ha-series { fill:none; stroke:var(--ha-accent); stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; }
+  #ha-iphone-comparison .ha-sma { fill:none; stroke:var(--ha-muted); stroke-width:1.4; stroke-dasharray:4 3; }
+  #ha-iphone-comparison .ha-grid { stroke:var(--ha-line); stroke-width:1; }
+  #ha-iphone-comparison .ha-phone svg text { fill:var(--ha-muted); font-size:11px; font-family:inherit; }
+  #ha-iphone-comparison .ha-chart { display:block; width:100%; height:auto; overflow:visible; }
+  #ha-iphone-comparison .ha-periods { display:flex; gap:7px; }
+  #ha-iphone-comparison .ha-periods .ha-btn { flex:1; padding:5px 0; font-size:11px; }
+  #ha-iphone-comparison .ha-data-foot { display:flex; justify-content:space-between; gap:8px; color:var(--ha-muted); font-size:11px; }
+  #ha-iphone-comparison .ha-key-values { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; }
+  #ha-iphone-comparison .ha-key-values .ha-column { gap:4px; }
+  #ha-iphone-comparison .ha-key-values strong { font-size:17px; font-weight:600; }
+  #ha-iphone-comparison .ha-key-values span { font-size:11px; color:var(--ha-muted); }
+  #ha-iphone-comparison .ha-data-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--ha-line); }
+  #ha-iphone-comparison .ha-data-row:last-child { border:0; }
+  #ha-iphone-comparison .ha-two-col { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  #ha-iphone-comparison .ha-macro-number { font-size:22px; font-weight:600; letter-spacing:-.5px; }
+  #ha-iphone-comparison .ha-quote-strip { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding:13px 0; border-top:1px solid var(--ha-line); border-bottom:1px solid var(--ha-line); }
+  #ha-iphone-comparison .ha-quote-strip strong { font-size:14px; font-weight:600; }
+  #ha-iphone-comparison .ha-sheet { position:absolute; z-index:2; inset:100px 0 0; background:var(--ha-card); border:1px solid var(--ha-line); border-radius:20px 20px 18px 18px; padding:20px 16px; display:flex; flex-direction:column; gap:12px; }
+  #ha-iphone-comparison .ha-sheet[hidden] { display:none; }
+  #ha-iphone-comparison .ha-sheet button { padding:11px; text-align:left; }
+  #ha-iphone-comparison .ha-spacer { flex:1; min-height:10px; }
+  #ha-iphone-comparison .ha-source { color:var(--ha-muted); font-size:11px; }
+  @media(max-width:580px) {
+    #ha-iphone-comparison .ha-compare-grid { grid-template-columns:1fr; gap:24px; padding:12px 0; }
+    #ha-iphone-comparison .ha-caption { max-width:350px; margin:0 auto 10px; }
+    #ha-iphone-comparison .ha-view-picker { padding-right:0; }
+  }
+  @media(pointer:coarse) {
+    #ha-iphone-comparison .ha-phone button { min-height:44px; }
+  }
+</style>
+
+<template id="ha-tarama-before">
+  <div class="ha-content">
+    <div class="ha-row"><h2 class="ha-title">Tarama</h2><button class="ha-btn" type="button" data-open-filter>Filtreler · 1</button></div>
+    <div class="ha-box"><div class="ha-original-note" data-original-preset>Etkin tarama: Düşük F/K</div></div>
+    <div class="ha-spacer"></div>
+  </div>
+  <nav class="ha-bottomnav" aria-label="Mevcut uygulama sekmeleri"><span>Piyasa</span><span>Takip</span><span class="ha-active">Tarama</span><span>Takvim</span></nav>
+</template>
+<template id="ha-tarama-after">
+  <div class="ha-content">
+    <div class="ha-row"><div class="ha-column"><span class="ha-eyebrow">HİSSE ANALİZİ</span><h2 class="ha-title">Tarama</h2></div><button class="ha-btn" type="button" data-open-filter>Filtreler · 1</button></div>
+    <div class="ha-row"><span class="ha-badge" data-preset-badge>Düşük F/K</span><span class="ha-small ha-muted">Örnek veri</span></div>
+    <div class="ha-row"><span class="ha-small" data-result-count>4 örnek sonuç</span><button type="button" class="ha-text-btn ha-small" data-sort>F/K · artan ↕</button></div>
+    <div><div class="ha-list-head"><span>Hisse / fiyat</span><span>Günlük</span><span data-result-column>F/K</span></div><div data-results></div></div>
+    <div class="ha-spacer"></div>
+    <div class="ha-source">Örnek fiyatlar · tasarım gösterimi</div>
+  </div>
+  <nav class="ha-bottomnav" aria-label="Önerilen uygulama sekmeleri"><span>Piyasa</span><span>Takip</span><span class="ha-active">Tarama</span><span>Takvim</span></nav>
+</template>
+<template id="ha-hisse-before">
+  <div class="ha-content">
+    <div class="ha-row"><span class="ha-text-btn">← Geri</span><button type="button" class="ha-text-btn" data-open-indicators>Göstergeler (2)</button></div>
+    <div class="ha-column"><h2 class="ha-title" data-symbol>THYAO</h2><span class="ha-muted" data-company>Türk Hava Yolları</span></div>
+    <div class="ha-subnav" data-stock-tabs></div>
+    <div class="ha-box"><span class="ha-muted">Görünüm: <span data-original-section>Teknik</span></span><strong data-original-price>300,00 ₺</strong><span class="ha-small ha-muted" data-original-indicators>Etkin göstergeler: SMA 20, RSI 14</span></div>
+    <div class="ha-spacer"></div>
+    <div class="ha-source">Fiyat alanı örnek değerle dolduruldu.</div>
+  </div>
+</template>
+<template id="ha-hisse-after">
+  <div class="ha-content">
+    <div class="ha-row"><span class="ha-text-btn">← Piyasa</span><span class="ha-small ha-muted">Örnek veri</span></div>
+    <div class="ha-row"><div class="ha-column"><h2 class="ha-title" data-symbol>THYAO</h2><span class="ha-muted ha-small" data-company>Türk Hava Yolları</span></div><span class="ha-badge">BIST</span></div>
+    <div class="ha-column"><div class="ha-big-number" data-after-price>300,00 ₺</div><span class="ha-small ha-up" data-after-change>+3,56 ₺ (+%1,20)</span><span class="ha-small ha-muted">Örnek fiyat · veri saati 17.45 · 15 dk gecikmeli</span></div>
+    <div class="ha-subnav" data-stock-tabs></div>
+    <div data-stock-detail></div>
+    <div class="ha-spacer"></div>
+  </div>
+</template>
+<template id="ha-makro-before">
+  <div class="ha-content"><span class="ha-text-btn">← Geri</span><h2 class="ha-title">Makroekonomi</h2><div class="ha-box"><div class="ha-original-note">TCMB politika faizi, enflasyon (TÜFE/ÜFE) ve döviz göstergeleri.</div></div><div class="ha-spacer"></div></div>
+</template>
+<template id="ha-makro-after">
+  <div class="ha-content">
+    <div class="ha-row"><span class="ha-text-btn">← Piyasa</span><span class="ha-small ha-muted">Örnek veri</span></div>
+    <h2 class="ha-title">Makroekonomi</h2>
+    <div class="ha-two-col"><div class="ha-box"><span class="ha-small ha-muted">Politika faizi</span><strong class="ha-macro-number">%40,00</strong><span class="ha-small ha-muted">Örnek karar</span></div><div class="ha-box"><span class="ha-small ha-muted">Yıllık TÜFE</span><strong class="ha-macro-number">%35,00</strong><span class="ha-small ha-muted">Örnek dönem</span></div></div>
+    <div class="ha-column"><div class="ha-medium">Faiz ve enflasyon</div><div class="ha-row"><span class="ha-small ha-muted"><span style="color:var(--ha-accent)">━</span> Politika faizi</span><span class="ha-small ha-muted">┄ Yıllık TÜFE</span></div>
+      <svg class="ha-chart" viewBox="0 0 280 156" role="img" aria-label="Örnek altı aylık politika faizi ve yıllık TÜFE grafiği; birim yüzde">
+        <text x="0" y="12">Oran (%)</text><line class="ha-grid" x1="29" y1="27" x2="276" y2="27"/><line class="ha-grid" x1="29" y1="70" x2="276" y2="70"/><line class="ha-grid" x1="29" y1="113" x2="276" y2="113"/>
+        <text x="0" y="31">55</text><text x="0" y="74">40</text><text x="0" y="117">25</text>
+        <path class="ha-series" d="M29 55 H127 V62 H225 V70 H276"/><path class="ha-sma" d="M29 40 L78 48 L127 58 L176 65 L225 75 L276 84"/>
+        <text x="29" y="139">Haz</text><text x="139" y="139">Eyl</text><text x="255" y="139">Kas</text><text x="116" y="154">Örnek dönem</text>
+      </svg>
+    </div>
+    <div class="ha-quote-strip"><div class="ha-column"><span class="ha-small ha-muted">USD/TRY</span><strong class="ha-number">44,00</strong></div><div class="ha-column"><span class="ha-small ha-muted">EUR/TRY</span><strong class="ha-number">48,00</strong></div><div class="ha-column"><span class="ha-small ha-muted">Gram altın · ₺</span><strong class="ha-number">5.900</strong></div></div>
+    <div class="ha-column"><div class="ha-medium">Ekonomik takvim</div><div class="ha-data-row"><span class="ha-column"><strong class="ha-medium">PPK faiz kararı</strong><span class="ha-small ha-muted">Örnek gelecek tarih</span></span><span class="ha-small">14.00</span></div><div class="ha-data-row"><span class="ha-column"><strong class="ha-medium">Enflasyon açıklaması</strong><span class="ha-small ha-muted">Örnek gelecek tarih</span></span><span class="ha-small">10.00</span></div></div>
+    <div class="ha-source">Tüm değerler temsilî; güncel piyasa verisi değil.</div>
+  </div>
+</template>
+
+<script>
+(() => {
+  const root = document.getElementById('ha-iphone-comparison');
+  const labels = {tarama:'Seçilen tarama adından, filtrelenmiş hisse sonuçlarına.',hisse:'Sekme ve gösterge adlarından, veriyle çalışan analiz ekranlarına.',makro:'Sabit açıklamadan, tarihli göstergeler ve grafiklere.'};
+  const sections = [{id:'genel',name:'Genel'},{id:'teknik',name:'Teknik'},{id:'temel',name:'Temel'},{id:'analiz',name:'Analiz'}];
+  const presets = [{id:'low_pe',name:'Düşük F/K'},{id:'low_pb',name:'Düşük PD/DD'},{id:'high_dividend',name:'Yüksek temettü'},{id:'high_roe',name:'Yüksek ROE'},{id:'rsi_oversold',name:'RSI aşırı satım'},{id:'uptrend',name:'Yükseliş trendi'}];
+  const stocks = [
+    {ticker:'THYAO',name:'Türk Hava Yolları',price:300,change:1.2,pe:4.2,pb:.9,div:2,roe:26,rsi:46,trend:true},
+    {ticker:'TUPRS',name:'Tüpraş',price:150,change:.8,pe:5.1,pb:1.2,div:9,roe:24,rsi:28,trend:true},
+    {ticker:'EREGL',name:'Ereğli Demir Çelik',price:30,change:-.6,pe:6,pb:.8,div:7.5,roe:14,rsi:29,trend:false},
+    {ticker:'AKBNK',name:'Akbank',price:60,change:1.8,pe:6.8,pb:1.1,div:6,roe:31,rsi:55,trend:true}
+  ];
+  let state = {screen:'tarama',section:'teknik',preset:'low_pe',descending:false,ticker:'THYAO',period:'1A',sma:true,rsi:true};
+  const money = n => n.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const selectedStock = () => stocks.find(s=>s.ticker===state.ticker) || stocks[0];
+  function persist() {
+    if(window.openai?.setWidgetState) window.openai.setWidgetState({modelContent:{screen:state.screen,stockSection:state.section,preset:state.preset,ticker:state.ticker},privateContent:state}).catch(()=>{});
+  }
+  function chooseScreen(screen,save=true) {
+    if(!['tarama','hisse','makro'].includes(screen)) return;
+    state.screen=screen;
+    root.querySelectorAll('[data-screen]').forEach(b=>{const active=b.dataset.screen===screen;b.setAttribute('aria-pressed',String(active));b.classList.toggle('btn-primary',active);});
+    for(const side of ['before','after']) root.querySelector(`[data-${side}-main]`).replaceChildren(document.getElementById(`ha-${screen}-${side}`).content.cloneNode(true));
+    root.querySelector('[data-change-label]').textContent=labels[screen];
+    if(screen==='tarama') renderResults();
+    if(screen==='hisse') renderStock();
+    if(save) persist();
+  }
+  function renderResults() {
+    const preset=presets.find(p=>p.id===state.preset)||presets[0];
+    root.querySelector('[data-original-preset]').textContent=`Etkin tarama: ${preset.name}`;
+    root.querySelector('[data-preset-badge]').textContent=preset.name;
+    const field=state.preset==='low_pb'?'pb':state.preset==='high_dividend'?'div':state.preset==='high_roe'?'roe':state.preset==='rsi_oversold'?'rsi':state.preset==='uptrend'?'change':'pe';
+    const column={pe:'F/K',pb:'PD/DD',div:'Verim',roe:'ROE',rsi:'RSI',change:'Değişim'}[field];
+    let list=stocks.filter(s=>field==='div'?s.div>=6:field==='roe'?s.roe>=20:field==='rsi'?s.rsi<30:field==='change'?s.trend:true);
+    list.sort((a,b)=>(a[field]-b[field])*(state.descending?-1:1));
+    root.querySelector('[data-result-count]').textContent=`${list.length} örnek sonuç`;
+    root.querySelector('[data-result-column]').textContent=column;
+    root.querySelector('[data-sort]').textContent=`${column} · ${state.descending?'azalan':'artan'} ↕`;
+    root.querySelector('[data-results]').innerHTML=list.map(s=>`<button class="ha-stock-row" type="button" data-stock="${s.ticker}" aria-label="${s.ticker} örnek analizini aç"><span class="ha-column"><strong>${s.ticker}</strong><span class="ha-small ha-muted ha-number">${money(s.price)} ₺</span></span><span class="ha-column"><span class="ha-number ${s.change>=0?'ha-up':'ha-down'}">${s.change>=0?'+':''}%${money(s.change)}</span><svg class="ha-spark" viewBox="0 0 55 19" role="img" aria-label="Temsilî fiyat eğilimi"><path class="ha-series" d="M1 15 L9 12 L17 14 L25 7 L33 9 L42 4 L54 3"/></svg></span><span class="ha-column ha-number">${['div','roe','change'].includes(field)?'%':''}${money(s[field])}</span></button>`).join('');
+  }
+  function stockChart(technical) {
+    const d=state.period==='1Y'?'M32 123 L45 117 L60 121 L72 102 L85 111 L99 87 L113 94 L127 73 L141 83 L154 66 L169 77 L183 52 L197 64 L211 38 L225 49 L241 35 L258 37 L275 28':state.period==='3A'?'M32 110 L45 106 L60 111 L72 88 L85 97 L99 85 L113 91 L127 69 L141 75 L154 63 L169 72 L183 49 L197 61 L211 43 L225 47 L241 33 L258 39 L275 28':'M32 105 L45 98 L60 109 L72 89 L85 96 L99 70 L113 77 L127 67 L141 83 L154 59 L169 66 L183 45 L197 62 L211 37 L225 48 L241 28 L258 39 L275 28';
+    return `<svg class="ha-chart" viewBox="0 0 280 166" role="img" aria-label="Örnek ${state.period} fiyat grafiği, lira; düz çizgi fiyat${technical&&state.sma?', kesikli çizgi SMA 20':''}"><text x="0" y="12">Fiyat (₺)</text><line class="ha-grid" x1="32" y1="28" x2="275" y2="28"/><line class="ha-grid" x1="32" y1="77" x2="275" y2="77"/><line class="ha-grid" x1="32" y1="126" x2="275" y2="126"/><text x="0" y="32">300</text><text x="0" y="81">280</text><text x="0" y="130">260</text><path class="ha-series" d="${d}"/>${technical&&state.sma?'<path class="ha-sma" d="M32 117 C90 103 105 94 139 86 S220 52 275 43"/>':''}<text x="32" y="151">Başlangıç</text><text x="218" y="151">Son gün</text></svg>`;
+  }
+  function rsiChart() {
+    return `<div class="ha-column"><div class="ha-row"><span class="ha-medium ha-small">RSI (14)</span><span class="ha-small ha-number">46,0 / 100</span></div><svg class="ha-chart" viewBox="0 0 280 88" role="img" aria-label="Temsilî RSI 14 grafiği, 0 ile 100 ölçeğinde; son değer 46"><line class="ha-grid" x1="32" y1="17" x2="275" y2="17"/><line class="ha-grid" x1="32" y1="60" x2="275" y2="60"/><text x="0" y="21">70</text><text x="0" y="64">30</text><path class="ha-series" d="M32 49 L47 37 L63 47 L79 30 L95 40 L111 23 L127 33 L143 46 L159 32 L175 42 L191 24 L207 36 L223 30 L239 43 L255 35 L275 43"/><text x="32" y="81">Başlangıç</text><text x="218" y="81">Son gün</text></svg></div>`;
+  }
+  function renderStock() {
+    const stock=selectedStock();
+    root.querySelectorAll('[data-symbol]').forEach(e=>e.textContent=stock.ticker);
+    root.querySelectorAll('[data-company]').forEach(e=>e.textContent=stock.name);
+    root.querySelector('[data-original-price]').textContent=`${money(stock.price)} ₺`;
+    root.querySelector('[data-after-price]').textContent=`${money(stock.price)} ₺`;
+    const change=root.querySelector('[data-after-change]');
+    change.textContent=`${stock.change>=0?'+':''}${money(stock.price-stock.price/(1+stock.change/100))} ₺ (${stock.change>=0?'+':''}%${money(stock.change)})`;
+    change.className=`ha-small ${stock.change>=0?'ha-up':'ha-down'}`;
+    root.querySelector('[data-original-section]').textContent=sections.find(s=>s.id===state.section).name;
+    root.querySelector('[data-original-indicators]').textContent=`Etkin göstergeler: ${[state.sma?'SMA 20':null,state.rsi?'RSI 14':null].filter(Boolean).join(', ')||'Yok'}`;
+    root.querySelectorAll('[data-stock-tabs]').forEach(e=>e.innerHTML=sections.map(s=>`<button type="button" class="ha-btn" data-section="${s.id}" aria-pressed="${state.section===s.id}">${s.name}</button>`).join(''));
+    root.querySelector('[data-open-indicators]').textContent=`Göstergeler (${Number(state.sma)+Number(state.rsi)})`;
+    const detail=root.querySelector('[data-stock-detail]');
+    const periods=`<div class="ha-periods">${['1A','3A','1Y'].map(p=>`<button type="button" class="ha-btn" data-period="${p}" aria-pressed="${state.period===p}">${p}</button>`).join('')}</div>`;
+    const ratios=`<div class="ha-key-values"><div class="ha-column"><span>F/K</span><strong>${money(stock.pe)}</strong></div><div class="ha-column"><span>PD/DD</span><strong>${money(stock.pb)}</strong></div><div class="ha-column"><span>ROE</span><strong>%${money(stock.roe)}</strong></div><div class="ha-column"><span>Temettü verimi</span><strong>%${money(stock.div)}</strong></div></div>`;
+    if(state.section==='genel') detail.innerHTML=`<div class="ha-column" style="gap:12px">${periods}${stockChart(false)}${ratios}<div class="ha-source">Örnek fiyat geçmişi ve oranlar</div></div>`;
+    if(state.section==='teknik') detail.innerHTML=`<div class="ha-column" style="gap:10px">${periods}<div class="ha-row"><span class="ha-small ha-muted">━ Fiyat ${state.sma?'· ┄ SMA 20':''}</span><button type="button" class="ha-text-btn ha-small" data-open-indicators>Göstergeler</button></div>${stockChart(true)}${state.rsi?rsiChart():''}<div class="ha-source">Temsilî fiyat ve gösterge serileri</div></div>`;
+    if(state.section==='temel') detail.innerHTML=`<div class="ha-column" style="gap:16px">${ratios}<div class="ha-row"><strong class="ha-medium">Gelir tablosu</strong><span class="ha-badge">Yıllık</span></div><div class="ha-small ha-muted">Örnek yıl · tüm tutarlar milyon TL</div><div><div class="ha-data-row"><span>Hasılat</span><span class="ha-number">900.000</span></div><div class="ha-data-row"><span>FAVÖK</span><span class="ha-number">180.000</span></div><div class="ha-data-row"><span>Net kâr</span><span class="ha-number">100.000</span></div></div><div class="ha-box"><span class="ha-medium">Dönem ve kaynak</span><span class="ha-small ha-muted">Yayın tasarımında finansal dönem, birim ve kaynak burada gösterilir.</span></div><span class="ha-source">Örnek tablo · gerçek şirket finansalı değil</span></div>`;
+    if(state.section==='analiz') detail.innerHTML=`<div class="ha-column" style="gap:17px"><div class="ha-box"><div class="ha-row"><span class="ha-medium">Teknik görünüm</span><span class="ha-badge">Örnek özet</span></div><span class="ha-small">Fiyat ve hareketli ortalamalar</span><span class="ha-small ha-muted">RSI: 46 · SMA 20: 294,00 ₺</span></div>${ratios}<div class="ha-column"><strong class="ha-medium">Sektör karşılaştırması</strong><div class="ha-data-row"><span>Şirket F/K</span><span>${money(stock.pe)}</span></div><div class="ha-data-row"><span>Örnek sektör medyanı</span><span>6,30</span></div></div><span class="ha-source">Temsilî veriler · işlem önerisi değildir</span></div>`;
+  }
+  function openSheet(phone,type) {
+    phone.querySelector('.ha-sheet')?.remove();
+    const sheet=document.createElement('div');sheet.className='ha-sheet';sheet.setAttribute('role','region');sheet.setAttribute('aria-label',type==='filter'?'Tarama filtreleri':'Gösterge ayarları');
+    if(type==='filter') sheet.innerHTML=`<div class="ha-row"><strong>Tarama filtreleri</strong><button class="ha-text-btn" type="button" data-close-sheet>Kapat</button></div>${presets.map(p=>`<button type="button" class="ha-btn" data-preset="${p.id}" aria-pressed="${p.id===state.preset}">${p.name}</button>`).join('')}`;
+    else sheet.innerHTML=`<div class="ha-row"><strong>Gösterge ayarları</strong><button class="ha-text-btn" type="button" data-close-sheet>Kapat</button></div><button type="button" class="ha-btn" data-indicator="sma" aria-pressed="${state.sma}">SMA 20 ${state.sma?'✓':''}</button><button type="button" class="ha-btn" data-indicator="rsi" aria-pressed="${state.rsi}">RSI 14 ${state.rsi?'✓':''}</button>`;
+    phone.querySelector('.ha-app-main').append(sheet);
+  }
+  root.addEventListener('click',event=>{
+    const b=event.target.closest('button');if(!b||!root.contains(b))return;
+    if(b.dataset.screen){chooseScreen(b.dataset.screen);return;}
+    if(b.hasAttribute('data-open-filter')){openSheet(b.closest('.ha-phone'),'filter');return;}
+    if(b.hasAttribute('data-open-indicators')){openSheet(b.closest('.ha-phone'),'indicators');return;}
+    if(b.hasAttribute('data-close-sheet')){b.closest('.ha-sheet').remove();return;}
+    if(b.dataset.preset){state.preset=b.dataset.preset;state.descending=['high_dividend','high_roe'].includes(state.preset);root.querySelectorAll('.ha-sheet').forEach(e=>e.remove());renderResults();persist();return;}
+    if(b.hasAttribute('data-sort')){state.descending=!state.descending;renderResults();persist();return;}
+    if(b.dataset.stock){state.ticker=b.dataset.stock;state.section='genel';chooseScreen('hisse');return;}
+    if(b.dataset.section){state.section=b.dataset.section;renderStock();persist();return;}
+    if(b.dataset.period){state.period=b.dataset.period;renderStock();persist();return;}
+    if(b.dataset.indicator){state[b.dataset.indicator]=!state[b.dataset.indicator];const phone=b.closest('.ha-phone');renderStock();openSheet(phone,'indicators');persist();return;}
+  });
+  function restore(saved) {
+    const s=saved?.privateContent;
+    if(!s||typeof s!=='object')return;
+    for(const key of ['screen','section','preset','ticker','period']){
+      const allowed={screen:['tarama','hisse','makro'],section:sections.map(x=>x.id),preset:presets.map(x=>x.id),ticker:stocks.map(x=>x.ticker),period:['1A','3A','1Y']}[key];
+      if(allowed.includes(s[key]))state[key]=s[key];
+    }
+    for(const key of ['descending','sma','rsi'])if(typeof s[key]==='boolean')state[key]=s[key];
+  }
+  restore(window.openai?.widgetState);
+  chooseScreen(state.screen,false);
+  window.addEventListener('openai:set_globals',event=>{const saved=event.detail?.globals?.widgetState;if(saved){const previous=JSON.stringify(state);restore(saved);if(previous!==JSON.stringify(state))chooseScreen(state.screen,false);}});
+})();
+</script>
+
+
+
+
+
+
+
+</body>
+</html>

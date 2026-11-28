@@ -10,3 +10,5 @@
 PNG karşılaştırmaları: `tarama-once-sonra.png`, `teknik-once-sonra.png`, `temel-once-sonra.png`, `makro-once-sonra.png`.
 
 23 Kasım 2026 tarihinde hazırlanmıştır. Bu tasarım çalışması web yayını, TestFlight dağıtımı veya mobil ekranların tamamlanması kapsamında değildir.
+
+Canlı paylaşım yolu: `/onizleme/iphone-once-sonra.html`. Statik yayın dosyası `dashboard/public/onizleme/` altında yer alır; uygulama dışı görüntüleme kabuğu çıkarılmıştır.
