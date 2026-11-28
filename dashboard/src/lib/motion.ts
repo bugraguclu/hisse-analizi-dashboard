@@ -13,7 +13,7 @@ export const motionCurve = {
   easeInOut: [0.77, 0, 0.175, 1],
 } as const;
 
-export const motionScale = { press: 0.97, popover: 0.95, pulse: 0.96 } as const;
+export const motionScale = { press: 0.97, popover: 0.95 } as const;
 export const motionStagger = { interval: 30, steps: 6 } as const;
 export const motionExitRatio = 0.8;
 export const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -57,7 +57,6 @@ export const motionCss = {
   "--motion-pulse-step": "90ms",
   "--motion-scale-press": motionScale.press,
   "--motion-scale-popover": motionScale.popover,
-  "--motion-scale-pulse": motionScale.pulse,
   "--motion-ease-out": cubicBezier(motionCurve.easeOut),
   "--motion-ease-in-out": cubicBezier(motionCurve.easeInOut),
 };

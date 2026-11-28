@@ -124,7 +124,7 @@ export function GroupLabel({
       href={href}
       className={cn(
         GROUP_LABEL_CLASS,
-        "group flex items-baseline justify-between gap-3 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring",
+        "group flex items-baseline justify-between gap-3 transition-colors motion-press-subtle hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring pointer-coarse:min-h-11",
         className,
       )}
     >
@@ -146,7 +146,7 @@ export function ChangePill({ value, className }: { value: number | null | undefi
   return (
     <span
       className={cn(
-        "inline-flex min-w-[4.25rem] justify-end rounded-sm px-1.5 py-px font-mono text-xs font-medium tabular-nums",
+        "inline-flex min-w-[4.25rem] justify-end rounded-md px-1.5 py-px font-mono text-xs font-medium tabular-nums",
         tone === "up" && "bg-up/10 text-up",
         tone === "down" && "bg-down/10 text-down",
         tone === "flat" && "text-muted-foreground",

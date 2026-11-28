@@ -219,7 +219,7 @@ export function IndexChartCard({ className }: { className?: string }) {
               </div>
             ) : (
               <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 motion-data-in">
-                <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">{level === null ? formatNumber(null) : formatLevel(level)}</span>
+                <span className="font-mono text-3xl font-semibold tracking-tight tabular-nums text-foreground">{level === null ? formatNumber(null) : formatLevel(level)}</span>
                 {unitTag}
                 <ChangeLine change={headerChange} percent={headerPercent} formatChange={formatChange} />
                 <span className="text-xs text-muted-foreground">
@@ -237,7 +237,7 @@ export function IndexChartCard({ className }: { className?: string }) {
             )}
           </div>
           {showsPastSession && stats && (
-            <span className="rounded-sm border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            <span className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
               {t("chart.lastSession")} · {formatMarketDate(stats.last.time, "dayMonth")}
             </span>
           )}

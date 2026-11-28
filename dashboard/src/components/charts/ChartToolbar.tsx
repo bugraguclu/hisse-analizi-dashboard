@@ -324,7 +324,7 @@ export function ChartToolbar(props: ChartToolbarProps) {
     ) : null;
 
   return (
-    <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex items-center gap-x-1.5", !simple && "flex-wrap gap-y-1.5", className)}>
+    <div role="toolbar" aria-label={t("action.toolbar")} className={cn("flex items-center gap-x-1 pointer-coarse:flex-wrap pointer-coarse:gap-1", !simple && "flex-wrap gap-y-1.5", className)}>
       <TypeMenu value={prefs.type} onChange={(type) => set("type", type)} compact={compact} />
       <UnitMenu value={prefs.unit} onChange={(unit) => set("unit", unit)} period={period} compact={compact} />
       {features.indicators ? (
@@ -399,7 +399,7 @@ function SimpleRest({
           {compact ? null : t("action.measure")}
         </ChipButton>
       ) : null}
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-0.5 pointer-coarse:gap-1">
         <ReleaseMenu
           onOpenChange={changeMenu}
           onOpenChangeComplete={finishMenu}
@@ -497,7 +497,7 @@ function FullRest({
         </ChipButton>
       ) : null}
 
-      <div className="ml-auto flex items-center gap-0.5">
+      <div className="ml-auto flex items-center gap-0.5 pointer-coarse:gap-1">
         {showDrawToggle || !features.drawings ? (
           <ToolButton label={measureOn ? t("action.measureOn") : t("action.measure")} pressed={measureOn} onClick={() => onMeasureChange(!measureOn)}>
             <Ruler />

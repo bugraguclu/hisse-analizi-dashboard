@@ -60,7 +60,7 @@ function StockTabs({ ticker, active }: { ticker: string; active: StockView }) {
                 href={tab.href(ticker)}
                 aria-current={current ? "page" : undefined}
                 className={cn(
-                  "relative flex h-10 items-center whitespace-nowrap rounded-sm px-1.5 text-[11.5px] font-medium transition-colors sm:px-2.5 sm:text-[13px]",
+                  "relative flex h-10 items-center whitespace-nowrap rounded-sm px-1.5 text-[11.5px] font-medium transition-colors motion-press-subtle pointer-coarse:h-11 sm:px-2.5 sm:text-[13px]",
                   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
                   current ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
@@ -84,7 +84,7 @@ export function StockNotFound({ ticker }: { ticker: string | null }) {
     <section className="mx-auto max-w-7xl py-10 md:py-16" aria-labelledby="stock-not-found-title">
       <div className="max-w-lg">
         <p className="font-mono text-xs text-muted-foreground">404</p>
-        <h1 id="stock-not-found-title" className="mt-2 break-words text-[32px] font-semibold leading-tight text-foreground">
+        <h1 id="stock-not-found-title" className="mt-2 break-words font-display text-[32px] font-normal leading-tight text-foreground">
           {shown ? t("notFound.titleWithTicker", { ticker: shown }) : t("notFound.title")}
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t("notFound.body")}</p>
@@ -92,10 +92,10 @@ export function StockNotFound({ ticker }: { ticker: string | null }) {
           <TickerSearch />
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
-          <Link href="/tarama" className={buttonVariants({ variant: "default" })}>
+          <Link href="/tarama" className={cn(buttonVariants({ variant: "default" }), "pointer-coarse:min-h-11")}>
             {t("notFound.browse")}
           </Link>
-          <Link href="/" className={buttonVariants({ variant: "outline" })}>
+          <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "pointer-coarse:min-h-11")}>
             {t("notFound.home")}
           </Link>
         </div>

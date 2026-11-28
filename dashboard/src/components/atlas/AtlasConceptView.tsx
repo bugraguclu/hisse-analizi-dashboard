@@ -127,7 +127,7 @@ export function AtlasConceptView({ concept }: { concept: AtlasConcept }) {
             </span>
             <span>{ATLAS_CATEGORY_LABELS[concept.category][locale]}</span>
           </div>
-          <h1 className="mt-2.5 text-[28px] font-semibold leading-tight text-foreground md:text-[34px]">
+          <h1 className="mt-2.5 font-display text-[28px] font-normal leading-tight text-foreground md:text-[34px]">
             {concept.title[locale]}
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-foreground/85">{concept.intro[locale]}</p>
@@ -173,7 +173,7 @@ export function AtlasConceptView({ concept }: { concept: AtlasConcept }) {
                 </div>
                 <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-primary sm:inline-flex">
                   {copy.openAction}
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform motion-reduce:transform-none group-hover:translate-x-0.5" aria-hidden="true" />
                 </span>
               </Link>
             );
@@ -238,7 +238,7 @@ export function AtlasConceptView({ concept }: { concept: AtlasConcept }) {
         {prev ? (
           <Link
             href={atlasHref(prev.slug)}
-            className="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+            className="motion-press-subtle inline-flex items-center gap-1.5 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             <span>
@@ -247,7 +247,7 @@ export function AtlasConceptView({ concept }: { concept: AtlasConcept }) {
             </span>
           </Link>
         ) : (
-          <Link href="/atlas" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+          <Link href="/atlas" className="motion-press-subtle inline-flex items-center gap-1.5 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11">
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             {copy.back}
           </Link>
@@ -256,7 +256,7 @@ export function AtlasConceptView({ concept }: { concept: AtlasConcept }) {
         {next ? (
           <Link
             href={atlasHref(next.slug)}
-            className="inline-flex items-center gap-1.5 text-right text-muted-foreground transition-colors hover:text-foreground"
+            className="motion-press-subtle inline-flex items-center gap-1.5 rounded-sm text-right text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
           >
             <span>
               <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/75">{copy.next}</span>

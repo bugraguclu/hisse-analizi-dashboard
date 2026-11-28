@@ -12,6 +12,7 @@ import { LocaleToggle } from "@/components/ui/locale-toggle";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DataStatus } from "./DataStatus";
 import { DEFAULT_TICKER, NAV_ITEMS, tickerFromPath } from "./nav";
+import { shouldKeepScrollbar } from "./scroll-lock";
 import { useShell } from "./shell-context";
 import { Wordmark } from "./SiteHeader";
 
@@ -30,8 +31,13 @@ export function MobileNav() {
   useEffect(() => {
     if (!mobileNavOpen) return;
     const trigger = mobileNavTriggerRef.current;
+    const keepScrollbar = shouldKeepScrollbar();
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (!keepScrollbar) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.documentElement.setAttribute("data-keep-scrollbar", "");
+    }
     closeButtonRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -64,7 +70,11 @@ export function MobileNav() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       desktop.removeEventListener("change", handleViewportChange);
-      document.body.style.overflow = previousOverflow;
+      if (!keepScrollbar) {
+        document.body.style.overflow = previousOverflow;
+      } else {
+        document.documentElement.removeAttribute("data-keep-scrollbar");
+      }
       trigger?.focus();
     };
   }, [mobileNavOpen, closeMobileNav, mobileNavTriggerRef]);
@@ -74,7 +84,7 @@ export function MobileNav() {
   return (
     <div className={cn("fixed inset-0 z-50 xl:hidden", !mobileNavOpen && "pointer-events-none")} inert={!mobileNavOpen} aria-hidden={!mobileNavOpen || undefined}>
       <div
-        className="motion-panel absolute inset-0 bg-black/40"
+        className="motion-panel absolute inset-0 overscroll-contain bg-black/40"
         data-presence=""
         data-ending-style={ending}
         onClick={closeMobileNav}
@@ -86,7 +96,7 @@ export function MobileNav() {
         role="dialog"
         aria-modal="true"
         aria-label={t("shell.mainNav")}
-        className="motion-panel motion-panel-slide motion-panel-horizontal absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto border-r border-border bg-background"
+        className="motion-panel motion-panel-slide motion-panel-horizontal absolute inset-y-0 left-0 flex h-svh max-h-svh w-72 max-w-[85vw] flex-col overflow-y-auto overscroll-contain border-r border-border bg-background"
         data-presence=""
         data-ending-style={ending}
         onTransitionEnd={finishExit}
@@ -117,7 +127,7 @@ export function MobileNav() {
                     onClick={closeMobileNav}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative flex items-center rounded-md px-3 py-2.5 text-[15px] transition-colors",
+                      "relative flex min-h-11 items-center rounded-md px-3 py-2.5 text-[15px] transition-colors",
                       "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring",
                       active ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
@@ -131,25 +141,27 @@ export function MobileNav() {
         </nav>
 
         <div className="mt-auto space-y-3 border-t border-border px-4 py-4">
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => {
-              closeMobileNav();
-              openWorkspaceManager("backup");
-            }}
-            className="flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground motion-press hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <Archive className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-            {t("workspace.openManager")}
-          </button>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">{t("shell.language")}</span>
-            <LocaleToggle />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">{t("shell.theme")}</span>
-            <ThemeToggle />
+          <div className="space-y-3 md:hidden">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => {
+                closeMobileNav();
+                openWorkspaceManager("backup");
+              }}
+              className="flex min-h-11 w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground motion-press-subtle hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <Archive className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              {t("workspace.openManager")}
+            </button>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">{t("shell.language")}</span>
+              <LocaleToggle />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">{t("shell.theme")}</span>
+              <ThemeToggle />
+            </div>
           </div>
           <DataStatus variant="panel" />
         </div>

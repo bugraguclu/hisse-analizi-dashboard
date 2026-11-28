@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, Plus, Trash2, WifiOff, X } from "lucide-react";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useShell } from "@/components/layout/shell-context";
 import { TickerSearch } from "@/components/shared/TickerSearch";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveRefetchInterval } from "@/hooks/use-market-status";
 import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
@@ -33,6 +34,39 @@ export function WatchlistCard({ className }: { className?: string }) {
   const [editing, setEditing] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    if (typeof CSS !== "undefined" && CSS.supports("animation-timeline", "scroll()")) {
+      el.removeAttribute("data-fade-start");
+      el.removeAttribute("data-fade-end");
+      return;
+    }
+    const update = () => {
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll <= 2) {
+        el.dataset.fadeStart = "false";
+        el.dataset.fadeEnd = "false";
+        return;
+      }
+      const left = Math.abs(el.scrollLeft);
+      el.dataset.fadeStart = left > 4 ? "true" : "false";
+      el.dataset.fadeEnd = maxScroll - left > 4 ? "true" : "false";
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    if (typeof ResizeObserver === "undefined") {
+      return () => el.removeEventListener("scroll", update);
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [lists.length]);
 
   const activeList: Watchlist = lists.find((l) => l.id === selectedId) ?? lists[0];
   const tickers = activeList.tickers;
@@ -123,7 +157,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                 setNotice(null);
               }}
               aria-expanded={editing}
-              className="inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline-offset-4 motion-press hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              className={cn(buttonVariants({ variant: "link", size: "sm" }), "text-xs pointer-coarse:min-h-11")}
             >
               {editing ? t("watchlist.done") : t("watchlist.editLists")}
             </button>
@@ -132,7 +166,7 @@ export function WatchlistCard({ className }: { className?: string }) {
       />
 
       {lists.length > 1 && (
-        <div role="group" aria-label={t("watchlist.lists")} className="flex shrink-0 items-center gap-4 overflow-x-auto border-b border-border px-4 scrollbar-none">
+        <div ref={tabsRef} role="group" aria-label={t("watchlist.lists")} className="flex shrink-0 items-center gap-4 overflow-x-auto border-b border-border px-4 scrollbar-none scroll-fade-x">
           {lists.map((list) => (
             <button
               key={list.id}
@@ -140,7 +174,7 @@ export function WatchlistCard({ className }: { className?: string }) {
               onClick={() => setSelectedId(list.id)}
               aria-pressed={list.id === activeList.id}
               className={cn(
-                "-mb-px whitespace-nowrap border-b-2 py-2 text-xs font-medium motion-press focus-visible:outline-2 focus-visible:outline-ring",
+                "-mb-px whitespace-nowrap rounded-t-sm border-b-2 py-2 text-xs font-medium motion-press-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                 list.id === activeList.id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
@@ -175,12 +209,12 @@ export function WatchlistCard({ className }: { className?: string }) {
               placeholder={t("watchlist.listName")}
               aria-label={t("watchlist.listName")}
               maxLength={40}
-              className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/40 focus:ring-2 focus:ring-ring/25"
+              className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-2.5 text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/40 focus:ring-2 focus:ring-ring/25 md:text-xs pointer-coarse:min-h-11"
             />
             <button
               type="submit"
               disabled={!newListName.trim()}
-              className="inline-flex h-8 items-center gap-1 rounded-md bg-foreground px-3 text-xs font-medium text-background motion-press hover:opacity-90 disabled:opacity-40"
+              className={cn(buttonVariants({ variant: "default", size: "md" }), "text-xs pointer-coarse:min-h-11")}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               {t("watchlist.newList")}
@@ -191,7 +225,7 @@ export function WatchlistCard({ className }: { className?: string }) {
               <button
                 type="button"
                 onClick={handleDelete}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive motion-press hover:text-destructive/80"
+                className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] font-medium text-destructive motion-press-subtle hover:text-destructive/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11"
               >
                 <Trash2 className="h-3 w-3" aria-hidden="true" />
                 {t("watchlist.deleteList")}: {listLabel(activeList)}
@@ -203,7 +237,10 @@ export function WatchlistCard({ className }: { className?: string }) {
               type="button"
               aria-haspopup="dialog"
               onClick={() => openWorkspaceManager("backup")}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              className={cn(
+                buttonVariants({ variant: "link", size: "sm" }),
+                "text-[11px] text-muted-foreground hover:text-foreground pointer-coarse:min-h-11",
+              )}
             >
               <Archive className="h-3 w-3" aria-hidden="true" />
               {t("offline.backupShortcut")}
@@ -241,7 +278,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                   >
                     <Link
                       href={`/hisse/${ticker}`}
-                      className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+                      className="min-w-0 flex-1 rounded-md focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:flex-col pointer-coarse:justify-center"
                     >
                       <span className="block font-mono text-[13px] font-semibold text-foreground">{ticker}</span>
                       {names.get(ticker) && <span className="block truncate text-[11px] text-muted-foreground">{names.get(ticker)}</span>}
@@ -272,7 +309,7 @@ export function WatchlistCard({ className }: { className?: string }) {
                         type="button"
                         onClick={() => handleRemoveTicker(activeList.id, ticker)}
                         aria-label={t("watchlist.remove", { ticker })}
-                        className="rounded-sm p-1 text-muted-foreground motion-press hover:bg-destructive/10 hover:text-destructive"
+                        className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground motion-press-subtle hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                       >
                         <X className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>

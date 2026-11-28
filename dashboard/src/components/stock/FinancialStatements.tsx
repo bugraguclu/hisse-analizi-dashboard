@@ -100,7 +100,12 @@ export function FinancialStatements({ ticker }: { ticker: string }) {
         <p className="flex flex-wrap items-center gap-1">
           {t("fin.source", { source: table.source })}
           {table.sourceUrl ? (
-            <a href={table.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+            <a
+              href={table.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-0.5 rounded-sm text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {t("fin.openSource")} <ExternalLink aria-hidden className="h-3 w-3" />
               <span className="sr-only">{t("common.opensInNewTab")}</span>
             </a>
@@ -163,7 +168,12 @@ export function FinancialStatements({ ticker }: { ticker: string }) {
         <SectionEmpty message={t("fin.notAvailable")} />
       ) : (
         <>
-          <div className="-mx-4 overflow-x-auto scrollbar-thin">
+          <div
+            role="region"
+            aria-label={`${t(KINDS.find((k) => k.value === kind)?.label ?? "fin.income")} · ${t("fin.unitShort")}`}
+            tabIndex={0}
+            className="-mx-4 overflow-x-auto scrollbar-thin focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          >
             {/* Separate borders drawn on the cells: in the collapsed model the sticky label cell
                 paints over the row rules, which then stop short of the label column. */}
             <table className="w-full border-separate border-spacing-0 text-xs sm:min-w-[34rem]">
@@ -231,7 +241,7 @@ export function FinancialStatements({ ticker }: { ticker: string }) {
               type="button"
               onClick={() => setShowAll((v) => !v)}
               aria-pressed={showAll}
-              className="mt-3 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="mt-3 inline-flex items-center rounded-sm text-[11px] font-semibold text-primary motion-press-subtle hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
             >
               {showAll ? t("fin.showSummary") : t("fin.showAll")}
             </button>

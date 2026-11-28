@@ -11,6 +11,7 @@ import { isFeedStale } from "@/lib/market-hours";
 import { STALE_TIME } from "@/lib/queryClient";
 import { EmptyState, ErrorState } from "@/components/shared/ErrorState";
 import { categoryKeys, severityKeys, toCategoryKey, toSeverity, type SeverityKey } from "@/components/shared/SeverityBadge";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useIsDisconnected, useOfflineSummary } from "@/hooks/use-network-status";
 import { useNow } from "@/hooks/use-now";
@@ -88,7 +89,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
               <li key={event.id}>
                 <Link
                   href={event.ticker ? `/hisse/${encodeURIComponent(event.ticker)}` : "/events"}
-                  className="relative grid grid-cols-[3.75rem_minmax(0,1fr)_auto] items-baseline gap-x-3 px-4 py-2.5 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                  className="relative grid grid-cols-[3.75rem_minmax(0,1fr)_auto] items-baseline gap-x-3 px-4 py-2.5 transition-colors motion-press-subtle hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring pointer-coarse:min-h-11"
                 >
                   {rule && <span aria-hidden="true" className={cn("absolute inset-y-2.5 left-0 w-0.5", rule)} />}
                   <span className="font-mono text-xs font-semibold text-foreground">{event.ticker ?? event.tickers?.[0] ?? "KAP"}</span>
@@ -140,7 +141,7 @@ export function LatestEventsCard({ className }: { className?: string }) {
         action={
           <Link
             href="/events"
-            className="inline-flex min-h-6 items-center gap-1 rounded-sm text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            className={cn(buttonVariants({ variant: "link", size: "sm" }), "text-xs pointer-coarse:min-h-11")}
           >
             {t("common.viewAll")} <ArrowRight className="h-3 w-3" aria-hidden="true" />
           </Link>

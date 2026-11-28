@@ -374,7 +374,7 @@ function PageDialog({ open, title, onClose, wide = false, children }: { open: bo
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-(--motion-fade) data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
         <Dialog.Popup
           className={cn(
-            "fixed left-1/2 top-[10vh] z-50 max-h-[80vh] -translate-x-1/2 overflow-y-auto rounded-xl border border-border bg-card text-foreground shadow-[var(--shadow-dialog)] outline-none motion-popover",
+            "fixed left-1/2 top-[10dvh] z-50 max-h-[80dvh] -translate-x-1/2 overflow-y-auto rounded-lg border border-border bg-card text-foreground shadow-[var(--shadow-dialog)] outline-none motion-popover",
             wide ? "w-[min(44rem,calc(100vw-2rem))]" : "w-[min(26rem,calc(100vw-2rem))]",
           )}
         >

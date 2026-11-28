@@ -171,7 +171,7 @@ export function YieldCurvePanel({ selected, onSelect, className }: { selected: s
                           onClick={() => onSelect(point.key)}
                           aria-pressed={active}
                           aria-label={t("mk.select", { name: t("yc.years", { n: point.years }) })}
-                          className="w-full py-1.5 text-left text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                          className="w-full rounded-md py-1.5 text-left text-foreground underline-offset-2 motion-press-subtle hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11"
                         >
                           {point.tenor}
                         </button>

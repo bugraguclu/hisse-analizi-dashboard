@@ -106,7 +106,7 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
   const copy = COPY[locale];
 
   const universeQ = useQuery({
-    queryKey: ["screener-universe"],
+    queryKey: ["screenerUniverse"],
     queryFn: ({ signal }) => api.screenerUniverse(signal),
     staleTime: STALE_TIME.market,
   });
@@ -138,10 +138,11 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
           eyebrow={`${INDEX_GROUP_LABELS[entry.group][locale]} · ${entry.code}`}
           title={entry.name[locale]}
           description={entry.lead[locale]}
+          className="[&_h1]:font-display [&_h1]:font-normal"
           actions={
             <Link
               href={screenerUrl}
-              className="motion-press inline-flex items-center gap-1.5 rounded-md bg-foreground px-3.5 py-2 text-xs font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="motion-press inline-flex items-center gap-1.5 rounded-md bg-foreground px-3.5 py-2 text-xs font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
             >
               <Filter className="h-3.5 w-3.5" aria-hidden="true" />
               {copy.openInScreener}
@@ -160,7 +161,7 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
                     href={indexPageHref(item.slug)}
                     aria-current={current ? "page" : undefined}
                     className={cn(
-                      "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      "motion-press-subtle inline-flex items-center rounded-md border px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                       current
                         ? "border-foreground bg-foreground text-background"
                         : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
@@ -246,10 +247,10 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
             <Link
               key={presetId}
               href={presetHref(presetId, entry.code)}
-              className="group inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+              className="motion-press-subtle group inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
             >
               {tt(`preset.${presetId}` as TaramaKey)}
-              <ArrowRight className="h-3 w-3 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+              <ArrowRight className="h-3 w-3 text-muted-foreground transition-transform motion-reduce:transform-none group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
             </Link>
           ))}
         </div>
@@ -261,7 +262,7 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
           <h2 id="index-constituents-heading" className="text-base font-semibold text-foreground">
             {copy.constituentsHeading}
           </h2>
-          <Link href={screenerUrl} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          <Link href={screenerUrl} className="motion-press-subtle inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11">
             {copy.openInScreener}
             <ArrowRight className="h-3 w-3" aria-hidden="true" />
           </Link>
@@ -303,7 +304,7 @@ export function IndexDetailView({ entry }: { entry: DiscoveryIndex }) {
               <Link
                 key={concept.slug}
                 href={atlasHref(concept.slug)}
-                className="group rounded-lg border border-border bg-surface/40 p-3 transition-colors hover:border-primary/50"
+                className="group rounded-md border border-border bg-surface/40 p-3 transition-colors hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <span className="font-mono text-[10px] font-semibold text-primary">{concept.badge}</span>
                 <p className="mt-1 text-xs font-semibold text-foreground group-hover:text-primary">

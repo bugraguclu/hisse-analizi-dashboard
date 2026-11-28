@@ -48,17 +48,8 @@ export function EventsSearchBox({
   const [text, setText] = useState(q);
   // Last query this box committed (or accepted from the URL): URL changes that
   // differ from it come from elsewhere (back/forward, a removed filter) and win.
-  // Resync only when the URL itself changes: a commit reaches `q` one transition
-  // later (router.replace), and comparing `q` with `ownQuery` in between read our
-  // own commit as an outside change — the text blanked for a moment and the list
-  // closed, 400 ms after every pause in typing.
-  const [ownQuery, setOwnQuery] = useState(q);
-  const [prevQ, setPrevQ] = useState(q);
-  if (q !== prevQ) {
-    setPrevQ(q);
-    if (q !== ownQuery) setText(q);
-    setOwnQuery(q);
-  }
+  const ownQueryRef = useRef(q);
+  const prevQRef = useRef(q);
   const [open, setOpen] = useState(false);
 
   const commitRef = useRef(onCommitQuery);
@@ -66,16 +57,35 @@ export function EventsSearchBox({
     commitRef.current = onCommitQuery;
   }, [onCommitQuery]);
 
+  // Sync external URL changes (back/forward, removed filter) without render-time setState.
+  useEffect(() => {
+    if (q === prevQRef.current) return;
+    if (q === ownQueryRef.current) {
+      prevQRef.current = q;
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      prevQRef.current = q;
+      ownQueryRef.current = q;
+      setText(q);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [q]);
+
   // Debounced commit; re-running on every keystroke (or URL sync) cancels the pending one.
   useEffect(() => {
     const next = normalizeQuery(text);
-    if (next === ownQuery) return;
+    if (next === ownQueryRef.current) return;
     const timer = setTimeout(() => {
-      setOwnQuery(next);
+      ownQueryRef.current = next;
       commitRef.current(next);
     }, COMMIT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [text, ownQuery]);
+  }, [text]);
 
   const trimmed = text.trim();
   const searchable = trimmed.length >= MIN_QUERY_LENGTH;
@@ -96,14 +106,14 @@ export function EventsSearchBox({
   function commitNow() {
     const next = normalizeQuery(text);
     setOpen(false);
-    if (next === ownQuery) return;
-    setOwnQuery(next);
+    if (next === ownQueryRef.current) return;
+    ownQueryRef.current = next;
     onCommitQuery(next);
   }
 
   function choose(match: CompanyMatch) {
     setText("");
-    setOwnQuery("");
+    ownQueryRef.current = "";
     setOpen(false);
     onPickTicker(match.ticker);
   }
@@ -111,8 +121,8 @@ export function EventsSearchBox({
   function clear() {
     setText("");
     setOpen(false);
-    if (ownQuery !== "") {
-      setOwnQuery("");
+    if (ownQueryRef.current !== "") {
+      ownQueryRef.current = "";
       onCommitQuery("");
     }
   }
@@ -188,7 +198,7 @@ export function EventsSearchBox({
         }}
         onKeyDown={handleKeyDown}
         className={cn(
-          "h-9 w-full min-w-0 rounded-md border border-input bg-card pl-8 pr-9 text-base text-foreground transition-colors sm:text-sm",
+          "h-9 w-full min-w-0 rounded-md border border-input bg-card pl-8 pr-9 text-base text-foreground transition-colors sm:text-sm pointer-coarse:h-11 pointer-coarse:pr-11",
           "placeholder:text-muted-foreground hover:border-foreground/25",
           // Same focus signal as the stock search: the border, no ring on a click.
           "focus:border-ring focus:outline-none",
@@ -205,7 +215,7 @@ export function EventsSearchBox({
             inputRef.current?.focus();
           }}
           aria-label={t("search.clear")}
-          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:right-0 pointer-coarse:h-11 pointer-coarse:w-11"
         >
           <X aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
@@ -245,7 +255,7 @@ export function EventsSearchBox({
                     onMouseMove={() => {
                       if (index !== activeIndex) nav.setActive(index);
                     }}
-                    className={cn("flex cursor-pointer items-baseline gap-3 px-3 py-2", index === activeIndex && "bg-accent")}
+                    className={cn("flex cursor-pointer items-baseline gap-3 px-3 py-2 pointer-coarse:min-h-11 pointer-coarse:items-center", index === activeIndex && "bg-accent")}
                   >
                     <span className="w-14 shrink-0 font-mono text-xs font-semibold text-foreground">{match.ticker}</span>
                     <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{match.name}</span>

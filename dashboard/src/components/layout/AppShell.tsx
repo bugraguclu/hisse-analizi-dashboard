@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {t("shell.skipToContent")}
       </a>
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-dvh flex-col">
         <SiteHeader />
         <MarketStrip />
         <DemoBanner />

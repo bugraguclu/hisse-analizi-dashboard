@@ -1,12 +1,15 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTaramaI18n } from "./i18n";
 import { pageList, type PageSlice } from "./model";
 
-const pagerButton =
-  "inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border px-2 font-mono text-[12px] tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40";
+const pagerButton = cn(
+  buttonVariants({ variant: "ghost", size: "sm" }),
+  "min-w-7 border border-border px-2 font-mono text-[12px] tabular-nums pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+);
 
 /** Rows per page are picked in the filter bar's SIRALA menu. */
 export function Pagination({ slice, onPage }: { slice: PageSlice<unknown>; onPage: (page: number) => void }) {

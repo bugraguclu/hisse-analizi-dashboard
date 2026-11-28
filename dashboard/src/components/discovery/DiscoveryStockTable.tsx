@@ -170,7 +170,7 @@ export function DiscoveryStockTable({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-xs text-muted-foreground">
+        <p className="font-mono tabular-nums text-xs text-muted-foreground">
           {copy.showing(displayed.length, filtered.length)}
         </p>
         <div className="relative w-full sm:w-64">
@@ -184,14 +184,14 @@ export function DiscoveryStockTable({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={copy.searchPlaceholder}
             aria-label={copy.searchLabel}
-            className="h-8 w-full rounded-md border border-input bg-card pl-8 pr-7 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+            className="h-8 pointer-coarse:h-11 w-full rounded-md border border-input bg-card pl-8 pr-7 pointer-coarse:pr-9 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label={copy.clear}
-              className="absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="motion-press-subtle absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -210,7 +210,7 @@ export function DiscoveryStockTable({
             setSortKey(key);
             setSortDir(dir);
           }}
-          className="h-8 flex-1 rounded-md border border-input bg-card px-2 text-xs text-foreground"
+          className="h-8 pointer-coarse:min-h-11 flex-1 rounded-md border border-input bg-card px-2 text-xs text-foreground"
         >
           {[{ key: "symbol" as SortKey, label: copy.stockCol }, ...visibleCols.map((col) => ({ key: col.key as SortKey, label: col.label[locale] }))].flatMap(
             (option) =>
@@ -245,7 +245,7 @@ export function DiscoveryStockTable({
                   <button
                     type="button"
                     onClick={() => toggleSort("symbol")}
-                    className="inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                    className="motion-press-subtle inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
                   >
                     {copy.stockCol}
                     {sortKey === "symbol" &&
@@ -266,7 +266,7 @@ export function DiscoveryStockTable({
                         type="button"
                         onClick={() => toggleSort(col.key)}
                         className={cn(
-                          "inline-flex items-center justify-end gap-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                          "motion-press-subtle inline-flex items-center justify-end gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                           active && "font-semibold text-foreground",
                         )}
                       >
@@ -367,7 +367,7 @@ export function DiscoveryStockTable({
           <button
             type="button"
             onClick={() => setShowAll(true)}
-            className="motion-press rounded-md border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+            className="motion-press-subtle rounded-md border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
           >
             {copy.showAll(filtered.length)}
           </button>

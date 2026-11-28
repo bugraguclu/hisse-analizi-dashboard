@@ -156,7 +156,7 @@ export function DrawingToolbar({
       aria-orientation={orientation}
       onKeyDown={onKeyDown}
       onFocus={onFocus}
-      className={cn("flex items-center gap-0.5", vertical && "flex-col", className)}
+      className={cn("flex items-center gap-0.5 pointer-coarse:gap-1", vertical && "flex-col", className)}
     >
       {TOOLS.map((entry, index) => (
         <ToolButton
@@ -214,17 +214,17 @@ export function DrawingToolbar({
               onKeyDown={(event) => {
                 if (event.key === "Escape") event.preventDefault();
               }}
-              className="w-max max-w-[16rem] rounded-md border border-border bg-popover p-2.5 text-[11px] leading-4 text-popover-foreground outline-none"
+              className="w-max max-w-[16rem] rounded-md border border-border bg-popover p-2.5 text-[11px] leading-4 text-popover-foreground shadow-md outline-none"
             >
               <Popover.Title className="text-xs font-medium text-foreground">{t("clearAll.confirm")}</Popover.Title>
               <Popover.Description className="mt-0.5 text-muted-foreground">{t("clearAll.count", { n: count })}</Popover.Description>
-              <div className="mt-2 flex justify-end gap-1.5">
-                <Popover.Close ref={cancelRef} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <div className="mt-2 flex justify-end gap-1.5 pointer-coarse:gap-2">
+                <Popover.Close ref={cancelRef} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "pointer-coarse:min-h-11")}>
                   {t("clearAll.no")}
                 </Popover.Close>
                 <button
                   type="button"
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "text-destructive hover:bg-destructive/10 hover:text-destructive")}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "text-destructive hover:bg-destructive/10 hover:text-destructive pointer-coarse:min-h-11")}
                   onClick={() => {
                     setConfirmOpen(false);
                     onClearAll();

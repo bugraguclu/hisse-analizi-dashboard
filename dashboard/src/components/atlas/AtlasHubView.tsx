@@ -113,7 +113,12 @@ export function AtlasHubView() {
             { label: t("nav.atlas"), href: "/atlas" },
           ]}
         />
-        <PageHeader eyebrow={copy.eyebrow} title={copy.title} description={copy.lead} />
+        <PageHeader
+          eyebrow={copy.eyebrow}
+          title={copy.title}
+          description={copy.lead}
+          className="[&_h1]:font-display [&_h1]:font-normal"
+        />
       </div>
 
       {/* Category chips + quick filter */}
@@ -124,7 +129,7 @@ export function AtlasHubView() {
             onClick={() => setCategory("all")}
             aria-pressed={category === "all"}
             className={cn(
-              "motion-press inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              "motion-press-subtle rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
               category === "all"
                 ? "border-foreground bg-foreground text-background"
                 : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
@@ -142,7 +147,7 @@ export function AtlasHubView() {
                 onClick={() => setCategory(cat)}
                 aria-pressed={active}
                 className={cn(
-                  "motion-press inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  "motion-press-subtle rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                   active
                     ? "border-foreground bg-foreground text-background"
                     : "border-border bg-card text-muted-foreground hover:border-foreground/35 hover:text-foreground",
@@ -165,14 +170,14 @@ export function AtlasHubView() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder={copy.searchPlaceholder}
             aria-label={copy.searchLabel}
-            className="h-8 w-full rounded-md border border-input bg-card pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+            className="h-9 w-full rounded-md border border-input bg-card pl-8 pr-8 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring sm:text-[13px] pointer-coarse:h-11 pointer-coarse:pr-11"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label={copy.clearSearch}
-              className="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="motion-press-subtle absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:right-0 pointer-coarse:h-11 pointer-coarse:w-11"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -213,7 +218,7 @@ export function AtlasHubView() {
                 </div>
                 <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground sm:inline-flex">
                   {copy.readMore}
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform motion-reduce:transform-none group-hover:translate-x-0.5" aria-hidden="true" />
                 </span>
               </Link>
             </li>
@@ -235,7 +240,7 @@ export function AtlasHubView() {
             <h2 className="text-[15px] font-semibold text-foreground">{copy.exploreIndices}</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">{copy.exploreIndicesDesc}</p>
           </div>
-          <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
+          <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transform-none group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
         </Link>
 
         <Link
@@ -250,7 +255,7 @@ export function AtlasHubView() {
             <h2 className="text-[15px] font-semibold text-foreground">{copy.exploreSectors}</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">{copy.exploreSectorsDesc}</p>
           </div>
-          <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
+          <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transform-none group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
         </Link>
       </div>
 

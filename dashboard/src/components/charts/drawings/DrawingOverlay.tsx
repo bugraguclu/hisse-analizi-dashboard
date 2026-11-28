@@ -82,7 +82,7 @@ function EditBar({
   onDelete: () => void;
 }) {
   const { t } = useDrawingI18n();
-  const barHeight = coarse ? 38 : 34;
+  const barHeight = coarse ? 50 : 34;
   // Above the drawing's top-most point; below it when that would leave the pane, else pinned to the top.
   let top: number;
   let above = false;
@@ -103,10 +103,10 @@ function EditBar({
       data-drawing-overlay=""
       role="toolbar"
       aria-label={t("edit.label")}
-      className="absolute left-0 z-[4] flex items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-[11px] text-popover-foreground"
+      className="absolute left-0 z-[4] flex items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-[11px] text-popover-foreground pointer-coarse:gap-1"
       style={{ top, transform: `translate(${translateX}, ${above ? "-100%" : "0"})` }}
     >
-      <div role="group" aria-label={t("edit.color")} className="flex items-center">
+      <div role="group" aria-label={t("edit.color")} className="flex items-center pointer-coarse:gap-1">
         {DRAWING_COLORS.map((color) => {
           const name = t(COLOR_NAMES[String(color)] ?? "color.-1");
           const current = color === drawing.color;
@@ -119,8 +119,8 @@ function EditBar({
               aria-pressed={current}
               onClick={() => onColor(color)}
               className={cn(
-                "inline-flex items-center justify-center rounded-md outline-none motion-press hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60",
-                coarse ? "h-8 w-8" : "h-7 w-6",
+                "inline-flex items-center justify-center rounded-md outline-none motion-press-subtle hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60",
+                coarse ? "h-11 w-11" : "h-7 w-6",
               )}
             >
               <span

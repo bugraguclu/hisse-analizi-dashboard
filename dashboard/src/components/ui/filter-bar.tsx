@@ -170,6 +170,43 @@ function keepRowInView(event: { currentTarget: HTMLElement }) {
   if (row) row.scrollIntoView({ block: "nearest" });
 }
 
+function useCanScroll(ref: RefObject<HTMLElement | null>, active: boolean): boolean {
+  const [canScroll, setCanScroll] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) {
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) setCanScroll(false);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const measure = () => {
+      setCanScroll(el.scrollHeight > el.clientHeight + 1);
+    };
+
+    const rafId = requestAnimationFrame(measure);
+    if (typeof ResizeObserver === "undefined") {
+      return () => cancelAnimationFrame(rafId);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+    for (const group of el.querySelectorAll(".fb-group")) observer.observe(group);
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [ref, active]);
+
+  return active && canScroll;
+}
+
 function CountText({ option, picked }: { option: FilterOption; picked: boolean }) {
   const text = useFilterBarText();
   if (option.loading) {
@@ -223,7 +260,7 @@ function hasDescription(option: FilterOption): boolean {
  * first line however the description wraps.
  */
 const DESCRIBED_ROW =
-  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-y-px py-2.5 sm:py-1.5 sm:leading-[18px] pointer-coarse:py-2.5";
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-y-px py-2.5 pointer-fine:sm:py-1.5 pointer-fine:sm:leading-[18px] pointer-coarse:py-2.5";
 /** Puts a row's mark on the label's first line (20px, 18px from sm): a 14px box, a 12px tick. */
 const DESCRIBED_BOX = "mt-[3px] sm:mt-[2px]";
 const DESCRIBED_TICK = "mt-1 sm:mt-[3px]";
@@ -528,9 +565,9 @@ export function FilterFacet<V extends string>({
                 className={cn(
                   // relative: the visually hidden input is positioned against the chip, not
                   // against a distant ancestor it would otherwise widen the page from.
-                  "relative inline-flex shrink-0 select-none items-center gap-1.5 whitespace-nowrap rounded-md border px-3.5 py-2 text-sm transition-colors",
-                  "sm:px-[11px] sm:py-[5px] sm:text-[13px] pointer-coarse:px-3.5 pointer-coarse:py-2",
-                  "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring",
+                  "relative inline-flex min-h-11 shrink-0 select-none items-center gap-1.5 whitespace-nowrap rounded-md border px-3.5 py-2 text-sm transition-colors motion-press-subtle",
+                  "sm:text-[13px] pointer-coarse:min-h-11 pointer-coarse:px-3.5 pointer-coarse:py-2 pointer-fine:sm:min-h-0 pointer-fine:sm:px-[11px] pointer-fine:sm:py-[5px]",
+                  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
                   on
                     ? "border-foreground bg-muted font-semibold text-foreground"
                     : dimmed
@@ -556,9 +593,9 @@ export function FilterFacet<V extends string>({
           onClick={onClear ?? (() => onChange([]))}
           aria-label={text.clearFacet(label)}
           className={cn(
-            "flex min-h-11 items-center self-start pb-1 text-[10px] uppercase tracking-[0.18em] text-primary transition-colors hover:text-foreground",
+            "flex min-h-11 items-center self-start pb-1 text-[10px] uppercase tracking-[0.18em] text-primary transition-colors motion-press-subtle hover:text-foreground",
             "outline-none focus-visible:underline focus-visible:underline-offset-4",
-            lg ? "lg:min-h-0 lg:self-center lg:px-2.5 lg:py-1.5" : "xl:min-h-0 xl:self-center xl:px-2.5 xl:py-1.5",
+            lg ? "lg:pointer-fine:min-h-0 lg:self-center lg:px-2.5 lg:py-1.5" : "xl:pointer-fine:min-h-0 xl:self-center xl:px-2.5 xl:py-1.5",
           )}
         >
           {text.clear}
@@ -655,6 +692,7 @@ export function FilterMenu({
   const aligned = useRef(false);
   const Icon = ICONS[icon];
   const { registerSummary, close: closeMenu, pointerPick } = bar;
+  const listCanScroll = useCanScroll(panelRef, open && variant === "list");
 
   useEffect(() => {
     registerSummary(id, summaryRef.current);
@@ -723,11 +761,11 @@ export function FilterMenu({
             bar.toggle(id);
           }}
           className={cn(
-            "relative flex h-full min-h-[38px] cursor-pointer list-none items-center gap-[0.35rem] whitespace-nowrap py-[9px] pr-1.5 transition-colors [&::-webkit-details-marker]:hidden",
+            "relative flex h-full min-h-11 cursor-pointer list-none items-center gap-[0.35rem] whitespace-nowrap py-[9px] pr-1.5 transition-colors motion-press-subtle [&::-webkit-details-marker]:hidden",
             "text-[10px] font-semibold uppercase tracking-[0.14em] sm:min-h-12 sm:gap-[0.55rem] sm:py-3.5 sm:pr-3 sm:tracking-[0.18em]",
             rightColumn ? "pl-3" : "pl-0",
             index > 0 ? "sm:pl-4" : "sm:pl-0",
-            facet && (lg ? "lg:min-h-0 lg:pl-5 lg:pr-1" : "xl:min-h-0 xl:pl-5 xl:pr-1"),
+            facet && (lg ? "lg:pointer-fine:min-h-0 lg:pl-5 lg:pr-1" : "xl:pointer-fine:min-h-0 xl:pl-5 xl:pr-1"),
             "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
             open ? "text-primary" : "text-foreground hover:text-primary",
           )}
@@ -747,19 +785,25 @@ export function FilterMenu({
         <div
           ref={panelRef}
           data-fb-panel=""
+          hidden={!open}
           className={cn(
             "absolute inset-x-0 top-full z-30 border border-border bg-popover text-popover-foreground",
             // Two-layer shadow: one layer disappeared over the rows it covers.
             "shadow-[var(--shadow-popover)]",
             anchorRight ? "sm:left-auto sm:right-0" : "sm:left-0 sm:right-auto",
-            "sm:w-[max(100%,250px)]",
-            variant === "list"
-              ? "max-h-[min(22rem,60vh)] overflow-y-auto overflow-x-hidden overscroll-contain py-1 sm:max-h-[22rem]"
-              : "flex max-h-[min(26rem,64vh)] flex-col overflow-hidden sm:max-h-[min(26rem,70vh)] sm:max-w-[420px]",
+            variant === "list" ? "sm:w-[max(100%,250px)]" : "sm:w-[max(100%,280px)]",
+            open
+              ? variant === "list"
+                ? cn(
+                    "max-h-[min(22rem,60vh)] overflow-y-auto overflow-x-hidden py-1 sm:max-h-[22rem]",
+                    listCanScroll ? "overscroll-contain" : "overscroll-auto",
+                  )
+                : "flex max-h-[min(26rem,64vh)] flex-col overflow-hidden sm:max-h-[min(26rem,70vh)] sm:max-w-[420px]"
+              : "hidden",
             facet &&
               (lg
-                ? cn("lg:left-auto lg:right-0", variant === "list" ? "lg:w-[250px]" : "lg:w-[264px]")
-                : cn("xl:left-auto xl:right-0", variant === "list" ? "xl:w-[250px]" : "xl:w-[264px]")),
+                ? cn("lg:left-auto lg:right-0", variant === "list" ? "lg:w-[250px]" : "lg:w-[288px]")
+                : cn("xl:left-auto xl:right-0", variant === "list" ? "xl:w-[250px]" : "xl:w-[288px]")),
             // Columns panel: 2 × 17rem from md, 3 × 15rem from lg (useColumnCount uses the same
             // breakpoints); wider than its cell, it is kept inside the bar by keepInsideBar.
             wide && "md:w-[34rem] md:max-w-[calc(100vw-2rem)] md:max-h-[min(48rem,calc(100dvh-9rem))] lg:w-[45rem]",
@@ -814,8 +858,8 @@ export function FilterChoiceList<V extends string>({
             key={option.value}
             title={option.title}
             className={cn(
-              "relative flex items-center gap-[0.6rem] px-[18px] py-3 text-sm transition-colors sm:py-2 sm:text-[13px] pointer-coarse:py-3",
-              "has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring",
+              "relative flex min-h-11 items-center gap-[0.6rem] px-[18px] py-2.5 text-sm transition-colors motion-press-subtle pointer-fine:sm:min-h-0 pointer-fine:sm:py-2 pointer-fine:sm:text-[13px]",
+              "has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring",
               on ? "font-semibold text-foreground" : "text-foreground/70",
               dimmed ? "cursor-default opacity-35" : "cursor-pointer hover:bg-muted/60 hover:text-foreground",
               described && DESCRIBED_ROW,
@@ -933,8 +977,8 @@ function OptionRows<V extends string>({ group }: { group: FilterGroupSpec<V> }) 
   };
   const rowClass = (on: boolean, dimmed: boolean) =>
     cn(
-      "relative flex items-center gap-[0.6rem] px-[18px] py-3 text-sm transition-colors sm:py-2 sm:text-[13px] pointer-coarse:py-3",
-      "has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring",
+      "relative flex min-h-11 items-center gap-[0.6rem] px-[18px] py-2.5 text-sm transition-colors motion-press-subtle pointer-fine:sm:min-h-0 pointer-fine:sm:py-2 pointer-fine:sm:text-[13px]",
+      "has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring",
       on ? "font-semibold text-foreground" : "text-foreground/70",
       dimmed ? "cursor-default opacity-35" : "cursor-pointer hover:bg-muted/60 hover:text-foreground",
     );
@@ -945,8 +989,8 @@ function OptionRows<V extends string>({ group }: { group: FilterGroupSpec<V> }) 
         // Text first, box last, at the row's right end: it drives the values, it is not one of them.
         <label
           className={cn(
-            "relative flex items-center gap-[0.6rem] border-b border-border/60 px-[18px] py-[13px] text-[13px] leading-[18px] transition-colors sm:py-[5px] sm:text-xs pointer-coarse:py-[13px]",
-            "has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring",
+            "relative flex min-h-11 items-center gap-[0.6rem] border-b border-border/60 px-[18px] py-2.5 text-[13px] leading-[18px] transition-colors motion-press-subtle pointer-fine:sm:min-h-0 pointer-fine:sm:py-[5px] pointer-fine:sm:text-xs",
+            "has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring",
             allState === "on" && minSelected > 0 ? "cursor-default" : "cursor-pointer hover:bg-muted/60",
           )}
         >
@@ -1044,7 +1088,7 @@ function GroupSection<V extends string>({
         }}
         className={cn(
           // Sticky while its list scrolls under it; opaque so the rows do not show through.
-          "sticky top-0 z-[1] flex min-h-11 cursor-pointer list-none items-center gap-2 bg-popover px-[18px] transition-colors sm:min-h-0 [&::-webkit-details-marker]:hidden",
+          "sticky top-0 z-[1] flex min-h-11 cursor-pointer list-none items-center gap-2 bg-popover px-[18px] transition-colors motion-press-subtle pointer-fine:sm:min-h-0 [&::-webkit-details-marker]:hidden",
           MICRO,
           "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
           folded
@@ -1199,6 +1243,7 @@ function GroupsPanel({
   const bodyRef = useRef<HTMLDivElement>(null);
   const secondHead = useRef<HTMLElement | null>(null);
   const columnCount = useColumnCount(columnsWanted);
+  const bodyCanScroll = useCanScroll(bodyRef, menu.open);
   const columns = columnCount > 1 ? splitColumns(groups, columnCount, groupWeight) : null;
   // Two axes (belif's case): the first opens, the second starts folded — open, but
   // looking closed, its list hanging under its header out of the flow — so the panel
@@ -1245,7 +1290,7 @@ function GroupsPanel({
           type="button"
           onClick={() => menu.close(true)}
           aria-label={text.closePanel}
-          className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:h-11 pointer-coarse:w-11"
+          className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:h-11 pointer-coarse:w-11"
         >
           <X aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
@@ -1258,7 +1303,10 @@ function GroupsPanel({
         onScroll={(event) => {
           if (foldable && event.currentTarget.scrollTop > 0) unfold();
         }}
-        className="fb-fade-y min-h-0 flex-1 overflow-y-auto overscroll-contain [scroll-padding-block-start:44px]"
+        className={cn(
+          "fb-fade-y min-h-0 flex-1 overflow-y-auto [scroll-padding-block-start:44px]",
+          bodyCanScroll ? "overscroll-contain" : "overscroll-auto",
+        )}
       >
         {columns ? (
           // Columns stretch to the tallest, so the hairlines between them run the full height.
@@ -1313,7 +1361,7 @@ function GroupsPanel({
           aria-label={text.clearPanel}
           className={cn(
             MICRO,
-            "min-h-11 shrink-0 px-1.5 text-primary transition-colors hover:text-foreground disabled:cursor-default disabled:text-muted-foreground/50 sm:min-h-[42px]",
+            "min-h-11 shrink-0 px-1.5 text-primary transition-colors motion-press-subtle hover:text-foreground disabled:cursor-default disabled:text-muted-foreground/50 pointer-fine:sm:min-h-[42px]",
             "outline-none focus-visible:underline focus-visible:underline-offset-4",
           )}
         >
@@ -1323,9 +1371,9 @@ function GroupsPanel({
           type="button"
           onClick={() => menu.close(true)}
           className={cn(
-            "min-h-11 min-w-0 flex-1 truncate rounded-md px-3.5 text-sm font-medium transition-colors sm:min-h-[42px] sm:text-[13px]",
+            "min-h-11 min-w-0 flex-1 truncate rounded-md px-3.5 text-sm font-medium transition-colors pointer-fine:sm:min-h-[42px] sm:text-[13px]",
             "outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-popover",
-            empty ? "bg-muted text-muted-foreground hover:bg-muted/70" : "bg-foreground text-background hover:bg-foreground/85",
+            empty ? "motion-press-subtle bg-muted text-muted-foreground hover:bg-muted/70" : "motion-press bg-foreground text-background hover:bg-foreground/85",
             // Across columns a full-width button would be a bar of its own: one column wide, at the end.
             columns && "ml-auto max-w-[16rem]",
           )}

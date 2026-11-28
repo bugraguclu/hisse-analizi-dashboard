@@ -64,7 +64,7 @@ export function DividendHistory({ ticker }: { ticker: string }) {
       ) : (
         <>
           {trailing && trailing.count > 0 ? (
-            <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg bg-muted/30 p-3 text-xs">
+            <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-md bg-surface p-3 text-xs">
               <span className="text-muted-foreground">{t("div.trailingYield")}</span>
               <span className="font-mono text-sm font-bold tabular-nums text-foreground">{formatPercent(trailing.yieldPct)}</span>
               <span className="text-muted-foreground">{t("div.trailingPerShare", { amount: perShare(trailing.perShare) })}</span>
@@ -112,7 +112,7 @@ export function DividendHistory({ ticker }: { ticker: string }) {
               type="button"
               aria-expanded={expanded}
               onClick={() => setExpanded((v) => !v)}
-              className="mt-3 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="mt-3 inline-flex items-center rounded-sm text-[11px] font-semibold text-primary motion-press-subtle hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
             >
               {expanded ? t("common.showLess") : t("common.showAllCount", { count: dividends.length })}
             </button>

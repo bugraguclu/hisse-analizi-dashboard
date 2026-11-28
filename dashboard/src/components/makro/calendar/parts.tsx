@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { Locale } from "@/lib/i18n";
-import { countryFlag, countryLabel, IMPORTANCE_LABELS } from "./i18n";
+import { countryLabel, IMPORTANCE_LABELS } from "./i18n";
 import type { Importance } from "./types";
 import { highlightSegments } from "./utils";
 
@@ -49,6 +49,20 @@ export function Highlight({ text, terms }: { text: string; terms: string[] }) {
   );
 }
 
+export function CountryCodeBadge({ code, className }: { code: string; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "inline-flex h-4 min-w-[1.5rem] shrink-0 items-center justify-center rounded-sm border border-border bg-muted/60 px-1 font-mono text-[10px] font-medium uppercase leading-none tracking-wider text-foreground",
+        className,
+      )}
+    >
+      {code}
+    </span>
+  );
+}
+
 export function Flag({
   code,
   locale,
@@ -63,22 +77,10 @@ export function Flag({
   className?: string;
 }) {
   const name = countryLabel(code, locale, fallback);
-  const flag = countryFlag(code);
   return (
-    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap", className)} title={name}>
-      {flag && (
-        <span aria-hidden="true" className="text-[13px] leading-none">
-          {flag}
-        </span>
-      )}
-      {withName ? (
-        <span>{name}</span>
-      ) : (
-        <>
-          <span aria-hidden="true" className="font-mono text-[10px] text-muted-foreground">{code}</span>
-          <span className="sr-only">{name}</span>
-        </>
-      )}
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", className)} title={name}>
+      <CountryCodeBadge code={code} />
+      {withName ? <span>{name}</span> : <span className="sr-only">{name}</span>}
     </span>
   );
 }

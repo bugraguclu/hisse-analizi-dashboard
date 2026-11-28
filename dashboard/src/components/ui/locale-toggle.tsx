@@ -9,7 +9,11 @@ export function LocaleToggle({ className }: { className?: string }) {
   const { locale, setLocale, t } = useLocale();
 
   return (
-    <div role="group" aria-label={t("shell.language")} className={cn("inline-flex h-8 shrink-0 items-center", className)}>
+    <div
+      role="group"
+      aria-label={t("shell.language")}
+      className={cn("inline-flex h-8 shrink-0 items-center pointer-coarse:h-10 pointer-coarse:gap-1", className)}
+    >
       {LOCALES.map((l) => (
         <button
           type="button"
@@ -20,7 +24,8 @@ export function LocaleToggle({ className }: { className?: string }) {
           aria-label={localeNames[l]}
           title={localeNames[l]}
           className={cn(
-            "h-7 min-w-7 rounded-md px-1.5 font-mono text-[11px] font-medium motion-press",
+            "relative h-7 min-w-7 rounded-md px-1.5 font-mono text-[11px] font-medium motion-press-subtle",
+            "pointer-coarse:h-10 pointer-coarse:min-w-11 pointer-coarse:after:absolute pointer-coarse:after:-inset-y-0.5 pointer-coarse:after:inset-x-0 pointer-coarse:after:content-['']",
             "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
             locale === l ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
           )}

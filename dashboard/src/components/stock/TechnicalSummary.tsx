@@ -16,7 +16,7 @@ const GROUPS: Array<{ key: "summary" | "oscillators" | "movingAverages"; label: 
 function GroupTile({ label, hint, group }: { label: string; hint: string; group: SignalGroup | null }) {
   const { t } = useStockI18n();
   return (
-    <div className="flex flex-col rounded-lg border border-border/50 bg-muted/20 p-3">
+    <div className="flex flex-col rounded-md border border-border bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="min-w-0 truncate text-xs font-semibold text-foreground">{label}</h3>
         {group ? <SignalBadge level={group.level} raw={group.raw} size="md" className="shrink-0" /> : null}

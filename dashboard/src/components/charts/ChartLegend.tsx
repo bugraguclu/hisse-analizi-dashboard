@@ -39,7 +39,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="inline-flex h-4 w-4 items-center justify-center self-center rounded-sm text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover:opacity-100 pointer-coarse:opacity-100"
+      className="relative inline-flex h-4 w-4 items-center justify-center self-center rounded-sm text-muted-foreground opacity-0 outline-none transition-opacity motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover:opacity-100 pointer-coarse:ml-1 pointer-coarse:opacity-100 pointer-coarse:after:absolute pointer-coarse:after:-inset-3.5"
     >
       <X className="h-3 w-3" />
     </button>

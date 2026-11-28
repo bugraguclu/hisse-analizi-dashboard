@@ -410,7 +410,7 @@ export function MonthlyCpiPanel({ className }: { className?: string }) {
                         x={x + width}
                         y={lastBarLabelY(points, { x, y, width, height }, text.length)}
                         textAnchor="end"
-                        className="fill-foreground font-mono text-[10px] font-semibold"
+                        className="fill-foreground font-mono text-[10px] font-semibold tabular-nums"
                       >
                         {text}
                       </text>

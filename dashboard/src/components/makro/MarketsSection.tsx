@@ -50,7 +50,7 @@ function QuoteRow({ quote, selected, onSelect }: { quote: MarketQuote; selected:
         aria-pressed={selected}
         aria-label={t("mk.select", { name })}
         className={cn(
-          "grid w-full grid-cols-[minmax(0,1fr)_auto_4.75rem] items-center gap-3 border-l-2 px-3 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          "grid w-full grid-cols-[minmax(0,1fr)_auto_4.75rem] items-center gap-3 border-l-2 px-3 py-1.5 text-left transition-colors motion-press-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
           selected ? "border-primary bg-muted/70" : "border-transparent hover:bg-muted/40",
         )}
       >

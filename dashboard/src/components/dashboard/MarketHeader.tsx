@@ -13,6 +13,7 @@ export function MarketHeader({ actions }: { actions?: ReactNode }) {
   const now = useNow();
   return (
     <PageHeader
+      className="[&_h1]:font-display [&_h1]:font-normal"
       eyebrow={
         now === null ? (
       <Skeleton as="span" className="inline-block h-3 w-28 origin-left" />

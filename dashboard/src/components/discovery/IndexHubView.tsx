@@ -62,7 +62,7 @@ export function IndexHubView() {
   const copy = COPY[locale];
   const quotesQ = useIndexQuotes();
   const universeQ = useQuery({
-    queryKey: ["screener-universe"],
+    queryKey: ["screenerUniverse"],
     queryFn: ({ signal }) => api.screenerUniverse(signal),
     staleTime: STALE_TIME.market,
   });
@@ -82,17 +82,18 @@ export function IndexHubView() {
           eyebrow={copy.eyebrow}
           title={copy.title}
           description={copy.lead}
+          className="[&_h1]:font-display [&_h1]:font-normal"
           actions={
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/sektor"
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                className="motion-press-subtle inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
               >
                 {copy.browseSectors}
               </Link>
               <Link
                 href="/tarama"
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                className="motion-press-subtle inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
               >
                 {copy.openScreener}
               </Link>
@@ -131,9 +132,9 @@ export function IndexHubView() {
                               </span>
                             </span>
                           ) : count !== undefined ? (
-                            <span className="font-mono text-[11px] text-muted-foreground">{copy.stocksCount(count)}</span>
+                            <span className="font-mono tabular-nums text-[11px] text-muted-foreground">{copy.stocksCount(count)}</span>
                           ) : (
-                            <span className="font-mono text-[11px] text-muted-foreground">{EMPTY_VALUE}</span>
+                            <span className="font-mono tabular-nums text-[11px] text-muted-foreground">{EMPTY_VALUE}</span>
                           )}
                         </div>
                         <h3 className="text-[15px] font-semibold text-foreground group-hover:text-primary">
@@ -142,12 +143,12 @@ export function IndexHubView() {
                         <p className="text-xs leading-relaxed text-muted-foreground">{item.shortDesc[locale]}</p>
                       </div>
                       <div className="flex items-center justify-between border-t border-border/70 pt-2.5 text-xs">
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono tabular-nums text-[11px] text-muted-foreground">
                           {count !== undefined ? copy.stocksCount(count) : item.slug}
                         </span>
                         <span className="inline-flex items-center gap-1 font-medium text-primary">
                           {copy.openIndex}
-                          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                          <ArrowRight className="h-3.5 w-3.5 transition-transform motion-reduce:transform-none group-hover:translate-x-0.5" aria-hidden="true" />
                         </span>
                       </div>
                     </Link>

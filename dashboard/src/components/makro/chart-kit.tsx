@@ -91,7 +91,13 @@ export function ChartTable({
   height: number;
 }) {
   return (
-    <div className="overflow-auto scrollbar-thin" style={{ maxHeight: height }}>
+    <div
+      role="region"
+      aria-label={caption}
+      tabIndex={0}
+      className="overflow-auto scrollbar-thin outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      style={{ maxHeight: height }}
+    >
       <table className="w-full text-xs">
         <caption className="sr-only">{caption}</caption>
         <thead className="sticky top-0 z-10 bg-card">

@@ -189,7 +189,7 @@ export function DiscoveryIndexChart({ symbol, title }: { symbol: string; title: 
               </div>
             ) : (
               <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 motion-data-in">
-                <span className="font-mono text-3xl font-semibold tracking-tight text-foreground">
+                <span className="font-mono text-3xl font-semibold tracking-tight tabular-nums text-foreground">
                   {level === null ? formatNumber(null) : formatLevel(level)}
                 </span>
                 {unitTag}

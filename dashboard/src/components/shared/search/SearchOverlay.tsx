@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type Ref, type RefObject } from "react";
+import { shouldKeepScrollbar } from "@/components/layout/scroll-lock";
 import { SheetHandle, useSheetDismiss } from "@/components/ui/DismissibleSheet";
 import { useLocale } from "@/lib/locale-context";
 import { TickerSearch, type TickerSearchHandle } from "../TickerSearch";
@@ -52,8 +53,13 @@ export function SearchOverlay({
   }, [triggerRef]);
 
   useEffect(() => {
+    const keepScrollbar = shouldKeepScrollbar();
     const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (!keepScrollbar) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.documentElement.setAttribute("data-keep-scrollbar", "");
+    }
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node;
@@ -71,7 +77,11 @@ export function SearchOverlay({
     wide.addEventListener("change", handleViewportChange);
 
     return () => {
-      document.body.style.overflow = previous;
+      if (!keepScrollbar) {
+        document.body.style.overflow = previous;
+      } else {
+        document.documentElement.removeAttribute("data-keep-scrollbar");
+      }
       document.removeEventListener("pointerdown", handlePointerDown);
       wide.removeEventListener("change", handleViewportChange);
     };
@@ -119,7 +129,7 @@ export function SearchOverlay({
       >
         <div
           ref={panelRef}
-          className="mx-auto max-w-2xl rounded-xl border border-border bg-popover px-2 pb-2 text-popover-foreground shadow-[var(--shadow-dialog)]"
+          className="mx-auto max-w-2xl rounded-lg border border-border bg-popover px-2 pb-2 text-popover-foreground shadow-[var(--shadow-dialog)]"
         >
           <SheetHandle onClose={() => closeRef.current()} label={t("shell.closeSearch")} className="py-1.5" />
           <TickerSearch ref={searchRef} variant="overlay" autoFocus onClose={() => closeRef.current()} />

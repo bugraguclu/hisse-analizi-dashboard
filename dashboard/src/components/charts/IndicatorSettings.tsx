@@ -40,7 +40,7 @@ function ParamField({ spec, value, onChange, label }: { spec: IndicatorParamSpec
           aria-hidden
           disabled={value <= spec.min}
           onClick={() => step(-1)}
-          className="inline-flex h-7 w-6 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40"
+          className="inline-flex h-7 w-6 items-center justify-center text-muted-foreground motion-press-subtle hover:text-foreground disabled:opacity-40 pointer-coarse:h-11 pointer-coarse:w-11"
         >
           <Minus className="h-3 w-3" />
         </button>
@@ -60,7 +60,7 @@ function ParamField({ spec, value, onChange, label }: { spec: IndicatorParamSpec
             }
           }}
           aria-label={label}
-          className="h-7 w-14 bg-transparent text-center font-mono text-xs tabular-nums text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="h-7 w-14 bg-transparent text-center font-mono text-xs tabular-nums text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:h-11"
         />
         <button
           type="button"
@@ -68,7 +68,7 @@ function ParamField({ spec, value, onChange, label }: { spec: IndicatorParamSpec
           aria-hidden
           disabled={value >= spec.max}
           onClick={() => step(1)}
-          className="inline-flex h-7 w-6 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40"
+          className="inline-flex h-7 w-6 items-center justify-center text-muted-foreground motion-press-subtle hover:text-foreground disabled:opacity-40 pointer-coarse:h-11 pointer-coarse:w-11"
         >
           <Plus className="h-3 w-3" />
         </button>
@@ -115,7 +115,7 @@ export function IndicatorSettingsPanel({
       ) : null}
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">{t("ind.color")}</span>
-        <span role="radiogroup" aria-label={t("ind.color")} className="flex items-center gap-1.5">
+        <span role="radiogroup" aria-label={t("ind.color")} className="flex items-center gap-1.5 pointer-coarse:gap-3">
           {SERIES_CSS_VAR.map((color, slot) => (
             <button
               key={color}
@@ -125,7 +125,7 @@ export function IndicatorSettingsPanel({
               aria-label={`${t("ind.color")} ${slot + 1}`}
               onClick={() => onChange({ ...config, color: slot })}
               className={cn(
-                "h-4 w-4 rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                "relative h-4 w-4 rounded-[3px] outline-none motion-press-subtle focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:h-9 pointer-coarse:w-9 pointer-coarse:after:absolute pointer-coarse:after:-inset-1",
                 config.color === slot ? "ring-2 ring-foreground/70 ring-offset-1 ring-offset-popover" : "hover:ring-1 hover:ring-border",
               )}
               style={{ background: color }}
@@ -146,7 +146,7 @@ export function IndicatorSettingsPanel({
         <button
           type="button"
           onClick={onRemove}
-          className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-down outline-none hover:bg-down/10 focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-down outline-none motion-press-subtle hover:bg-down/10 focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-h-11"
         >
           <Trash2 className="h-3.5 w-3.5" />
           {t("ind.remove")}
@@ -178,7 +178,7 @@ export function IndicatorSettingsPopover({
         aria-label={t("ind.settings", { name: view.label })}
         title={t("ind.settings", { name: view.label })}
         className={cn(
-          "motion-press inline-flex items-baseline gap-1 rounded-sm px-0.5 outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[popup-open]:bg-muted",
+          "motion-press-subtle inline-flex items-baseline gap-1 rounded-sm px-0.5 outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[popup-open]:bg-muted pointer-coarse:min-h-11 pointer-coarse:items-center",
           triggerClassName,
         )}
       >

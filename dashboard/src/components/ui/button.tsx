@@ -6,14 +6,14 @@ import { cn } from "@/lib/utils";
  * Primary actions are solid ink (foreground), not a brand colour.
  */
 export const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium motion-press outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-foreground text-background hover:bg-foreground/85",
-        outline: "border border-border bg-card text-foreground hover:bg-muted",
-        ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
-        link: "h-auto px-0 text-primary underline-offset-4 hover:underline",
+        default: "bg-foreground text-background motion-press hover:bg-foreground/85",
+        outline: "border border-border bg-card text-foreground motion-press hover:bg-muted",
+        ghost: "text-muted-foreground motion-press-subtle hover:bg-muted hover:text-foreground",
+        link: "h-auto px-0 text-primary underline-offset-4 motion-press-subtle hover:underline",
       },
       size: {
         sm: "h-7 px-2.5 text-xs [&_svg]:size-3.5",

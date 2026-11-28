@@ -2,6 +2,15 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant focus-visible (
+  &:where(
+    html[data-keyboard] *,
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"], [type="reset"]),
+    textarea,
+    select,
+    [contenteditable]:not([contenteditable="false"])
+  ):focus-visible
+);
 
 /*
  * A card in a layout slot (see components/workspace): variants on the size of
@@ -161,6 +170,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+  :where(:not(
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"], [type="reset"]),
+    textarea,
+    select,
+    [contenteditable]:not([contenteditable="false"])
+  )):focus-visible {
+    outline: none;
+  }
+  html[data-keyboard] :focus-visible {
+    outline: revert;
+  }
   body {
     @apply bg-background text-foreground;
   }
@@ -202,8 +222,20 @@
     border-color var(--motion-press) var(--motion-ease-out),
     color var(--motion-press) var(--motion-ease-out);
 }
-.motion-press:active:not(:disabled, [aria-disabled="true"]) {
-  opacity: 0.88;
+@media (prefers-reduced-motion: no-preference) {
+  .motion-press:active:not(:disabled, [aria-disabled="true"]) {
+    scale: var(--motion-scale-press);
+    opacity: 0.86;
+  }
+}
+.motion-press-subtle {
+  transition: opacity var(--motion-press) var(--motion-ease-out),
+    background-color var(--motion-press) var(--motion-ease-out),
+    border-color var(--motion-press) var(--motion-ease-out),
+    color var(--motion-press) var(--motion-ease-out);
+}
+.motion-press-subtle:active:not(:disabled, [aria-disabled="true"]) {
+  opacity: 0.76;
 }
 
 /* Modal/drawer close X (yemek-takibi 2445a732): backgroundless; darkens on mouse hover,
@@ -218,7 +250,7 @@
   color: var(--muted-foreground);
   transition: color var(--motion-press) var(--motion-ease-out);
 }
-@media (hover: hover) and (pointer: fine) {
+@media (hover: hover) {
   .close-icon-btn:hover:not(:disabled) {
     color: var(--foreground);
   }
@@ -229,19 +261,19 @@
 .close-icon-btn:active:not(:disabled) svg {
   stroke-width: 2.6;
 }
-.close-icon-btn:focus-visible {
+html[data-keyboard] .close-icon-btn:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 @media (pointer: coarse) {
   .close-icon-btn {
-    min-inline-size: 2.5rem;
-    min-block-size: 2.5rem;
+    min-inline-size: 2.75rem;
+    min-block-size: 2.75rem;
   }
 }
 
 @media (forced-colors: active) {
-  :where(a:any-link, button, summary, input, select, textarea):focus-visible {
+  html[data-keyboard] :where(a:any-link, button, summary, input, select, textarea):focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 2px;
   }
@@ -323,13 +355,25 @@
 [data-sonner-toaster].toaster {
   transition: none;
 }
-[data-sonner-toaster].toaster .cn-toast,
-[data-sonner-toaster].toaster .cn-toast[data-removed="true"],
-[data-sonner-toaster].toaster .cn-toast > * {
-  transition: opacity var(--motion-fade) var(--motion-ease-out) !important;
+[data-sonner-toaster].toaster [data-sonner-toast].cn-toast {
+  transition: transform var(--motion-move) var(--motion-ease-out),
+    height var(--motion-move) var(--motion-ease-out),
+    opacity var(--motion-fade) var(--motion-ease-out);
 }
-[data-sonner-toaster].toaster .cn-toast[data-removed="true"] {
-  transition-duration: var(--motion-fade-exit) !important;
+[data-sonner-toaster].toaster [data-sonner-toast].cn-toast[data-removed="true"],
+[data-sonner-toaster].toaster [data-sonner-toast].cn-toast[data-removed="true"][data-front][data-swipe-out="false"][data-expanded] {
+  transition: transform var(--motion-move) var(--motion-ease-out),
+    opacity var(--motion-fade-exit) var(--motion-ease-out);
+}
+[data-sonner-toaster].toaster [data-sonner-toast].cn-toast[data-swiping="true"] {
+  transition: none;
+}
+html:not([data-keyboard]) [data-sonner-toaster].toaster [data-sonner-toast][data-styled="true"]:focus-visible {
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+}
+html:not([data-keyboard]) [data-sonner-toaster].toaster [data-sonner-toast]:not([data-styled="true"]):focus-visible,
+html:not([data-keyboard]) [data-sonner-toaster].toaster [data-sonner-toast][data-styled="true"] :is([data-button], [data-close-button]):focus-visible {
+  box-shadow: none;
 }
 [data-sonner-toaster].toaster .cn-toast:not([data-mounted="true"]),
 [data-sonner-toaster].toaster .cn-toast[data-removed="true"]:not([data-swipe-out="true"]) {
@@ -351,13 +395,15 @@
   .motion-panel-slide {
     transition-property: opacity;
   }
+  .motion-press-subtle {
+    transition-property: opacity, background-color, border-color, color;
+  }
   .motion-press:active:not(:disabled, [aria-disabled="true"]),
   .motion-popover:is([data-starting-style], [data-ending-style]) {
     scale: none;
   }
   .motion-press:active:not(:disabled, [aria-disabled="true"]) {
-    filter: none;
-    opacity: .8;
+    opacity: 0.82;
   }
   .motion-panel-slide:is([data-starting-style], [data-ending-style]) {
     translate: none;
@@ -370,11 +416,16 @@
   .motion-popover[data-open] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [data-motion-menu-row]) {
     transition-delay: 0ms;
   }
+  [data-sonner-toaster].toaster [data-sonner-toast].cn-toast,
+  [data-sonner-toaster].toaster [data-sonner-toast].cn-toast[data-removed="true"],
+  [data-sonner-toaster].toaster [data-sonner-toast].cn-toast[data-removed="true"][data-front][data-swipe-out="false"][data-expanded] {
+    transition: none;
+  }
   [data-sonner-toaster].toaster .cn-toast[data-swiping="true"] {
     transform: var(--y);
   }
-  [data-sonner-toaster].toaster .cn-toast[data-swipe-out="true"] {
-    animation: none !important;
+  [data-sonner-toaster].toaster [data-sonner-toast].cn-toast[data-swipe-out="true"] {
+    animation: none;
     opacity: 0;
   }
 }
@@ -426,17 +477,17 @@
 @keyframes skeleton-breathe {
   0%, 100% {
     opacity: 0.55;
-    scale: var(--motion-scale-pulse);
   }
 
   50% {
     opacity: 1;
-    scale: 1;
   }
 }
 
 @utility motion-data-in {
-  animation: data-in var(--motion-fade) var(--motion-ease-out);
+  @media (prefers-reduced-motion: no-preference) {
+    animation: data-in var(--motion-fade) var(--motion-ease-out);
+  }
 }
 
 @keyframes data-in {
@@ -508,6 +559,62 @@
   }
 }
 
+/* Dynamic horizontal scroll edge fades (segmented-control.tsx). */
+@property --fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes reveal-fade-start {
+  to {
+    --fade-start: var(--fade-size);
+  }
+}
+@keyframes hide-fade-end {
+  from {
+    --fade-end: var(--fade-size);
+  }
+}
+@layer components {
+  .scroll-fade-x {
+    --fade-size: 1.5rem;
+    --fade-dir: right;
+    --fade-start-pos: 0;
+    --fade-end-pos: 100%;
+    scroll-padding-inline: var(--fade-size);
+    mask:
+      linear-gradient(black, black) no-clip subtract,
+      linear-gradient(to var(--fade-dir), black, transparent) var(--fade-start-pos) 0 / var(--fade-start) 100% no-repeat no-clip,
+      linear-gradient(to var(--fade-dir), transparent, black) var(--fade-end-pos) 0 / var(--fade-end) 100% no-repeat no-clip;
+    transition: --fade-start var(--motion-press) var(--motion-ease-out),
+      --fade-end var(--motion-press) var(--motion-ease-out);
+  }
+  .scroll-fade-x:dir(rtl) {
+    --fade-dir: left;
+    --fade-start-pos: 100%;
+    --fade-end-pos: 0;
+  }
+  .scroll-fade-x[data-fade-start="true"] {
+    --fade-start: var(--fade-size);
+  }
+  .scroll-fade-x[data-fade-end="true"] {
+    --fade-end: var(--fade-size);
+  }
+  @supports (animation-timeline: scroll()) {
+    .scroll-fade-x {
+      transition: none;
+      animation: reveal-fade-start linear both, hide-fade-end linear both;
+      animation-timeline: scroll(self inline);
+      animation-range: 0 var(--fade-size), calc(100% - var(--fade-size)) 100%;
+    }
+  }
+}
+
 .motion-header {
   transition: transform var(--motion-move) var(--motion-ease-in-out);
 }
@@ -565,9 +672,12 @@ html[data-soft-keyboard] [data-fb-actions] {
   will-change: translate;
   user-select: none;
 }
-[data-sheet-state="settling"],
+[data-sheet-state="settling"] {
+  transition: translate var(--motion-panel, 260ms) var(--motion-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
 [data-sheet-state="dismissing"] {
-  transition: translate 260ms var(--motion-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+  transition: translate var(--motion-panel-exit, 208ms) var(--motion-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
   [data-sheet-state="settling"],
@@ -600,7 +710,7 @@ html[data-soft-keyboard] [data-fb-actions] {
   color: var(--muted-foreground);
   opacity: 0.6;
 }
-.breadcrumb-nav > ol > li > a:focus-visible {
+:where(html[data-keyboard]) .breadcrumb-nav > ol > li > a:focus-visible {
   position: relative;
   z-index: 1;
 }
@@ -638,23 +748,27 @@ html[data-soft-keyboard] [data-fb-actions] {
   rotate: 45deg;
   translate: 0 -1px;
 }
-.atlas-accordion details::details-content {
-  interpolate-size: allow-keywords;
-  overflow: clip;
-  contain: layout;
-}
-.atlas-accordion details:not([open])::details-content {
-  block-size: 0;
-}
 @media (prefers-reduced-motion: no-preference) {
   .atlas-accordion details > summary::before {
     transition: rotate var(--motion-fade) var(--motion-ease-out);
   }
+}
+@supports (interpolate-size: allow-keywords) {
   .atlas-accordion details::details-content {
-    transition: block-size var(--motion-panel) var(--motion-ease-out),
-      content-visibility var(--motion-panel) var(--motion-ease-out),
-      display var(--motion-panel) var(--motion-ease-out);
-    transition-behavior: allow-discrete;
+    interpolate-size: allow-keywords;
+    overflow: clip;
+    contain: layout;
+  }
+  .atlas-accordion details:not([open])::details-content {
+    block-size: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .atlas-accordion details::details-content {
+      transition: block-size var(--motion-panel) var(--motion-ease-out),
+        content-visibility var(--motion-panel) var(--motion-ease-out),
+        display var(--motion-panel) var(--motion-ease-out);
+      transition-behavior: allow-discrete;
+    }
   }
 }
 

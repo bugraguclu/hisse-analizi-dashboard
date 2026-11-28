@@ -95,7 +95,7 @@ export function SectorHubView() {
   const [query, setQuery] = useState("");
 
   const universeQ = useQuery({
-    queryKey: ["screener-universe"],
+    queryKey: ["screenerUniverse"],
     queryFn: ({ signal }) => api.screenerUniverse(signal),
     staleTime: STALE_TIME.market,
   });
@@ -144,17 +144,18 @@ export function SectorHubView() {
           eyebrow={copy.eyebrow}
           title={copy.title}
           description={copy.lead}
+          className="[&_h1]:font-display [&_h1]:font-normal"
           actions={
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/endeks"
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                className="motion-press-subtle inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
               >
                 {copy.browseIndices}
               </Link>
               <Link
                 href="/atlas/sektor-medyani"
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                className="motion-press-subtle inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
               >
                 {copy.openAtlas}
               </Link>
@@ -174,7 +175,7 @@ export function SectorHubView() {
               <li key={key}>
                 <Link
                   href={sectorPageHref(key)}
-                  className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:border-foreground/35 hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
+                  className="motion-press-subtle inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
                 >
                   {sectorLabel(key, locale)}
                 </Link>
@@ -201,14 +202,14 @@ export function SectorHubView() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder={copy.searchPlaceholder}
               aria-label={copy.searchLabel}
-              className="h-9 w-full rounded-md border border-input bg-card pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+              className="h-9 w-full rounded-md border border-input bg-card pl-8 pr-8 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring sm:text-[13px] pointer-coarse:h-11 pointer-coarse:pr-11"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label={copy.clear}
-                className="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="motion-press-subtle absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:right-0 pointer-coarse:h-11 pointer-coarse:w-11"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -234,9 +235,9 @@ export function SectorHubView() {
                         <h3 className="text-[14px] font-semibold leading-snug text-foreground group-hover:text-primary">
                           {sectorLabel(key, locale)}
                         </h3>
-                        <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+                        <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transform-none group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
                       </div>
-                      <p className="font-mono text-[11px] text-muted-foreground">
+                      <p className="font-mono tabular-nums text-[11px] text-muted-foreground">
                         {universeQ.isPending ? (
                           <Skeleton as="span" className="inline-block h-3 w-24" />
                         ) : stat ? (

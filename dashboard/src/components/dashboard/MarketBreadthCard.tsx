@@ -115,7 +115,7 @@ function MoverList({ title, movers, href }: { title: string; movers: Mover[]; hr
               <Link
                 href={`/hisse/${mover.ticker}`}
                 title={mover.name || undefined}
-                className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto_4.25rem] items-center gap-x-3 px-4 py-[5px] transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto_4.25rem] items-center gap-x-3 px-4 py-[5px] transition-colors motion-press-subtle hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring pointer-coarse:min-h-11"
               >
                 <span className="font-mono text-xs font-semibold text-foreground">{mover.ticker}</span>
                 <span className="truncate text-[11px] text-muted-foreground">{mover.name}</span>
@@ -172,17 +172,21 @@ export function MarketBreadthCard({ className }: { className?: string }) {
     body = (
       <>
         {usingOfflineCache && cachedBreadth && (
-          <p role="status" className="mx-5 mb-3 rounded-sm bg-warn/10 px-2.5 py-1 text-[11px] text-warn">
+          <p role="status" className="mx-5 mb-3 rounded-md bg-warn/10 px-2.5 py-1 text-[11px] text-warn">
             {t("offline.cachedBadge", { time: formatMarketDate(cachedBreadth.savedAt, "dayMonthTime") })}
           </p>
         )}
         <div className="px-5 pb-4">
-          <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+          <div className="flex items-center justify-between gap-2 text-xs font-semibold tabular-nums">
             <span
               role="img"
               aria-label={`${breadth.up} ${t("dashboard.advancers")}`}
               tabIndex={0}
-              className={cn("outline-none motion-fade", "text-up", highlight != null && highlight !== "up" && "opacity-50")}
+              className={cn(
+                "rounded-sm outline-none motion-fade focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "text-up",
+                highlight != null && highlight !== "up" && "opacity-50",
+              )}
               onPointerEnter={() => setHighlight("up")}
               onPointerLeave={() => clearHighlight("up")}
               onFocus={() => setHighlight("up")}
@@ -194,7 +198,11 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               role="img"
               aria-label={`${breadth.flat} ${t("dashboard.unchanged")}`}
               tabIndex={0}
-              className={cn("outline-none motion-fade", "text-muted-foreground", highlight != null && highlight !== "flat" && "opacity-50")}
+              className={cn(
+                "rounded-sm outline-none motion-fade focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "text-muted-foreground",
+                highlight != null && highlight !== "flat" && "opacity-50",
+              )}
               onPointerEnter={() => setHighlight("flat")}
               onPointerLeave={() => clearHighlight("flat")}
               onFocus={() => setHighlight("flat")}
@@ -206,7 +214,11 @@ export function MarketBreadthCard({ className }: { className?: string }) {
               role="img"
               aria-label={`${breadth.down} ${t("dashboard.decliners")}`}
               tabIndex={0}
-              className={cn("outline-none motion-fade", "text-down", highlight != null && highlight !== "down" && "opacity-50")}
+              className={cn(
+                "rounded-sm outline-none motion-fade focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "text-down",
+                highlight != null && highlight !== "down" && "opacity-50",
+              )}
               onPointerEnter={() => setHighlight("down")}
               onPointerLeave={() => clearHighlight("down")}
               onFocus={() => setHighlight("down")}

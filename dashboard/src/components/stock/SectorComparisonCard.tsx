@@ -108,7 +108,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
         className={cn(
           STICKY,
           "font-normal transition-colors",
-          isSelf ? "bg-card shadow-[inset_2px_0_0_var(--foreground)]" : "bg-card group-hover:bg-surface",
+          isSelf ? "border-l-2 border-l-foreground bg-card" : "bg-card group-hover:bg-surface",
         )}
       >
         {isSelf ? (
@@ -140,7 +140,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
       actions={
         <Link
           href={sectorHref(sector.key, "fundamentals")}
-          className="inline-flex items-center gap-1 rounded-sm text-[11px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex items-center gap-1 rounded-sm text-[11px] font-semibold text-primary underline-offset-4 motion-press-subtle hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
         >
           {t("peers.openScreener")}
           <ArrowRight aria-hidden className="h-3 w-3" />
@@ -159,7 +159,12 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
         {t("peers.count", { count: sector.size })}
       </p>
       {!hasMedian ? <p className="mb-3 text-xs text-muted-foreground">{t("peers.noMedian", { count: sector.size, min: sector.minCompanies })}</p> : null}
-      <div className="relative -mx-4 overflow-x-auto scrollbar-thin">
+      <div
+        role="region"
+        aria-label={t("peers.caption", { ticker, sector: sectorName })}
+        tabIndex={0}
+        className="relative -mx-4 overflow-x-auto scrollbar-thin focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      >
         <table className="w-full border-separate border-spacing-0 text-xs">
           <caption className="sr-only">{t("peers.caption", { ticker, sector: sectorName })}</caption>
           <thead>
@@ -202,7 +207,7 @@ export function SectorComparisonCard({ ticker, compact = false }: { ticker: stri
           type="button"
           aria-expanded={expanded}
           onClick={() => setExpanded((open) => !open)}
-          className="mt-3 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="mt-3 inline-flex items-center rounded-sm text-[11px] font-semibold text-primary motion-press-subtle hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
         >
           {expanded ? t("common.showLess") : t("common.showAllCount", { count: sector.peers.length })}
         </button>

@@ -701,15 +701,22 @@ export function FinancialChart({
 
   const revealPlot = useEffectEvent((host: HTMLDivElement) => {
     if (claimPlotEntrance?.() === false || !motionAllowed || plotRef.current?.matches(":focus-within")) return;
+    if (typeof host.animate !== "function") return;
     // A mask reveals the canvases together while keeping their dimensions and pointer targets fixed.
     const mask = {
       maskImage: "linear-gradient(90deg, black 48%, transparent 52%)",
       maskSize: "220% 100%",
     };
-    entranceRef.current = host.animate(
+    const animation = host.animate(
       [{ ...mask, maskPosition: "100% 0" }, { ...mask, maskPosition: "0% 0" }],
       { duration: motionDuration.reveal, easing: cubicBezier(motionCurve.easeOut) },
     );
+    entranceRef.current = animation;
+    const clear = () => {
+      if (entranceRef.current === animation) entranceRef.current = null;
+    };
+    animation.onfinish = clear;
+    animation.oncancel = clear;
   });
 
   const publishBuild = useEffectEvent((main: AnySeries | null, palette: ChartPalette) => {
@@ -1927,7 +1934,7 @@ export function FinancialChart({
             onClick={scrollToLatest}
             title={t("action.latest")}
             aria-label={t("action.latest")}
-            className="absolute z-[4] inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="absolute z-[4] inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground outline-none transition-colors motion-press-subtle hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:h-11 pointer-coarse:w-11"
             style={{ right: axisBox.priceWidth + 8, bottom: axisBox.timeHeight + 8 + (events.length > 0 ? 24 : 0) }}
           >
             <ChevronsRight className="h-3.5 w-3.5" />
@@ -1935,7 +1942,7 @@ export function FinancialChart({
         ) : null}
         {axisBox && onScaleChange ? (
           <div
-            className="absolute bottom-0 right-0 z-[4] flex items-center justify-center gap-0.5"
+            className="absolute bottom-0 right-0 z-[4] flex items-center justify-center gap-0.5 pointer-coarse:gap-2"
             style={{ width: axisBox.priceWidth, height: axisBox.timeHeight }}
           >
             {manualScale ? (
@@ -2072,8 +2079,8 @@ function ScaleButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-mono text-[10px] leading-none outline-none transition-colors",
-        "focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default",
+        "relative inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 font-mono text-[10px] leading-none outline-none transition-colors motion-press-subtle",
+        "focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default pointer-coarse:after:absolute pointer-coarse:after:-inset-x-0.5 pointer-coarse:after:-inset-y-3",
         pressed ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50",
       )}
     >
@@ -2114,7 +2121,7 @@ function EventTooltip({
           type="button"
           onClick={onClose}
           aria-label={t("event.close")}
-          className="absolute right-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="absolute right-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:after:absolute pointer-coarse:after:-inset-3"
         >
           <X className="h-3 w-3" />
         </button>
@@ -2138,7 +2145,7 @@ function EventTooltip({
                   href={event.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+                  className="mt-1 inline-flex items-center gap-1 rounded-sm text-[11px] font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
                 >
                   {t("event.open")}
                   <ExternalLink className="h-3 w-3" />

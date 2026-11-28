@@ -16,6 +16,7 @@ import {
   Minus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 import { EMPTY_VALUE } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import type { Locale } from "@/lib/i18n";
@@ -121,7 +122,13 @@ export function CalendarTable(props: TableProps) {
   const groups = useMemo(() => (grouped ? groupByDay(shown) : []), [grouped, shown]);
 
   return (
-    <div ref={scrollRef} className="relative max-h-[min(72vh,780px)] overflow-auto overscroll-contain scrollbar-thin">
+    <div
+      ref={scrollRef}
+      role="region"
+      aria-label={tt("tableCaption", { n: rows.length })}
+      tabIndex={0}
+      className="relative max-h-[min(72vh,780px)] overflow-auto overscroll-contain scrollbar-thin outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+    >
       <table className="w-full border-separate border-spacing-0 text-xs">
         <caption className="sr-only">{tt("tableCaption", { n: rows.length })}</caption>
         <thead>
@@ -169,7 +176,7 @@ export function CalendarTable(props: TableProps) {
           <button
             type="button"
             onClick={onShowMore}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            className={cn(buttonVariants({ variant: "ghost", size: "md" }), "border border-border bg-card px-3 text-xs text-foreground pointer-coarse:min-h-11")}
           >
             {tt("showMore", { n: rows.length - shown.length })}
           </button>
@@ -211,7 +218,7 @@ function SortHeader({
         onClick={() => onSort(sortKey)}
         title={tt("sortBy", { col: SORT_LABELS[sortKey][locale] })}
         className={cn(
-          "inline-flex items-center gap-1 rounded-sm uppercase transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+          "inline-flex items-center gap-1 rounded-md px-1 py-0.5 uppercase transition-colors motion-press-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11",
           active && "text-foreground",
         )}
       >
@@ -325,9 +332,8 @@ function CalendarRowView({
     <>
       <tr
         data-row-id={row.id}
-        onClick={() => onToggle(row.id)}
         className={cn(
-          "group cursor-pointer transition-colors [&>td]:border-b [&>td]:border-border hover:bg-muted/40",
+          "group transition-colors [&>td]:border-b [&>td]:border-border hover:bg-muted/40",
           expanded && "bg-muted/40",
         )}
       >
@@ -355,13 +361,10 @@ function CalendarRowView({
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <button
               type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggle(row.id);
-              }}
+              onClick={() => onToggle(row.id)}
               aria-expanded={expanded}
               aria-controls={expanded ? detailId : undefined}
-              className="rounded-sm text-left text-[13px] leading-snug text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="inline-flex min-h-5 items-center rounded-md text-left text-[13px] leading-snug text-foreground underline-offset-2 motion-press-subtle hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11"
             >
               <Highlight text={row.title} terms={terms} />
             </button>
@@ -377,7 +380,7 @@ function CalendarRowView({
             )}
           </div>
           {visibleTags.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap gap-1.5 pointer-coarse:gap-2">
               {visibleTags.map((tag) => {
                 const active = selectedTags.includes(tag);
                 return (
@@ -386,12 +389,9 @@ function CalendarRowView({
                     type="button"
                     aria-pressed={active}
                     title={TAG_LABELS[tag].long[locale]}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleTag(tag);
-                    }}
+                    onClick={() => onToggleTag(tag)}
                     className={cn(
-                      "rounded-sm border px-1.5 py-px text-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                      "rounded-md border px-1.5 py-px text-[10px] transition-colors motion-press-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2.5",
                       active ? "border-border bg-muted text-foreground" : "border-border/70 text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -437,11 +437,20 @@ function CalendarRowView({
         <td className="hidden whitespace-nowrap px-2 py-2 text-right align-top font-mono text-xs tabular-nums text-muted-foreground sm:table-cell">
           {formatValue(row.previous, locale, row.unit)}
         </td>
-        <td className="w-8 py-2 pr-3 align-top">
-          <ChevronDown
-            className={cn("mt-0.5 h-3.5 w-3.5 text-muted-foreground", expanded && "rotate-180 text-foreground")}
-            aria-hidden="true"
-          />
+        <td className="w-8 py-1.5 pr-3 align-top">
+          <button
+            type="button"
+            onClick={() => onToggle(row.id)}
+            aria-expanded={expanded}
+            aria-controls={expanded ? detailId : undefined}
+            aria-label={`${row.title} — ${tt("colDetails")}`}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:h-11 pointer-coarse:w-11"
+          >
+            <ChevronDown
+              className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180 text-foreground")}
+              aria-hidden="true"
+            />
+          </button>
         </td>
       </tr>
       {expanded && (
@@ -607,8 +616,7 @@ function EventDetail({
                 href={row.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                className="inline-flex items-center gap-1 text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="inline-flex items-center gap-1 rounded-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11"
               >
                 {agencyLabel(row.countryCode, row.sourceName, locale)}
                 <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -629,7 +637,7 @@ function EventDetail({
                 aria-pressed={active}
                 onClick={() => onToggleTag(tag)}
                 className={cn(
-                  "rounded-md border px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                  "rounded-md border px-2 py-0.5 text-[11px] transition-colors motion-press-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11 pointer-coarse:px-2.5",
                   active ? "border-border bg-muted text-foreground" : "border-border/70 text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -660,7 +668,10 @@ function DetailAction({ icon: Icon, onClick, children }: { icon: typeof Filter; 
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-left text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      className={cn(
+        buttonVariants({ variant: "ghost", size: "sm" }),
+        "justify-start border border-border bg-card px-2.5 text-left text-[11px] text-foreground pointer-coarse:min-h-11",
+      )}
     >
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       {children}
@@ -695,7 +706,10 @@ function NextReleaseLine({
         type="button"
         onClick={() => onJump(next)}
         title={tt("showInTable")}
-        className="rounded-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        className={cn(
+          buttonVariants({ variant: "link", size: "sm" }),
+          "h-auto p-0 text-[11px] text-foreground pointer-coarse:min-h-11",
+        )}
       >
         {next.allDay ? day : `${day}, ${next.time}`}
       </button>

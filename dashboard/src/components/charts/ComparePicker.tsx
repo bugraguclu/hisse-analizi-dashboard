@@ -184,7 +184,7 @@ export function ComparePicker({
                           aria-pressed={selected !== undefined}
                           title={choice.name}
                           className={cn(
-                            "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50",
+                            "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] outline-none transition-colors motion-press-subtle focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 pointer-coarse:min-h-11",
                             selected ? "border-border bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                           )}
                         >
@@ -208,22 +208,22 @@ export function ComparePicker({
                   <button
                     type="button"
                     onClick={onClear}
-                    className="rounded-sm px-1 text-[11px] font-medium text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                    className="rounded-sm px-1 text-[11px] font-medium text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-h-11 pointer-coarse:px-2"
                   >
                     {t("compare.clear")}
                   </button>
                 </div>
-                <ul className="mt-1 flex flex-wrap gap-1">
+                <ul className="mt-1 flex flex-wrap gap-1 pointer-coarse:gap-3">
                   {items.map((item) => (
                     <li key={item.symbol}>
-                      <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-0.5 font-mono text-[11px] text-foreground">
+                      <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-0.5 font-mono text-[11px] text-foreground pointer-coarse:h-9">
                         <span aria-hidden className="h-0 w-3 border-t-2" style={{ borderColor: SERIES_CSS_VAR[item.color % 5] }} />
                         {item.label}
                         <button
                           type="button"
                           onClick={() => onRemove(item.symbol)}
                           aria-label={t("compare.remove", { symbol: item.label })}
-                          className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                          className="relative inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:h-8 pointer-coarse:w-8 pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -253,7 +253,7 @@ export function ComparePicker({
                       onPointerMove={() => nav.setActive(index)}
                       onClick={() => toggle(choice)}
                       className={cn(
-                        "mx-1.5 flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5",
+                        "mx-1.5 flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 pointer-coarse:min-h-11",
                         nav.active === index && "bg-muted",
                         disabled && "cursor-not-allowed opacity-50",
                       )}

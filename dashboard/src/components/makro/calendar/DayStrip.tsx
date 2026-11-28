@@ -116,8 +116,8 @@ export function DayStrip({
                   }
                 }}
                 className={cn(
-                  "relative flex w-12 shrink-0 flex-col items-center rounded-md border px-1 pb-1.5 pt-1 transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                  "relative flex w-12 shrink-0 flex-col items-center rounded-md border px-1 pb-1.5 pt-1 transition-colors motion-press-subtle pointer-coarse:min-h-11",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   selected
                     ? "border-border bg-muted text-foreground"
                     : cn(

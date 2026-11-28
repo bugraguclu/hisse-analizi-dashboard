@@ -53,6 +53,7 @@ function GuideContent() {
         eyebrow={COPY.eyebrow[locale]}
         title={COPY.title[locale]}
         description={COPY.subtitle[locale]}
+        className="[&_h1]:font-display [&_h1]:font-normal"
       />
 
       <div role="group" aria-label={COPY.filterLabel[locale]} className="flex flex-wrap gap-1.5">
@@ -65,7 +66,7 @@ function GuideContent() {
               onClick={() => setCategory(item.id)}
               aria-pressed={active}
               className={cn(
-                "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                "motion-press-subtle rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                 active
                   ? "border-foreground bg-foreground text-background"
                   : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -112,7 +113,7 @@ function GuideContent() {
                 <p className="text-[11px] leading-4 text-muted-foreground">{entry.methodology[locale]}</p>
                 <Link
                   href={entry.actionHref(DEFAULT_TICKER)}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="motion-press-subtle inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
                 >
                   {entry.actionLabel[locale]}
                   <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />

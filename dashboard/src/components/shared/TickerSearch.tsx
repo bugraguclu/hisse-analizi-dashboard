@@ -472,7 +472,7 @@ export function TickerSearch({
             // One focus signal for pointer and keyboard alike: the border takes the focus
             // colour. No ring — a text field matches :focus-visible on a click too.
             "focus:border-ring",
-            overlay ? "h-11 pl-10 pr-12" : cn("h-8 pl-8 pr-8 md:text-[13px]", shortcutHint && "lg:pr-14"),
+            overlay ? "h-11 pl-10 pr-12" : cn("h-8 pointer-coarse:h-11 pl-8 pr-8 md:text-[13px]", shortcutHint && "lg:pr-14"),
           )}
         />
         {overlay ? (
@@ -480,7 +480,7 @@ export function TickerSearch({
             type="button"
             onClick={onClose}
             aria-label={t("shell.closeSearch")}
-            className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+            className="motion-press-subtle absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -494,7 +494,7 @@ export function TickerSearch({
             type="button"
             onClick={clear}
             aria-label={t("search.clear")}
-            className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground after:absolute after:-inset-2.5 after:content-[''] hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="motion-press-subtle absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground after:absolute after:-inset-2.5 after:content-[''] hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -518,7 +518,7 @@ export function TickerSearch({
             "overflow-hidden border border-border bg-popover text-popover-foreground",
             overlay
               ? "mt-2 rounded-md"
-              : "absolute right-0 top-full z-50 mt-1 w-full min-w-80 rounded-lg shadow-[var(--shadow-popover)]",
+              : "absolute right-0 top-full z-50 mt-1 w-full min-w-80 rounded-md shadow-[var(--shadow-popover)]",
           )}
         >
           {showRows ? (
@@ -548,12 +548,12 @@ export function TickerSearch({
                       onMouseMove={() => i !== nav.active && nav.setActive(i)}
                       onClick={() => choose(item)}
                       className={cn(
-                        "cursor-pointer px-3 py-2.5 text-sm md:py-2",
+                        "cursor-pointer px-3 py-2.5 text-sm md:py-2 pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:items-center",
                         showQuickDivider && "mt-1 border-t border-border pt-2.5",
                         i === nav.active && "bg-accent",
                       )}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex w-full items-center gap-2.5">
                         <span
                           className={cn(
                             "w-16 shrink-0 truncate font-mono text-[11px] font-semibold",

@@ -109,11 +109,11 @@ function DesktopNav() {
 }
 
 const ICON_BUTTON =
-  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring md:h-8 md:w-8";
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring md:h-8 md:w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 
 /**
- * Top navigation: wordmark, section links (lg+), stock search, language and theme.
- * Below lg the links move into the MobileNav drawer.
+ * Top navigation: wordmark, section links (xl+), stock search, language and theme.
+ * Below xl the links move into the MobileNav drawer.
  */
 export function SiteHeader() {
   const pathname = usePathname();
@@ -198,7 +198,7 @@ export function SiteHeader() {
 
             <DesktopNav />
 
-            <div className="flex shrink-0 items-center justify-self-end gap-0.5 md:ml-auto md:gap-1.5">
+            <div className="flex shrink-0 items-center justify-self-end gap-0.5 md:ml-auto md:gap-1.5 pointer-coarse:gap-1">
               <div className="hidden w-52 md:block xl:w-48 2xl:w-60">
                 <TickerSearch ref={desktopSearchRef} shortcutHint />
               </div>
@@ -212,7 +212,7 @@ export function SiteHeader() {
                 aria-controls={mobileSearchOpen ? searchOverlayId : undefined}
                 className={cn(
                   ICON_BUTTON,
-                  "text-foreground md:hidden",
+                  "relative text-foreground pointer-coarse:h-10 pointer-coarse:w-10 pointer-coarse:after:absolute pointer-coarse:after:-inset-0.5 pointer-coarse:after:content-[''] md:hidden",
                   mobileSearchOpen && "bg-muted",
                 )}
               >
@@ -247,12 +247,15 @@ export function SiteHeader() {
                 aria-label={t("workspace.openManager")}
                 aria-haspopup="dialog"
                 title={t("workspace.openManager")}
-                className={cn(ICON_BUTTON, "hidden md:inline-flex")}
+                className={cn(
+                  ICON_BUTTON,
+                  "relative hidden md:inline-flex pointer-coarse:h-10 pointer-coarse:w-10 pointer-coarse:after:absolute pointer-coarse:after:-inset-0.5 pointer-coarse:after:content-['']",
+                )}
               >
                 <Archive className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
               </button>
               <LocaleToggle className="ml-1 hidden md:inline-flex" />
-              <ThemeToggle className="hidden md:inline-flex" />
+              <ThemeToggle className="hidden md:inline-flex pointer-coarse:mr-0.5" />
             </div>
           </div>
 

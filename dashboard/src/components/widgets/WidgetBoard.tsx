@@ -1183,7 +1183,8 @@ export function WidgetBoard({
 
   return (
     <>
-      <div ref={boardRef} className={cn("relative space-y-4", editing && "pb-28", className)} data-editing={editing ? "" : undefined}>
+      {editing ? <EditBar editor={editor} widgets={total} onAdd={() => openGallery()} hint={wide ? t("edit.hint") : t("edit.hintMobile")} /> : null}
+      <div ref={boardRef} className={cn("relative space-y-4", className)} data-editing={editing ? "" : undefined}>
         {scopeSections ? (
           <>
             {shown.rows.length === 0 ? <WidgetScopeCards /> : null}
@@ -1248,10 +1249,6 @@ export function WidgetBoard({
           {announcement.n % 2 ? "\u00a0" : ""}
         </p>
       </div>
-
-
-
-      {editing ? <EditBar editor={editor} widgets={total} onAdd={() => openGallery()} hint={wide ? t("edit.hint") : t("edit.hintMobile")} /> : null}
 
       <WidgetGallery
         open={gallery.open}

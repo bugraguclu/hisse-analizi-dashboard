@@ -3,7 +3,7 @@
   transform: translate3d(var(--drag-x, 0px), var(--drag-y, 0px), 0);
   will-change: transform;
   border-radius: calc(var(--radius) * 1.8);
-  box-shadow: 0 18px 40px -14px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 16%);
+  box-shadow: 0 8px 24px -8px rgb(0 0 0 / 28%);
 }
 
 @media (prefers-reduced-motion: reduce) {

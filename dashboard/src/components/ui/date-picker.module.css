@@ -2,12 +2,12 @@
 .input { padding-right: 34px; appearance: none; }
 .input::-webkit-calendar-picker-indicator { display: none; }
 .input::-webkit-date-and-time-value { text-align: left; }
-.open { position: absolute; right: 3px; top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--primary); cursor: pointer; }
+.open { position: absolute; right: 3px; top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-md); color: var(--primary); cursor: pointer; }
 .open:disabled { opacity: .35; cursor: default; }
-.panel { position: fixed; inset: auto; margin: 0; padding: 12px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 18px; background: var(--popover); color: var(--popover-foreground); font-family: var(--font-sans); font-size: 14px; }
-.panel button { display: flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.panel { position: fixed; inset: auto; margin: 0; padding: 12px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--popover); color: var(--popover-foreground); font-family: var(--font-sans); font-size: 14px; box-shadow: 0 4px 16px -4px rgb(0 0 0 / 0.12); }
+.panel button { display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; font: inherit; cursor: pointer; font-variant-numeric: tabular-nums; }
 .panel button:disabled { opacity: .3; cursor: default; }
-.panel button:focus-visible, .open:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+:global(html[data-keyboard]) .panel button:focus-visible, :global(html[data-keyboard]) .open:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .caption { display: flex; align-items: center; gap: 2px; margin-bottom: 14px; }
 .heading { display: flex; flex: 1; justify-content: center; align-items: center; min-width: 0; gap: 3px; }
 .heading button { min-height: 36px; padding: 2px; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -35,4 +35,15 @@
   .panel button:hover:not(:disabled) { color: var(--primary); background: var(--muted); }
   .days button[aria-pressed="true"]:hover, .options button[aria-pressed="true"]:hover { background: var(--primary); color: var(--primary-foreground); }
 }
-@media (pointer: coarse) { .input { min-height: 44px; font-size: 16px; } .days > * { min-height: 38px; } }
+@media (pointer: coarse) {
+  .input { min-height: 44px; padding-right: 46px; font-size: 16px; }
+  .open { width: 38px; height: 38px; }
+  .open::after { content: ""; position: absolute; inset: -3px; }
+  .panel { min-width: min(360px, calc(100dvw - 24px)); }
+  .caption { flex-wrap: wrap; gap: 4px; }
+  .heading { flex: 1 0 auto; min-width: max-content; gap: 4px; }
+  .weekdays, .days { gap: 4px; }
+  .days { grid-auto-rows: max(44px, calc((100cqw - 24px) / 7)); }
+  .days > * { min-height: 44px; }
+  .arrow, .close, .heading button, .caption .today, .footer button { min-width: 44px; min-height: 44px; }
+}

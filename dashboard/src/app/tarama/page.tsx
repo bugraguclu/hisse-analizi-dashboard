@@ -52,6 +52,7 @@ function Header({ asOf }: { asOf?: string }) {
   return (
     <PageHeader
       title={t("page.title")}
+      className="[&_h1]:font-display [&_h1]:font-normal"
       actions={status ? <p className="text-[11px] text-muted-foreground">{status}</p> : undefined}
     />
   );

@@ -66,7 +66,7 @@ function PageLink({
   current?: boolean;
 }) {
   const className = cn(
-    "inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 font-mono text-xs transition-colors",
+    "inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 font-mono text-xs transition-colors motion-press-subtle pointer-coarse:min-h-11 pointer-coarse:min-w-11",
     current ? "border-foreground bg-muted font-semibold text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
     FOCUS_RING,
   );
@@ -88,14 +88,14 @@ function Pagination({ page, pages, pageHref }: { page: number; pages: number; pa
   const { t } = useEventsI18n();
   const slots = pageWindow(page, pages);
   return (
-    <nav aria-label={t("pagination.label")} className="flex items-center gap-0.5">
+    <nav aria-label={t("pagination.label")} className="flex items-center gap-0.5 pointer-coarse:gap-1">
       <PageLink href={pageHref(1)} disabled={page <= 1} label={t("pagination.first")}>
         <ChevronsLeft aria-hidden="true" className="h-4 w-4" />
       </PageLink>
       <PageLink href={pageHref(page - 1)} disabled={page <= 1} label={t("pagination.prev")}>
         <ChevronLeft aria-hidden="true" className="h-4 w-4" />
       </PageLink>
-      <ol className="hidden items-center gap-0.5 sm:flex">
+      <ol className="hidden items-center gap-0.5 pointer-coarse:gap-1 sm:flex">
         {slots.map((item, index) =>
           item === null ? (
             <li key={`gap-${index}`} aria-hidden="true" className="px-1 text-xs text-muted-foreground">
@@ -225,7 +225,7 @@ export const EventsFeed = forwardRef<HTMLElement, EventsFeedProps>(function Even
         <FeedMessage
           title={t("feed.emptyPage")}
           action={
-            <Link href={pageHref(1)} scroll={false} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Link href={pageHref(1)} scroll={false} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "pointer-coarse:min-h-11")}>
               {t("feed.firstPage")}
             </Link>
           }
@@ -235,7 +235,7 @@ export const EventsFeed = forwardRef<HTMLElement, EventsFeedProps>(function Even
           title={t("feed.emptyFiltered")}
           hint={t("feed.emptyFilteredHint")}
           action={
-            <button type="button" onClick={onClearFilters} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <button type="button" onClick={onClearFilters} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "pointer-coarse:min-h-11")}>
               {t("active.clearAll")}
             </button>
           }

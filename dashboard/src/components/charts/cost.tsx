@@ -92,7 +92,10 @@ export function CostEditor({ cost, onSave, onClose }: { cost: number | null; onS
         }}
         className="h-6 w-24 rounded-sm border border-border bg-transparent px-1.5 font-mono text-[12px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/60 aria-[invalid=true]:border-down"
       />
-      <button type="submit" className="h-6 rounded-sm border border-border px-2 font-medium text-foreground hover:bg-muted">
+      <button
+        type="submit"
+        className="h-6 rounded-md border border-border px-2 font-medium text-foreground outline-none motion-press hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-h-11 pointer-coarse:px-3"
+      >
         {t("cost.save")}
       </button>
       {cost !== null ? (
@@ -102,7 +105,7 @@ export function CostEditor({ cost, onSave, onClose }: { cost: number | null; onS
             onSave(null);
             onClose();
           }}
-          className="h-6 rounded-sm px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="h-6 rounded-md px-2 text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-h-11 pointer-coarse:px-3"
         >
           {t("cost.clear")}
         </button>
@@ -114,7 +117,12 @@ export function CostEditor({ cost, onSave, onClose }: { cost: number | null; onS
       ) : (
         <span className="text-[10px] text-muted-foreground">{t("cost.note")}</span>
       )}
-      <button type="button" onClick={onClose} aria-label={t("cost.close")} className="ml-auto rounded-sm p-0.5 text-muted-foreground hover:text-foreground">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={t("cost.close")}
+        className="relative ml-auto inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground outline-none motion-press-subtle hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5"
+      >
         <X className="h-3.5 w-3.5" />
       </button>
     </form>

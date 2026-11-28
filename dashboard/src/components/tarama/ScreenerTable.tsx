@@ -237,7 +237,7 @@ function PinnedTableRow({ pinned, columns, context }: { pinned: PinnedRow; colum
         className="sticky left-0 z-10 border-b border-border bg-surface py-2 pl-2 pr-3 text-left font-normal max-lg:border-r"
       >
         <div className="flex items-center gap-1.5">
-          <span aria-hidden className="w-[22px] shrink-0" />
+          <span aria-hidden className="w-[22px] shrink-0 pointer-coarse:w-11" />
           <span className="min-w-0">
             <span className="block text-[12px] font-semibold text-foreground">{pinned.label}</span>
             <span className="block text-[11px] text-muted-foreground">{pinned.detail}</span>
@@ -313,8 +313,8 @@ export function ScreenerTable({
             onClick={() => onSort(key as SortKey)}
             title={title}
             className={cn(
-              "inline-flex items-center gap-1 rounded-sm uppercase tracking-wider motion-press hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
-              spec.align === "right" && "flex-row-reverse",
+              "inline-flex items-center gap-1 rounded-md uppercase tracking-wider outline-none motion-press-subtle hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+              spec.align === "right" && "flex-row-reverse justify-start",
               active && "text-foreground",
             )}
           >
@@ -329,7 +329,12 @@ export function ScreenerTable({
   };
 
   return (
-    <div className="overflow-x-auto scrollbar-thin">
+    <div
+      role="region"
+      aria-label={t("results.caption")}
+      tabIndex={0}
+      className="overflow-x-auto scrollbar-thin outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+    >
       <table className="w-full border-separate border-spacing-0 text-[13px]">
         <caption className="sr-only">{t("results.caption")}</caption>
         <thead>
@@ -356,7 +361,7 @@ export function ScreenerTable({
                       aria-label={t(favorite ? "watch.remove" : "watch.add", { ticker: row.symbol })}
                       title={t(favorite ? "watch.remove" : "watch.add", { ticker: row.symbol })}
                       className={cn(
-                        "shrink-0 rounded-sm p-1 motion-press focus-visible:outline-2 focus-visible:outline-ring",
+                        "inline-flex shrink-0 items-center justify-center rounded-md p-1 outline-none motion-press-subtle focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:p-0",
                         favorite ? "text-foreground" : "text-muted-foreground/50 hover:text-foreground",
                       )}
                     >
@@ -364,7 +369,7 @@ export function ScreenerTable({
                     </button>
                     <Link
                       href={`/hisse/${encodeURIComponent(row.symbol)}`}
-                      className="min-w-0 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+                      className="min-w-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:flex-col pointer-coarse:justify-center"
                     >
                       <span className="block font-mono text-[13px] font-semibold text-foreground group-hover:text-primary">{row.symbol}</span>
                       {row.name && <span className="block max-w-[11rem] truncate text-[11px] text-muted-foreground sm:max-w-[14rem]">{row.name}</span>}

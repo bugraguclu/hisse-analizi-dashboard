@@ -39,7 +39,7 @@ function TechnicalSignal({ ticker }: { ticker: string }) {
   return (
     <InfoPopover
       label={t("header.signalInfo")}
-      triggerClassName="h-7 rounded-md border border-border bg-card px-2.5 text-xs pointer-coarse:h-8"
+      triggerClassName="h-7 rounded-md border border-border bg-card px-2.5 text-xs pointer-coarse:min-h-11"
       trigger={
         <>
           <span className="text-muted-foreground">{t("header.technicalSignal")}:</span>
@@ -90,7 +90,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
             </>
           ) : null}
         </p>
-        <h1 className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[clamp(1.625rem,1.35rem+0.9vw,2rem)] font-medium leading-[1.15] tracking-[-0.018em] text-foreground">
+        <h1 className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-display text-[28px] font-normal leading-tight text-foreground md:text-[32px]">
           <span>{ticker}</span>
           {name ? (
             <span className="min-w-0 font-sans text-base font-normal leading-snug text-muted-foreground md:text-lg" title={legalName ?? undefined}>
@@ -113,7 +113,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
         ) : quote ? (
           <>
             <p className="flex items-baseline gap-1.5 md:justify-end">
-              <span className="font-mono text-[28px] font-semibold leading-none text-foreground md:text-[32px]">
+              <span className="font-mono text-[28px] font-semibold leading-none tabular-nums text-foreground md:text-[32px]">
                 {formatPrice(quote.last)}
               </span>
               <span className="text-sm text-muted-foreground">TL</span>
@@ -157,7 +157,7 @@ export function StockHeader({ ticker, identity }: { ticker: string; identity: Id
         ) : isError ? (
           <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
             <span>{t("header.quoteUnavailable")}</span>
-            <button type="button" onClick={refetch} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "pointer-coarse:h-8")}>
+            <button type="button" onClick={refetch} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "pointer-coarse:min-h-11")}>
               {t("state.retry")}
             </button>
           </div>

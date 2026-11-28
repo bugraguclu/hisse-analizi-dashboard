@@ -7,6 +7,7 @@ import { EMPTY_VALUE, formatChangePercent, formatMarketDate, formatPercent } fro
 import { useNow } from "@/hooks/use-now";
 import { istanbulClock } from "@/lib/market-hours";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 import { ChartSkeleton } from "@/components/ui/chart-skeleton";
 import { useMakroI18n, type MakroKey } from "./i18n";
 import { usePolicyRate, useInflation, useTcmbCalendar, useTcmbRates } from "./queries";
@@ -74,10 +75,10 @@ function CorridorTrack({ floor, policy, ceiling, late }: { floor: number; policy
         className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-card"
         style={{ left: pos(policy), backgroundColor: SERIES_COLOR.policy }}
       />
-      <span aria-hidden className="absolute bottom-0 left-0 font-mono text-[10px] text-muted-foreground">
+      <span aria-hidden className="absolute bottom-0 left-0 font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatPercent(min, 0)}
       </span>
-      <span aria-hidden className="absolute bottom-0 right-0 font-mono text-[10px] text-muted-foreground">
+      <span aria-hidden className="absolute bottom-0 right-0 font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatPercent(max, 0)}
       </span>
     </div>
@@ -218,7 +219,14 @@ export function CorridorPanel({ className }: { className?: string }) {
             {calendarQ.isError && !calendarQ.data ? (
               <div className="text-muted-foreground">
                 {t("common.loadError")} ·{" "}
-                <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => void calendarQ.refetch()}>
+                <button
+                  type="button"
+                  className={cn(
+                    buttonVariants({ variant: "link", size: "sm" }),
+                    "text-xs text-muted-foreground underline hover:text-foreground pointer-coarse:min-h-11",
+                  )}
+                  onClick={() => void calendarQ.refetch()}
+                >
                   {t("common.retry")}
                 </button>
               </div>
@@ -276,7 +284,7 @@ export function CorridorPanel({ className }: { className?: string }) {
                 type="button"
                 onClick={() => setShowAllDecisions((value) => !value)}
                 aria-expanded={showAllDecisions}
-                className="mt-1.5 text-[11px] font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                className={cn(buttonVariants({ variant: "link", size: "sm" }), "mt-1.5 text-[11px] pointer-coarse:min-h-11")}
               >
                 {showAllDecisions ? t("common.showLess") : t("common.showAll", { count: decisions.length })}
               </button>

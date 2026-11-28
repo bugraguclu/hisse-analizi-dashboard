@@ -3,7 +3,6 @@ import { EMPTY_VALUE } from "@/lib/format";
 import {
   agencyLabel,
   calendarText,
-  countryFlag,
   countryLabel,
   countrySearchNames,
   IMPORTANCE_LABELS,
@@ -752,7 +751,7 @@ export function toIcs(rows: CalendarRow[], locale: Locale, now: number): string 
   for (const row of rows) {
     const country = countryLabel(row.countryCode, locale, row.countryName);
     const period = formatPeriod(row, locale);
-    const summary = `${countryFlag(row.countryCode)} ${country}: ${row.title}${period ? ` (${period})` : ""}`.trim();
+    const summary = `[${row.countryCode}] ${country}: ${row.title}${period ? ` (${period})` : ""}`.trim();
     const description = [
       `${t("importance")}: ${IMPORTANCE_LABELS[row.importance][locale]}`,
       row.previous ? `${t("colPrevious")}: ${formatValue(row.previous, locale, row.unit)}` : "",

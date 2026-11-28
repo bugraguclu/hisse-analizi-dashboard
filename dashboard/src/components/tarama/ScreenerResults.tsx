@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RowSkeleton } from "@/components/dashboard/ui";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { useLocale } from "@/lib/locale-context";
+import { cn } from "@/lib/utils";
 import type { ScreenerUniverseOut } from "@/types";
 import { columnLabel, ScreenerTable, type PinnedRow, type TableContext } from "./ScreenerTable";
 import { Pagination } from "./Pagination";
@@ -100,7 +101,10 @@ export function ScreenerResults({
             onClick={onExport}
             disabled={status !== "ready" || slice.total === 0}
             title={t("results.exportTitle")}
-            className={buttonVariants({ variant: "outline", size: "md" })}
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "border border-border bg-card text-foreground pointer-coarse:min-h-11",
+            )}
           >
             <Download aria-hidden="true" />
             {t("results.export")}
@@ -124,7 +128,11 @@ export function ScreenerResults({
             direction: t(state.dir === "asc" ? "results.asc" : "results.desc"),
           })}
           {sortChanged && (
-            <button type="button" onClick={onResetSort} className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">
+            <button
+              type="button"
+              onClick={onResetSort}
+              className={cn(buttonVariants({ variant: "link", size: "sm" }), "pointer-coarse:min-h-11")}
+            >
               {t("results.resetSort")}
             </button>
           )}
@@ -144,7 +152,7 @@ export function ScreenerResults({
             <button
               type="button"
               onClick={onClearFilters}
-              className="mt-1 inline-flex h-7 items-center rounded-md border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1 pointer-coarse:min-h-11")}
             >
               {t("filters.clearAll")}
             </button>

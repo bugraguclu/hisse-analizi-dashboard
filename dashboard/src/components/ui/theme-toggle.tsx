@@ -19,7 +19,8 @@ export function ThemeToggle({ className }: { className?: string }) {
       type="button"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground motion-press",
+        "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground motion-press-subtle",
+        "pointer-coarse:h-10 pointer-coarse:w-10 pointer-coarse:after:absolute pointer-coarse:after:-inset-0.5 pointer-coarse:after:content-['']",
         "hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
         className,
       )}

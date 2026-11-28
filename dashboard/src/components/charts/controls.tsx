@@ -37,8 +37,10 @@ export const ToolButton = forwardRef<HTMLButtonElement, ToolButtonProps>(functio
       aria-label={label}
       aria-pressed={pressed}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-md motion-press",
-        size === "sm" ? "h-7 w-7 [&>svg]:h-3.5 [&>svg]:w-3.5" : "h-8 w-8 [&>svg]:h-4 [&>svg]:w-4",
+        "inline-flex shrink-0 items-center justify-center rounded-md motion-press-subtle",
+        size === "sm"
+          ? "h-7 w-7 pointer-coarse:h-11 pointer-coarse:w-11 [&>svg]:h-3.5 [&>svg]:w-3.5"
+          : "h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11 [&>svg]:h-4 [&>svg]:w-4",
         FOCUS,
         pressed
           ? "bg-muted text-foreground ring-1 ring-inset ring-border"
@@ -67,7 +69,7 @@ export const ChipButton = forwardRef<HTMLButtonElement, ChipButtonProps>(functio
       type={type}
       aria-pressed={pressed}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium whitespace-nowrap motion-press pointer-coarse:h-8 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
+        "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-medium whitespace-nowrap motion-press-subtle pointer-coarse:min-h-11 pointer-coarse:min-w-11 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
         FOCUS,
         pressed
           ? "border-foreground/30 bg-muted text-foreground"
@@ -88,7 +90,7 @@ export function ToolbarDivider({ vertical = false, className }: { vertical?: boo
 
 /** Popup surface shared by the chart kit's menus and popovers. */
 export const POPUP_CLASS =
-  "rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--shadow-popover)] outline-none";
+  "rounded-md border border-border bg-popover text-popover-foreground shadow-[var(--shadow-popover)] outline-none";
 
 /** Row of a Base UI menu (highlight follows pointer and arrows alike). */
 export const MENU_ITEM_CLASS =

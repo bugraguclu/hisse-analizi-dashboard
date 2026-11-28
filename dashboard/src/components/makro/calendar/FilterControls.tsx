@@ -13,8 +13,8 @@ import {
 import { useLocale } from "@/lib/locale-context";
 import { DateMenu } from "./DateNavigator";
 import { DEFAULT_COUNTRIES, DEFAULT_IMPORTANCE, sameSet, type FiltersUpdate } from "./hooks";
-import { countryFlag, countryLabel, IMPORTANCE_LABELS, SORT_LABELS, TAG_LABELS, useCalendarText } from "./i18n";
-import { ImportanceMarker } from "./parts";
+import { countryLabel, IMPORTANCE_LABELS, SORT_LABELS, TAG_LABELS, useCalendarText } from "./i18n";
+import { CountryCodeBadge, ImportanceMarker } from "./parts";
 import {
   CALENDAR_TAGS,
   IMPORTANCE_LEVELS,
@@ -95,11 +95,7 @@ export function CalendarFilterBar({
       return {
         value: code,
         label: countryName(code),
-        marker: (
-          <span aria-hidden="true" className="w-4 shrink-0 text-center text-[13px] leading-none">
-            {countryFlag(code)}
-          </span>
-        ),
+        marker: <CountryCodeBadge code={code} className="text-muted-foreground" />,
         // Only fetched countries have counts; ticking another one fetches it, so it is never dimmed.
         count: picked ? (facets.countries[code] ?? 0) : null,
         loading: loadingCountries.includes(code),

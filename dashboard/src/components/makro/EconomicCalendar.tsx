@@ -8,13 +8,16 @@ import { formatMarketDate } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import { istanbulClock } from "@/lib/market-hours";
 import { useNow } from "@/hooks/use-now";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { MACRO_QUERY_ROOT } from "@/components/makro/queries";
 import { PanelEmpty, PanelError, Shimmer } from "@/components/makro/ui";
 import { CalendarTable, PAGE_SIZE } from "./calendar/CalendarTable";
 import { DayStrip } from "./calendar/DayStrip";
 import { CalendarFilterBar } from "./calendar/FilterControls";
 import { isNarrowed, toggleIn, useCalendarFilters } from "./calendar/hooks";
-import { countryFlag, countryLabel, useCalendarText } from "./calendar/i18n";
+import { countryLabel, useCalendarText } from "./calendar/i18n";
+import { CountryCodeBadge } from "./calendar/parts";
 import { QueryBar } from "./calendar/QueryBar";
 import type { CalendarRow, CalendarTag, SortKey } from "./calendar/types";
 import {
@@ -164,14 +167,9 @@ function CalendarBody() {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [scrollTarget, setScrollTarget] = useState<string | null>(null);
-  const [limit, setLimit] = useState(PAGE_SIZE);
-  // A new result set starts from the first page again (adjusted during render, no effect).
   const listKey = [countriesKey, filters.q, filters.event, filters.importance.join(), filters.tags.join(), filters.status, range?.from, range?.to, filters.sort, filters.dir].join("|");
-  const [prevListKey, setPrevListKey] = useState(listKey);
-  if (listKey !== prevListKey) {
-    setPrevListKey(listKey);
-    setLimit(PAGE_SIZE);
-  }
+  const [limitState, setLimitState] = useState<{ key: string; limit: number }>({ key: listKey, limit: PAGE_SIZE });
+  const limit = limitState.key === listKey ? limitState.limit : PAGE_SIZE;
 
   const next = useMemo(() => {
     if (!now) return { key: null, decision: null };
@@ -190,7 +188,7 @@ function CalendarBody() {
       // Hidden by the current filters: show that day with everything else cleared.
       update({ q: "", event: null, tags: [], status: "all", importance: [], range: "custom", from: row.date, to: row.date, sort: "time", dir: "asc" });
     } else if (index >= limit) {
-      setLimit(index + PAGE_SIZE);
+      setLimitState({ key: listKey, limit: index + PAGE_SIZE });
     }
     setExpandedId(row.id);
     setScrollTarget(row.id);
@@ -199,7 +197,7 @@ function CalendarBody() {
   const goToday = () => {
     const coversToday = Boolean(range && today && range.from <= today && today <= range.to);
     if (!coversToday || filters.sort !== "time") update({ ...(coversToday ? {} : { range: "thisWeek" as const }), sort: "time", dir: "asc" });
-    else setLimit(Math.max(limit, sorted.length));
+    else setLimitState((current) => ({ key: listKey, limit: Math.max(current.key === listKey ? current.limit : PAGE_SIZE, sorted.length) }));
     setScrollTarget("now");
   };
 
@@ -331,7 +329,14 @@ function CalendarBody() {
           ]
             .filter(Boolean)
             .join(" ")}
-          <button type="button" onClick={() => void query.refetch()} className="ml-auto underline underline-offset-2">
+          <button
+            type="button"
+            onClick={() => void query.refetch()}
+            className={cn(
+              buttonVariants({ variant: "link", size: "sm" }),
+              "ml-auto text-[11px] text-warn underline hover:text-foreground pointer-coarse:min-h-11",
+            )}
+          >
             {t("common.retry")}
           </button>
         </p>
@@ -369,7 +374,10 @@ function CalendarBody() {
               type="button"
               onClick={() => update({ event: null })}
               aria-label={tt("removeFilter", { name: eventTitle })}
-              className="shrink-0 rounded-sm font-medium text-primary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className={cn(
+                buttonVariants({ variant: "link", size: "sm" }),
+                "shrink-0 text-[11px] hover:text-foreground pointer-coarse:min-h-11",
+              )}
             >
               {tt("remove")}
             </button>
@@ -379,7 +387,10 @@ function CalendarBody() {
           type="button"
           onClick={goToday}
           disabled={!today}
-          className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "ml-auto border border-border bg-card px-2 text-[11px] text-foreground pointer-coarse:min-h-11",
+          )}
         >
           <Crosshair className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
           {tt("goToday")}
@@ -391,12 +402,26 @@ function CalendarBody() {
           <p className="text-[13px] text-muted-foreground">{tt("noMatch")}</p>
           <div className="flex flex-wrap justify-center gap-2">
             {narrowed && (
-              <button type="button" onClick={reset} className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted">
+              <button
+                type="button"
+                onClick={reset}
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "border border-border bg-card px-2.5 text-xs text-foreground pointer-coarse:min-h-11",
+                )}
+              >
                 {tt("clearFilters")}
               </button>
             )}
             {filters.range !== "all" && (
-              <button type="button" onClick={() => update({ range: "all" })} className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted">
+              <button
+                type="button"
+                onClick={() => update({ range: "all" })}
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "border border-border bg-card px-2.5 text-xs text-foreground pointer-coarse:min-h-11",
+                )}
+              >
                 {tt("searchAllDates")}
               </button>
             )}
@@ -419,7 +444,7 @@ function CalendarBody() {
           onToggleTag={toggleTag}
           onOnlyEvent={pickEvent}
           limit={limit}
-          onShowMore={() => setLimit((current) => current + PAGE_SIZE)}
+          onShowMore={() => setLimitState((current) => ({ key: listKey, limit: (current.key === listKey ? current.limit : PAGE_SIZE) + PAGE_SIZE }))}
           scrollTarget={scrollTarget}
           onScrolled={onScrolled}
         />
@@ -446,12 +471,13 @@ function NextRelease({ label, row, now, onSelect }: { label: string; row: Calend
     <button
       type="button"
       onClick={onSelect}
-      className="group min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="group min-w-0 rounded-md text-left motion-press-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:min-h-11"
     >
       <span className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2">
         <span className="truncate text-[13px] font-semibold text-foreground group-hover:underline group-hover:underline-offset-2">
-          <span aria-hidden="true">{countryFlag(row.countryCode)} </span>
+          <CountryCodeBadge code={row.countryCode} className="mr-1.5 align-middle" />
+          <span className="sr-only">{countryLabel(row.countryCode, locale, row.countryName)} </span>
           {row.title}
         </span>
         <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -484,7 +510,11 @@ function ToolbarButton({
       disabled={disabled}
       title={label}
       aria-label={iconOnly ? label : undefined}
-      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        buttonVariants({ variant: "ghost", size: "sm" }),
+        "border border-border bg-card px-2 text-[11px] text-foreground pointer-coarse:min-h-11",
+        iconOnly && "w-7 px-0 pointer-coarse:min-w-11",
+      )}
     >
       {icon}
       {!iconOnly && children}

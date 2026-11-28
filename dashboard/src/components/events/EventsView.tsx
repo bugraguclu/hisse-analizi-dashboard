@@ -63,8 +63,17 @@ export function EventsView() {
   // The Hisse group of the filter panel: picked tickers, those picked earlier in this
   // visit (options must not vanish when unticked) and the watchlist.
   const [seenTickers, setSeenTickers] = useState<string[]>(state.tickers);
-  const unseen = state.tickers.filter((ticker) => !seenTickers.includes(ticker));
-  if (unseen.length > 0) setSeenTickers([...seenTickers, ...unseen]);
+  useEffect(() => {
+    const unseen = state.tickers.filter((ticker) => !seenTickers.includes(ticker));
+    if (unseen.length === 0) return;
+    const raf = requestAnimationFrame(() => {
+      setSeenTickers((prev) => {
+        const next = state.tickers.filter((ticker) => !prev.includes(ticker));
+        return next.length > 0 ? [...prev, ...next] : prev;
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [state.tickers, seenTickers]);
   const watchTickers = watchlist?.tickers;
   const tickerChoices = useMemo(
     () => Array.from(new Set([...state.tickers, ...seenTickers, ...(watchTickers ?? [])])).slice(0, MAX_TICKERS),
@@ -100,12 +109,29 @@ export function EventsView() {
   // Rows that arrived in the last refresh of the same page receive a new badge.
   const listKey = listParams ? JSON.stringify(listParams) : "";
   const [seen, setSeen] = useState<SeenPage | null>(null);
-  if (data && !listQ.isPlaceholderData && seen?.data !== data) {
+  const freshIds = useMemo(() => {
+    if (!data || listQ.isPlaceholderData) return EMPTY_IDS;
+    if (seen?.key === listKey && seen.data === data) return seen.fresh;
     const previous = seen && seen.key === listKey ? new Set(seen.data.items.map((item) => item.id)) : null;
-    const fresh = previous ? new Set(data.items.filter((item) => !previous.has(item.id)).map((item) => item.id)) : EMPTY_IDS;
-    setSeen({ key: listKey, data, fresh });
-  }
-  const freshIds = seen && seen.key === listKey && seen.data === data ? seen.fresh : EMPTY_IDS;
+    return previous ? new Set(data.items.filter((item) => !previous.has(item.id)).map((item) => item.id)) : EMPTY_IDS;
+  }, [data, listQ.isPlaceholderData, seen, listKey]);
+
+  useEffect(() => {
+    if (!data || listQ.isPlaceholderData || seen?.data === data) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setSeen((prev) => {
+          const previous = prev && prev.key === listKey ? new Set(prev.data.items.map((item) => item.id)) : null;
+          const fresh = previous ? new Set(data.items.filter((item) => !previous.has(item.id)).map((item) => item.id)) : EMPTY_IDS;
+          return { key: listKey, data, fresh };
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data, listQ.isPlaceholderData, seen?.data, listKey]);
 
   // Prefetch the next page so paging feels instant.
   useEffect(() => {
@@ -178,6 +204,7 @@ export function EventsView() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title={t("page.title")}
+        className="[&_h1]:font-display [&_h1]:font-normal"
         actions={
           <FeedStatus status={feedStatus} now={now} refreshing={listQ.isFetching || feedStatus.isFetching} onRefresh={refresh} />
         }

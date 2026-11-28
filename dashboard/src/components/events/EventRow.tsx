@@ -60,21 +60,18 @@ function RowTickers({
   const shown = tickers.slice(0, MAX_VISIBLE_TICKERS);
   const rest = tickers.slice(MAX_VISIBLE_TICKERS);
   return (
-    // Sits above the row's stretched button; the gaps stay click-through.
-    <span className={cn("pointer-events-none relative z-10 shrink-0 items-center gap-0.5", className)}>
+    <span className={cn("relative shrink-0 items-center gap-1 pointer-coarse:gap-1.5", className)}>
       {shown.map((ticker) => (
         <button
           key={ticker}
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onAddTicker(ticker);
-          }}
+          onClick={() => onAddTicker(ticker)}
           aria-label={t("row.addTicker", { ticker })}
           title={t("row.addTicker", { ticker })}
           className={cn(
-            "pointer-events-auto rounded-sm px-1 py-px font-mono text-xs font-semibold leading-tight text-foreground transition-colors hover:bg-muted",
+            "rounded-md px-1 py-px font-mono text-xs font-semibold leading-tight text-foreground transition-colors motion-press-subtle hover:bg-muted",
             "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:px-2",
             // Already in the filter: neutral selected tint (primary is for links only).
             activeTickers.has(ticker) && "bg-muted",
           )}
@@ -170,7 +167,7 @@ export const EventRow = memo(function EventRow({
       {rule ? <span aria-hidden="true" className={cn("pointer-events-none absolute inset-y-0 left-0 w-0.5", rule)} /> : null}
       <div
         className={cn(
-          "grid grid-cols-[minmax(0,1fr)] gap-y-1 px-4 py-2.5 sm:gap-x-3 sm:px-5",
+          "grid grid-cols-[minmax(0,1fr)] gap-y-1 pointer-coarse:gap-y-1.5 px-4 py-2.5 sm:gap-x-3 sm:px-5",
           grouped ? "sm:grid-cols-[6rem_minmax(0,1fr)_auto]" : "sm:grid-cols-[9rem_minmax(0,1fr)_auto]",
         )}
       >
@@ -207,7 +204,7 @@ export const EventRow = memo(function EventRow({
           <RowTickers className="flex sm:hidden" tickers={tickers} activeTickers={activeTickers} onAddTicker={onAddTicker} />
         </div>
 
-        <div className="flex min-w-0 items-baseline gap-1.5 sm:col-start-2 sm:row-start-1">
+        <div className="flex min-w-0 items-center gap-1.5 pointer-coarse:gap-2 sm:col-start-2 sm:row-start-1">
           <RowTickers className="hidden sm:flex" tickers={tickers} activeTickers={activeTickers} onAddTicker={onAddTicker} />
           {isNew || fresh ? (
             <Badge variant="secondary" className="self-center">
@@ -222,10 +219,9 @@ export const EventRow = memo(function EventRow({
             aria-describedby={`${timeId} ${metaId}`}
             title={headline}
             className={cn(
-              "min-w-0 flex-1 text-left text-sm leading-snug text-foreground outline-none",
-              // Stretched hit area: the whole row opens the disclosure.
-              "after:absolute after:inset-0 after:content-['']",
-              "focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring",
+              "min-w-0 flex-1 rounded-sm text-left text-sm leading-snug text-foreground outline-none motion-press-subtle",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              "pointer-coarse:min-h-11 pointer-coarse:py-1.5",
               severity === "HIGH" && "font-medium",
             )}
           >

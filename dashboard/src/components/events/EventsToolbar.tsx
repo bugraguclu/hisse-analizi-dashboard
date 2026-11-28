@@ -99,7 +99,7 @@ function CustomRangeFields({ state, today, onChange }: { state: EventsUrlState; 
   }
 
   const dateInput = cn(
-    "h-9 w-full min-w-0 rounded-md border border-border bg-card px-2 font-mono text-base text-foreground transition-colors hover:border-foreground/30 [color-scheme:light] dark:[color-scheme:dark] sm:text-xs",
+    "h-9 w-full min-w-0 rounded-md border border-border bg-card px-2 font-mono text-base text-foreground transition-colors hover:border-foreground/30 [color-scheme:light] dark:[color-scheme:dark] sm:text-xs pointer-coarse:h-11",
     FOCUS_RING,
   );
 
@@ -167,7 +167,7 @@ function WatchlistToggle({ watchlist, tickers, onChange }: { watchlist: Watchlis
       onClick={() => onChange({ tickers: active ? [] : listTickers }, active ? CLEAR : PICK)}
       title={t("watchlist.hint", { count: listTickers.length })}
       className={cn(
-        "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+        "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors motion-press-subtle pointer-coarse:h-11 pointer-coarse:min-w-11",
         active ? SELECTED_CLASS : UNSELECTED_CLASS,
         FOCUS_RING,
       )}

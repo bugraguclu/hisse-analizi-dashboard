@@ -134,7 +134,7 @@ export function NewsCard({ ticker }: { ticker: string }) {
               type="button"
               aria-expanded={expanded}
               onClick={() => setExpanded((v) => !v)}
-              className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="inline-flex items-center rounded-sm text-[11px] font-semibold text-primary motion-press-subtle hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
             >
               {expanded ? t("common.showLess") : t("common.showAllCount", { count: newsQ.data.length })}
             </button>

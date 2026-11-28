@@ -80,7 +80,7 @@ export function LegalNoticeLink() {
         const dialog = legalNoticeRef.current;
         if (dialog && !dialog.open) dialog.showModal();
       }}
-      className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+      className="inline-flex items-center rounded-sm py-1 underline underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11 pointer-coarse:min-w-11"
     >
       {t("legal.title")}
     </button>

@@ -389,12 +389,6 @@ export function countrySearchNames(code: string, fallback?: string): string[] {
   return [code, fallback ?? "", ...(names ? Object.values(names) : [])].filter(Boolean);
 }
 
-/** Regional-indicator flag emoji ("TR" → 🇹🇷, "EU" → 🇪🇺). */
-export function countryFlag(code: string): string {
-  if (!/^[A-Z]{2}$/.test(code)) return "";
-  return String.fromCodePoint(...[...code].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
-}
-
 /**
  * TradingView names the publishing agency generically ("Central Bank", "Statistical
  * Institute"); the Turkish UI names Türkiye's own and translates the generic ones.

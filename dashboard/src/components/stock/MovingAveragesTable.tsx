@@ -33,7 +33,7 @@ export function MovingAveragesTable({ ticker }: { ticker: string }) {
       title={t("ma.title")}
       actions={
         golden != null ? (
-          <span className={cn("rounded-lg px-2 py-1 text-[11px] font-semibold", TREND_PILL_CLASS[golden ? "up" : "down"])}>
+          <span className={cn("rounded-md px-2 py-1 text-[11px] font-semibold", TREND_PILL_CLASS[golden ? "up" : "down"])}>
             {golden ? t("ma.goldenBadge") : t("ma.deathBadge")}
           </span>
         ) : null
@@ -193,17 +193,17 @@ export function PivotsCard({ ticker }: { ticker: string }) {
         <div className="space-y-4">
           <PivotLadder pivots={pivots} price={price} />
           <div className={cn("grid grid-cols-1 gap-3", slotted ? "@lg:grid-cols-3" : "sm:grid-cols-3")}>
-            <div className="space-y-2 rounded-lg border border-border/60 bg-surface p-3">
+            <div className="space-y-2 rounded-md border border-border bg-surface p-3">
               <div className="flex items-center gap-1 text-xs font-bold text-foreground">
                 <ArrowUpRight aria-hidden className="h-3.5 w-3.5 text-muted-foreground" /> {t("pivots.resistance")}
               </div>
               <dl className="space-y-1.5 font-mono text-xs">{levels(["r3", "r2", "r1"])}</dl>
             </div>
-            <div className="flex flex-col items-center justify-center rounded-lg border border-border/60 bg-surface p-3 text-center">
+            <div className="flex flex-col items-center justify-center rounded-md border border-border bg-surface p-3 text-center">
               <span className="mb-1 text-xs font-bold text-foreground">{t("pivots.pivot")}</span>
               <span className="font-mono text-lg font-bold tabular-nums text-foreground">{formatPrice(pivots.pivot)}</span>
             </div>
-            <div className="space-y-2 rounded-lg border border-border/60 bg-surface p-3">
+            <div className="space-y-2 rounded-md border border-border bg-surface p-3">
               <div className="flex items-center gap-1 text-xs font-bold text-foreground">
                 <ArrowDownRight aria-hidden className="h-3.5 w-3.5 text-muted-foreground" /> {t("pivots.support")}
               </div>

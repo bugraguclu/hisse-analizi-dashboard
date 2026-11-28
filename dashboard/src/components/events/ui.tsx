@@ -14,14 +14,24 @@ export const SELECTED_CLASS = "border-foreground bg-muted text-foreground";
 export const UNSELECTED_CLASS = "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground";
 
 /** Secondary action (bordered), for <button>, <a> and <Link>. */
-export const ACTION_CLASS = buttonVariants({ variant: "outline", size: "md" });
+export const ACTION_CLASS = cn(
+  buttonVariants({ variant: "ghost", size: "md" }),
+  "border border-border bg-card text-foreground pointer-coarse:min-h-11",
+);
 
 /** Square icon-only button; always give it an aria-label. */
 export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>(function IconButton(
   { className, type = "button", ...props },
   ref,
 ) {
-  return <button ref={ref} type={type} className={cn(buttonVariants({ variant: "ghost", size: "md" }), "w-8 px-0", className)} {...props} />;
+  return (
+    <button
+      ref={ref}
+      type={type}
+      className={cn(buttonVariants({ variant: "ghost", size: "md" }), "w-8 px-0 pointer-coarse:h-11 pointer-coarse:w-11", className)}
+      {...props}
+    />
+  );
 });
 
 /** 2px vertical marker echoing the row-edge severity rule (INFO gets a neutral one). */

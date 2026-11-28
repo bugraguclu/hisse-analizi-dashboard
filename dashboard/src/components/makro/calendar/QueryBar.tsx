@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { useDismissOnLeave } from "@/components/shared/search/use-dismiss";
 import { useListNav } from "@/components/shared/search/use-list-nav";
 import { formatMarketDate } from "@/lib/format";
 import { useLocale } from "@/lib/locale-context";
 import { cn } from "@/lib/utils";
-import { countryFlag, countryLabel, countrySearchNames, POPULAR_SEARCHES, useCalendarText } from "./i18n";
-import { Highlight } from "./parts";
+import { countryLabel, countrySearchNames, POPULAR_SEARCHES, useCalendarText } from "./i18n";
+import { CountryCodeBadge, Highlight } from "./parts";
 import type { CalendarCountry, CalendarRow, Importance } from "./types";
 import { fold, formatDay, isUpcoming, searchTerms } from "./utils";
 
@@ -76,18 +76,12 @@ export function QueryBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const commitTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const [draft, setDraft] = useState(value);
+  const [draftState, setDraftState] = useState<{ base: string; text: string } | null>(null);
+  const draft = draftState !== null && draftState.base === value ? draftState.text : value;
+  const setDraft = (text: string) => setDraftState({ base: value, text });
   const [open, setOpen] = useState(false);
   // The empty field's list was asked for (click, ↓) rather than met on the way past.
   const [purpose, setPurpose] = useState(false);
-
-  // Follow external changes (filter reset, a row's "only this event"); adjusted
-  // during render, React's pattern for syncing state to a changed prop.
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    setDraft(value);
-  }
 
   useEffect(() => () => clearTimeout(commitTimer.current), []);
 
@@ -185,7 +179,10 @@ export function QueryBar({
 
   function scheduleCommit(next: string) {
     clearTimeout(commitTimer.current);
-    commitTimer.current = setTimeout(() => onCommit(next.trim()), COMMIT_DELAY_MS);
+    commitTimer.current = setTimeout(() => {
+      setDraftState((cur) => (cur ? { base: next.trim(), text: cur.text } : null));
+      onCommit(next.trim());
+    }, COMMIT_DELAY_MS);
   }
 
   function commitNow(next: string) {
@@ -197,16 +194,17 @@ export function QueryBar({
     closeList();
     switch (option.kind) {
       case "popular":
-        setDraft(option.query);
+        setDraftState({ base: option.query, text: option.query });
         commitNow(option.query);
         break;
       case "event":
-        setDraft("");
+        setDraftState(null);
         commitNow("");
         onPickEvent(option.key);
         break;
       case "country":
         // The text stays: once the country loads, it finds that country's events.
+        setDraftState((cur) => (cur ? { base: draft.trim(), text: cur.text } : null));
         commitNow(draft);
         onAddCountry(option.code);
         break;
@@ -243,7 +241,7 @@ export function QueryBar({
           closeList();
         } else if (draft) {
           event.preventDefault();
-          setDraft("");
+          setDraftState(null);
           commitNow("");
         }
         break;
@@ -256,26 +254,51 @@ export function QueryBar({
   const when = (row: CalendarRow) =>
     row.allDay ? formatDay(row.date, locale, { day: "numeric", month: "short" }) : formatMarketDate(row.ts, "dayMonthTime");
 
-  function subtitle(option: Option): string | null {
+  function renderSubtitle(option: Option): ReactNode {
     switch (option.kind) {
       case "popular":
-        return option.next
-          ? `${tt("nextShort", { date: when(option.next) })} · ${countryFlag(option.next.countryCode)} ${option.next.title}`
-          : null;
+        return option.next ? (
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-1">
+            <span>{tt("nextShort", { date: when(option.next) })}</span>
+            <span aria-hidden="true">·</span>
+            <CountryCodeBadge code={option.next.countryCode} />
+            <span className="min-w-0 truncate">{option.next.title}</span>
+          </span>
+        ) : null;
       case "event": {
         const [first] = option.countries;
         const where =
-          option.countries.length === 1
-            ? `${countryFlag(first)} ${countryLabel(first, locale)}`
-            : `${option.countries.slice(0, 4).map(countryFlag).join(" ")}${option.countries.length > 4 ? ` +${option.countries.length - 4}` : ""}`;
-        // Several countries: the flag says whose release comes next.
-        const whose = (row: CalendarRow) => (option.countries.length > 1 ? `${countryFlag(row.countryCode)} ` : "");
-        const release = option.next
-          ? tt("nextShort", { date: `${whose(option.next)}${when(option.next)}` })
+          option.countries.length === 1 ? (
+            <span className="inline-flex items-center gap-1">
+              <CountryCodeBadge code={first} />
+              <span>{countryLabel(first, locale)}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              {option.countries.slice(0, 4).map((c) => (
+                <CountryCodeBadge key={c} code={c} />
+              ))}
+              {option.countries.length > 4 ? <span>+{option.countries.length - 4}</span> : null}
+            </span>
+          );
+        const target = option.next ?? option.last;
+        const releaseText = option.next
+          ? tt("nextShort", { date: when(option.next) })
           : option.last
-            ? tt("lastShort", { date: `${whose(option.last)}${when(option.last)}` })
+            ? tt("lastShort", { date: when(option.last) })
             : null;
-        return release ? `${where} · ${release}` : where;
+        return (
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-1">
+            {where}
+            {releaseText && target ? (
+              <>
+                <span aria-hidden="true">·</span>
+                {option.countries.length > 1 ? <CountryCodeBadge code={target.countryCode} /> : null}
+                <span>{releaseText}</span>
+              </>
+            ) : null}
+          </span>
+        );
       }
       case "country":
         return tt("addCountry");
@@ -322,7 +345,7 @@ export function QueryBar({
         onKeyDown={onKeyDown}
         className={cn(
           // 16 px below md: iOS zooms the page into any smaller field it focuses.
-          "h-9 w-full min-w-0 rounded-md border border-input bg-card pl-9 pr-9 text-base text-foreground outline-none transition-colors md:text-[13px]",
+          "h-9 w-full min-w-0 rounded-md border border-input bg-card pl-9 pr-9 text-base text-foreground outline-none transition-colors md:text-[13px] pointer-coarse:h-11 pointer-coarse:pr-11",
           // Same focus signal as the stock search: the border, no ring on a click.
           "placeholder:text-muted-foreground focus:border-ring",
         )}
@@ -332,14 +355,14 @@ export function QueryBar({
           type="button"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
-            setDraft("");
+            setDraftState(null);
             commitNow("");
             closeList();
             inputRef.current?.focus();
           }}
           aria-label={tt("clearSearch")}
           title={tt("clearSearch")}
-          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors after:absolute after:-inset-2 after:content-[''] hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors motion-press-subtle after:absolute after:-inset-2.5 after:content-[''] hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
@@ -370,7 +393,7 @@ export function QueryBar({
               className="max-h-[min(380px,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain p-1"
             >
               {options.map((option, index) => {
-                const sub = subtitle(option);
+                const sub = renderSubtitle(option);
                 return (
                   <li
                     key={option.id}
@@ -382,13 +405,13 @@ export function QueryBar({
                       if (index !== active) nav.setActive(index);
                     }}
                     onClick={() => choose(option, true)}
-                    className={cn("cursor-pointer rounded-md px-2.5 py-2", index === active && "bg-accent")}
+                    className={cn("cursor-pointer rounded-md px-2.5 py-2 pointer-coarse:min-h-11", index === active && "bg-accent")}
                   >
                     <span className="block truncate text-[13px] font-medium text-foreground">
-                      {option.kind === "country" && <span aria-hidden="true">{countryFlag(option.code)} </span>}
+                      {option.kind === "country" && <CountryCodeBadge code={option.code} className="mr-1.5 align-middle" />}
                       <Highlight text={option.kind === "popular" ? option.query : option.kind === "event" ? option.title : option.name} terms={query ? terms : []} />
                     </span>
-                    {sub && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{sub}</span>}
+                    {sub && <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">{sub}</span>}
                   </li>
                 );
               })}

@@ -101,7 +101,7 @@ export const SPLIT_ROWS = "@3xl:grid @3xl:grid-cols-2 @3xl:gap-x-10 @3xl:[&>li]:
 
 /**
  * Single-choice picker for card headers: the design-system SegmentedControl
- * (radiogroup with arrow-key navigation), with a 32px target on touch screens.
+ * (radiogroup with arrow-key navigation).
  */
 export function Segmented<T extends string | number>({
   label,
@@ -128,7 +128,7 @@ export function Segmented<T extends string | number>({
       onChange={onChange}
       size={size}
       variant={variant}
-      className={cn("pointer-coarse:[&>button]:h-8", className)}
+      className={className}
     />
   );
 }
@@ -191,7 +191,7 @@ export function SectionError({
       </p>
       {detail ? <p className="max-w-md break-words text-xs text-muted-foreground">{detail}</p> : null}
       {onRetry ? (
-        <button type="button" onClick={onRetry} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1 pointer-coarse:h-8")}>
+        <button type="button" onClick={onRetry} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1 pointer-coarse:min-h-11")}>
           <RefreshCw aria-hidden />
           {t("state.retry")}
         </button>
@@ -233,8 +233,8 @@ export function InfoPopover({
       <Popover.Trigger
         aria-label={trigger ? undefined : label}
         className={cn(
-          "inline-flex items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[popup-open]:bg-muted data-[popup-open]:text-foreground",
-          trigger ? "gap-1.5" : "h-6 w-6 pointer-coarse:h-8 pointer-coarse:w-8",
+          "inline-flex items-center justify-center rounded-md text-muted-foreground motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[popup-open]:bg-muted data-[popup-open]:text-foreground",
+          trigger ? "gap-1.5" : "relative h-6 w-6 pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5",
           triggerClassName,
         )}
       >

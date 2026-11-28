@@ -238,11 +238,11 @@ export function MarketStrip() {
 
   return (
     <div className="border-b border-border bg-card/40 px-4 md:px-6">
-      <div className="mx-auto flex h-9 max-w-7xl items-center gap-3 text-xs">
+      <div className="mx-auto flex h-9 max-w-7xl items-center gap-3.5 text-xs">
         <div
           ref={viewportRef}
           className={cn(
-            "min-w-0 flex-1 self-stretch overflow-hidden overscroll-x-contain",
+            "relative isolate z-0 min-w-0 flex-1 self-stretch overflow-hidden overscroll-x-contain [contain:layout_paint]",
             "cursor-grab select-none touch-pan-y touch-pinch-zoom [-webkit-touch-callout:none]",
             "data-dragging:cursor-grabbing [&[data-dragging]_*]:cursor-grabbing",
             "[mask-image:linear-gradient(to_right,transparent,#000_2rem,#000_calc(100%-2rem),transparent)]",
@@ -260,10 +260,9 @@ export function MarketStrip() {
         <button
           type="button"
           onClick={togglePaused}
-          aria-pressed={paused}
-          aria-label={t("shell.tapePause")}
+          aria-label={paused ? t("shell.tapePlay") : t("shell.tapePause")}
           title={paused ? t("shell.tapePlay") : t("shell.tapePause")}
-          className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors after:absolute after:-inset-1.5 after:content-[''] hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground motion-press-subtle after:absolute after:-inset-1.5 after:content-[''] pointer-coarse:after:-inset-2 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         >
           {paused ? (
             <Play className="h-3.5 w-3.5" aria-hidden="true" />

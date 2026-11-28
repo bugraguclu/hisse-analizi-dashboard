@@ -439,7 +439,7 @@ export function ChartWorkspace({
             type="button"
             onClick={() => chartRef.current?.reset()}
             title={t("action.reset")}
-            className="absolute right-0 top-0 z-[5] inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2 py-0.5 text-[11px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="absolute right-0 top-0 z-[5] inline-flex items-center gap-1 rounded-md border border-border bg-card/95 px-2 py-0.5 text-[11px] font-medium text-muted-foreground outline-none motion-press-subtle hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-h-11 pointer-coarse:px-3"
           >
             <RotateCcw aria-hidden className="h-3 w-3" />
             {t("action.resetShort")}
@@ -621,7 +621,7 @@ export function ChartWorkspace({
                   href="https://www.tradingview.com/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="min-w-0 truncate underline-offset-2 hover:underline"
+                  className="min-w-0 truncate rounded-sm underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
                 >
                   {t("attribution")}
                 </a>
@@ -660,7 +660,7 @@ export function ChartAttribution({ className }: { className?: string }) {
       href="https://www.tradingview.com/"
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("underline-offset-2 hover:text-foreground hover:underline", className)}
+      className={cn("rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60", className)}
     >
       {t("attribution")}
     </a>

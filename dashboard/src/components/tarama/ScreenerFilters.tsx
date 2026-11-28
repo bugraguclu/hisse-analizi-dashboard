@@ -280,14 +280,31 @@ function SearchField({ value, onCommit }: { value: string; onCommit: (q: string)
   const { t } = useTaramaI18n();
   const id = useId();
   const [draft, setDraft] = useState(value);
-  const [synced, setSynced] = useState(value);
+  const syncedRef = useRef(value);
+  const draftRef = useRef(draft);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
   // Follow outside changes (back/forward, a cleared filter) unless they only echo what was typed.
-  if (value !== synced) {
-    setSynced(value);
-    if (foldText(draft.trim()) !== foldText(value.trim())) setDraft(value);
-  }
+  useEffect(() => {
+    if (value === syncedRef.current) return;
+    if (foldText(draftRef.current.trim()) === foldText(value.trim())) {
+      syncedRef.current = value;
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      syncedRef.current = value;
+      setDraft(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   function update(next: string) {
@@ -326,14 +343,14 @@ function SearchField({ value, onCommit }: { value: string; onCommit: (q: string)
             onCommit(draft.trim());
           }
         }}
-        className="h-9 pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden"
+        className="h-9 pl-9 pr-9 pointer-coarse:h-11 pointer-coarse:pr-11 [&::-webkit-search-cancel-button]:hidden"
       />
       {draft && (
         <button
           type="button"
           onClick={clear}
           aria-label={t("filters.clearSearch")}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-muted-foreground transition-colors motion-press-subtle hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:right-0 pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:p-0"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
@@ -364,7 +381,7 @@ function ChoiceField<T extends string>({
       <label htmlFor={id} className="text-pretty text-[12px] leading-snug text-foreground">
         {label}
       </label>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value as T)} className={cn(selectClass, "h-9 text-base sm:h-7 sm:text-[12px]")}>
+      <select id={id} value={value} onChange={(event) => onChange(event.target.value as T)} className={cn(selectClass, "h-9 text-base pointer-coarse:h-11 pointer-fine:sm:h-7 sm:text-[12px]")}>
         <option value="">{t("filters.any")}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -383,18 +400,37 @@ function RangeField({ rangeKey, bounds, onCommit }: { rangeKey: RangeKey; bounds
   const min = bounds?.min;
   const max = bounds?.max;
   const [draft, setDraft] = useState<[string, string]>(() => [boundInputText(min), boundInputText(max)]);
-  const [synced, setSynced] = useState<[number | undefined, number | undefined]>([min, max]);
+  const syncedRef = useRef<[number | undefined, number | undefined]>([min, max]);
+  const draftRef = useRef(draft);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   // Adopt outside changes (quick screen, chip removed, back/forward) — but keep what the
   // user is typing when it already means the committed value ("1," while typing "1,5").
-  if (synced[0] !== min || synced[1] !== max) {
-    setSynced([min, max]);
-    setDraft([
-      (parseDecimal(draft[0]) ?? undefined) === min ? draft[0] : boundInputText(min),
-      (parseDecimal(draft[1]) ?? undefined) === max ? draft[1] : boundInputText(max),
-    ]);
-  }
+  useEffect(() => {
+    if (syncedRef.current[0] === min && syncedRef.current[1] === max) return;
+    const current = draftRef.current;
+    const next: [string, string] = [
+      (parseDecimal(current[0]) ?? undefined) === min ? current[0] : boundInputText(min),
+      (parseDecimal(current[1]) ?? undefined) === max ? current[1] : boundInputText(max),
+    ];
+    if (next[0] === current[0] && next[1] === current[1]) {
+      syncedRef.current = [min, max];
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      syncedRef.current = [min, max];
+      setDraft(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [min, max]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const parsed = draft.map((text) => (text.trim() ? parseDecimal(text) : null)) as [number | null, number | null];
@@ -449,7 +485,7 @@ function RangeField({ rangeKey, bounds, onCommit }: { rangeKey: RangeKey; bounds
             onKeyDown={(event) => {
               if (event.key === "Enter") flush();
             }}
-            className="h-9 px-2 text-right font-mono text-base tabular-nums sm:h-7 sm:text-[12px]"
+            className="h-9 px-2 text-right font-mono text-base tabular-nums pointer-coarse:h-11 pointer-fine:sm:h-7 sm:text-[12px]"
           />
         ))}
       </div>

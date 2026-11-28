@@ -23,7 +23,7 @@ const MOVES: ReadonlyArray<{ direction: MoveDirection; label: WidgetKey; icon: t
 ];
 
 const TOOL_BUTTON =
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] motion-press text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-[popup-open]:bg-muted data-[popup-open]:text-foreground [&_svg]:size-4";
+  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] motion-press-subtle text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-[popup-open]:bg-muted data-[popup-open]:text-foreground pointer-coarse:h-11 pointer-coarse:w-11 [&_svg]:size-4";
 
 function MenuPopup({ children, side = "bottom" }: { children: ReactNode; side?: "bottom" | "inline-end" }) {
   return (
@@ -122,12 +122,12 @@ export function WidgetFrame({
           ? "bg-background/60 ring-2 ring-dashed ring-primary/50"
           : highlighted
             ? "bg-primary/[0.06] ring-2 ring-primary"
-            : "ring-1 ring-primary/25 hover:bg-primary/[0.035] hover:ring-primary/60 has-[:focus-visible]:ring-primary/60",
+            : "ring-1 ring-primary/25 hover:bg-primary/[0.035] hover:ring-primary/60 has-focus-visible:ring-primary/60",
       )}
     >
       <div
         onPointerDown={(event) => event.stopPropagation()}
-        className="absolute right-2 top-2 flex max-w-[calc(100%-1rem)] cursor-default items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-[var(--shadow-popover)]"
+        className="absolute right-2 top-2 flex max-w-[calc(100%-1rem)] cursor-default items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-[var(--shadow-popover)] pointer-coarse:gap-1"
       >
         <button
           type="button"

@@ -187,7 +187,7 @@ export function IndicatorMenu({
                     inputRef.current?.focus();
                   }}
                   aria-label={t("event.close")}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="relative inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -208,7 +208,7 @@ export function IndicatorMenu({
                           type="button"
                           disabled={disabled}
                           onClick={() => onChange(template.build())}
-                          className="flex flex-col items-start rounded-md border border-border px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+                          className="flex flex-col items-start rounded-md border border-border px-2 py-1.5 text-left outline-none transition-colors motion-press-subtle hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 pointer-coarse:min-h-11"
                         >
                           <span className="text-[12px] font-medium text-foreground">{t(template.key)}</span>
                           <span className="font-mono text-[10px] text-muted-foreground">{template.hint}</span>
@@ -221,10 +221,10 @@ export function IndicatorMenu({
               {!needle && indicators.length > 0 ? (
                 <section className="border-b border-border px-1.5 py-2">
                   <h3 className="px-1.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("ind.onChart")}</h3>
-                  <ul className="flex flex-wrap gap-1 px-1">
+                  <ul className="flex flex-wrap gap-1 px-1 pointer-coarse:gap-3">
                     {indicators.map((config) => (
                       <li key={config.id}>
-                        <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-0.5 text-[11px]">
+                        <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-0.5 text-[11px] pointer-coarse:h-9">
                           <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ background: SERIES_CSS_VAR[config.color % 5] }} />
                           <span className={cn("font-mono tabular-nums", config.hidden ? "text-muted-foreground line-through" : "text-foreground")}>
                             {indicatorLabel(config)}
@@ -233,7 +233,7 @@ export function IndicatorMenu({
                             type="button"
                             onClick={() => onChange(indicators.filter((item) => item.id !== config.id))}
                             aria-label={t("ind.removeNamed", { name: indicatorLabel(config) })}
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                            className="relative inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:h-8 pointer-coarse:w-8 pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5"
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -319,7 +319,7 @@ export function IndicatorMenu({
                 <button
                   type="button"
                   onClick={() => onChange([])}
-                  className="ml-auto rounded-sm px-1.5 py-0.5 font-medium text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                  className="ml-auto rounded-sm px-1.5 py-0.5 font-medium text-muted-foreground outline-none motion-press-subtle hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-h-11 pointer-coarse:px-2"
                 >
                   {t("ind.removeAll")}
                 </button>

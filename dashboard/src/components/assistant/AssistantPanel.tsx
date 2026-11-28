@@ -422,7 +422,7 @@ export function AssistantPanel() {
             </Dialog.Close>
           </div>
 
-          <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 scrollbar-thin">
+          <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 scrollbar-thin scrollbar-thin">
             {turns.length === 0 ? (
               <div className="space-y-4">
                 <Dialog.Description className="text-[13px] leading-relaxed text-muted-foreground">{t("assistant.intro")}</Dialog.Description>

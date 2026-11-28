@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { prefersReducedMotion } from "@/hooks/use-motion-allowed";
+import { exitDuration, motionDuration } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { evaluateSheetDragStart, shouldDismissSheet } from "./dismissible-sheet";
 
@@ -89,7 +90,7 @@ export function useSheetDismiss(
       element.dataset.sheetState = "settling";
       element.style.setProperty("--sheet-offset", "0px");
       clearTimeout(timer);
-      timer = setTimeout(reset, prefersReducedMotion() ? 0 : 260);
+      timer = setTimeout(reset, prefersReducedMotion() ? 0 : motionDuration.panel);
     };
 
     const canStart = (target: EventTarget | null): boolean => {
@@ -180,7 +181,7 @@ export function useSheetDismiss(
         } finally {
           if (mounted && element.isConnected) settle();
         }
-      }, prefersReducedMotion() ? 0 : 260);
+      }, prefersReducedMotion() ? 0 : exitDuration(motionDuration.panel));
     };
 
     const onTouchStart = (event: TouchEvent) => {

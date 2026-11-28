@@ -173,7 +173,7 @@ function ContentTable({ header, rows, index }: { header: string[]; rows: string[
                     key={column}
                     className={cn(
                       "px-2.5 py-1.5 align-top text-foreground",
-                      numericColumns[column] || isNumeric(cell) ? "whitespace-nowrap text-right font-mono" : "min-w-[8rem] break-words",
+                      numericColumns[column] || isNumeric(cell) ? "whitespace-nowrap text-right font-mono tabular-nums" : "min-w-[8rem] break-words",
                     )}
                   >
                     {cell}
@@ -201,7 +201,12 @@ export function EventContentBody({ content, kapUrl }: { content: EventContentOut
 
   const kapLink = (children: ReactNode) =>
     kapUrl ? (
-      <a href={kapUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">
+      <a
+        href={kapUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         {children}
         <span className="sr-only"> {t("common.opensInNewTab")}</span>
       </a>

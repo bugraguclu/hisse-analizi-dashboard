@@ -37,7 +37,12 @@ export function ChartDataTable({
   const truncated = to - from + 1 > MAX_ROWS;
 
   return (
-    <div className={cn("max-h-80 overflow-auto rounded-md border border-border scrollbar-thin", className)}>
+    <div
+      role="region"
+      aria-label={t("table.caption", { symbol })}
+      tabIndex={0}
+      className={cn("max-h-80 overflow-auto rounded-md border border-border scrollbar-thin outline-none focus-visible:ring-2 focus-visible:ring-ring/60", className)}
+    >
       <table className="w-full border-collapse text-right font-mono text-[11px] tabular-nums">
         <caption className="sr-only">{t("table.caption", { symbol })}</caption>
         <thead className="sticky top-0 z-[1] bg-card font-sans text-[10px] font-medium uppercase tracking-wider text-muted-foreground">

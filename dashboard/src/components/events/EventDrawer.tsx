@@ -159,7 +159,7 @@ function EventDetailBody({
                     <li key={ticker} className="flex min-w-0 items-baseline gap-2">
                       <Link
                         href={`/hisse/${encodeURIComponent(ticker)}`}
-                        className="shrink-0 rounded-sm font-mono text-xs font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                        className="inline-flex shrink-0 items-center rounded-md font-mono text-xs font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11"
                       >
                         {ticker}
                       </Link>
@@ -238,7 +238,16 @@ export function EventDrawer({
   const open = eventId !== null;
   // Keep the last disclosure rendered while the sheet animates out.
   const [shownId, setShownId] = useState<string | null>(eventId);
-  if (eventId !== null && eventId !== shownId) setShownId(eventId);
+  useEffect(() => {
+    if (eventId === null || eventId === shownId) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setShownId(eventId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, shownId]);
   const id = eventId ?? shownId;
 
   const index = id ? rows.findIndex((row) => row.id === id) : -1;

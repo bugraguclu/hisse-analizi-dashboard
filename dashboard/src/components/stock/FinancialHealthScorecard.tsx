@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
-import { Activity, Award, ChevronDown, DollarSign, Scale, Star, TrendingUp } from "lucide-react";
+import { useId, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { formatMultiple, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useFastInfo, useRatios, useSignals } from "./hooks";
@@ -28,7 +28,6 @@ interface MetricDef {
 interface CategoryDef {
   id: string;
   title: StockKey;
-  icon: ReactNode;
   metrics: Array<MetricDef & { source: RatioKey | "pe" | "pb" }>;
 }
 
@@ -49,7 +48,6 @@ const CATEGORIES: CategoryDef[] = [
   {
     id: "profitability",
     title: "score.profitability",
-    icon: <DollarSign aria-hidden className="h-4 w-4" />,
     metrics: [
       { id: "roe", source: "roe", label: "ratios.roe", direction: "higher", thresholds: [30, 20, 10, 0], format: pct, display: pctValue },
       { id: "netMargin", source: "net_margin", label: "ratios.netMargin", direction: "higher", thresholds: [15, 8, 3, 0], format: pct, display: pctValue },
@@ -58,7 +56,6 @@ const CATEGORIES: CategoryDef[] = [
   {
     id: "growth",
     title: "score.growth",
-    icon: <TrendingUp aria-hidden className="h-4 w-4" />,
     metrics: [
       { id: "revGrowth", source: "revenue_growth_yoy", label: "ratios.revenueGrowth", direction: "higher", thresholds: [50, 30, 15, 0], format: pct, display: pctValue },
       { id: "niGrowth", source: "net_income_growth_yoy", label: "ratios.netIncomeGrowth", direction: "higher", thresholds: [50, 30, 15, 0], format: pct, display: pctValue },
@@ -67,7 +64,6 @@ const CATEGORIES: CategoryDef[] = [
   {
     id: "health",
     title: "score.health",
-    icon: <Scale aria-hidden className="h-4 w-4" />,
     metrics: [
       { id: "current", source: "current_ratio", label: "ratios.currentRatio", direction: "higher", thresholds: [2, 1.5, 1, 0.8], format: mult, display: multValue },
       { id: "de", source: "debt_to_equity", label: "ratios.debtToEquity", direction: "lower", thresholds: [0.5, 1, 2, 3], format: mult, display: multValue },
@@ -77,7 +73,6 @@ const CATEGORIES: CategoryDef[] = [
   {
     id: "valuation",
     title: "score.valuation",
-    icon: <Award aria-hidden className="h-4 w-4" />,
     metrics: [
       { id: "pe", source: "pe", label: "stats.pe", direction: "lower", thresholds: [8, 12, 18, 25], format: plain, display: plainValue, nonPositiveScore: 1 },
       { id: "pb", source: "pb", label: "stats.pb", direction: "lower", thresholds: [1, 2, 3, 5], format: mult, display: multValue, nonPositiveScore: 1 },
@@ -96,27 +91,6 @@ function scoreMetric(value: number, def: MetricDef): number {
 
 function average(values: number[]): number | null {
   return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
-}
-
-function StarRating({ score, label }: { score: number; label: string }) {
-  const rounded = Math.round(score * 2) / 2;
-  return (
-    <span role="img" aria-label={label} className="inline-flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((star) => {
-        const fill = rounded >= star ? "full" : rounded >= star - 0.5 ? "half" : "empty";
-        return (
-          <span key={star} aria-hidden className="relative inline-block h-3.5 w-3.5">
-            <Star className="absolute inset-0 h-3.5 w-3.5 fill-muted text-muted-foreground/30" />
-            {fill !== "empty" ? (
-              <span className={cn("absolute inset-y-0 left-0 overflow-hidden", fill === "half" ? "w-1/2" : "w-full")}>
-                <Star className="h-3.5 w-3.5 fill-foreground text-foreground" />
-              </span>
-            ) : null}
-          </span>
-        );
-      })}
-    </span>
-  );
 }
 
 export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
@@ -167,10 +141,11 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
       title={t("score.title")}
       actions={
         overall != null && !pending ? (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-warn/20 bg-warn/10 px-2 py-1 text-[11px] font-semibold text-warn">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-warn/20 bg-warn/10 px-2 py-1 text-[11px] font-semibold text-warn">
             {t("score.overall")}
-            <StarRating score={overall} label={outOf(overall)} />
-            <span className="font-mono tabular-nums">{formatNumber(overall, 1)}</span>
+            <span className="font-mono tabular-nums" aria-label={outOf(overall)}>
+              {formatNumber(overall, 1)}
+            </span>
           </span>
         ) : null
       }
@@ -195,13 +170,13 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
               return (
                 <li key={category.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0">
                   <span className="flex w-36 shrink-0 items-center gap-2 text-xs font-semibold text-foreground">
-                    <span className="text-muted-foreground">{category.icon}</span>
                     {t(category.title)}
                   </span>
                   {category.score != null ? (
                     <>
-                      <StarRating score={category.score} label={outOf(category.score)} />
-                      <span className="font-mono text-[11px] font-bold tabular-nums text-foreground">{formatNumber(category.score, 1)}</span>
+                      <span className="font-mono text-[11px] font-bold tabular-nums text-foreground" aria-label={outOf(category.score)}>
+                        {formatNumber(category.score, 1)}
+                      </span>
                       <span className={cn("min-w-0 flex-1 line-clamp-2 text-[11px] text-muted-foreground", slotted && "@max-md:basis-full")} title={detailText}>
                         {detailText}
                       </span>
@@ -214,13 +189,13 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
             })}
             <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
               <span className="flex w-36 shrink-0 items-center gap-2 text-xs font-semibold text-foreground">
-                <Activity aria-hidden className="h-4 w-4 text-muted-foreground" />
                 {t("score.technical")}
               </span>
               {technicalScore != null ? (
                 <>
-                  <StarRating score={technicalScore} label={outOf(technicalScore)} />
-                  <span className="font-mono text-[11px] font-bold tabular-nums text-foreground">{formatNumber(technicalScore, 1)}</span>
+                  <span className="font-mono text-[11px] font-bold tabular-nums text-foreground" aria-label={outOf(technicalScore)}>
+                    {formatNumber(technicalScore, 1)}
+                  </span>
                   <span className={cn("min-w-0 flex-1 line-clamp-2 text-[11px] text-muted-foreground", slotted && "@max-md:basis-full")}>
                     {t("score.technicalInput", { signal: signalLabel(technicalLevel) })}
                   </span>
@@ -236,13 +211,13 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
             aria-expanded={showMethod}
             aria-controls={methodId}
             onClick={() => setShowMethod((open) => !open)}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1.5 text-[11px] font-semibold text-primary outline-none transition-colors motion-press-subtle hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
           >
             <ChevronDown aria-hidden className={cn("h-3.5 w-3.5", showMethod && "rotate-180")} />
             {t("score.howCalculated")}
           </button>
           {showMethod ? (
-            <div id={methodId} className="mt-2 space-y-3 rounded-lg bg-muted/30 p-3 text-[11px] text-muted-foreground">
+            <div id={methodId} className="mt-2 space-y-3 rounded-md bg-muted/30 p-3 text-[11px] text-muted-foreground">
               <p>{t("score.methodIntro")}</p>
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full min-w-[26rem] text-left">
@@ -267,7 +242,7 @@ export function FinancialHealthScorecard({ ticker }: { ticker: string }) {
                               {m.value == null ? t("score.noData") : (m.display ?? m.format)(m.value)}
                             </td>
                             <td className="py-1 pr-2 text-right font-mono tabular-nums text-foreground">{m.score ?? "—"}</td>
-                            <td className="py-1 font-mono">
+                            <td className="py-1 font-mono tabular-nums">
                               {rules}
                               {m.nonPositiveScore !== undefined ? ` · ≤0: ${m.nonPositiveScore}` : ""}
                             </td>

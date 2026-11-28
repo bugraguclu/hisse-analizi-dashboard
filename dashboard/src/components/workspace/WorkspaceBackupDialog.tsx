@@ -406,7 +406,7 @@ export function WorkspaceBackupDialog() {
           type="button"
           onClick={() => dialogRef.current?.close()}
           aria-label={t("common.close")}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground motion-press hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="motion-press-subtle inline-flex h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -426,7 +426,7 @@ export function WorkspaceBackupDialog() {
               aria-controls={`${tabBaseId}-panel-${tab}`}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                "motion-press-subtle -mb-px border-b-2 px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                 selected
                   ? "border-foreground text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
@@ -443,7 +443,7 @@ export function WorkspaceBackupDialog() {
         {activeTab === "backup" ? (
           <div id={`${tabBaseId}-panel-backup`} role="tabpanel" aria-labelledby={`${tabBaseId}-backup`} className="space-y-5">
             {/* Current local workspace summary + export */}
-            <section className="rounded-lg border border-border bg-surface/40 p-4">
+            <section className="rounded-md border border-border bg-surface/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="text-xs font-semibold text-foreground">{t("workspace.currentTitle")}</h3>
@@ -454,7 +454,7 @@ export function WorkspaceBackupDialog() {
               {currentSummary && (
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statWatchlists", {
                         count: currentSummary.counts.watchlists,
                         tickers: currentSummary.counts.tickers,
@@ -462,22 +462,22 @@ export function WorkspaceBackupDialog() {
                     </dd>
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statLayouts", { count: currentSummary.counts.layouts })}
                     </dd>
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statCustomPages", { count: currentSummary.counts.customPages })}
                     </dd>
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statCharts", { count: currentSummary.counts.chartPrefs })}
                     </dd>
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statDrawings", {
                         count: currentSummary.counts.drawings,
                         symbols: currentSummary.counts.drawingSymbols,
@@ -485,12 +485,12 @@ export function WorkspaceBackupDialog() {
                     </dd>
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statCosts", { count: currentSummary.counts.costs })}
                     </dd>
                   </div>
                   <div className="rounded-md border border-border/80 bg-card px-2.5 py-1.5">
-                    <dd className="font-mono font-medium text-foreground">
+                    <dd className="font-mono tabular-nums font-medium text-foreground">
                       {t("workspace.statPrefs", { count: currentSummary.counts.preferences })}
                     </dd>
                   </div>
@@ -504,11 +504,11 @@ export function WorkspaceBackupDialog() {
               ) : null}
 
               <div className="mt-3.5 flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={handleExportDownload} disabled={busy}>
+                <Button size="sm" onClick={handleExportDownload} disabled={busy} className="pointer-coarse:min-h-11">
                   <Download aria-hidden="true" />
                   {t("workspace.exportJson")}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => void handleSaveRestorePoint()} disabled={busy}>
+                <Button size="sm" variant="outline" onClick={() => void handleSaveRestorePoint()} disabled={busy} className="pointer-coarse:min-h-11">
                   <History aria-hidden="true" />
                   {t("workspace.saveLocalPoint")}
                 </Button>
@@ -516,7 +516,7 @@ export function WorkspaceBackupDialog() {
             </section>
 
             {/* Validated Import & Preview */}
-            <section className="rounded-lg border border-border p-4">
+            <section className="rounded-md border border-border p-4">
               <h3 className="text-xs font-semibold text-foreground">{t("workspace.importTitle")}</h3>
               <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{t("workspace.importHint")}</p>
 
@@ -534,6 +534,7 @@ export function WorkspaceBackupDialog() {
                   variant="outline"
                   disabled={busy}
                   onClick={() => fileInputRef.current?.click()}
+                  className="pointer-coarse:min-h-11"
                 >
                   <Upload aria-hidden="true" />
                   {t("workspace.chooseFile")}
@@ -622,10 +623,11 @@ export function WorkspaceBackupDialog() {
                       autoFocus
                       disabled={busy}
                       onClick={() => setPendingImport(null)}
+                      className="pointer-coarse:min-h-11"
                     >
                       {t("workspace.cancelRestore")}
                     </Button>
-                    <Button size="sm" disabled={busy} onClick={() => void handleConfirmImport()}>
+                    <Button size="sm" disabled={busy} onClick={() => void handleConfirmImport()} className="pointer-coarse:min-h-11">
                       <RotateCcw aria-hidden="true" />
                       {t("workspace.confirmRestore")}
                     </Button>
@@ -638,11 +640,11 @@ export function WorkspaceBackupDialog() {
             <section className="space-y-2.5">
               <h3 className="text-xs font-semibold text-foreground">{t("workspace.historyTitle")}</h3>
               {restorePoints.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border px-3.5 py-4 text-xs text-muted-foreground">
+                <p className="rounded-md border border-dashed border-border px-3.5 py-4 text-xs text-muted-foreground">
                   {t("workspace.historyEmpty")}
                 </p>
               ) : (
-                <ul className="divide-y divide-border rounded-lg border border-border">
+                <ul className="divide-y divide-border rounded-md border border-border">
                   {restorePoints.map((point) => (
                     <li key={point.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
                       <div className="min-w-0 flex-1">
@@ -657,7 +659,7 @@ export function WorkspaceBackupDialog() {
                           >
                             {point.kind === "prerestore" ? t("workspace.badgePreRestore") : t("workspace.badgeManual")}
                           </span>
-                          <span className="font-mono text-xs text-foreground">
+                          <span className="font-mono tabular-nums text-xs text-foreground">
                             {formatMarketDate(point.createdAt, "dateTime")}
                           </span>
                           <span className="text-[11px] text-muted-foreground">· {formatBytes(point.size)}</span>
@@ -668,12 +670,13 @@ export function WorkspaceBackupDialog() {
                           {point.drawingCount} {t("workspace.statDrawings", { count: point.drawingCount, symbols: 0 }).replace(/^\d+\s*/, "").replace(/\s*\(.*\)$/, "")}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 pointer-coarse:gap-2">
                         <Button
                           size="sm"
                           variant="outline"
                           disabled={busy}
                           onClick={() => void handleRestoreFromHistory(point.id)}
+                          className="pointer-coarse:min-h-11"
                         >
                           <RotateCcw aria-hidden="true" />
                           {t("workspace.restoreAction")}
@@ -685,6 +688,7 @@ export function WorkspaceBackupDialog() {
                           onClick={() => void handleDownloadHistory(point.id)}
                           aria-label={t("workspace.downloadAction")}
                           title={t("workspace.downloadAction")}
+                          className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                         >
                           <Download aria-hidden="true" />
                         </Button>
@@ -695,6 +699,7 @@ export function WorkspaceBackupDialog() {
                           onClick={() => void handleDeleteHistory(point.id)}
                           aria-label={t("workspace.deleteAction")}
                           title={t("workspace.deleteAction")}
+                          className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                         >
                           <Trash2 aria-hidden="true" />
                         </Button>
@@ -709,7 +714,7 @@ export function WorkspaceBackupDialog() {
           /* Offline Summary Tab */
           <div id={`${tabBaseId}-panel-offline`} role="tabpanel" aria-labelledby={`${tabBaseId}-offline`} className="space-y-4">
             {/* Network & BIST freshness header */}
-            <section className="rounded-lg border border-border bg-surface/40 p-3.5">
+            <section className="rounded-md border border-border bg-surface/40 p-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-medium">
                   {online && !disconnected ? (
@@ -732,15 +737,15 @@ export function WorkspaceBackupDialog() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 pointer-coarse:gap-2">
                   {online && (
-                    <Button size="sm" variant="outline" onClick={handleRefreshOnline}>
+                    <Button size="sm" variant="outline" onClick={handleRefreshOnline} className="pointer-coarse:min-h-11">
                       <RefreshCw aria-hidden="true" />
                       {t("offline.refreshNow")}
                     </Button>
                   )}
                   {hasCachedMarket && (
-                    <Button size="sm" variant="ghost" onClick={handleClearOfflineCache}>
+                    <Button size="sm" variant="ghost" onClick={handleClearOfflineCache} className="pointer-coarse:min-h-11">
                       <Trash2 aria-hidden="true" />
                       {t("offline.clearCache")}
                     </Button>
@@ -800,7 +805,7 @@ export function WorkspaceBackupDialog() {
                       onClick={() => setSelectedListId(list.id)}
                       aria-pressed={list.id === activeWatchlist.id}
                       className={cn(
-                        "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                        "motion-press-subtle rounded-md border px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11",
                         list.id === activeWatchlist.id
                           ? "border-foreground bg-foreground text-background"
                           : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -813,11 +818,11 @@ export function WorkspaceBackupDialog() {
               )}
 
               {activeWatchlist.tickers.length === 0 ? (
-                <p className="rounded-lg border border-border px-3.5 py-4 text-xs text-muted-foreground">
+                <p className="rounded-md border border-border px-3.5 py-4 text-xs text-muted-foreground">
                   {t("watchlist.emptyList")}
                 </p>
               ) : (
-                <ul className="divide-y divide-border rounded-lg border border-border">
+                <ul className="divide-y divide-border rounded-md border border-border">
                   {activeWatchlist.tickers.map((ticker) => {
                     const entry = offlineSummary?.watchlistQuotes[ticker];
                     const name = companyNames.get(ticker);
@@ -826,7 +831,7 @@ export function WorkspaceBackupDialog() {
                         <Link
                           href={`/hisse/${ticker}`}
                           onClick={() => dialogRef.current?.close()}
-                          className="min-w-0 flex-1 rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                          className="min-w-0 flex-1 rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:flex-col pointer-coarse:justify-center"
                         >
                           <span className="block font-mono text-xs font-semibold text-foreground">{ticker}</span>
                           {name && <span className="block truncate text-[11px] text-muted-foreground">{name}</span>}
@@ -857,7 +862,7 @@ export function WorkspaceBackupDialog() {
             {offlineSummary?.latestEvents && offlineSummary.latestEvents.items.length > 0 && (
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold text-foreground">{t("offline.cachedEvents")}</h3>
-                <ul className="divide-y divide-border rounded-lg border border-border">
+                <ul className="divide-y divide-border rounded-md border border-border">
                   {offlineSummary.latestEvents.items.slice(0, 5).map((ev) => {
                     const evTime = parseDate(ev.published_at ?? ev.created_at);
                     return (
@@ -879,7 +884,7 @@ export function WorkspaceBackupDialog() {
             )}
 
             {!hasCachedMarket && (
-              <p className="rounded-lg border border-dashed border-border px-3.5 py-4 text-xs text-muted-foreground">
+              <p className="rounded-md border border-dashed border-border px-3.5 py-4 text-xs text-muted-foreground">
                 {t("offline.noDataYet")}
               </p>
             )}

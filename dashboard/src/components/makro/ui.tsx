@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
 import { TRANSIENT, usePanel } from "@/components/workspace/panel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { buttonVariants } from "@/components/ui/button";
 import { useMakroI18n, type MakroKey } from "./i18n";
 
 /**
@@ -111,7 +112,10 @@ export function PanelError({ error, onRetry, className }: { error: unknown; onRe
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex items-center gap-1.5 rounded-sm border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "border border-border bg-card px-2.5 text-xs text-foreground pointer-coarse:min-h-11",
+          )}
         >
           <RefreshCw className="h-3 w-3" aria-hidden="true" />
           {t("common.retry")}
@@ -296,7 +300,9 @@ export function InfoPopover({ label, children, className }: { label: string; chi
       <Popover.Trigger
         aria-label={label}
         className={cn(
-          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+          "relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors motion-press-subtle",
+          "hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "pointer-coarse:after:absolute pointer-coarse:after:-inset-3 pointer-coarse:after:content-['']",
           className,
         )}
       >

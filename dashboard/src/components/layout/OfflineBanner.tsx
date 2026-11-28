@@ -63,7 +63,7 @@ export function OfflineBanner() {
           <button
             type="button"
             onClick={() => void queryClient.invalidateQueries({ refetchType: "active" })}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-foreground motion-press hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-foreground motion-press-subtle hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             {t("common.retry")}

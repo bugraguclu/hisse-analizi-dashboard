@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { EMPTY_VALUE, formatMarketDate, formatNumber, getIntlLocale } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 import { useMakroI18n } from "./i18n";
 import { useFxBulletin } from "./queries";
 import { ApiDataMeta } from "@/components/shared/DataMeta";
@@ -77,7 +78,7 @@ export function FxBulletinPanel({ className }: { className?: string }) {
                 {shown.map((rate) => (
                   <tr key={rate.currency}>
                     <th scope="row" className="py-1.5 pr-3 text-left font-normal">
-                      <span className="font-mono font-medium text-foreground">
+                      <span className="font-mono font-medium tabular-nums text-foreground">
                         {rate.quoted_unit > 1 ? `${rate.quoted_unit} ` : ""}
                         {rate.currency}
                       </span>
@@ -100,7 +101,7 @@ export function FxBulletinPanel({ className }: { className?: string }) {
               type="button"
               onClick={() => setExpanded((value) => !value)}
               aria-expanded={expanded}
-              className="mt-2 text-[11px] font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              className={cn(buttonVariants({ variant: "link", size: "sm" }), "mt-2 text-[11px] pointer-coarse:min-h-11")}
             >
               {expanded ? t("common.showLess") : t("common.showAll", { count: rates.length })}
             </button>

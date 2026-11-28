@@ -157,7 +157,7 @@ function EventDetailDialog({ eventId, onClose }: { eventId: string | null; onClo
                   </p>
                 </div>
                 {summary && summary !== title ? (
-                  <div className="rounded-lg bg-surface p-4">
+                  <div className="rounded-md bg-surface p-4">
                     <h4 className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("kap.summary")}</h4>
                     <p className="break-words text-sm leading-relaxed text-foreground">{summary}</p>
                   </div>
@@ -230,7 +230,7 @@ function KapRow({ item, now, onOpen }: { item: KapItem; now: number | null; onOp
 
   const rowClass = "group relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-4 py-3 text-left";
   const interactiveClass =
-    "transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
+    "transition-colors motion-press-subtle hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11";
 
   if (item.id) {
     const id = item.id;
@@ -283,7 +283,7 @@ export function KapEventsCard({ ticker }: { ticker: string }) {
       actions={
         <Link
           href={`/events?ticker=${ticker}`}
-          className="inline-flex h-8 items-center gap-1 rounded-sm text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          className="inline-flex h-8 items-center gap-1 rounded-sm text-xs text-primary underline-offset-4 motion-press-subtle hover:underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11"
         >
           {t("kap.viewAll")}
           <ArrowRight aria-hidden className="h-3 w-3" />
